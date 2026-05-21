@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 
 export default function Topbar() {
   const [activeTab, setActiveTab] = useState("Community");
+  const [, setLocation] = useLocation();
   const navTabs = ["Community", "Athletes", "Events", "Leaderboards", "Challenges"];
 
   return (
@@ -35,8 +37,8 @@ export default function Topbar() {
           <input type="text" placeholder="Search athletes, sports, events…" data-testid="input-search" />
         </div>
         <div className="topbar-actions">
-          <a href="#" className="btn btn-ghost" data-testid="btn-login">Log in</a>
-          <a href="#" className="btn btn-primary" data-testid="btn-signup">Sign up</a>
+          <a href="/login" className="btn btn-ghost" data-testid="btn-login" onClick={(e) => { e.preventDefault(); setLocation("/login"); }}>Log in</a>
+          <a href="/signup" className="btn btn-primary" data-testid="btn-signup" onClick={(e) => { e.preventDefault(); setLocation("/signup"); }}>Sign up</a>
           <div className="avatar-sm" data-testid="avatar-user">JK</div>
         </div>
       </div>
