@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
+import Landing from "@/pages/Landing";
 import Community from "@/pages/Community";
 import Login from "@/pages/Login";
 import Profile from "@/pages/Profile";
@@ -12,7 +13,8 @@ const queryClient = new QueryClient();
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Community} />
+      <Route path="/" component={Landing} />
+      <Route path="/community" component={Community} />
       <Route path="/login" component={Login} />
       <Route path="/profile" component={Profile} />
       <Route component={NotFound} />
