@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 
-export default function Topbar() {
+interface TopbarProps {
+  loggedIn?: boolean;
+}
+
+export default function Topbar({ loggedIn = false }: TopbarProps) {
   const [activeTab, setActiveTab] = useState("Community");
   const [, setLocation] = useLocation();
   const navTabs = ["Community", "Athletes", "Events", "Leaderboards", "Challenges"];
@@ -9,7 +13,7 @@ export default function Topbar() {
   return (
     <header className="topbar">
       <div className="topbar-inner">
-        <a href="#" className="logo" data-testid="logo-link">
+        <a href="/" className="logo" data-testid="logo-link" onClick={(e) => { e.preventDefault(); setLocation("/"); }}>
           <div className="logo-icon">🏟</div>
           <span className="logo-text">Arenas</span>
         </a>
@@ -37,9 +41,35 @@ export default function Topbar() {
           <input type="text" placeholder="Search athletes, sports, events…" data-testid="input-search" />
         </div>
         <div className="topbar-actions">
-          <a href="/login" className="btn btn-ghost" data-testid="btn-login" onClick={(e) => { e.preventDefault(); setLocation("/login"); }}>Log in</a>
-          <a href="/signup" className="btn btn-primary" data-testid="btn-signup" onClick={(e) => { e.preventDefault(); setLocation("/signup"); }}>Sign up</a>
-          <div className="avatar-sm" data-testid="avatar-user">JK</div>
+          {loggedIn ? (
+            <>
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: "13px" }}
+                data-testid="btn-log-activity"
+                onClick={() => setLocation("/profile")}
+              >+ Log activity</button>
+              <div
+                className="avatar-sm"
+                title="My profile"
+                data-testid="avatar-user"
+                style={{ cursor: "pointer" }}
+                onClick={() => setLocation("/profile")}
+              >JK</div>
+            </>
+          ) : (
+            <>
+              <a href="/login" className="btn btn-ghost" data-testid="btn-login" onClick={(e) => { e.preventDefault(); setLocation("/login"); }}>Log in</a>
+              <a href="/signup" className="btn btn-primary" data-testid="btn-signup" onClick={(e) => { e.preventDefault(); setLocation("/signup"); }}>Sign up</a>
+              <div
+                className="avatar-sm"
+                title="My profile"
+                data-testid="avatar-user"
+                style={{ cursor: "pointer" }}
+                onClick={() => setLocation("/profile")}
+              >JK</div>
+            </>
+          )}
         </div>
       </div>
     </header>

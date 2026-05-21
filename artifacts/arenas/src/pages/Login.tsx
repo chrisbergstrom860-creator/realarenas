@@ -19,7 +19,7 @@ export default function Login() {
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
-      setLocation("/");
+      setLocation("/profile");
     }, 1000);
   }
 
