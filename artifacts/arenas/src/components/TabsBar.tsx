@@ -1,8 +1,9 @@
-import { useState } from "react";
+interface TabsBarProps {
+  activeTab: string;
+  onTabChange: (tab: string) => void;
+}
 
-export default function TabsBar() {
-  const [activeTab, setActiveTab] = useState("Activities");
-
+export default function TabsBar({ activeTab, onTabChange }: TabsBarProps) {
   const tabs = [
     { name: "Activities", count: "312k" },
     { name: "Athletes", count: "84k" },
@@ -18,7 +19,7 @@ export default function TabsBar() {
           <div
             key={tab.name}
             className={`tab ${activeTab === tab.name ? "active" : ""}`}
-            onClick={() => setActiveTab(tab.name)}
+            onClick={() => onTabChange(tab.name)}
             data-testid={`tab-${tab.name.toLowerCase()}`}
           >
             {tab.name} <span className="count">{tab.count}</span>
