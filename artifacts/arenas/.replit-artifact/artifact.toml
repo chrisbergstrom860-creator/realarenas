@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Arenas — Sports Community"
+version = "1.0.0"
+id = "artifacts/arenas"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24821
+
+[services.development]
+run = "pnpm --filter @workspace/arenas run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/arenas", "run", "build" ]
+publicDir = "artifacts/arenas/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24821"
+BASE_PATH = "/"

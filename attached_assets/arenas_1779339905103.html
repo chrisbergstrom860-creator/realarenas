@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arenas — Sports Community</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --yellow: #FFD21E; --yellow-dark: #E6B800; --yellow-light: #FFF9E0;
+    --gray-50: #F9FAFB; --gray-100: #F3F4F6; --gray-200: #E5E7EB;
+    --gray-300: #D1D5DB; --gray-400: #9CA3AF; --gray-500: #6B7280;
+    --gray-600: #4B5563; --gray-700: #374151; --gray-800: #1F2937; --gray-900: #111827;
+    --font: 'Source Sans 3', sans-serif; --mono: 'IBM Plex Mono', monospace;
+    --border: 1px solid var(--gray-200); --radius: 8px; --radius-lg: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  }
+  body { font-family: var(--font); background: var(--gray-50); color: var(--gray-800); font-size: 15px; line-height: 1.5; min-height: 100vh; }
+
+  /* TOPBAR */
+  .topbar { background: white; border-bottom: var(--border); position: sticky; top: 0; z-index: 100; }
+  .topbar-inner { max-width: 1280px; margin: 0 auto; padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 32px; }
+  .logo { display: flex; align-items: center; gap: 8px; text-decoration: none; flex-shrink: 0; }
+  .logo-icon { width: 30px; height: 30px; background: var(--yellow); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .logo-text { font-size: 17px; font-weight: 600; color: var(--gray-900); }
+  .topnav { display: flex; align-items: center; gap: 2px; flex: 1; }
+  .topnav a { padding: 6px 12px; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--gray-600); text-decoration: none; transition: background 0.1s, color 0.1s; }
+  .topnav a:hover { background: var(--gray-100); color: var(--gray-900); }
+  .topnav a.active { background: var(--yellow-light); color: var(--gray-900); }
+  .search-wrap { display: flex; align-items: center; background: var(--gray-100); border: var(--border); border-radius: 8px; padding: 6px 12px; gap: 8px; width: 240px; transition: border-color 0.15s, background 0.15s; }
+  .search-wrap:focus-within { background: white; border-color: var(--gray-400); }
+  .search-wrap svg { color: var(--gray-400); flex-shrink: 0; }
+  .search-wrap input { background: none; border: none; outline: none; font-size: 14px; color: var(--gray-700); width: 100%; font-family: var(--font); }
+  .search-wrap input::placeholder { color: var(--gray-400); }
+  .topbar-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .btn { padding: 6px 14px; border-radius: 7px; font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none; transition: all 0.1s; border: var(--border); font-family: var(--font); }
+  .btn-ghost { background: transparent; color: var(--gray-700); }
+  .btn-ghost:hover { background: var(--gray-100); }
+  .btn-primary { background: var(--gray-900); color: white; border-color: var(--gray-900); }
+  .btn-primary:hover { background: var(--gray-700); }
+  .avatar-sm { width: 30px; height: 30px; border-radius: 50%; background: var(--yellow); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: var(--gray-900); cursor: pointer; }
+
+  /* HERO */
+  .hero { background: white; border-bottom: var(--border); padding: 28px 0; }
+  .hero-inner { max-width: 1280px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+  .hero-text h1 { font-size: 26px; font-weight: 600; color: var(--gray-900); line-height: 1.3; }
+  .hero-text p { font-size: 15px; color: var(--gray-500); margin-top: 6px; }
+  .hero-stats { display: flex; gap: 24px; }
+  .hero-stat { text-align: center; }
+  .hero-stat .num { font-size: 22px; font-weight: 600; color: var(--gray-900); font-family: var(--mono); }
+  .hero-stat .lbl { font-size: 12px; color: var(--gray-500); margin-top: 1px; }
+
+  /* TABS */
+  .tabs-bar { background: white; border-bottom: var(--border); }
+  .tabs-inner { max-width: 1280px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; }
+  .tab { padding: 12px 16px; font-size: 14px; font-weight: 500; color: var(--gray-500); border-bottom: 2px solid transparent; cursor: pointer; transition: color 0.1s, border-color 0.1s; display: flex; align-items: center; gap: 6px; }
+  .tab:hover { color: var(--gray-800); }
+  .tab.active { color: var(--gray-900); border-bottom-color: var(--gray-900); }
+  .tab .count { background: var(--gray-100); color: var(--gray-500); font-size: 11px; font-family: var(--mono); padding: 1px 6px; border-radius: 10px; }
+  .tab.active .count { background: var(--gray-200); color: var(--gray-700); }
+  .tab-spacer { flex: 1; }
+  .sort-select { padding: 5px 10px; border: var(--border); border-radius: 6px; font-size: 13px; font-family: var(--font); color: var(--gray-600); background: white; outline: none; cursor: pointer; margin: 8px 0; }
+
+  /* MAIN LAYOUT */
+  .main { max-width: 1280px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: 240px 1fr; gap: 20px; align-items: start; }
+
+  /* SIDEBAR */
+  .sidebar { display: flex; flex-direction: column; gap: 16px; }
+  .sidebar-card { background: white; border: var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+  .sidebar-section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--gray-500); padding: 12px 14px 6px; }
+  .filter-group { padding: 0 8px 10px; display: flex; flex-direction: column; gap: 1px; }
+  .filter-item { display: flex; align-items: center; justify-content: space-between; padding: 5px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--gray-700); transition: background 0.1s; }
+  .filter-item:hover { background: var(--gray-50); }
+  .filter-item.active { background: var(--yellow-light); color: var(--gray-900); font-weight: 500; }
+  .filter-item-left { display: flex; align-items: center; gap: 7px; }
+  .filter-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .filter-count { font-size: 11px; font-family: var(--mono); color: var(--gray-400); }
+  .filter-item.active .filter-count { color: var(--gray-600); }
+  .lb-row { display: flex; align-items: center; gap: 10px; padding: 7px 14px; border-bottom: 1px solid var(--gray-100); font-size: 13px; cursor: pointer; transition: background 0.1s; }
+  .lb-row:last-child { border-bottom: none; }
+  .lb-row:hover { background: var(--gray-50); }
+  .lb-rank { font-family: var(--mono); font-size: 12px; color: var(--gray-400); width: 16px; text-align: center; }
+  .lb-rank.gold { color: #D97706; font-weight: 700; }
+  .lb-rank.silver { color: #6B7280; font-weight: 700; }
+  .lb-rank.bronze { color: #B45309; font-weight: 700; }
+  .lb-av { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; flex-shrink: 0; }
+  .lb-name { flex: 1; font-weight: 500; color: var(--gray-800); }
+  .lb-sport { font-size: 11px; color: var(--gray-400); }
+  .lb-pts { font-family: var(--mono); font-size: 12px; color: var(--gray-600); }
+
+  /* CARDS */
+  .grid-wrap { display: flex; flex-direction: column; gap: 12px; }
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .section-header h2 { font-size: 15px; font-weight: 600; color: var(--gray-900); }
+  .section-header a { font-size: 13px; color: var(--gray-500); text-decoration: none; }
+  .section-header a:hover { color: var(--gray-700); }
+  .cards-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .cards-grid.wide { grid-template-columns: repeat(2, 1fr); }
+  .card { background: white; border: var(--border); border-radius: var(--radius-lg); padding: 16px; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; text-decoration: none; color: inherit; display: flex; flex-direction: column; gap: 10px; }
+  .card:hover { border-color: var(--gray-300); box-shadow: var(--shadow); }
+  .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .card-avatar { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .card-title { font-size: 14px; font-weight: 600; color: var(--gray-900); line-height: 1.3; }
+  .card-author { font-size: 12px; color: var(--gray-500); margin-top: 2px; }
+  .card-desc { font-size: 13px; color: var(--gray-600); line-height: 1.5; flex: 1; }
+  .card-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+  .tag { padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; background: var(--gray-100); color: var(--gray-600); border: 1px solid var(--gray-200); }
+  .tag.sport { background: var(--yellow-light); color: #7a5c00; border-color: #fde68a; }
+  .tag.level { background: #EFF6FF; color: #1D4ED8; border-color: #BFDBFE; }
+  .tag.gear { background: #F0FDF4; color: #166534; border-color: #BBF7D0; }
+  .tag.new { background: #FEF3C7; color: #92400E; border-color: #FDE68A; }
+  .card-footer { display: flex; align-items: center; justify-content: space-between; padding-top: 8px; border-top: 1px solid var(--gray-100); font-size: 12px; color: var(--gray-400); }
+  .card-footer-left { display: flex; align-items: center; gap: 12px; }
+  .card-stat { display: flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 11px; }
+  .card-updated { font-size: 11px; color: var(--gray-400); }
+
+  /* ACTIVITY CARDS */
+  .activity-card { background: white; border: var(--border); border-radius: var(--radius-lg); overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s; }
+  .activity-card:hover { border-color: var(--gray-300); box-shadow: var(--shadow); }
+  .activity-card-body { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .act-header { display: flex; align-items: center; gap: 10px; }
+  .act-avatar { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+  .act-meta { flex: 1; }
+  .act-user { font-size: 13px; font-weight: 600; color: var(--gray-900); }
+  .act-time { font-size: 11px; color: var(--gray-400); margin-top: 1px; }
+  .act-body { font-size: 13px; color: var(--gray-600); line-height: 1.55; }
+  .act-stats { display: flex; gap: 6px; flex-wrap: wrap; }
+  .act-stat-pill { background: var(--gray-50); border: var(--border); border-radius: 6px; padding: 4px 10px; font-size: 11px; font-family: var(--mono); color: var(--gray-700); display: flex; flex-direction: column; align-items: center; }
+  .act-stat-pill .val { font-size: 14px; font-weight: 600; color: var(--gray-900); }
+  .act-stat-pill .lbl { font-size: 10px; color: var(--gray-400); }
+  .act-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .act-btn { padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; border: var(--border); background: white; color: var(--gray-600); cursor: pointer; display: flex; align-items: center; gap: 5px; transition: background 0.1s; font-family: var(--font); }
+  .act-btn:hover { background: var(--gray-50); }
+  .act-btn.liked { background: var(--yellow-light); border-color: #fde68a; color: #7a5c00; }
+  .act-btn.ai-btn { background: var(--gray-900); color: white; border-color: var(--gray-900); }
+  .act-btn.ai-btn:hover { background: var(--gray-700); }
+  .act-btn.ai-btn.active { background: var(--yellow); color: var(--gray-900); border-color: var(--yellow-dark); }
+
+  /* AI COACH PANEL */
+  .ai-panel { border-top: var(--border); background: var(--gray-50); display: none; }
+  .ai-panel.open { display: block; }
+  .ai-panel-tabs { display: flex; border-bottom: var(--border); background: white; }
+  .ai-tab { padding: 9px 16px; font-size: 13px; font-weight: 500; color: var(--gray-500); border-bottom: 2px solid transparent; cursor: pointer; transition: color 0.1s; }
+  .ai-tab:hover { color: var(--gray-700); }
+  .ai-tab.active { color: var(--gray-900); border-bottom-color: var(--yellow-dark); }
+  .ai-panel-content { padding: 16px; }
+
+  /* AI ANALYSIS OUTPUT */
+  .ai-loading { display: flex; align-items: center; gap: 10px; padding: 12px 0; color: var(--gray-500); font-size: 13px; }
+  .ai-spinner { width: 16px; height: 16px; border: 2px solid var(--gray-200); border-top-color: var(--gray-600); border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .ai-response { font-size: 13px; color: var(--gray-700); line-height: 1.65; }
+  .ai-response h4 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gray-500); margin: 14px 0 6px; }
+  .ai-response h4:first-child { margin-top: 0; }
+  .ai-response p { margin-bottom: 8px; }
+  .ai-response p:last-child { margin-bottom: 0; }
+
+  .insight-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+  .insight-card { background: white; border: var(--border); border-radius: 8px; padding: 10px 12px; }
+  .insight-card .ic-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gray-400); margin-bottom: 4px; }
+  .insight-card .ic-value { font-size: 15px; font-weight: 600; color: var(--gray-900); font-family: var(--mono); }
+  .insight-card .ic-note { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
+  .insight-card.good { border-left: 3px solid #10B981; }
+  .insight-card.warn { border-left: 3px solid #F59E0B; }
+  .insight-card.info { border-left: 3px solid #3B82F6; }
+
+  /* AI CHAT */
+  .ai-chat-history { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; max-height: 280px; overflow-y: auto; }
+  .chat-msg { display: flex; gap: 8px; align-items: flex-start; }
+  .chat-msg.user { flex-direction: row-reverse; }
+  .chat-bubble { padding: 8px 12px; border-radius: 10px; font-size: 13px; line-height: 1.5; max-width: 85%; }
+  .chat-msg.ai .chat-bubble { background: white; border: var(--border); color: var(--gray-700); border-radius: 2px 10px 10px 10px; }
+  .chat-msg.user .chat-bubble { background: var(--gray-900); color: white; border-radius: 10px 2px 10px 10px; }
+  .chat-icon { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; margin-top: 2px; }
+  .chat-icon.ai-icon { background: var(--yellow); color: var(--gray-900); font-weight: 700; font-size: 10px; }
+  .chat-icon.user-icon { background: var(--gray-200); color: var(--gray-600); font-size: 10px; }
+  .ai-chat-input-row { display: flex; gap: 8px; }
+  .ai-chat-input { flex: 1; padding: 8px 12px; border: var(--border); border-radius: 8px; font-size: 13px; font-family: var(--font); outline: none; background: white; color: var(--gray-800); transition: border-color 0.15s; }
+  .ai-chat-input:focus { border-color: var(--gray-400); }
+  .ai-chat-input::placeholder { color: var(--gray-400); }
+  .ai-send-btn { padding: 8px 14px; background: var(--gray-900); color: white; border: none; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: var(--font); transition: background 0.1s; white-space: nowrap; }
+  .ai-send-btn:hover { background: var(--gray-700); }
+  .ai-send-btn:disabled { background: var(--gray-300); cursor: not-allowed; }
+
+  .quick-prompts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .quick-prompt { padding: 4px 10px; border: var(--border); border-radius: 20px; font-size: 12px; color: var(--gray-600); background: white; cursor: pointer; transition: background 0.1s, border-color 0.1s; }
+  .quick-prompt:hover { background: var(--gray-50); border-color: var(--gray-300); }
+
+  /* EVENTS */
+  .event-card { background: white; border: var(--border); border-radius: var(--radius-lg); padding: 14px 16px; display: flex; align-items: center; gap: 14px; cursor: pointer; transition: border-color 0.15s; }
+  .event-card:hover { border-color: var(--gray-300); }
+  .event-date-box { width: 44px; height: 44px; background: var(--yellow); border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; }
+  .event-date-box .day { font-size: 16px; font-weight: 700; color: var(--gray-900); line-height: 1; font-family: var(--mono); }
+  .event-date-box .mon { font-size: 10px; font-weight: 600; color: var(--gray-700); text-transform: uppercase; }
+  .event-info { flex: 1; }
+  .event-name { font-size: 14px; font-weight: 600; color: var(--gray-900); }
+  .event-meta { font-size: 12px; color: var(--gray-500); margin-top: 2px; }
+  .event-going { font-size: 12px; color: var(--gray-400); font-family: var(--mono); }
+
+  /* TRENDING */
+  .trending-item { display: flex; align-items: center; justify-content: space-between; padding: 7px 14px; font-size: 13px; border-bottom: 1px solid var(--gray-100); cursor: pointer; transition: background 0.1s; }
+  .trending-item:last-child { border-bottom: none; }
+  .trending-item:hover { background: var(--gray-50); }
+  .trend-tag { color: var(--gray-700); font-weight: 500; }
+  .trend-tag span { color: var(--gray-400); font-weight: 400; }
+  .trend-count { font-size: 11px; color: var(--gray-400); font-family: var(--mono); }
+
+  /* FOOTER */
+  .footer { background: white; border-top: var(--border); margin-top: 40px; padding: 20px 24px; }
+  .footer-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--gray-400); }
+  .footer-links { display: flex; gap: 16px; }
+  .footer-links a { color: var(--gray-500); text-decoration: none; }
+  .footer-links a:hover { color: var(--gray-700); }
+
+  /* AI badge in topbar */
+  .ai-badge { background: var(--yellow); color: var(--gray-900); font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px; margin-left: 4px; letter-spacing: 0.04em; }
+
+  /* streaming cursor */
+  .stream-cursor::after { content: '▋'; animation: blink 1s step-end infinite; color: var(--gray-400); }
+  @keyframes blink { 50% { opacity: 0; } }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <a href="#" class="logo">
+      <div class="logo-icon">🏟</div>
+      <span class="logo-text">Arenas</span>
+    </a>
+    <nav class="topnav">
+      <a href="#" class="active">Community</a>
+      <a href="#">Athletes</a>
+      <a href="#">Events</a>
+      <a href="#">Leaderboards</a>
+      <a href="#">Challenges</a>
+    </nav>
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6.5" cy="6.5" r="5"/><path d="M10.5 10.5l3.5 3.5" stroke-linecap="round"/></svg>
+      <input type="text" placeholder="Search athletes, sports, events…">
+    </div>
+    <div class="topbar-actions">
+      <a href="#" class="btn btn-ghost">Log in</a>
+      <a href="#" class="btn btn-primary">Sign up</a>
+      <div class="avatar-sm">JK</div>
+    </div>
+  </div>
+</header>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-inner">
+    <div class="hero-text">
+      <h1>The open community for every sport 🏅</h1>
+      <p>Share workouts, discover events, follow athletes, and get AI-powered coaching on every activity.</p>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="num">84k</div><div class="lbl">Athletes</div></div>
+      <div class="hero-stat"><div class="num">312k</div><div class="lbl">Activities</div></div>
+      <div class="hero-stat"><div class="num">2.1k</div><div class="lbl">Events</div></div>
+      <div class="hero-stat"><div class="num">47</div><div class="lbl">Sports</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs-bar">
+  <div class="tabs-inner">
+    <div class="tab active">Activities <span class="count">312k</span></div>
+    <div class="tab">Athletes <span class="count">84k</span></div>
+    <div class="tab">Groups <span class="count">6.4k</span></div>
+    <div class="tab">Events <span class="count">2.1k</span></div>
+    <div class="tab">Challenges <span class="count">340</span></div>
+    <div class="tab-spacer"></div>
+    <select class="sort-select"><option>Sort: Most recent</option><option>Most liked</option><option>Trending</option></select>
+  </div>
+</div>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-card">
+      <div class="sidebar-section-title">Sport</div>
+      <div class="filter-group">
+        <div class="filter-item active"><div class="filter-item-left"><div class="filter-dot" style="background:#6B7280"></div> All sports</div><span class="filter-count">312k</span></div>
+        <div class="filter-item"><div class="filter-item-left"><div class="filter-dot" style="background:#F97316"></div> Running</div><span class="filter-count">88k</span></div>
+        <div class="filter-item"><div class="filter-item-left"><div class="filter-dot" style="background:#3B82F6"></div> Cycling</div><span class="filter-count">64k</span></div>
+        <div class="filter-item"><div class="filter-item-left"><div class="filter-dot" style="background:#14B8A6"></div> Swimming</div><span class="filter-count">29k</span></div>
+        <div class="filter-item"><div class="filter-item-left"><div class="filter-dot" style="background:#8B5CF6"></div> Climbing</div><span class="filter-count">18k</span></div>
+        <div class="filter-item"><div class="filter-item-left"><div class="filter-dot" style="background:#10B981"></div> Football</div><span class="filter-count">47k</span></div>
+        <div class="filter-item"><div class="filter-item-left"><div class="filter-dot" style="background:#EF4444"></div> Basketball</div><span class="filter-count">21k</span></div>
+        <div class="filter-item"><div class="filter-item-left"><div class="filter-dot" style="background:#F59E0B"></div> Tennis</div><span class="filter-count">14k</span></div>
+        <div class="filter-item"><div class="filter-item-left"><div class="filter-dot" style="background:#EC4899"></div> Yoga</div><span class="filter-count">9k</span></div>
+      </div>
+    </div>
+    <div class="sidebar-card">
+      <div class="sidebar-section-title">Level</div>
+      <div class="filter-group">
+        <div class="filter-item"><div class="filter-item-left"><div class="filter-dot" style="background:#9CA3AF"></div> Beginner</div><span class="filter-count">102k</span></div>
+        <div class="filter-item"><div class="filter-item-left"><div class="filter-dot" style="background:#60A5FA"></div> Intermediate</div><span class="filter-count">138k</span></div>
+        <div class="filter-item"><div class="filter-item-left"><div class="filter-dot" style="background:#F59E0B"></div> Advanced</div><span class="filter-count">57k</span></div>
+        <div class="filter-item"><div class="filter-item-left"><div class="filter-dot" style="background:#EF4444"></div> Elite / Pro</div><span class="filter-count">14k</span></div>
+      </div>
+    </div>
+    <div class="sidebar-card">
+      <div class="sidebar-section-title">Weekly leaders</div>
+      <div class="lb-row"><span class="lb-rank gold">1</span><div class="lb-av" style="background:#FEF9C3;color:#854D0E">SL</div><div><div class="lb-name">Sofia L.</div><div class="lb-sport">Running</div></div><span class="lb-pts">9,840 pts</span></div>
+      <div class="lb-row"><span class="lb-rank silver">2</span><div class="lb-av" style="background:#E0F2FE;color:#0369A1">MC</div><div><div class="lb-name">Marco C.</div><div class="lb-sport">Cycling</div></div><span class="lb-pts">8,120 pts</span></div>
+      <div class="lb-row"><span class="lb-rank bronze">3</span><div class="lb-av" style="background:#FCE7F3;color:#9D174D">YT</div><div><div class="lb-name">Yuki T.</div><div class="lb-sport">Swim</div></div><span class="lb-pts">7,610 pts</span></div>
+      <div class="lb-row"><span class="lb-rank">4</span><div class="lb-av" style="background:#F0FDF4;color:#166534">OB</div><div><div class="lb-name">Omar B.</div><div class="lb-sport">Basketball</div></div><span class="lb-pts">6,990 pts</span></div>
+      <div class="lb-row"><span class="lb-rank">5</span><div class="lb-av" style="background:#FFF7ED;color:#9A3412">JK</div><div><div class="lb-name">Jamie K.</div><div class="lb-sport">Running</div></div><span class="lb-pts">6,440 pts</span></div>
+    </div>
+  </aside>
+
+  <!-- CONTENT -->
+  <div class="grid-wrap">
+
+    <!-- Featured Athletes -->
+    <div>
+      <div class="section-header"><h2>Featured athletes</h2><a href="#">View all →</a></div>
+      <div class="cards-grid">
+        <div class="card">
+          <div class="card-top"><div style="display:flex;gap:10px;align-items:center"><div class="card-avatar" style="background:#FEF9C3">🏃</div><div><div class="card-title">Sofia L.</div><div class="card-author">Prague · 2.4k followers</div></div></div></div>
+          <div class="card-desc">Marathon runner chasing sub-2:55. Logging every mile publicly. Coach at Sparta Athletic Club.</div>
+          <div class="card-tags"><span class="tag sport">Running</span><span class="tag level">Advanced</span><span class="tag">Triathlon</span></div>
+          <div class="card-footer"><div class="card-footer-left"><div class="card-stat">🔥 312 activities</div><div class="card-stat">⭐ 9,840 pts</div></div><div class="card-updated">Active today</div></div>
+        </div>
+        <div class="card">
+          <div class="card-top"><div style="display:flex;gap:10px;align-items:center"><div class="card-avatar" style="background:#E0F2FE">🚴</div><div><div class="card-title">Marco C.</div><div class="card-author">Milan · 1.8k followers</div></div></div></div>
+          <div class="card-desc">Granfondo specialist. 40,000 km logged in 2025. Stelvio is home. Leading the Milan Cycling collective.</div>
+          <div class="card-tags"><span class="tag sport">Cycling</span><span class="tag level">Elite / Pro</span><span class="tag">Gravel</span></div>
+          <div class="card-footer"><div class="card-footer-left"><div class="card-stat">🔥 287 activities</div><div class="card-stat">⭐ 8,120 pts</div></div><div class="card-updated">2h ago</div></div>
+        </div>
+        <div class="card">
+          <div class="card-top"><div style="display:flex;gap:10px;align-items:center"><div class="card-avatar" style="background:#ECFDF5">🧗</div><div><div class="card-title">Alena M.</div><div class="card-author">Barcelona · 980 followers</div></div></div></div>
+          <div class="card-desc">Sport climbing 7c+ and projecting 8a. Beta queen — full route breakdowns in every post.</div>
+          <div class="card-tags"><span class="tag sport">Climbing</span><span class="tag level">Advanced</span><span class="tag new">New ✦</span></div>
+          <div class="card-footer"><div class="card-footer-left"><div class="card-stat">🔥 144 activities</div><div class="card-stat">⭐ 5,220 pts</div></div><div class="card-updated">5h ago</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Activities with AI Coach -->
+    <div>
+      <div class="section-header" style="margin-top:8px">
+        <h2>Recent activities</h2>
+        <a href="#">View all →</a>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+
+        <!-- Activity 1: Running -->
+        <div class="activity-card" id="card-1">
+          <div class="activity-card-body">
+            <div class="act-header">
+              <div class="act-avatar" style="background:#FFF7ED;color:#9A3412">JK</div>
+              <div class="act-meta">
+                <div style="display:flex;align-items:center;gap:7px"><div class="act-user">Jamie K.</div><span class="tag sport" style="font-size:10px">🏃 Running</span></div>
+                <div class="act-time">7 min ago · London, UK</div>
+              </div>
+            </div>
+            <div class="act-stats">
+              <div class="act-stat-pill"><div class="val">12.4</div><div class="lbl">km</div></div>
+              <div class="act-stat-pill"><div class="val">54:22</div><div class="lbl">time</div></div>
+              <div class="act-stat-pill"><div class="val">4:23</div><div class="lbl">/ km</div></div>
+              <div class="act-stat-pill"><div class="val">148</div><div class="lbl">avg bpm</div></div>
+              <div class="act-stat-pill"><div class="val">+312</div><div class="lbl">elev m</div></div>
+            </div>
+            <div class="act-body">Morning long run ✓ Legs felt heavy but pushed through miles 8–10. PB attempt next Sunday — anyone in London want to pace the last 5k?</div>
+            <div class="act-actions">
+              <button class="act-btn liked">👍 24 kudos</button>
+              <button class="act-btn">💬 8 comments</button>
+              <button class="act-btn">📍 View route</button>
+              <button class="act-btn ai-btn" onclick="toggleAI('1')">✦ AI Coach</button>
+            </div>
+          </div>
+          <div class="ai-panel" id="ai-panel-1">
+            <div class="ai-panel-tabs">
+              <div class="ai-tab active" onclick="switchAITab('1','analysis')">Analysis</div>
+              <div class="ai-tab" onclick="switchAITab('1','chat')">Ask the coach</div>
+            </div>
+            <div class="ai-panel-content" id="ai-content-1">
+              <div id="ai-analysis-1"></div>
+              <div id="ai-chat-1" style="display:none"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activity 2: Climbing -->
+        <div class="activity-card" id="card-2">
+          <div class="activity-card-body">
+            <div class="act-header">
+              <div class="act-avatar" style="background:#F5F3FF;color:#6D28D9">SR</div>
+              <div class="act-meta">
+                <div style="display:flex;align-items:center;gap:7px"><div class="act-user">Sofia R.</div><span class="tag sport" style="font-size:10px">🧗 Climbing</span></div>
+                <div class="act-time">22 min ago · Barcelona</div>
+              </div>
+            </div>
+            <div class="act-stats">
+              <div class="act-stat-pill"><div class="val">V7</div><div class="lbl">grade</div></div>
+              <div class="act-stat-pill"><div class="val">3 wks</div><div class="lbl">project time</div></div>
+              <div class="act-stat-pill"><div class="val">Sent ✓</div><div class="lbl">status</div></div>
+              <div class="act-stat-pill"><div class="val">2h 10m</div><div class="lbl">session</div></div>
+            </div>
+            <div class="act-body">Finally sent the V7 I've been projecting at Montserrat. Crux is the undercling right before the lip. Full send video linked — beta in comments for anyone working this problem.</div>
+            <div class="act-actions">
+              <button class="act-btn">👍 61 kudos</button>
+              <button class="act-btn">💬 19 comments</button>
+              <button class="act-btn">🔖 Save</button>
+              <button class="act-btn ai-btn" onclick="toggleAI('2')">✦ AI Coach</button>
+            </div>
+          </div>
+          <div class="ai-panel" id="ai-panel-2">
+            <div class="ai-panel-tabs">
+              <div class="ai-tab active" onclick="switchAITab('2','analysis')">Analysis</div>
+              <div class="ai-tab" onclick="switchAITab('2','chat')">Ask the coach</div>
+            </div>
+            <div class="ai-panel-content" id="ai-content-2">
+              <div id="ai-analysis-2"></div>
+              <div id="ai-chat-2" style="display:none"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activity 3: Cycling -->
+        <div class="activity-card" id="card-3">
+          <div class="activity-card-body">
+            <div class="act-header">
+              <div class="act-avatar" style="background:#FEF9C3;color:#854D0E">MC</div>
+              <div class="act-meta">
+                <div style="display:flex;align-items:center;gap:7px"><div class="act-user">Marco C.</div><span class="tag sport" style="font-size:10px">🚴 Cycling</span></div>
+                <div class="act-time">1h ago · Milan</div>
+              </div>
+            </div>
+            <div class="act-stats">
+              <div class="act-stat-pill"><div class="val">88</div><div class="lbl">km</div></div>
+              <div class="act-stat-pill"><div class="val">2h 41m</div><div class="lbl">time</div></div>
+              <div class="act-stat-pill"><div class="val">32.7</div><div class="lbl">km/h</div></div>
+              <div class="act-stat-pill"><div class="val">1,240</div><div class="lbl">elev m</div></div>
+              <div class="act-stat-pill"><div class="val">241</div><div class="lbl">avg watt</div></div>
+            </div>
+            <div class="act-body">Saturday climb group is open this weekend — we'll hit the Stelvio approach from Prato allo Stelvio. DM to join, cap at 12 riders. Café stop at the summit.</div>
+            <div class="act-actions">
+              <button class="act-btn">👍 37 kudos</button>
+              <button class="act-btn">💬 14 comments</button>
+              <button class="act-btn">📍 View route</button>
+              <button class="act-btn ai-btn" onclick="toggleAI('3')">✦ AI Coach</button>
+            </div>
+          </div>
+          <div class="ai-panel" id="ai-panel-3">
+            <div class="ai-panel-tabs">
+              <div class="ai-tab active" onclick="switchAITab('3','analysis')">Analysis</div>
+              <div class="ai-tab" onclick="switchAITab('3','chat')">Ask the coach</div>
+            </div>
+            <div class="ai-panel-content" id="ai-content-3">
+              <div id="ai-analysis-3"></div>
+              <div id="ai-chat-3" style="display:none"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Events -->
+    <div>
+      <div class="section-header" style="margin-top:8px"><h2>Upcoming events</h2><a href="#">View all →</a></div>
+      <div class="cards-grid wide">
+        <div class="event-card"><div class="event-date-box"><div class="day">13</div><div class="mon">Apr</div></div><div class="event-info"><div class="event-name">Berlin Half Marathon</div><div class="event-meta">Berlin, Germany · Running</div></div><div style="text-align:right"><div class="event-going">847 going</div><button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;margin-top:4px">+ Join</button></div></div>
+        <div class="event-card"><div class="event-date-box"><div class="day">19</div><div class="mon">Apr</div></div><div class="event-info"><div class="event-name">Open Water 5K</div><div class="event-meta">Lake Geneva, CH · Swimming</div></div><div style="text-align:right"><div class="event-going">203 going</div><button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;margin-top:4px">+ Join</button></div></div>
+        <div class="event-card"><div class="event-date-box"><div class="day">27</div><div class="mon">Apr</div></div><div class="event-info"><div class="event-name">Granfondo Stelvio</div><div class="event-meta">South Tyrol, Italy · Cycling</div></div><div style="text-align:right"><div class="event-going">1.2k going</div><button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;margin-top:4px">+ Join</button></div></div>
+        <div class="event-card"><div class="event-date-box"><div class="day">3</div><div class="mon">May</div></div><div class="event-info"><div class="event-name">Urban Bouldering League</div><div class="event-meta">London, UK · Climbing</div></div><div style="text-align:right"><div class="event-going">88 going</div><button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;margin-top:4px">+ Join</button></div></div>
+      </div>
+    </div>
+
+    <!-- Trending -->
+    <div>
+      <div class="section-header" style="margin-top:8px"><h2>Trending topics</h2><a href="#">Explore →</a></div>
+      <div style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">
+        <div class="trending-item"><span class="trend-tag">#SpringMarathons <span>· Running</span></span><span class="trend-count">4,210 posts</span></div>
+        <div class="trending-item"><span class="trend-tag">#ClimbingBeta <span>· Climbing</span></span><span class="trend-count">1,820 posts</span></div>
+        <div class="trending-item"><span class="trend-tag">#CyclingStelvio <span>· Cycling</span></span><span class="trend-count">940 posts</span></div>
+        <div class="trending-item"><span class="trend-tag">#SwimOpen2026 <span>· Swimming</span></span><span class="trend-count">612 posts</span></div>
+        <div class="trending-item"><span class="trend-tag">#5AsideSeason <span>· Football</span></span><span class="trend-count">408 posts</span></div>
+        <div class="trending-item"><span class="trend-tag">#GravelGang <span>· Cycling</span></span><span class="trend-count">371 posts</span></div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="width:22px;height:22px;background:var(--yellow);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px">🏟</div>
+      <span>Arenas © 2026</span>
+    </div>
+    <div class="footer-links">
+      <a href="#">About</a><a href="#">Blog</a><a href="#">API</a><a href="#">Terms</a><a href="#">Privacy</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+// ── Activity data for AI context ──
+const activities = {
+  '1': {
+    sport: 'Running',
+    athlete: 'Jamie K.',
+    stats: { distance: '12.4 km', time: '54:22', pace: '4:23/km', avgHR: '148 bpm', elevation: '+312m' },
+    note: 'Legs felt heavy, struggled miles 8-10, planning a PB attempt next Sunday',
+    quickPrompts: ['How can I improve my pace?', 'Was my heart rate too high?', 'Recovery tips for Sunday?', 'What does this pace mean for a half marathon?']
+  },
+  '2': {
+    sport: 'Climbing',
+    athlete: 'Sofia R.',
+    stats: { grade: 'V7', projectDuration: '3 weeks', status: 'Sent', sessionLength: '2h 10m' },
+    note: 'Sent V7 bouldering problem at Montserrat, crux was an undercling near the top',
+    quickPrompts: ['What should I project next?', 'How do I train for V8?', 'Tips for undercling moves?', 'How long should I rest before next session?']
+  },
+  '3': {
+    sport: 'Cycling',
+    athlete: 'Marco C.',
+    stats: { distance: '88 km', time: '2h 41m', avgSpeed: '32.7 km/h', elevation: '1,240m', avgPower: '241W' },
+    note: 'Mountain ride, Stelvio approach, planning group ride this Saturday',
+    quickPrompts: ['How does my power output compare?', 'Tips for climbing efficiency?', 'Nutrition for long climbs?', 'How to train for Granfondo?']
+  }
+};
+
+const panelState = {}; // tracks open/loaded/chat state per card
+
+function toggleAI(id) {
+  const panel = document.getElementById('ai-panel-' + id);
+  const btn = document.querySelector('#card-' + id + ' .ai-btn');
+  const isOpen = panel.classList.contains('open');
+
+  if (isOpen) {
+    panel.classList.remove('open');
+    btn.classList.remove('active');
+  } else {
+    panel.classList.add('open');
+    btn.classList.add('active');
+    if (!panelState[id]) {
+      panelState[id] = { analysisLoaded: false, chatHistory: [], activeTab: 'analysis' };
+      loadAnalysis(id);
+    }
+  }
+}
+
+function switchAITab(id, tab) {
+  const tabs = document.querySelectorAll('#ai-panel-' + id + ' .ai-tab');
+  tabs.forEach((t, i) => t.classList.toggle('active', (i === 0 && tab === 'analysis') || (i === 1 && tab === 'chat')));
+  document.getElementById('ai-analysis-' + id).style.display = tab === 'analysis' ? 'block' : 'none';
+  document.getElementById('ai-chat-' + id).style.display = tab === 'chat' ? 'block' : 'none';
+  panelState[id].activeTab = tab;
+
+  if (tab === 'chat' && !panelState[id].chatInitialized) {
+    panelState[id].chatInitialized = true;
+    initChat(id);
+  }
+}
+
+async function loadAnalysis(id) {
+  const act = activities[id];
+  const container = document.getElementById('ai-analysis-' + id);
+  container.innerHTML = '<div class="ai-loading"><div class="ai-spinner"></div>Analysing your ' + act.sport.toLowerCase() + ' data…</div>';
+
+  const statsText = Object.entries(act.stats).map(([k, v]) => k + ': ' + v).join(', ');
+  const prompt = `You are a sports performance coach. Analyse this ${act.sport} activity for ${act.athlete}.
+
+Stats: ${statsText}
+Athlete note: "${act.note}"
+
+Respond with a concise, expert coaching analysis. Use this exact structure with these exact headings:
+**Performance Summary**
+2-3 sentences on what the data shows overall.
+
+**Key Insights**
+3 specific, data-driven observations. Each insight on its own line starting with a bullet point (•).
+
+**Training Recommendations**
+2-3 actionable, specific recommendations for the next session or week.
+
+Keep it practical, specific to the numbers, and motivating. Do not use markdown formatting beyond the headings above. Maximum 180 words total.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        stream: true,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    container.innerHTML = '<div class="ai-response stream-cursor" id="ai-text-' + id + '"></div>';
+    const textEl = document.getElementById('ai-text-' + id);
+    let fullText = '';
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.type === 'content_block_delta' && data.delta?.text) {
+              fullText += data.delta.text;
+              textEl.innerHTML = formatAnalysis(fullText);
+            }
+          } catch(e) {}
+        }
+      }
+    }
+
+    textEl.classList.remove('stream-cursor');
+    panelState[id].analysisLoaded = true;
+    panelState[id].analysisText = fullText;
+  } catch(err) {
+    container.innerHTML = '<div style="color:var(--gray-500);font-size:13px;padding:8px 0">Unable to load analysis. Please try again.</div>';
+  }
+}
+
+function formatAnalysis(text) {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '<h4>$1</h4>')
+    .replace(/^• (.+)$/gm, '<p>• $1</p>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, ' ');
+}
+
+function initChat(id) {
+  const act = activities[id];
+  const container = document.getElementById('ai-chat-' + id);
+  container.innerHTML = `
+    <div class="ai-chat-history" id="chat-history-${id}">
+      <div class="chat-msg ai">
+        <div class="chat-icon ai-icon">AI</div>
+        <div class="chat-bubble">Hi! I've analysed ${act.athlete}'s ${act.sport.toLowerCase()} session. Ask me anything about the workout, training approach, or how to improve.</div>
+      </div>
+    </div>
+    <div class="quick-prompts" id="quick-prompts-${id}">
+      ${act.quickPrompts.map(q => `<div class="quick-prompt" onclick="sendQuick('${id}', this)">${q}</div>`).join('')}
+    </div>
+    <div class="ai-chat-input-row">
+      <input class="ai-chat-input" id="chat-input-${id}" placeholder="Ask the AI coach anything…" onkeydown="if(event.key==='Enter')sendChat('${id}')">
+      <button class="ai-send-btn" id="chat-send-${id}" onclick="sendChat('${id}')">Send ↑</button>
+    </div>
+  `;
+}
+
+function sendQuick(id, el) {
+  const input = document.getElementById('chat-input-' + id);
+  input.value = el.textContent;
+  document.getElementById('quick-prompts-' + id).style.display = 'none';
+  sendChat(id);
+}
+
+async function sendChat(id) {
+  const input = document.getElementById('chat-input-' + id);
+  const sendBtn = document.getElementById('chat-send-' + id);
+  const history = document.getElementById('chat-history-' + id);
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  input.value = '';
+  sendBtn.disabled = true;
+  document.getElementById('quick-prompts-' + id).style.display = 'none';
+
+  // Add user message
+  history.innerHTML += `<div class="chat-msg user"><div class="chat-icon user-icon">JK</div><div class="chat-bubble">${msg}</div></div>`;
+
+  // Add AI typing indicator
+  const typingId = 'typing-' + Date.now();
+  history.innerHTML += `<div class="chat-msg ai" id="${typingId}"><div class="chat-icon ai-icon">AI</div><div class="chat-bubble ai-loading" style="padding:8px 12px"><div class="ai-spinner"></div></div></div>`;
+  history.scrollTop = history.scrollHeight;
+
+  const act = activities[id];
+  const statsText = Object.entries(act.stats).map(([k,v]) => k+': '+v).join(', ');
+
+  // Build conversation history for context
+  const state = panelState[id];
+  if (!state.messages) state.messages = [];
+  state.messages.push({ role: 'user', content: msg });
+
+  const systemPrompt = `You are an expert ${act.sport} coach analysing a specific workout. 
+Activity: ${act.sport} by ${act.athlete}
+Stats: ${statsText}
+Athlete note: "${act.note}"
+${state.analysisText ? 'Your prior analysis: ' + state.analysisText : ''}
+
+Give concise, specific, expert coaching advice. Max 100 words. No markdown formatting. Be direct and practical.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        stream: true,
+        system: systemPrompt,
+        messages: state.messages
+      })
+    });
+
+    // Replace typing indicator with streaming response
+    const typingEl = document.getElementById(typingId);
+    typingEl.innerHTML = '<div class="chat-icon ai-icon">AI</div><div class="chat-bubble stream-cursor" id="stream-bubble-' + typingId + '"></div>';
+    const bubbleEl = document.getElementById('stream-bubble-' + typingId);
+    let fullReply = '';
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value);
+      for (const line of chunk.split('\n')) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.type === 'content_block_delta' && data.delta?.text) {
+              fullReply += data.delta.text;
+              bubbleEl.textContent = fullReply;
+              history.scrollTop = history.scrollHeight;
+            }
+          } catch(e) {}
+        }
+      }
+    }
+    bubbleEl.classList.remove('stream-cursor');
+    state.messages.push({ role: 'assistant', content: fullReply });
+  } catch(err) {
+    document.getElementById(typingId).querySelector('.chat-bubble').textContent = 'Sorry, something went wrong. Try again.';
+  }
+
+  sendBtn.disabled = false;
+  history.scrollTop = history.scrollHeight;
+}
+</script>
+</body>
+</html>
