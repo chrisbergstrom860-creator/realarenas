@@ -10,7 +10,7 @@ const NAV_ROUTES: Record<string, string> = {
   Athletes:     "/community",
   Events:       "/events",
   Leaderboards: "/leaderboards",
-  Challenges:   "/community",
+  Challenges:   "/challenges",
 };
 
 export default function Topbar({ loggedIn = false, activeNav }: TopbarProps) {

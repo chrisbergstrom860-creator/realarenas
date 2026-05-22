@@ -9,6 +9,7 @@ import Login from "@/pages/Login";
 import Profile from "@/pages/Profile";
 import Events from "@/pages/Events";
 import Leaderboards from "@/pages/Leaderboards";
+import Challenges from "@/pages/Challenges";
 
 const queryClient = new QueryClient();
 
@@ -19,6 +20,7 @@ function Router() {
       <Route path="/community" component={Community} />
       <Route path="/events" component={Events} />
       <Route path="/leaderboards" component={Leaderboards} />
+      <Route path="/challenges" component={Challenges} />
       <Route path="/login" component={Login} />
       <Route path="/profile" component={Profile} />
       <Route component={NotFound} />
