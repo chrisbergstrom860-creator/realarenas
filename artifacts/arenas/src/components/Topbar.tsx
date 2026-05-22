@@ -9,7 +9,7 @@ const NAV_ROUTES: Record<string, string> = {
   Community:    "/community",
   Athletes:     "/community",
   Events:       "/events",
-  Leaderboards: "/community",
+  Leaderboards: "/leaderboards",
   Challenges:   "/community",
 };
 
