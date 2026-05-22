@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arenas — Sports Community</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --yellow: #FFD21E; --yellow-dark: #E6B800; --yellow-light: #FFF9E0;
+  --gray-50: #F9FAFB; --gray-100: #F3F4F6; --gray-200: #E5E7EB;
+  --gray-300: #D1D5DB; --gray-400: #9CA3AF; --gray-500: #6B7280;
+  --gray-600: #4B5563; --gray-700: #374151; --gray-800: #1F2937; --gray-900: #111827;
+  --font: 'Source Sans 3', sans-serif; --mono: 'IBM Plex Mono', monospace;
+  --border: 1px solid var(--gray-200); --radius: 8px; --radius-lg: 12px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+}
+body { font-family: var(--font); background: var(--gray-50); color: var(--gray-800); font-size: 15px; line-height: 1.5; min-height: 100vh; }
+
+/* ── TOPBAR ── */
+.topbar { background: white; border-bottom: var(--border); position: sticky; top: 0; z-index: 100; }
+.topbar-inner { max-width: 1280px; margin: 0 auto; padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 32px; }
+.logo { display: flex; align-items: center; gap: 8px; text-decoration: none; flex-shrink: 0; cursor: pointer; }
+.logo-icon { width: 30px; height: 30px; background: var(--yellow); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.logo-text { font-size: 17px; font-weight: 600; color: var(--gray-900); }
+.topnav { display: flex; align-items: center; gap: 2px; flex: 1; }
+.topnav a { padding: 6px 12px; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--gray-600); text-decoration: none; transition: background 0.1s, color 0.1s; cursor: pointer; }
+.topnav a:hover { background: var(--gray-100); color: var(--gray-900); }
+.topnav a.nav-active { background: var(--yellow-light); color: #7a5c00; }
+html { scroll-behavior: smooth; }
+/* offset anchors so sticky topbar doesn't cover the heading */
+.section-anchor { display: block; position: relative; top: -80px; visibility: hidden; }
+.topbar-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.btn { padding: 7px 16px; border-radius: 7px; font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none; transition: all 0.15s; border: var(--border); font-family: var(--font); display: inline-flex; align-items: center; gap: 6px; }
+.btn-ghost { background: transparent; color: var(--gray-700); }
+.btn-ghost:hover { background: var(--gray-100); }
+.btn-primary { background: var(--gray-900); color: white; border-color: var(--gray-900); }
+.btn-primary:hover { background: var(--gray-700); }
+.btn-yellow { background: var(--yellow); color: var(--gray-900); border-color: var(--yellow-dark); font-weight: 600; }
+.btn-yellow:hover { background: var(--yellow-dark); }
+.btn-lg { padding: 11px 26px; font-size: 15px; border-radius: 9px; }
+.btn-full { width: 100%; justify-content: center; }
+
+/* ── PAGE VISIBILITY ── */
+.page { display: none; }
+.page.active { display: block; }
+
+/* ═══════════════════════════
+   SPLIT HERO
+═══════════════════════════ */
+.split-hero {
+  background: white;
+  border-bottom: var(--border);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 520px;
+}
+
+/* Left — headline & CTA */
+.hero-left {
+  padding: 64px 56px 64px 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-right: var(--border);
+}
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--yellow-light);
+  border: 1px solid #fde68a;
+  border-radius: 20px;
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #7a5c00;
+  margin-bottom: 22px;
+  width: fit-content;
+  letter-spacing: 0.03em;
+}
+.hero-eyebrow span { font-family: var(--mono); }
+.hero-h1 {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--gray-900);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  margin-bottom: 18px;
+}
+.hero-h1 em {
+  font-style: normal;
+  background: var(--yellow);
+  padding: 2px 8px;
+  border-radius: 5px;
+}
+.hero-sub {
+  font-size: 17px;
+  color: var(--gray-500);
+  line-height: 1.65;
+  margin-bottom: 32px;
+  max-width: 420px;
+}
+.hero-cta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.hero-note { font-size: 12px; color: var(--gray-400); }
+.hero-social-proof {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: var(--border);
+}
+.hsp-avatars { display: flex; }
+.hsp-av {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 2px solid white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 600;
+  margin-left: -7px; flex-shrink: 0;
+}
+.hsp-av:first-child { margin-left: 0; }
+.hsp-text { font-size: 13px; color: var(--gray-500); }
+.hsp-text strong { color: var(--gray-900); font-weight: 600; }
+
+/* Right — live feed preview */
+.hero-right {
+  background: var(--gray-50);
+  padding: 28px 28px 0 28px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.hero-right-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+.live-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-700);
+}
+.live-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #10B981;
+  animation: pulse-dot 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.85); }
+}
+.live-count { font-size: 12px; color: var(--gray-400); font-family: var(--mono); }
+
+.feed-preview { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+
+/* Activity preview cards */
+.prev-card {
+  background: white;
+  border: var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.prev-card:hover { border-color: var(--gray-300); }
+.prev-card-body { padding: 14px 16px; }
+.prev-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.prev-av {
+  width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600; flex-shrink: 0;
+}
+.prev-user { font-size: 13px; font-weight: 600; color: var(--gray-900); }
+.prev-time { font-size: 11px; color: var(--gray-400); }
+.prev-sport-tag {
+  margin-left: auto;
+  font-size: 10px; font-weight: 600;
+  padding: 2px 8px; border-radius: 20px;
+  flex-shrink: 0;
+}
+.prev-stats { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
+.prev-stat {
+  background: var(--gray-50); border: var(--border);
+  border-radius: 6px; padding: 3px 8px;
+  font-size: 11px; font-family: var(--mono); color: var(--gray-700);
+  display: flex; flex-direction: column; align-items: center;
+}
+.prev-stat .pv { font-size: 13px; font-weight: 600; color: var(--gray-900); }
+.prev-stat .pl { font-size: 9px; color: var(--gray-400); }
+.prev-desc { font-size: 12px; color: var(--gray-600); line-height: 1.5; }
+
+/* AI coach panel inside preview card */
+.prev-ai-panel {
+  border-top: var(--border);
+  background: var(--yellow-light);
+  padding: 10px 16px;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.prev-ai-icon {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--yellow); color: var(--gray-900);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; flex-shrink: 0; margin-top: 1px;
+}
+.prev-ai-text { font-size: 12px; color: #7a5c00; line-height: 1.55; }
+.prev-ai-text strong { font-weight: 600; }
+
+/* fade-in animation for cards */
+.prev-card { opacity: 0; animation: card-in 0.4s ease forwards; }
+.prev-card:nth-child(1) { animation-delay: 0.1s; }
+.prev-card:nth-child(2) { animation-delay: 0.25s; }
+.prev-card:nth-child(3) { animation-delay: 0.4s; }
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── SPORT SCROLL ── */
+.sport-scroll { padding: 18px 0; background: var(--gray-50); border-bottom: var(--border); overflow: hidden; }
+.sport-scroll-inner { display: flex; gap: 8px; animation: scroll-left 32s linear infinite; width: max-content; }
+@keyframes scroll-left { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.sport-pill {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: 20px;
+  background: white; border: var(--border);
+  font-size: 13px; font-weight: 500; color: var(--gray-700);
+  white-space: nowrap; flex-shrink: 0;
+}
+
+/* ── STATS BAR ── */
+.stats-bar { background: white; border-bottom: var(--border); padding: 28px 24px; }
+.stats-bar-inner { max-width: 960px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); }
+.stat-item { text-align: center; padding: 0 24px; border-right: var(--border); }
+.stat-item:last-child { border-right: none; }
+.stat-num { font-size: 32px; font-weight: 700; color: var(--gray-900); font-family: var(--mono); line-height: 1; }
+.stat-label { font-size: 13px; color: var(--gray-500); margin-top: 6px; }
+.stat-delta { font-size: 11px; color: #10B981; font-family: var(--mono); margin-top: 3px; font-weight: 500; }
+.stat-pulse { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #10B981; margin-right: 4px; animation: pulse-dot 2s ease-in-out infinite; }
+
+/* ── FEATURES ── */
+.features { padding: 72px 24px; background: var(--gray-50); }
+.features-inner { max-width: 1100px; margin: 0 auto; }
+.section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gray-500); margin-bottom: 12px; }
+.section-title { font-size: 32px; font-weight: 700; color: var(--gray-900); max-width: 480px; line-height: 1.25; margin-bottom: 48px; letter-spacing: -0.01em; }
+.features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.feature-card { background: white; border: var(--border); border-radius: var(--radius-lg); padding: 24px; transition: border-color 0.15s, box-shadow 0.15s; }
+.feature-card:hover { border-color: var(--gray-300); box-shadow: var(--shadow-md); }
+.feature-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 14px; }
+.feature-card h3 { font-size: 15px; font-weight: 600; color: var(--gray-900); margin-bottom: 8px; }
+.feature-card p { font-size: 13px; color: var(--gray-500); line-height: 1.6; }
+.feature-badge { display: inline-block; margin-top: 12px; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge-ai { background: var(--yellow-light); color: #7a5c00; border: 1px solid #fde68a; }
+.badge-free { background: #F0FDF4; color: #166534; border: 1px solid #BBF7D0; }
+.badge-pro { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+
+/* ── HOW IT WORKS ── */
+.how-it-works { background: white; border-top: var(--border); border-bottom: var(--border); padding: 72px 24px; }
+.how-inner { max-width: 960px; margin: 0 auto; }
+.steps-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin-top: 48px; position: relative; }
+.steps-grid::before {
+  content: '';
+  position: absolute;
+  top: 28px; left: 12.5%; right: 12.5%;
+  height: 1px; background: var(--gray-200);
+  z-index: 0;
+}
+.step { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 0 16px; position: relative; z-index: 1; }
+.step-num {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: white; border: var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 700; color: var(--gray-900);
+  font-family: var(--mono); margin-bottom: 16px;
+}
+.step:first-child .step-num { background: var(--yellow); border-color: var(--yellow-dark); }
+.step-title { font-size: 14px; font-weight: 600; color: var(--gray-900); margin-bottom: 6px; }
+.step-desc { font-size: 13px; color: var(--gray-500); line-height: 1.6; }
+
+/* ── SOCIAL PROOF ── */
+.social-proof { background: var(--gray-50); border-bottom: var(--border); padding: 72px 24px; }
+.social-proof-inner { max-width: 960px; margin: 0 auto; }
+.testimonials { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 40px; }
+.testimonial { background: white; border: var(--border); border-radius: var(--radius-lg); padding: 22px; }
+.testimonial-text { font-size: 14px; color: var(--gray-700); line-height: 1.7; margin-bottom: 18px; font-style: italic; }
+.testimonial-author { display: flex; align-items: center; gap: 10px; }
+.t-avatar { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+.t-name { font-size: 13px; font-weight: 600; color: var(--gray-800); }
+.t-sport { font-size: 11px; color: var(--gray-500); }
+.stars { color: var(--yellow-dark); font-size: 14px; margin-bottom: 12px; letter-spacing: 2px; }
+
+/* ── PREVIEW STRIP ── */
+.preview-strip { padding: 72px 24px; background: white; border-bottom: var(--border); }
+.preview-strip-inner { max-width: 860px; margin: 0 auto; }
+.preview-cards { display: flex; flex-direction: column; gap: 10px; margin-top: 32px; }
+.p-card { background: var(--gray-50); border: var(--border); border-radius: var(--radius-lg); padding: 16px; display: flex; align-items: center; gap: 14px; transition: border-color 0.15s; }
+.p-card:hover { border-color: var(--gray-300); }
+.p-avatar { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+.p-info { flex: 1; }
+.p-name { font-size: 13px; font-weight: 600; color: var(--gray-900); }
+.p-desc { font-size: 12px; color: var(--gray-500); margin-top: 1px; }
+.p-stats { display: flex; gap: 6px; }
+.p-stat { background: white; border: var(--border); border-radius: 6px; padding: 3px 8px; font-size: 11px; font-family: var(--mono); color: var(--gray-700); }
+.ai-badge { background: var(--yellow-light); border: 1px solid #fde68a; color: #7a5c00; font-size: 11px; padding: 2px 9px; border-radius: 20px; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+
+/* ── PRICING ── */
+.pricing { padding: 80px 24px; background: var(--gray-50); border-top: var(--border); }
+.pricing-inner { max-width: 1000px; margin: 0 auto; }
+.pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 48px; }
+.pricing-card { background: white; border: var(--border); border-radius: var(--radius-lg); padding: 28px 24px; display: flex; flex-direction: column; transition: border-color 0.15s, box-shadow 0.15s; }
+.pricing-card:hover { border-color: var(--gray-300); box-shadow: var(--shadow-md); }
+.pricing-card.featured { border: 2px solid var(--gray-900); }
+.pricing-popular { display: inline-block; background: var(--gray-900); color: white; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; margin-bottom: 14px; letter-spacing: 0.04em; width: fit-content; }
+.pricing-name { font-size: 18px; font-weight: 700; color: var(--gray-900); margin-bottom: 6px; }
+.pricing-desc { font-size: 13px; color: var(--gray-500); margin-bottom: 20px; line-height: 1.55; }
+.pricing-price { display: flex; align-items: baseline; gap: 4px; margin-bottom: 4px; }
+.pricing-amount { font-size: 38px; font-weight: 700; color: var(--gray-900); font-family: var(--mono); line-height: 1; }
+.pricing-period { font-size: 14px; color: var(--gray-500); }
+.pricing-billed { font-size: 12px; color: var(--gray-400); margin-bottom: 22px; }
+.pricing-divider { height: 1px; background: var(--gray-100); margin: 20px 0; }
+.pricing-features { display: flex; flex-direction: column; gap: 10px; flex: 1; margin-bottom: 24px; }
+.pricing-feat { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; color: var(--gray-700); line-height: 1.45; }
+.pfeat-tick { color: var(--green); font-weight: 700; flex-shrink: 0; font-size: 14px; }
+.pfeat-cross { color: var(--gray-300); flex-shrink: 0; font-size: 14px; }
+.pricing-cta { margin-top: auto; }
+
+/* ── FOR CLUBS ── */
+.for-clubs { padding: 80px 24px; background: white; border-top: var(--border); border-bottom: var(--border); }
+.for-clubs-inner { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; }
+.clubs-right { display: flex; flex-direction: column; gap: 18px; }
+.club-feat { display: flex; gap: 14px; align-items: flex-start; }
+.club-feat-icon { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; background: var(--gray-50); border: var(--border); }
+.club-feat-text h4 { font-size: 14px; font-weight: 600; color: var(--gray-900); margin-bottom: 4px; }
+.club-feat-text p { font-size: 13px; color: var(--gray-500); line-height: 1.6; }
+.clubs-testimonial { background: var(--gray-50); border: var(--border); border-radius: var(--radius-lg); padding: 20px; margin-top: 8px; }
+.clubs-testimonial blockquote { font-size: 14px; color: var(--gray-700); line-height: 1.65; font-style: italic; margin-bottom: 12px; }
+.clubs-testimonial-author { display: flex; align-items: center; gap: 10px; }
+
+/* ── SECTION ANCHOR offset ── */
+.section-anchor { display: block; position: relative; top: -80px; visibility: hidden; }
+
+/* ── CTA BAND ── */
+.cta-band { background: var(--gray-900); padding: 80px 24px; text-align: center; position: relative; overflow: hidden; }
+.cta-band::before { content: ''; position: absolute; top: -80px; left: 50%; transform: translateX(-50%); width: 500px; height: 300px; background: radial-gradient(ellipse, rgba(255,210,30,0.12) 0%, transparent 70%); pointer-events: none; }
+.cta-band h2 { font-size: 36px; font-weight: 700; color: white; margin-bottom: 14px; letter-spacing: -0.01em; position: relative; }
+.cta-band p { font-size: 17px; color: var(--gray-400); margin-bottom: 32px; position: relative; }
+.cta-band-btns { display: flex; align-items: center; justify-content: center; gap: 10px; position: relative; }
+
+/* ── FOOTER ── */
+.footer { background: white; border-top: var(--border); padding: 28px 24px; }
+.footer-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--gray-400); }
+.footer-links { display: flex; gap: 20px; }
+.footer-links a { color: var(--gray-500); text-decoration: none; }
+.footer-links a:hover { color: var(--gray-700); }
+
+/* ═══════════════════════════
+   AUTH PAGE (Login / Signup)
+═══════════════════════════ */
+.auth-page { min-height: calc(100vh - 56px); display: grid; grid-template-columns: 1fr 1fr; }
+
+.auth-left {
+  background: var(--gray-900); padding: 56px 48px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  position: relative; overflow: hidden;
+}
+.auth-left::before {
+  content: ''; position: absolute; top: -100px; right: -100px;
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(255,210,30,0.15) 0%, transparent 70%);
+  pointer-events: none;
+}
+.auth-left-top { position: relative; z-index: 1; }
+.auth-left-tagline { font-size: 30px; font-weight: 700; color: white; line-height: 1.25; margin-bottom: 16px; letter-spacing: -0.01em; }
+.auth-left-tagline em { font-style: normal; color: var(--yellow); }
+.auth-left-sub { font-size: 15px; color: var(--gray-400); line-height: 1.6; max-width: 340px; }
+.auth-preview { display: flex; flex-direction: column; gap: 10px; margin-top: 40px; position: relative; z-index: 1; }
+.auth-preview-card {
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--radius-lg); padding: 14px; display: flex; align-items: center; gap: 12px;
+}
+.apc-avatar { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+.apc-info { flex: 1; }
+.apc-name { font-size: 13px; font-weight: 600; color: white; }
+.apc-stats { display: flex; gap: 5px; margin-top: 4px; flex-wrap: wrap; }
+.apc-stat { background: rgba(255,255,255,0.08); border-radius: 5px; padding: 2px 7px; font-size: 10px; font-family: var(--mono); color: var(--gray-300); }
+.ai-tag-dark { font-size: 10px; background: rgba(255,210,30,0.2); color: #FFD21E; padding: 2px 8px; border-radius: 10px; white-space: nowrap; flex-shrink: 0; }
+.auth-left-stats { display: flex; gap: 28px; position: relative; z-index: 1; }
+.auth-ls .n { font-size: 22px; font-weight: 700; color: white; font-family: var(--mono); }
+.auth-ls .l { font-size: 12px; color: var(--gray-500); margin-top: 2px; }
+
+.auth-right {
+  background: white; padding: 56px 48px;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.auth-form-wrap { max-width: 360px; width: 100%; margin: 0 auto; }
+.auth-mode-toggle { display: flex; background: var(--gray-100); border-radius: 9px; padding: 4px; margin-bottom: 28px; gap: 2px; }
+.auth-mode-btn {
+  flex: 1; padding: 7px; border-radius: 7px; text-align: center;
+  font-size: 14px; font-weight: 500; cursor: pointer;
+  color: var(--gray-500); transition: all 0.15s;
+  border: none; background: transparent; font-family: var(--font);
+}
+.auth-mode-btn.active { background: white; color: var(--gray-900); box-shadow: var(--shadow); }
+.auth-title { font-size: 22px; font-weight: 700; color: var(--gray-900); margin-bottom: 6px; }
+.auth-subtitle { font-size: 14px; color: var(--gray-500); margin-bottom: 28px; }
+.social-btns { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+.social-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 10px 16px; border: var(--border); border-radius: 8px;
+  font-size: 14px; font-weight: 500; color: var(--gray-700);
+  background: white; cursor: pointer; font-family: var(--font);
+  transition: background 0.1s, border-color 0.1s;
+}
+.social-btn:hover { background: var(--gray-50); border-color: var(--gray-300); }
+.strava-btn { border-color: #FC4C02; color: #FC4C02; }
+.strava-btn:hover { background: #FFF5F0; }
+.auth-divider { display: flex; align-items: center; gap: 12px; margin: 20px 0; }
+.auth-divider::before, .auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--gray-200); }
+.auth-divider span { font-size: 12px; color: var(--gray-400); white-space: nowrap; }
+.form-field { margin-bottom: 14px; }
+.form-label { display: block; font-size: 13px; font-weight: 500; color: var(--gray-700); margin-bottom: 5px; }
+.form-input {
+  width: 100%; padding: 9px 12px; border: var(--border); border-radius: 8px;
+  font-size: 14px; font-family: var(--font); color: var(--gray-800);
+  background: white; outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.form-input:focus { border-color: var(--gray-500); box-shadow: 0 0 0 3px rgba(107,114,128,0.1); }
+.form-input::placeholder { color: var(--gray-400); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.form-forgot { float: right; font-size: 12px; color: var(--gray-500); text-decoration: none; }
+.form-forgot:hover { color: var(--gray-800); }
+.form-submit { margin-top: 20px; }
+.form-terms { font-size: 12px; color: var(--gray-400); text-align: center; margin-top: 14px; line-height: 1.5; }
+.form-terms a { color: var(--gray-600); text-decoration: underline; }
+.sport-selector { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.sport-select-chip {
+  padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  border: var(--border); background: white; color: var(--gray-600);
+  cursor: pointer; transition: all 0.1s; font-family: var(--font);
+}
+.sport-select-chip:hover { border-color: var(--gray-400); }
+.sport-select-chip.selected { background: var(--yellow-light); border-color: #fde68a; color: #7a5c00; }
+.pw-strength { margin-top: 6px; display: flex; gap: 3px; }
+.pw-bar { height: 3px; flex: 1; border-radius: 3px; background: var(--gray-200); transition: background 0.2s; }
+.pw-bar.weak { background: #EF4444; }
+.pw-bar.medium { background: #F59E0B; }
+.pw-bar.strong { background: #10B981; }
+.pw-label { font-size: 11px; color: var(--gray-400); margin-top: 4px; }
+.onboard-step { display: none; }
+.onboard-step.active { display: block; }
+.onboard-progress { display: flex; gap: 4px; margin-bottom: 24px; }
+.onboard-dot { height: 3px; flex: 1; border-radius: 3px; background: var(--gray-200); }
+.onboard-dot.done { background: var(--gray-900); }
+.onboard-dot.active { background: var(--yellow-dark); }
+.auth-success { text-align: center; padding: 20px 0; }
+.success-icon { width: 56px; height: 56px; background: var(--yellow); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; margin: 0 auto 16px; }
+.auth-success h3 { font-size: 20px; font-weight: 700; color: var(--gray-900); margin-bottom: 8px; }
+.auth-success p { font-size: 14px; color: var(--gray-500); margin-bottom: 24px; }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="logo" onclick="showPage('landing')">
+      <div class="logo-icon">🏟</div>
+      <span class="logo-text">Arenas</span>
+    </div>
+    <nav class="topnav" id="main-topnav">
+      <a href="#features" onclick="scrollTo('features')" data-section="features">Features</a>
+      <a href="#pricing" onclick="scrollTo('pricing')" data-section="pricing">Pricing</a>
+      <a href="#for-clubs" onclick="scrollTo('for-clubs')" data-section="for-clubs">For clubs</a>
+      <a href="#blog" onclick="scrollTo('blog')" data-section="blog">Blog</a>
+    </nav>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost" onclick="showPage('login'); setMode('login')">Log in</button>
+      <button class="btn btn-yellow" onclick="showPage('login'); setMode('signup')">Sign up free</button>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════ LANDING PAGE ═══════════ -->
+<div class="page active" id="page-landing">
+
+  <!-- ── SPLIT HERO ── -->
+  <div class="split-hero">
+
+    <!-- Left: headline + CTA -->
+    <div class="hero-left">
+      <div class="hero-eyebrow">🏅 <span>84,000+</span> athletes · 47 sports</div>
+      <h1 class="hero-h1">Every sport.<br><em>One community.</em></h1>
+      <p class="hero-sub">Share workouts, get AI coaching on every activity, discover events, and find athletes who train as hard as you do.</p>
+      <div class="hero-cta">
+        <button class="btn btn-yellow btn-lg" onclick="showPage('login'); setMode('signup')">Get started free →</button>
+        <button class="btn btn-ghost btn-lg" onclick="showPage('login'); setMode('login')">Log in</button>
+      </div>
+      <div class="hero-note">No credit card required · Free forever plan available</div>
+      <div class="hero-social-proof">
+        <div class="hsp-avatars">
+          <div class="hsp-av" style="background:#FFF7ED;color:#9A3412">JK</div>
+          <div class="hsp-av" style="background:#FEF9C3;color:#854D0E">SL</div>
+          <div class="hsp-av" style="background:#E0F2FE;color:#0369A1">MC</div>
+          <div class="hsp-av" style="background:#F5F3FF;color:#6D28D9">SR</div>
+          <div class="hsp-av" style="background:#FCE7F3;color:#9D174D">YT</div>
+        </div>
+        <div class="hsp-text"><strong>4,800+ athletes</strong> joined this week alone</div>
+      </div>
+    </div>
+
+    <!-- Right: live feed preview -->
+    <div class="hero-right">
+      <div class="hero-right-header">
+        <div class="live-badge"><div class="live-dot"></div>Live activity feed</div>
+        <div class="live-count">312,841 activities logged</div>
+      </div>
+
+      <div class="feed-preview">
+
+        <!-- Card 1: Running with AI coach open -->
+        <div class="prev-card">
+          <div class="prev-card-body">
+            <div class="prev-head">
+              <div class="prev-av" style="background:#FFF7ED;color:#9A3412">JK</div>
+              <div>
+                <div class="prev-user">Jamie K.</div>
+                <div class="prev-time">7 min ago · London</div>
+              </div>
+              <div class="prev-sport-tag" style="background:#FFF7ED;color:#9A3412;border:1px solid #FDBA74">🏃 Running</div>
+            </div>
+            <div class="prev-stats">
+              <div class="prev-stat"><div class="pv">12.4</div><div class="pl">km</div></div>
+              <div class="prev-stat"><div class="pv">54:22</div><div class="pl">time</div></div>
+              <div class="prev-stat"><div class="pv">4:23</div><div class="pl">/km</div></div>
+              <div class="prev-stat"><div class="pv">148</div><div class="pl">bpm</div></div>
+            </div>
+            <div class="prev-desc">Morning long run done ✓ PB attempt this Sunday — anyone in London want to pace?</div>
+          </div>
+          <div class="prev-ai-panel">
+            <div class="prev-ai-icon">AI</div>
+            <div class="prev-ai-text"><strong>AI Coach:</strong> Solid effort — your pace held well through mile 6. HR spiked 12 bpm in the final 3km, suggesting glycogen depletion. Keep tomorrow easy, then hit Sunday's PB fresh.</div>
+          </div>
+        </div>
+
+        <!-- Card 2: Climbing -->
+        <div class="prev-card">
+          <div class="prev-card-body">
+            <div class="prev-head">
+              <div class="prev-av" style="background:#F5F3FF;color:#6D28D9">SR</div>
+              <div>
+                <div class="prev-user">Sofia R.</div>
+                <div class="prev-time">22 min ago · Barcelona</div>
+              </div>
+              <div class="prev-sport-tag" style="background:#F5F3FF;color:#5B21B6;border:1px solid #C4B5FD">🧗 Climbing</div>
+            </div>
+            <div class="prev-stats">
+              <div class="prev-stat"><div class="pv">V7</div><div class="pl">grade</div></div>
+              <div class="prev-stat"><div class="pv">Sent ✓</div><div class="pl">status</div></div>
+              <div class="prev-stat"><div class="pv">3 wks</div><div class="pl">project</div></div>
+            </div>
+            <div class="prev-desc">Finally sent the V7 at Montserrat — crux was the undercling. Beta in comments.</div>
+          </div>
+        </div>
+
+        <!-- Card 3: Cycling -->
+        <div class="prev-card">
+          <div class="prev-card-body">
+            <div class="prev-head">
+              <div class="prev-av" style="background:#FEF9C3;color:#854D0E">MC</div>
+              <div>
+                <div class="prev-user">Marco C.</div>
+                <div class="prev-time">1h ago · Milan</div>
+              </div>
+              <div class="prev-sport-tag" style="background:#EFF6FF;color:#1E40AF;border:1px solid #93C5FD">🚴 Cycling</div>
+            </div>
+            <div class="prev-stats">
+              <div class="prev-stat"><div class="pv">88</div><div class="pl">km</div></div>
+              <div class="prev-stat"><div class="pv">241</div><div class="pl">avg W</div></div>
+              <div class="prev-stat"><div class="pv">1,240</div><div class="pl">elev m</div></div>
+            </div>
+            <div class="prev-desc">Stelvio approach done — Saturday group ride open, DM to join. Cap 12 riders.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Scrolling sport pills -->
+  <div class="sport-scroll">
+    <div class="sport-scroll-inner" id="sport-pills"></div>
+  </div>
+
+  <!-- Stats bar -->
+  <div class="stats-bar">
+    <div class="stats-bar-inner">
+      <div class="stat-item">
+        <div class="stat-num">84k</div>
+        <div class="stat-label">Athletes worldwide</div>
+        <div class="stat-delta"><span class="stat-pulse"></span>↑ +1.2k this week</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">312k</div>
+        <div class="stat-label">Activities logged</div>
+        <div class="stat-delta"><span class="stat-pulse"></span>↑ +4.8k today</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">2.1k</div>
+        <div class="stat-label">Upcoming events</div>
+        <div class="stat-delta"><span class="stat-pulse"></span>↑ +38 this week</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-num">47</div>
+        <div class="stat-label">Sports covered</div>
+        <div class="stat-delta">↑ +2 this month</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Features -->
+  <div class="features" id="features">
+    <a class="section-anchor" id="features-anchor"></a>
+    <div class="features-inner">
+      <div class="section-label">Why Arenas</div>
+      <div class="section-title">Everything your training needs, in one place</div>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon" style="background:#FFF9E0">✦</div>
+          <h3>AI-powered coaching</h3>
+          <p>Every activity you log gets a personalised AI analysis — pace breakdown, heart rate zones, recovery recommendations, and training suggestions grounded in your own data.</p>
+          <span class="feature-badge badge-ai">✦ AI Coach</span>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:#F0FDF4">🏟</div>
+          <h3>Cross-sport community</h3>
+          <p>Running, cycling, climbing, football, swimming — all in one feed. Follow athletes across sports and discover a community Strava's siloed design doesn't allow.</p>
+          <span class="feature-badge badge-free">Free forever</span>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:#EFF6FF">📅</div>
+          <h3>Event discovery</h3>
+          <p>2,100+ events across 47 sports. AI matches you with events that suit your fitness profile and connects you with athletes already registered near you.</p>
+          <span class="feature-badge badge-free">Free forever</span>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:#FDF4FF">🏆</div>
+          <h3>Leaderboards & challenges</h3>
+          <p>Weekly sport leaderboards, monthly challenges, and club competitions. Earn points for every activity and climb the rankings against athletes at your level.</p>
+          <span class="feature-badge badge-free">Free forever</span>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:#FFF7ED">🔗</div>
+          <h3>Strava & device sync</h3>
+          <p>Connect Strava, Garmin, Wahoo, or Apple Watch. Activities sync automatically — your stats flow straight into your Arenas feed without manual logging.</p>
+          <span class="feature-badge badge-free">Free forever</span>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:#F0FDF4">📈</div>
+          <h3>Training analytics</h3>
+          <p>Trend analysis across weeks and months. Track your training load, spot patterns in your performance, and understand how your fitness is actually progressing.</p>
+          <span class="feature-badge badge-pro">Pro feature</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- How it works -->
+  <div class="how-it-works">
+    <div class="how-inner">
+      <div class="section-label" style="text-align:center">How it works</div>
+      <div class="section-title" style="text-align:center;margin:0 auto 0;max-width:520px">Up and running in four steps</div>
+      <div class="steps-grid">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-title">Create your profile</div>
+          <div class="step-desc">Pick your sports, set your level, and connect your location. Takes 90 seconds.</div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-title">Connect Strava</div>
+          <div class="step-desc">Your past and future activities sync automatically — no manual logging.</div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-title">Get AI coaching</div>
+          <div class="step-desc">Every workout gets a personalised analysis grounded in your data.</div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-title">Find your people</div>
+          <div class="step-desc">Follow athletes, join events, and compete in challenges near you.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Social proof -->
+  <div class="social-proof" id="community">
+    <a class="section-anchor" id="community-anchor"></a>
+    <div class="social-proof-inner">
+      <div class="section-label" style="text-align:center">Athletes love it</div>
+      <div class="section-title" style="text-align:center;margin:0 auto;max-width:500px">What the community is saying</div>
+      <div class="testimonials">
+        <div class="testimonial">
+          <div class="stars">★★★★★</div>
+          <div class="testimonial-text">"The AI coach told me my heart rate was too high for a recovery run before I even realised it. Came back and it was exactly right. Nothing else does that."</div>
+          <div class="testimonial-author">
+            <div class="t-avatar" style="background:#FFF7ED;color:#9A3412">JK</div>
+            <div><div class="t-name">Jamie K.</div><div class="t-sport">Running · London</div></div>
+          </div>
+        </div>
+        <div class="testimonial">
+          <div class="stars">★★★★★</div>
+          <div class="testimonial-text">"Finally a place where my running AND my climbing coexist in the same feed. I don't have to choose which sport identity to post from."</div>
+          <div class="testimonial-author">
+            <div class="t-avatar" style="background:#F5F3FF;color:#6D28D9">SR</div>
+            <div><div class="t-name">Sofia R.</div><div class="t-sport">Climbing · Barcelona</div></div>
+          </div>
+        </div>
+        <div class="testimonial">
+          <div class="stars">★★★★★</div>
+          <div class="testimonial-text">"Found 8 riders for my Stelvio group through Arenas Events. Never met any of them before — now we ride every Saturday."</div>
+          <div class="testimonial-author">
+            <div class="t-avatar" style="background:#FEF9C3;color:#854D0E">MC</div>
+            <div><div class="t-name">Marco C.</div><div class="t-sport">Cycling · Milan</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Activity preview strip -->
+  <div class="preview-strip">
+    <div class="preview-strip-inner">
+      <div class="section-label">Live feed preview</div>
+      <div class="section-title">See what's happening right now</div>
+      <div class="preview-cards">
+        <div class="p-card">
+          <div class="p-avatar" style="background:#FFF7ED;color:#9A3412">JK</div>
+          <div class="p-info">
+            <div class="p-name">Jamie K. <span style="font-size:11px;font-weight:400;color:var(--gray-400)">· 7 min ago · Running</span></div>
+            <div class="p-desc">Morning long run — PB attempt this Sunday!</div>
+          </div>
+          <div class="p-stats"><div class="p-stat">12.4 km</div><div class="p-stat">4:23/km</div><div class="p-stat">148 bpm</div></div>
+          <div class="ai-badge">✦ AI analysed</div>
+        </div>
+        <div class="p-card">
+          <div class="p-avatar" style="background:#F5F3FF;color:#6D28D9">SR</div>
+          <div class="p-info">
+            <div class="p-name">Sofia R. <span style="font-size:11px;font-weight:400;color:var(--gray-400)">· 22 min ago · Climbing</span></div>
+            <div class="p-desc">Sent the V7 project at Montserrat</div>
+          </div>
+          <div class="p-stats"><div class="p-stat">V7</div><div class="p-stat">3-wk project</div></div>
+          <div class="ai-badge">✦ AI analysed</div>
+        </div>
+        <div class="p-card">
+          <div class="p-avatar" style="background:#FEF9C3;color:#854D0E">MC</div>
+          <div class="p-info">
+            <div class="p-name">Marco C. <span style="font-size:11px;font-weight:400;color:var(--gray-400)">· 1h ago · Cycling</span></div>
+            <div class="p-desc">Stelvio approach — group ride Saturday open</div>
+          </div>
+          <div class="p-stats"><div class="p-stat">88 km</div><div class="p-stat">241W</div><div class="p-stat">1,240m</div></div>
+          <div class="ai-badge">✦ AI analysed</div>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:28px">
+        <button class="btn btn-yellow btn-lg" onclick="showPage('login'); setMode('signup')">Join Arenas to see your feed →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRICING -->
+  <div class="pricing" id="pricing">
+    <a class="section-anchor" id="pricing-anchor"></a>
+    <div class="pricing-inner">
+      <div class="section-label" style="text-align:center">Pricing</div>
+      <div class="section-title" style="text-align:center;margin:0 auto 0;max-width:480px">Start free. Upgrade when you're ready.</div>
+      <div class="pricing-grid">
+
+        <!-- Free -->
+        <div class="pricing-card">
+          <div class="pricing-name">Free</div>
+          <div class="pricing-desc">Everything you need to get started and stay active with the community.</div>
+          <div class="pricing-price"><span class="pricing-amount">$0</span><span class="pricing-period">/ month</span></div>
+          <div class="pricing-billed">Free forever — no credit card needed</div>
+          <div class="pricing-divider"></div>
+          <div class="pricing-features">
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Activity feed across all sports</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> 5 AI coach analyses per month</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Follow up to 50 athletes</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Event discovery & RSVP</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Weekly leaderboards</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Up to 3 active challenges</div>
+            <div class="pricing-feat"><span class="pfeat-cross">✗</span> <span style="color:var(--gray-400)">Unlimited AI coaching</span></div>
+            <div class="pricing-feat"><span class="pfeat-cross">✗</span> <span style="color:var(--gray-400)">Training analytics & trends</span></div>
+          </div>
+          <div class="pricing-cta">
+            <button class="btn btn-primary btn-full" onclick="showPage('login'); setMode('signup')">Get started free</button>
+          </div>
+        </div>
+
+        <!-- Pro -->
+        <div class="pricing-card featured">
+          <div class="pricing-popular">Most popular</div>
+          <div class="pricing-name">Pro</div>
+          <div class="pricing-desc">Unlimited AI coaching and deep training analytics for serious athletes.</div>
+          <div class="pricing-price"><span class="pricing-amount">$9</span><span class="pricing-period">/ month</span></div>
+          <div class="pricing-billed">Billed annually — or $12/mo monthly</div>
+          <div class="pricing-divider"></div>
+          <div class="pricing-features">
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Everything in Free</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> <strong>Unlimited AI coach analyses</strong></div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Full training analytics & trends</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Training load & recovery scoring</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Unlimited follows & connections</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Unlimited active challenges</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Priority event matching</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Export your data anytime</div>
+          </div>
+          <div class="pricing-cta">
+            <button class="btn btn-yellow btn-full" onclick="showPage('login'); setMode('signup')">Start Pro free for 14 days →</button>
+          </div>
+        </div>
+
+        <!-- Club -->
+        <div class="pricing-card">
+          <div class="pricing-name">Club</div>
+          <div class="pricing-desc">For running clubs, cycling teams, gyms, and sports organisations.</div>
+          <div class="pricing-price"><span class="pricing-amount">$29</span><span class="pricing-period">/ month</span></div>
+          <div class="pricing-billed">Up to 25 members — $1/mo per additional member</div>
+          <div class="pricing-divider"></div>
+          <div class="pricing-features">
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Everything in Pro for all members</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Club dashboard & group feed</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Coach oversight of member stats</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Private club leaderboards</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Bulk event sign-ups</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Club challenges & points</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Dedicated support</div>
+          </div>
+          <div class="pricing-cta">
+            <button class="btn btn-primary btn-full" onclick="showPage('login'); setMode('signup')">Start Club trial</button>
+          </div>
+        </div>
+
+      </div>
+      <div style="text-align:center;margin-top:20px;font-size:13px;color:var(--gray-500)">
+        All plans include a 14-day free trial · Cancel anytime · No long-term contracts
+      </div>
+    </div>
+  </div>
+
+  <!-- FOR CLUBS -->
+  <div class="for-clubs" id="for-clubs">
+    <a class="section-anchor" id="for-clubs-anchor"></a>
+    <div class="for-clubs-inner">
+      <div class="clubs-left">
+        <div class="section-label">For clubs & teams</div>
+        <div class="section-title" style="max-width:380px">The team dashboard your club has been waiting for</div>
+        <p style="font-size:15px;color:var(--gray-500);line-height:1.7;margin-bottom:28px;max-width:380px">Whether you run a parkrun group, a cycling collective, or a multi-sport club — Arenas gives coaches and organisers a single view of every member's training, events, and progress.</p>
+        <button class="btn btn-primary btn-lg" onclick="showPage('login'); setMode('signup')">Set up your club →</button>
+        <div style="font-size:13px;color:var(--gray-400);margin-top:10px">From $29/month · First month free</div>
+      </div>
+      <div class="clubs-right">
+        <div class="club-feat">
+          <div class="club-feat-icon">📊</div>
+          <div class="club-feat-text">
+            <h4>Coach dashboard</h4>
+            <p>See every member's weekly training load, activity streaks, and progress toward challenges — all in one place, without chasing Strava screenshots.</p>
+          </div>
+        </div>
+        <div class="club-feat">
+          <div class="club-feat-icon">🏆</div>
+          <div class="club-feat-text">
+            <h4>Private leaderboards & challenges</h4>
+            <p>Run club-only competitions — weekly km totals, challenge streaks, or custom scoring. Points keep members engaged between events.</p>
+          </div>
+        </div>
+        <div class="club-feat">
+          <div class="club-feat-icon">📅</div>
+          <div class="club-feat-text">
+            <h4>Bulk event sign-ups</h4>
+            <p>Register your whole club for a race in one step. Members get a notification, the coach sees who's confirmed, and attendance is tracked automatically.</p>
+          </div>
+        </div>
+        <div class="clubs-testimonial">
+          <blockquote>"We moved our running club from a WhatsApp group to Arenas. The coach dashboard alone saves me two hours a week — I can see every member's training at a glance."</blockquote>
+          <div class="clubs-testimonial-author">
+            <div class="t-avatar" style="background:#FFF7ED;color:#9A3412;width:32px;height:32px;font-size:11px">RH</div>
+            <div><div class="t-name" style="font-size:13px">Rachel H.</div><div class="t-sport">Head coach · Hackney Running Club</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BLOG placeholder anchor -->
+  <div id="blog" style="display:none"><a class="section-anchor" id="blog-anchor"></a></div>
+
+  <div class="cta-band">
+    <h2>Start for free today</h2>
+    <p>Join 84,000 athletes already training smarter with Arenas.</p>
+    <div class="cta-band-btns">
+      <button class="btn btn-yellow btn-lg" onclick="showPage('login'); setMode('signup')">Create free account</button>
+      <button class="btn btn-ghost btn-lg" style="color:var(--gray-300);border-color:var(--gray-700)" onclick="showPage('login'); setMode('login')">Log in</button>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="width:22px;height:22px;background:var(--yellow);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px">🏟</div>
+        <span>Arenas © 2026</span>
+      </div>
+      <div class="footer-links">
+        <a href="#">About</a><a href="#">Blog</a><a href="#">API</a><a href="#">Terms</a><a href="#">Privacy</a><a href="#">Contact</a>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<!-- ═══════════ LOGIN / SIGNUP PAGE ═══════════ -->
+<div class="page" id="page-login">
+  <div class="auth-page">
+
+    <!-- Left panel -->
+    <div class="auth-left">
+      <div class="auth-left-top">
+        <div class="auth-left-tagline">Every sport.<br><em>One community.</em></div>
+        <div class="auth-left-sub">Share workouts, get AI coaching, discover events, and connect with athletes across every sport.</div>
+        <div class="auth-preview">
+          <div class="auth-preview-card">
+            <div class="apc-avatar" style="background:#FFF7ED;color:#9A3412">JK</div>
+            <div class="apc-info">
+              <div class="apc-name">Jamie K. <span style="color:var(--gray-500);font-weight:400;font-size:11px">· Running</span></div>
+              <div class="apc-stats"><div class="apc-stat">12.4 km</div><div class="apc-stat">4:23/km</div><div class="apc-stat">148 bpm</div></div>
+            </div>
+            <div class="ai-tag-dark">✦ AI analysed</div>
+          </div>
+          <div class="auth-preview-card">
+            <div class="apc-avatar" style="background:#F5F3FF;color:#6D28D9">SR</div>
+            <div class="apc-info">
+              <div class="apc-name">Sofia R. <span style="color:var(--gray-500);font-weight:400;font-size:11px">· Climbing</span></div>
+              <div class="apc-stats"><div class="apc-stat">V7 sent ✓</div><div class="apc-stat">3-wk project</div></div>
+            </div>
+            <div class="ai-tag-dark">✦ AI analysed</div>
+          </div>
+          <div class="auth-preview-card">
+            <div class="apc-avatar" style="background:#FEF9C3;color:#854D0E">MC</div>
+            <div class="apc-info">
+              <div class="apc-name">Marco C. <span style="color:var(--gray-500);font-weight:400;font-size:11px">· Cycling</span></div>
+              <div class="apc-stats"><div class="apc-stat">88 km</div><div class="apc-stat">241W avg</div><div class="apc-stat">1,240m</div></div>
+            </div>
+            <div class="ai-tag-dark">✦ AI analysed</div>
+          </div>
+        </div>
+      </div>
+      <div class="auth-left-stats">
+        <div class="auth-ls"><div class="n">84k</div><div class="l">Athletes</div></div>
+        <div class="auth-ls"><div class="n">47</div><div class="l">Sports</div></div>
+        <div class="auth-ls"><div class="n">2.1k</div><div class="l">Events</div></div>
+      </div>
+    </div>
+
+    <!-- Right panel: form -->
+    <div class="auth-right">
+      <div class="auth-form-wrap">
+
+        <div class="auth-mode-toggle">
+          <button class="auth-mode-btn" id="mode-login" onclick="setMode('login')">Log in</button>
+          <button class="auth-mode-btn" id="mode-signup" onclick="setMode('signup')">Sign up</button>
+        </div>
+
+        <!-- LOGIN -->
+        <div id="form-login">
+          <div class="auth-title">Welcome back</div>
+          <div class="auth-subtitle">Log in to your Arenas account</div>
+          <div class="social-btns">
+            <button class="social-btn strava-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="#FC4C02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+              Continue with Strava
+            </button>
+            <button class="social-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+              Continue with Google
+            </button>
+          </div>
+          <div class="auth-divider"><span>or log in with email</span></div>
+          <div class="form-field">
+            <label class="form-label">Email</label>
+            <input class="form-input" type="email" placeholder="you@example.com">
+          </div>
+          <div class="form-field">
+            <label class="form-label">Password <a href="#" class="form-forgot">Forgot password?</a></label>
+            <input class="form-input" type="password" placeholder="••••••••">
+          </div>
+          <div class="form-submit">
+            <button class="btn btn-primary btn-full btn-lg" onclick="handleLogin()">Log in to Arenas</button>
+          </div>
+          <div class="form-terms" style="margin-top:16px">Don't have an account? <a href="#" onclick="setMode('signup')">Sign up free</a></div>
+        </div>
+
+        <!-- SIGNUP -->
+        <div id="form-signup" style="display:none">
+          <div class="onboard-step active" id="step-1">
+            <div class="onboard-progress">
+              <div class="onboard-dot active"></div>
+              <div class="onboard-dot"></div>
+              <div class="onboard-dot"></div>
+            </div>
+            <div class="auth-title">Create your account</div>
+            <div class="auth-subtitle">Join 84,000 athletes on Arenas</div>
+            <div class="social-btns">
+              <button class="social-btn strava-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#FC4C02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
+                Sign up with Strava
+              </button>
+              <button class="social-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                Sign up with Google
+              </button>
+            </div>
+            <div class="auth-divider"><span>or sign up with email</span></div>
+            <div class="form-row">
+              <div class="form-field"><label class="form-label">First name</label><input class="form-input" type="text" placeholder="Jamie"></div>
+              <div class="form-field"><label class="form-label">Last name</label><input class="form-input" type="text" placeholder="King"></div>
+            </div>
+            <div class="form-field"><label class="form-label">Email</label><input class="form-input" type="email" placeholder="you@example.com"></div>
+            <div class="form-field">
+              <label class="form-label">Password</label>
+              <input class="form-input" type="password" placeholder="Min 8 characters" oninput="checkPW(this.value)">
+              <div class="pw-strength"><div class="pw-bar" id="pb1"></div><div class="pw-bar" id="pb2"></div><div class="pw-bar" id="pb3"></div><div class="pw-bar" id="pb4"></div></div>
+              <div class="pw-label" id="pw-label">Choose a strong password</div>
+            </div>
+            <div class="form-submit"><button class="btn btn-primary btn-full btn-lg" onclick="goStep(2)">Continue →</button></div>
+            <div class="form-terms">By signing up you agree to our <a href="#">Terms</a> and <a href="#">Privacy Policy</a></div>
+          </div>
+
+          <div class="onboard-step" id="step-2">
+            <div class="onboard-progress">
+              <div class="onboard-dot done"></div><div class="onboard-dot active"></div><div class="onboard-dot"></div>
+            </div>
+            <div class="auth-title">Your sports</div>
+            <div class="auth-subtitle">Pick the sports you train in — we'll personalise your feed.</div>
+            <div class="form-field">
+              <label class="form-label">Select all that apply</label>
+              <div class="sport-selector">
+                <button class="sport-select-chip" onclick="toggleSport(this)">🏃 Running</button>
+                <button class="sport-select-chip" onclick="toggleSport(this)">🚴 Cycling</button>
+                <button class="sport-select-chip" onclick="toggleSport(this)">🏊 Swimming</button>
+                <button class="sport-select-chip" onclick="toggleSport(this)">🧗 Climbing</button>
+                <button class="sport-select-chip" onclick="toggleSport(this)">⚽ Football</button>
+                <button class="sport-select-chip" onclick="toggleSport(this)">🏀 Basketball</button>
+                <button class="sport-select-chip" onclick="toggleSport(this)">🎾 Tennis</button>
+                <button class="sport-select-chip" onclick="toggleSport(this)">🏋️ Weightlifting</button>
+                <button class="sport-select-chip" onclick="toggleSport(this)">🧘 Yoga</button>
+                <button class="sport-select-chip" onclick="toggleSport(this)">🏄 Surfing</button>
+                <button class="sport-select-chip" onclick="toggleSport(this)">⛷️ Skiing</button>
+                <button class="sport-select-chip" onclick="toggleSport(this)">🥊 Boxing</button>
+              </div>
+            </div>
+            <div class="form-field" style="margin-top:16px">
+              <label class="form-label">Your level</label>
+              <select class="form-input">
+                <option value="">Select your level</option>
+                <option>Beginner — just getting started</option>
+                <option>Intermediate — training regularly</option>
+                <option>Advanced — competing or racing</option>
+                <option>Elite / Professional</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:20px">
+              <button class="btn btn-ghost" style="flex:1" onclick="goStep(1)">← Back</button>
+              <button class="btn btn-primary" style="flex:2" onclick="goStep(3)">Continue →</button>
+            </div>
+          </div>
+
+          <div class="onboard-step" id="step-3">
+            <div class="onboard-progress">
+              <div class="onboard-dot done"></div><div class="onboard-dot done"></div><div class="onboard-dot active"></div>
+            </div>
+            <div class="auth-title">Connect your devices</div>
+            <div class="auth-subtitle">Sync activities automatically — no manual logging needed.</div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin:20px 0">
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:var(--border);border-radius:9px;background:white">
+                <div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">🔶</span><div><div style="font-size:14px;font-weight:600;color:var(--gray-900)">Strava</div><div style="font-size:12px;color:var(--gray-500)">Sync runs, rides, swims & more</div></div></div>
+                <button class="btn btn-ghost" style="font-size:12px;padding:5px 12px;color:#FC4C02;border-color:#FC4C02">Connect</button>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:var(--border);border-radius:9px;background:white">
+                <div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">⌚</span><div><div style="font-size:14px;font-weight:600;color:var(--gray-900)">Garmin Connect</div><div style="font-size:12px;color:var(--gray-500)">Sync GPS data and heart rate</div></div></div>
+                <button class="btn btn-ghost" style="font-size:12px;padding:5px 12px">Connect</button>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:var(--border);border-radius:9px;background:white">
+                <div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">🍎</span><div><div style="font-size:14px;font-weight:600;color:var(--gray-900)">Apple Health</div><div style="font-size:12px;color:var(--gray-500)">Workouts, steps and activity</div></div></div>
+                <button class="btn btn-ghost" style="font-size:12px;padding:5px 12px">Connect</button>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn btn-ghost" style="flex:1" onclick="goStep(2)">← Back</button>
+              <button class="btn btn-primary" style="flex:2" onclick="handleSignup()">Finish setup →</button>
+            </div>
+            <div style="text-align:center;margin-top:10px"><a href="#" style="font-size:12px;color:var(--gray-400);text-decoration:none" onclick="handleSignup()">Skip for now</a></div>
+          </div>
+        </div>
+
+        <!-- Success -->
+        <div id="form-success" style="display:none">
+          <div class="auth-success">
+            <div class="success-icon">🎉</div>
+            <h3>You're in!</h3>
+            <p>Welcome to Arenas. Your account is ready — let's take you to your personalised feed.</p>
+            <button class="btn btn-yellow btn-full btn-lg" onclick="showPage('landing')">Go to my feed →</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── PAGE ROUTING ──
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+// ── AUTH FORM ──
+function setMode(mode) {
+  document.getElementById('mode-login').classList.toggle('active', mode === 'login');
+  document.getElementById('mode-signup').classList.toggle('active', mode === 'signup');
+  document.getElementById('form-login').style.display  = mode === 'login'  ? 'block' : 'none';
+  document.getElementById('form-signup').style.display = mode === 'signup' ? 'block' : 'none';
+  document.getElementById('form-success').style.display = 'none';
+}
+function goStep(n) {
+  document.querySelectorAll('.onboard-step').forEach(s => s.classList.remove('active'));
+  document.getElementById('step-' + n).classList.add('active');
+}
+function toggleSport(el) { el.classList.toggle('selected'); }
+function checkPW(val) {
+  const bars = [document.getElementById('pb1'),document.getElementById('pb2'),document.getElementById('pb3'),document.getElementById('pb4')];
+  const label = document.getElementById('pw-label');
+  let score = 0;
+  if (val.length >= 8) score++;
+  if (/[A-Z]/.test(val)) score++;
+  if (/[0-9]/.test(val)) score++;
+  if (/[^A-Za-z0-9]/.test(val)) score++;
+  const cls = score <= 1 ? 'weak' : score <= 2 ? 'medium' : 'strong';
+  bars.forEach((b, i) => { b.className = 'pw-bar'; if (i < score) b.classList.add(cls); });
+  label.textContent = val.length ? ['','Weak','Fair','Good','Strong'][score]||'Strong' : 'Choose a strong password';
+  label.style.color = score <= 1 ? '#EF4444' : score <= 2 ? '#F59E0B' : '#10B981';
+}
+function handleLogin() {
+  document.getElementById('form-login').style.display = 'none';
+  document.getElementById('form-success').style.display = 'block';
+}
+function handleSignup() {
+  document.getElementById('form-signup').style.display = 'none';
+  document.getElementById('form-success').style.display = 'block';
+}
+
+// ── SMOOTH SCROLL + NAV ACTIVE STATE ──
+// Maps nav data-section values to element IDs on the page
+const sectionMap = {
+  features:  'features',
+  pricing:   'pricing',
+  'for-clubs': 'for-clubs',
+  blog:      'cta-band'   // blog not yet built — scroll to CTA instead
+};
+
+function scrollTo(section) {
+  // If on login page, go back to landing first then scroll
+  if (!document.getElementById('page-landing').classList.contains('active')) {
+    showPage('landing');
+    setTimeout(() => doScroll(section), 80);
+  } else {
+    doScroll(section);
+  }
+  return false; // prevent default href jump
+}
+
+function doScroll(section) {
+  const targetId = sectionMap[section] || section;
+  const el = document.getElementById(targetId);
+  if (!el) return;
+  const topbarH = 56;
+  const rect = el.getBoundingClientRect();
+  const scrollTop = window.pageYOffset + rect.top - topbarH - 12;
+  window.scrollTo({ top: scrollTop, behavior: 'smooth' });
+  setNavActive(section);
+}
+
+function setNavActive(section) {
+  document.querySelectorAll('#main-topnav a').forEach(a => {
+    a.classList.toggle('nav-active', a.dataset.section === section);
+  });
+}
+
+// IntersectionObserver — highlight nav link as sections scroll into view
+const observerSections = [
+  { id: 'features',  section: 'features'   },
+  { id: 'pricing',   section: 'pricing'    },
+  { id: 'for-clubs', section: 'for-clubs'  },
+];
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const matched = observerSections.find(s => s.id === entry.target.id);
+      if (matched) setNavActive(matched.section);
+    }
+  });
+}, { rootMargin: '-20% 0px -60% 0px', threshold: 0 });
+
+window.addEventListener('load', () => {
+  observerSections.forEach(s => {
+    const el = document.getElementById(s.id);
+    if (el) observer.observe(el);
+  });
+  // Clear active state when scrolled back to top
+  window.addEventListener('scroll', () => {
+    if (window.scrollY < 200) {
+      document.querySelectorAll('#main-topnav a').forEach(a => a.classList.remove('nav-active'));
+    }
+  });
+});
+
+// ── SPORT PILLS STRIP ──
+const sports = ['🏃 Running','🚴 Cycling','🏊 Swimming','🧗 Climbing','⚽ Football','🏀 Basketball','🎾 Tennis','🏋️ Weightlifting','🧘 Yoga','🏄 Surfing','⛷️ Skiing','🥊 Boxing','🏉 Rugby','🏸 Badminton','🤸 Gymnastics','🛶 Rowing','🏇 Horse riding','🥋 Martial arts','🏌️ Golf','🎿 Cross-country skiing'];
+const strip = document.getElementById('sport-pills');
+[...sports, ...sports].forEach(s => {
+  const el = document.createElement('div');
+  el.className = 'sport-pill';
+  el.textContent = s;
+  strip.appendChild(el);
+});
+
+setMode('login');
+</script>
+</body>
+</html>
