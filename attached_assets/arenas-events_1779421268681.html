@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arenas — Events</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --yellow: #FFD21E; --yellow-dark: #E6B800; --yellow-light: #FFF9E0;
+  --gray-50: #F9FAFB; --gray-100: #F3F4F6; --gray-200: #E5E7EB;
+  --gray-300: #D1D5DB; --gray-400: #9CA3AF; --gray-500: #6B7280;
+  --gray-600: #4B5563; --gray-700: #374151; --gray-800: #1F2937; --gray-900: #111827;
+  --green: #10B981; --blue: #3B82F6; --red: #EF4444; --purple: #8B5CF6; --orange: #F97316;
+  --font: 'Source Sans 3', sans-serif; --mono: 'IBM Plex Mono', monospace;
+  --border: 1px solid var(--gray-200); --radius: 8px; --radius-lg: 12px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+}
+body { font-family: var(--font); background: var(--gray-50); color: var(--gray-800); font-size: 15px; line-height: 1.5; min-height: 100vh; }
+
+/* ── TOPBAR ── */
+.topbar { background: white; border-bottom: var(--border); position: sticky; top: 0; z-index: 200; }
+.topbar-inner { max-width: 1280px; margin: 0 auto; padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 24px; }
+.logo { display: flex; align-items: center; gap: 8px; text-decoration: none; flex-shrink: 0; }
+.logo-icon { width: 30px; height: 30px; background: var(--yellow); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.logo-text { font-size: 17px; font-weight: 600; color: var(--gray-900); }
+.topnav { display: flex; align-items: center; gap: 2px; flex: 1; }
+.topnav a { padding: 6px 12px; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--gray-600); text-decoration: none; transition: background 0.1s; }
+.topnav a:hover { background: var(--gray-100); color: var(--gray-900); }
+.topnav a.active { background: var(--yellow-light); color: var(--gray-900); }
+.topbar-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.btn { padding: 7px 14px; border-radius: 7px; font-size: 14px; font-weight: 500; cursor: pointer; border: var(--border); font-family: var(--font); transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.btn-ghost { background: transparent; color: var(--gray-700); }
+.btn-ghost:hover { background: var(--gray-100); }
+.btn-primary { background: var(--gray-900); color: white; border-color: var(--gray-900); }
+.btn-primary:hover { background: var(--gray-700); }
+.btn-yellow { background: var(--yellow); color: var(--gray-900); border-color: var(--yellow-dark); font-weight: 600; }
+.btn-yellow:hover { background: var(--yellow-dark); }
+.avatar-sm { width: 30px; height: 30px; border-radius: 50%; background: var(--yellow); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: var(--gray-900); cursor: pointer; }
+
+/* ── PAGE HEADER ── */
+.page-header { background: white; border-bottom: var(--border); padding: 28px 24px; }
+.page-header-inner { max-width: 1280px; margin: 0 auto; }
+.page-header h1 { font-size: 26px; font-weight: 700; color: var(--gray-900); margin-bottom: 4px; letter-spacing: -0.01em; }
+.page-header p { font-size: 14px; color: var(--gray-500); }
+.header-meta { display: flex; align-items: center; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
+.header-stat { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--gray-600); }
+.header-stat strong { color: var(--gray-900); font-family: var(--mono); font-weight: 500; }
+.header-stat-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+/* ── SEARCH + FILTER BAR ── */
+.filter-bar { background: white; border-bottom: var(--border); padding: 14px 24px; position: sticky; top: 56px; z-index: 100; }
+.filter-bar-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.search-group { display: flex; gap: 8px; flex: 1; min-width: 300px; }
+.location-input-wrap { position: relative; flex: 1; }
+.location-input-wrap .loc-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--gray-400); font-size: 14px; pointer-events: none; }
+.location-input { width: 100%; padding: 8px 12px 8px 32px; border: var(--border); border-radius: 8px; font-size: 14px; font-family: var(--font); color: var(--gray-800); outline: none; transition: border-color 0.15s; background: var(--gray-50); }
+.location-input:focus { border-color: var(--gray-500); background: white; }
+.location-input::placeholder { color: var(--gray-400); }
+
+.radius-select { padding: 8px 12px; border: var(--border); border-radius: 8px; font-size: 14px; font-family: var(--font); color: var(--gray-700); background: var(--gray-50); outline: none; cursor: pointer; }
+.radius-select:focus { background: white; border-color: var(--gray-500); }
+
+.filter-divider { width: 1px; height: 28px; background: var(--gray-200); flex-shrink: 0; }
+
+.filter-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.filter-pill { padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 500; border: var(--border); background: white; color: var(--gray-600); cursor: pointer; transition: all 0.12s; white-space: nowrap; font-family: var(--font); }
+.filter-pill:hover { border-color: var(--gray-400); color: var(--gray-800); }
+.filter-pill.active { background: var(--gray-900); color: white; border-color: var(--gray-900); }
+.filter-pill.sport-active { background: var(--yellow-light); color: #7a5c00; border-color: #fde68a; }
+
+.view-toggle { display: flex; border: var(--border); border-radius: 8px; overflow: hidden; margin-left: auto; flex-shrink: 0; }
+.view-btn { padding: 7px 12px; border: none; background: white; color: var(--gray-500); cursor: pointer; font-size: 14px; transition: background 0.1s; }
+.view-btn:hover { background: var(--gray-50); }
+.view-btn.active { background: var(--gray-900); color: white; }
+
+/* ── MAIN LAYOUT ── */
+.main { max-width: 1280px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: 260px 1fr; gap: 20px; align-items: start; }
+
+/* ── SIDEBAR ── */
+.sidebar { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 120px; }
+.sidebar-card { background: white; border: var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.sidebar-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--gray-500); padding: 14px 14px 8px; }
+.sidebar-section { padding: 0 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.sidebar-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--gray-700); transition: background 0.1s; }
+.sidebar-item:hover { background: var(--gray-50); }
+.sidebar-item.active { background: var(--yellow-light); color: var(--gray-900); font-weight: 500; }
+.sidebar-item-left { display: flex; align-items: center; gap: 8px; }
+.sport-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sidebar-count { font-size: 11px; font-family: var(--mono); color: var(--gray-400); }
+.sidebar-item.active .sidebar-count { color: #7a5c00; }
+
+/* Date filter */
+.date-options { display: flex; flex-direction: column; gap: 2px; padding: 0 10px 12px; }
+.date-option { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--gray-700); transition: background 0.1s; }
+.date-option:hover { background: var(--gray-50); }
+.date-option.active { background: var(--yellow-light); color: var(--gray-900); font-weight: 500; }
+.date-option input[type=radio] { accent-color: var(--gray-900); }
+
+/* Distance filter */
+.distance-slider-wrap { padding: 4px 14px 14px; }
+.distance-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--gray-500); margin-bottom: 8px; }
+.distance-label strong { font-family: var(--mono); color: var(--gray-800); }
+input[type=range] { width: 100%; accent-color: var(--gray-900); cursor: pointer; }
+
+/* Upcoming events mini-list */
+.mini-event { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--gray-100); cursor: pointer; transition: background 0.1s; }
+.mini-event:last-child { border-bottom: none; }
+.mini-event:hover { background: var(--gray-50); }
+.mini-date-box { width: 36px; height: 36px; background: var(--yellow); border-radius: 7px; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; }
+.mini-date-box .d { font-size: 14px; font-weight: 700; color: var(--gray-900); line-height: 1; font-family: var(--mono); }
+.mini-date-box .m { font-size: 9px; font-weight: 600; text-transform: uppercase; color: var(--gray-700); }
+.mini-event-info { flex: 1; min-width: 0; }
+.mini-event-name { font-size: 12px; font-weight: 600; color: var(--gray-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini-event-sport { font-size: 11px; color: var(--gray-400); }
+
+/* ── CONTENT AREA ── */
+.content { display: flex; flex-direction: column; gap: 14px; }
+
+/* Results header */
+.results-header { display: flex; align-items: center; justify-content: space-between; }
+.results-count { font-size: 14px; color: var(--gray-600); }
+.results-count strong { color: var(--gray-900); font-weight: 600; }
+.sort-wrap { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--gray-500); }
+.sort-select { padding: 5px 10px; border: var(--border); border-radius: 6px; font-size: 13px; font-family: var(--font); color: var(--gray-600); background: white; outline: none; cursor: pointer; }
+
+/* Featured event banner */
+.featured-event {
+  background: var(--gray-900); border-radius: var(--radius-lg);
+  padding: 24px 28px; display: flex; align-items: center; gap: 24px;
+  position: relative; overflow: hidden; cursor: pointer;
+  transition: transform 0.15s;
+}
+.featured-event:hover { transform: translateY(-1px); }
+.featured-event::before {
+  content: ''; position: absolute; top: -60px; right: -60px;
+  width: 220px; height: 220px;
+  background: radial-gradient(circle, rgba(255,210,30,0.2) 0%, transparent 70%);
+  pointer-events: none;
+}
+.featured-badge { position: absolute; top: 16px; right: 16px; background: var(--yellow); color: var(--gray-900); font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 20px; letter-spacing: 0.04em; }
+.featured-date-box { width: 60px; height: 60px; background: var(--yellow); border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; }
+.featured-date-box .fd { font-size: 22px; font-weight: 700; color: var(--gray-900); line-height: 1; font-family: var(--mono); }
+.featured-date-box .fm { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--gray-700); }
+.featured-info { flex: 1; position: relative; z-index: 1; }
+.featured-sport-tag { display: inline-block; background: rgba(255,255,255,0.1); color: var(--gray-300); font-size: 11px; font-weight: 500; padding: 2px 10px; border-radius: 20px; margin-bottom: 8px; }
+.featured-name { font-size: 20px; font-weight: 700; color: white; margin-bottom: 6px; letter-spacing: -0.01em; }
+.featured-meta { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.featured-meta-item { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--gray-400); }
+.featured-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; position: relative; z-index: 1; }
+.featured-going { font-size: 12px; color: var(--gray-400); font-family: var(--mono); }
+.attending-avatars { display: flex; }
+.att-av { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--gray-900); margin-left: -6px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; }
+.att-av:first-child { margin-left: 0; }
+
+/* ── EVENT CARDS GRID ── */
+.events-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.events-grid.list-view { grid-template-columns: 1fr; }
+
+.event-card {
+  background: white; border: var(--border); border-radius: var(--radius-lg);
+  overflow: hidden; cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+.event-card:hover { border-color: var(--gray-300); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.event-card-header { padding: 16px 16px 12px; display: flex; gap: 12px; align-items: flex-start; }
+.ec-date-box { width: 44px; height: 44px; border-radius: 9px; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; }
+.ec-date-box .d { font-size: 16px; font-weight: 700; line-height: 1; font-family: var(--mono); }
+.ec-date-box .m { font-size: 9px; font-weight: 600; text-transform: uppercase; margin-top: 1px; }
+.ec-info { flex: 1; min-width: 0; }
+.ec-sport-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.ec-sport-tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
+.ec-dist { font-size: 11px; color: var(--gray-400); font-family: var(--mono); }
+.ec-name { font-size: 15px; font-weight: 600; color: var(--gray-900); margin-bottom: 4px; line-height: 1.3; }
+.ec-location { font-size: 12px; color: var(--gray-500); display: flex; align-items: center; gap: 4px; }
+.ec-body { padding: 0 16px 12px; }
+.ec-desc { font-size: 13px; color: var(--gray-600); line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ec-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
+.ec-tag { padding: 2px 8px; border-radius: 20px; font-size: 11px; background: var(--gray-100); color: var(--gray-600); border: 1px solid var(--gray-200); }
+.ec-footer { padding: 10px 16px 14px; border-top: 1px solid var(--gray-100); display: flex; align-items: center; justify-content: space-between; }
+.ec-going { display: flex; align-items: center; gap: 6px; }
+.ec-going-avatars { display: flex; }
+.ec-going-av { width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; margin-left: -5px; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 600; }
+.ec-going-av:first-child { margin-left: 0; }
+.ec-going-count { font-size: 12px; color: var(--gray-500); font-family: var(--mono); }
+.ec-join-btn { padding: 5px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; border: var(--border); background: white; color: var(--gray-700); cursor: pointer; font-family: var(--font); transition: all 0.12s; }
+.ec-join-btn:hover { background: var(--gray-900); color: white; border-color: var(--gray-900); }
+.ec-join-btn.joined { background: var(--yellow-light); color: #7a5c00; border-color: #fde68a; }
+
+/* List view card variant */
+.events-grid.list-view .event-card-header { align-items: center; }
+.events-grid.list-view .ec-desc { -webkit-line-clamp: 1; }
+
+/* ── LOAD MORE ── */
+.load-more { text-align: center; padding: 8px 0; }
+.load-more-btn { padding: 9px 24px; border: var(--border); border-radius: 8px; font-size: 14px; font-weight: 500; background: white; color: var(--gray-700); cursor: pointer; font-family: var(--font); transition: background 0.1s; }
+.load-more-btn:hover { background: var(--gray-50); }
+
+/* ── EMPTY STATE ── */
+.empty-state { text-align: center; padding: 56px 24px; background: white; border: var(--border); border-radius: var(--radius-lg); }
+.empty-icon { font-size: 40px; margin-bottom: 14px; }
+.empty-state h3 { font-size: 17px; font-weight: 600; color: var(--gray-900); margin-bottom: 6px; }
+.empty-state p { font-size: 14px; color: var(--gray-500); margin-bottom: 20px; }
+
+/* ── EVENT DETAIL MODAL ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 500; display: none; align-items: center; justify-content: center; padding: 24px; backdrop-filter: blur(2px); }
+.modal-overlay.open { display: flex; }
+.modal { background: white; border-radius: var(--radius-lg); width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2); animation: modal-in 0.2s ease; }
+@keyframes modal-in { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
+.modal-header { padding: 20px 24px 16px; border-bottom: var(--border); display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.modal-close { width: 28px; height: 28px; border-radius: 50%; border: var(--border); background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--gray-500); flex-shrink: 0; transition: background 0.1s; }
+.modal-close:hover { background: var(--gray-100); }
+.modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 18px; }
+.modal-map { width: 100%; height: 180px; background: var(--gray-100); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--gray-500); position: relative; overflow: hidden; }
+.modal-map-bg { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, transparent, transparent 39px, var(--gray-200) 39px, var(--gray-200) 40px), repeating-linear-gradient(90deg, transparent, transparent 39px, var(--gray-200) 39px, var(--gray-200) 40px); }
+.modal-map-pin { position: absolute; font-size: 28px; top: 50%; left: 50%; transform: translate(-50%, -60%); filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2)); }
+.modal-section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--gray-500); margin-bottom: 8px; }
+.modal-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.modal-detail-item { background: var(--gray-50); border-radius: 8px; padding: 10px 12px; }
+.modal-detail-item .lbl { font-size: 11px; color: var(--gray-400); margin-bottom: 2px; }
+.modal-detail-item .val { font-size: 14px; font-weight: 600; color: var(--gray-900); font-family: var(--mono); }
+.modal-attendees { display: flex; gap: 8px; flex-wrap: wrap; }
+.modal-att { display: flex; align-items: center; gap: 6px; background: var(--gray-50); border-radius: 20px; padding: 4px 10px 4px 4px; }
+.modal-att-av { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; }
+.modal-att-name { font-size: 12px; font-weight: 500; color: var(--gray-700); }
+.modal-footer { padding: 16px 24px; border-top: var(--border); display: flex; gap: 10px; }
+
+/* ── TOAST ── */
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--gray-900); color: white; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; z-index: 999; transition: transform 0.3s ease; white-space: nowrap; }
+.toast.show { transform: translateX(-50%) translateY(0); }
+
+/* ── LOCATION SUGGESTION DROPDOWN ── */
+.loc-dropdown { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: white; border: var(--border); border-radius: 8px; box-shadow: var(--shadow-md); z-index: 300; display: none; overflow: hidden; }
+.loc-dropdown.open { display: block; }
+.loc-suggestion { padding: 9px 14px; font-size: 13px; color: var(--gray-700); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.1s; }
+.loc-suggestion:hover { background: var(--gray-50); }
+.loc-suggestion .zip { font-family: var(--mono); font-weight: 500; color: var(--gray-900); }
+.loc-suggestion .city { color: var(--gray-500); }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <a href="#" class="logo"><div class="logo-icon">🏟</div><span class="logo-text">Arenas</span></a>
+    <nav class="topnav">
+      <a href="#">Community</a>
+      <a href="#">Athletes</a>
+      <a href="#" class="active">Events</a>
+      <a href="#">Leaderboards</a>
+      <a href="#">Challenges</a>
+    </nav>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost">Log in</button>
+      <button class="btn btn-primary">Sign up</button>
+      <div class="avatar-sm">JK</div>
+    </div>
+  </div>
+</header>
+
+<!-- PAGE HEADER -->
+<div class="page-header">
+  <div class="page-header-inner">
+    <h1>Events near you 📅</h1>
+    <p>Races, meetups, competitions and group sessions across every sport — filtered to your area.</p>
+    <div class="header-meta">
+      <div class="header-stat"><div class="header-stat-dot" style="background:#10B981"></div> <strong id="result-count">2,140</strong> upcoming events</div>
+      <div class="header-stat"><div class="header-stat-dot" style="background:#3B82F6"></div> <strong>47</strong> sports</div>
+      <div class="header-stat"><div class="header-stat-dot" style="background:#F97316"></div> Showing events within <strong id="radius-label">25 miles</strong> of <strong id="location-label">90210</strong></div>
+    </div>
+  </div>
+</div>
+
+<!-- FILTER BAR -->
+<div class="filter-bar">
+  <div class="filter-bar-inner">
+    <div class="search-group">
+      <div class="location-input-wrap">
+        <span class="loc-icon">📍</span>
+        <input class="location-input" type="text" id="zip-input" placeholder="Enter zip code or city…" value="90210" oninput="handleZipInput(this.value)" onfocus="showDropdown()" onblur="hideDropdown()">
+        <div class="loc-dropdown" id="loc-dropdown"></div>
+      </div>
+      <select class="radius-select" id="radius-select" onchange="updateRadius(this.value)">
+        <option value="5">Within 5 mi</option>
+        <option value="10">Within 10 mi</option>
+        <option value="25" selected>Within 25 mi</option>
+        <option value="50">Within 50 mi</option>
+        <option value="100">Within 100 mi</option>
+        <option value="9999">Anywhere</option>
+      </select>
+    </div>
+
+    <div class="filter-divider"></div>
+
+    <div class="filter-pills" id="sport-filter-pills">
+      <button class="filter-pill active" data-sport="all" onclick="setSportFilter(this,'all')">All sports</button>
+      <button class="filter-pill" data-sport="running" onclick="setSportFilter(this,'running')">🏃 Running</button>
+      <button class="filter-pill" data-sport="cycling" onclick="setSportFilter(this,'cycling')">🚴 Cycling</button>
+      <button class="filter-pill" data-sport="swimming" onclick="setSportFilter(this,'swimming')">🏊 Swimming</button>
+      <button class="filter-pill" data-sport="climbing" onclick="setSportFilter(this,'climbing')">🧗 Climbing</button>
+      <button class="filter-pill" data-sport="football" onclick="setSportFilter(this,'football')">⚽ Football</button>
+      <button class="filter-pill" data-sport="basketball" onclick="setSportFilter(this,'basketball')">🏀 Basketball</button>
+      <button class="filter-pill" data-sport="tennis" onclick="setSportFilter(this,'tennis')">🎾 Tennis</button>
+      <button class="filter-pill" data-sport="yoga" onclick="setSportFilter(this,'yoga')">🧘 Yoga</button>
+    </div>
+
+    <div class="view-toggle">
+      <button class="view-btn active" id="btn-grid" onclick="setView('grid')" title="Grid view">⊞</button>
+      <button class="view-btn" id="btn-list" onclick="setView('list')" title="List view">≡</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+
+    <div class="sidebar-card">
+      <div class="sidebar-title">Date</div>
+      <div class="date-options">
+        <label class="date-option active" onclick="setDateFilter('any',this)"><input type="radio" name="date" checked> Any date</label>
+        <label class="date-option" onclick="setDateFilter('week',this)"><input type="radio" name="date"> This week</label>
+        <label class="date-option" onclick="setDateFilter('month',this)"><input type="radio" name="date"> This month</label>
+        <label class="date-option" onclick="setDateFilter('3months',this)"><input type="radio" name="date"> Next 3 months</label>
+        <label class="date-option" onclick="setDateFilter('weekend',this)"><input type="radio" name="date"> Weekends only</label>
+      </div>
+    </div>
+
+    <div class="sidebar-card">
+      <div class="sidebar-title">Distance from you</div>
+      <div class="distance-slider-wrap">
+        <div class="distance-label"><span>0 mi</span><strong id="dist-val">25 mi</strong></div>
+        <input type="range" min="1" max="100" value="25" id="dist-slider" oninput="updateDistSlider(this.value)">
+      </div>
+    </div>
+
+    <div class="sidebar-card">
+      <div class="sidebar-title">Sport</div>
+      <div class="sidebar-section" id="sidebar-sports">
+        <div class="sidebar-item active" onclick="setSidebarSport(this,'all')"><div class="sidebar-item-left"><div class="sport-dot" style="background:#6B7280"></div>All sports</div><span class="sidebar-count">2,140</span></div>
+        <div class="sidebar-item" onclick="setSidebarSport(this,'running')"><div class="sidebar-item-left"><div class="sport-dot" style="background:#F97316"></div>Running</div><span class="sidebar-count">612</span></div>
+        <div class="sidebar-item" onclick="setSidebarSport(this,'cycling')"><div class="sidebar-item-left"><div class="sport-dot" style="background:#3B82F6"></div>Cycling</div><span class="sidebar-count">488</span></div>
+        <div class="sidebar-item" onclick="setSidebarSport(this,'swimming')"><div class="sidebar-item-left"><div class="sport-dot" style="background:#14B8A6"></div>Swimming</div><span class="sidebar-count">201</span></div>
+        <div class="sidebar-item" onclick="setSidebarSport(this,'climbing')"><div class="sidebar-item-left"><div class="sport-dot" style="background:#8B5CF6"></div>Climbing</div><span class="sidebar-count">134</span></div>
+        <div class="sidebar-item" onclick="setSidebarSport(this,'football')"><div class="sidebar-item-left"><div class="sport-dot" style="background:#10B981"></div>Football</div><span class="sidebar-count">298</span></div>
+        <div class="sidebar-item" onclick="setSidebarSport(this,'basketball')"><div class="sidebar-item-left"><div class="sport-dot" style="background:#EF4444"></div>Basketball</div><span class="sidebar-count">187</span></div>
+        <div class="sidebar-item" onclick="setSidebarSport(this,'tennis')"><div class="sidebar-item-left"><div class="sport-dot" style="background:#F59E0B"></div>Tennis</div><span class="sidebar-count">110</span></div>
+        <div class="sidebar-item" onclick="setSidebarSport(this,'yoga')"><div class="sidebar-item-left"><div class="sport-dot" style="background:#EC4899"></div>Yoga</div><span class="sidebar-count">110</span></div>
+      </div>
+    </div>
+
+    <div class="sidebar-card">
+      <div class="sidebar-title">Event type</div>
+      <div class="sidebar-section">
+        <div class="sidebar-item active"><div class="sidebar-item-left"><div class="sport-dot" style="background:#6B7280"></div>All types</div><span class="sidebar-count">2,140</span></div>
+        <div class="sidebar-item"><div class="sidebar-item-left"><div class="sport-dot" style="background:#EF4444"></div>Race / Competition</div><span class="sidebar-count">840</span></div>
+        <div class="sidebar-item"><div class="sidebar-item-left"><div class="sport-dot" style="background:#3B82F6"></div>Group training</div><span class="sidebar-count">612</span></div>
+        <div class="sidebar-item"><div class="sidebar-item-left"><div class="sport-dot" style="background:#10B981"></div>Social ride / run</div><span class="sidebar-count">398</span></div>
+        <div class="sidebar-item"><div class="sidebar-item-left"><div class="sport-dot" style="background:#F59E0B"></div>Workshop / Clinic</div><span class="sidebar-count">290</span></div>
+      </div>
+    </div>
+
+    <!-- My sports shortcut -->
+    <div class="sidebar-card">
+      <div class="sidebar-title">My sports</div>
+      <div class="sidebar-section">
+        <div class="sidebar-item" style="background:var(--yellow-light);color:#7a5c00;font-weight:500" onclick="setSidebarSport(this,'running')"><div class="sidebar-item-left"><div class="sport-dot" style="background:#F97316"></div>Running</div><span class="sidebar-count" style="color:#7a5c00">612</span></div>
+        <div class="sidebar-item" onclick="setSidebarSport(this,'cycling')"><div class="sidebar-item-left"><div class="sport-dot" style="background:#3B82F6"></div>Cycling</div><span class="sidebar-count">488</span></div>
+        <div style="padding: 8px 8px 4px"><button class="btn btn-ghost" style="font-size:12px;width:100%;justify-content:center;padding:5px">+ Add sport</button></div>
+      </div>
+    </div>
+
+    <!-- Coming up -->
+    <div class="sidebar-card">
+      <div class="sidebar-title">Coming up soon</div>
+      <div id="mini-events-list"></div>
+    </div>
+
+  </aside>
+
+  <!-- CONTENT -->
+  <div class="content" id="content">
+
+    <div class="results-header">
+      <div class="results-count">Showing <strong id="shown-count">18</strong> events near <strong id="shown-location">Beverly Hills, CA</strong></div>
+      <div class="sort-wrap">
+        Sort by
+        <select class="sort-select" onchange="applySort(this.value)">
+          <option value="date">Date</option>
+          <option value="distance">Distance</option>
+          <option value="popular">Most popular</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Featured event -->
+    <div class="featured-event" onclick="openModal(0)">
+      <div class="featured-badge">⭐ Featured</div>
+      <div class="featured-date-box"><div class="fd">13</div><div class="fm">Apr</div></div>
+      <div class="featured-info">
+        <div class="featured-sport-tag">🏃 Running</div>
+        <div class="featured-name">LA Spring Half Marathon</div>
+        <div class="featured-meta">
+          <div class="featured-meta-item">📍 Santa Monica, CA · 4.2 mi away</div>
+          <div class="featured-meta-item">⏱ 7:00 AM start</div>
+          <div class="featured-meta-item">🏅 Medal finisher event</div>
+        </div>
+      </div>
+      <div class="featured-actions">
+        <div class="attending-avatars">
+          <div class="att-av" style="background:#FFF7ED;color:#9A3412">JK</div>
+          <div class="att-av" style="background:#E0F2FE;color:#0369A1">MC</div>
+          <div class="att-av" style="background:#FEF9C3;color:#854D0E">SL</div>
+          <div class="att-av" style="background:#6B7280;color:white;font-size:8px">+42</div>
+        </div>
+        <div class="featured-going">847 athletes going</div>
+        <button class="btn btn-yellow" onclick="event.stopPropagation();joinEvent(this,'featured')">+ Join event</button>
+      </div>
+    </div>
+
+    <!-- Events grid -->
+    <div class="events-grid" id="events-grid"></div>
+
+    <div class="load-more"><button class="load-more-btn" onclick="loadMore()">Load more events</button></div>
+  </div>
+</main>
+
+<!-- EVENT DETAIL MODAL -->
+<div class="modal-overlay" id="modal" onclick="closeModal(event)">
+  <div class="modal" id="modal-content">
+    <div class="modal-header">
+      <div>
+        <div id="modal-sport-tag" style="display:inline-block;font-size:11px;font-weight:600;padding:2px 10px;border-radius:20px;margin-bottom:8px"></div>
+        <div id="modal-name" style="font-size:20px;font-weight:700;color:var(--gray-900);letter-spacing:-0.01em"></div>
+        <div id="modal-location" style="font-size:13px;color:var(--gray-500);margin-top:4px"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-map">
+        <div class="modal-map-bg"></div>
+        <div class="modal-map-pin" id="modal-map-pin">📍</div>
+      </div>
+      <div>
+        <div class="modal-section-title">Event details</div>
+        <div class="modal-detail-grid" id="modal-details"></div>
+      </div>
+      <div>
+        <div class="modal-section-title">Description</div>
+        <p id="modal-desc" style="font-size:14px;color:var(--gray-600);line-height:1.65"></p>
+      </div>
+      <div>
+        <div class="modal-section-title">Athletes attending</div>
+        <div class="modal-attendees" id="modal-attendees"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-yellow" style="flex:1;justify-content:center" id="modal-join-btn" onclick="joinEventFromModal()">+ Join this event</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── DATA ──
+const sportColors = {
+  running:    { bg:'#FFF7ED', color:'#9A3412', dot:'#F97316', tag:'🏃' },
+  cycling:    { bg:'#EFF6FF', color:'#1D4ED8', dot:'#3B82F6', tag:'🚴' },
+  swimming:   { bg:'#F0FDF4', color:'#166534', dot:'#14B8A6', tag:'🏊' },
+  climbing:   { bg:'#F5F3FF', color:'#6D28D9', dot:'#8B5CF6', tag:'🧗' },
+  football:   { bg:'#F0FDF4', color:'#14532D', dot:'#10B981', tag:'⚽' },
+  basketball: { bg:'#FEF2F2', color:'#991B1B', dot:'#EF4444', tag:'🏀' },
+  tennis:     { bg:'#FEFCE8', color:'#713F12', dot:'#F59E0B', tag:'🎾' },
+  yoga:       { bg:'#FDF4FF', color:'#6B21A8', dot:'#EC4899', tag:'🧘' },
+};
+
+const events = [
+  { id:1,  sport:'running',    name:'LA Spring Half Marathon',          location:'Santa Monica, CA',     dist:4.2,  date:{d:'13',m:'Apr'}, time:'7:00 AM',  going:847,  type:'Race', tags:['Medal','Chip timed','All levels'],  desc:'Join 800+ runners for the annual LA Spring Half Marathon along the iconic Santa Monica beachfront. Flat fast course, perfect for a PB attempt. Finisher medal and post-race brunch included.', details:{Distance:'13.1 mi',Start:'7:00 AM',Entry:'$45',Level:'All levels'}, attendees:[{i:'JK',bg:'#FFF7ED',c:'#9A3412'},{i:'SL',bg:'#FEF9C3',c:'#854D0E'},{i:'MC',bg:'#E0F2FE',c:'#0369A1'},{i:'YT',bg:'#FCE7F3',c:'#9D174D'}] },
+  { id:2,  sport:'cycling',    name:'Pacific Coast Century Ride',        location:'Malibu, CA',           dist:8.1,  date:{d:'19',m:'Apr'}, time:'6:30 AM',  going:203,  type:'Social',tags:['100 mi','Scenic','SAG support'],  desc:'A stunning 100-mile ride along PCH from Malibu to Ventura and back. SAG wagons every 20 miles, rest stops with food and drinks. Suitable for experienced cyclists.', details:{Distance:'100 mi',Start:'6:30 AM',Entry:'$35',Level:'Advanced'}, attendees:[{i:'MC',bg:'#FEF9C3',c:'#854D0E'},{i:'OB',bg:'#F0FDF4',c:'#166534'}] },
+  { id:3,  sport:'climbing',   name:'SoCal Bouldering Open',             location:'Claremont, CA',        dist:12.4, date:{d:'27',m:'Apr'}, time:'9:00 AM',  going:88,   type:'Race', tags:['V4–V10','Cash prizes','Community'],  desc:'Indoor bouldering competition open to all levels, with categories from V4 to V10+. Cash prizes for top 3 in each category. Qualifiers + finals format, spectators welcome.', details:{Distance:'N/A',Start:'9:00 AM',Entry:'$30',Level:'Intermediate–Elite'}, attendees:[{i:'AM',bg:'#ECFDF5',c:'#065F46'},{i:'SR',bg:'#F5F3FF',c:'#6D28D9'}] },
+  { id:4,  sport:'swimming',   name:'Open Water 5K — Marina del Rey',   location:'Marina del Rey, CA',   dist:6.8,  date:{d:'3',m:'May'},  time:'7:30 AM',  going:154,  type:'Race', tags:['Ocean swim','Wetsuit OK','Chip timed'], desc:'Annual open water 5K in the protected waters of Marina del Rey. Calm conditions, buoyed course, safety kayakers throughout. Wetsuits permitted but not required.', details:{Distance:'5K',Start:'7:30 AM',Entry:'$40',Level:'All levels'}, attendees:[{i:'YT',bg:'#FCE7F3',c:'#9D174D'},{i:'JK',bg:'#FFF7ED',c:'#9A3412'}] },
+  { id:5,  sport:'running',    'name':'Griffith Park 10K Trailblazer',   location:'Los Feliz, CA',        dist:9.3,  date:{d:'10',m:'May'}, time:'7:00 AM',  going:312,  type:'Race', tags:['Trail','Elevation','Dog-friendly'],  desc:'A scenic 10K trail race through Griffith Park with 800ft of elevation gain. Stunning views of the city and Hollywood sign. Dog-friendly with leash.', details:{Distance:'10K',Start:'7:00 AM',Entry:'$28',Level:'Intermediate'}, attendees:[{i:'SL',bg:'#FEF9C3',c:'#854D0E'},{i:'JK',bg:'#FFF7ED',c:'#9A3412'}] },
+  { id:6,  sport:'yoga',       name:'Sunrise Yoga in the Park',          location:'Echo Park, CA',        dist:5.1,  date:{d:'17',m:'May'}, time:'6:00 AM',  going:67,   type:'Social',tags:['All levels','Free','Outdoor'],    desc:'Weekly sunrise yoga session in Echo Park led by certified instructors. Bring your own mat. Free for all levels — beginners very welcome. Followed by optional coffee meetup.', details:{Distance:'N/A',Start:'6:00 AM',Entry:'Free',Level:'All levels'}, attendees:[{i:'AM',bg:'#ECFDF5',c:'#065F46'}] },
+  { id:7,  sport:'basketball', name:'3x3 Venice Beach Tournament',       location:'Venice Beach, CA',     dist:7.2,  date:{d:'24',m:'May'}, time:'10:00 AM', going:196,  type:'Race', tags:['3v3','Cash prize','Outdoor'],       desc:'The annual Venice Beach 3x3 basketball tournament on the world-famous outdoor courts. Register as a team of 3–4. Cash prizes for winners. Spectators welcome on the boardwalk.', details:{Distance:'N/A',Start:'10:00 AM',Entry:'$20/team',Level:'All levels'}, attendees:[{i:'OB',bg:'#F0FDF4',c:'#166534'},{i:'JK',bg:'#FFF7ED',c:'#9A3412'}] },
+  { id:8,  sport:'cycling',    name:'Pasadena Gran Fondo',                location:'Pasadena, CA',        dist:14.7, date:{d:'31',m:'May'}, time:'6:00 AM',  going:421,  type:'Race', tags:['Timed','Scenic','Multiple distances'], desc:'Choose your distance: 40, 75, or 100 miles through the San Gabriel foothills. Fully supported with SAG, mechanical support, and post-ride festival. One of Southern California\'s premier sportives.', details:{Distance:'40/75/100 mi',Start:'6:00 AM',Entry:'$55',Level:'Intermediate–Pro'}, attendees:[{i:'MC',bg:'#FEF9C3',c:'#854D0E'}] },
+  { id:9,  sport:'tennis',     name:'Westside Open Tennis Tournament',   location:'Brentwood, CA',        dist:3.8,  date:{d:'7',m:'Jun'},  time:'8:00 AM',  going:44,   type:'Race', tags:['NTRP rated','Singles + Doubles','All ages'], desc:'NTRP-rated singles and doubles tournament across 3.0 to 5.0 levels. Matches played on hard courts at Brentwood Recreation Center. Prize balls and trophies for winners.', details:{Distance:'N/A',Start:'8:00 AM',Entry:'$35',Level:'All levels'}, attendees:[{i:'SL',bg:'#FEF9C3',c:'#854D0E'}] },
+  { id:10, sport:'football',   name:'LAFC Community 5-a-side League',   location:'Hollywood, CA',        dist:11.0, date:{d:'1',m:'Jun'},  time:'11:00 AM', going:88,   type:'Social',tags:['Weekly','5v5','All welcome'],     desc:'Weekly recreational 5-a-side football league running through summer. Register as a team or as an individual to be placed. Turf pitches, refs provided, no slide tackling.', details:{Distance:'N/A',Start:'11:00 AM',Entry:'$15/session',Level:'Beginner–Intermediate'}, attendees:[{i:'OB',bg:'#F0FDF4',c:'#166534'},{i:'MC',bg:'#FEF9C3',c:'#854D0E'}] },
+  { id:11, sport:'running',    name:'Sunset Strip Night Run 8K',         location:'West Hollywood, CA',   dist:2.9,  date:{d:'14',m:'Jun'}, time:'9:00 PM',  going:502,  type:'Race', tags:['Night race','LED lit','Party finish'], desc:'Run 8K through the famous Sunset Strip after dark. LED accessories encouraged. DJ at the finish line, after-party at a rooftop venue. One of LA\'s most fun evening events.', details:{Distance:'8K',Start:'9:00 PM',Entry:'$38',Level:'All levels'}, attendees:[{i:'JK',bg:'#FFF7ED',c:'#9A3412'},{i:'SL',bg:'#FEF9C3',c:'#854D0E'},{i:'YT',bg:'#FCE7F3',c:'#9D174D'}] },
+  { id:12, sport:'swimming',   name:'Santa Monica Pool Masters',         location:'Santa Monica, CA',     dist:4.5,  date:{d:'21',m:'Jun'}, time:'8:00 AM',  going:78,   type:'Race', tags:['Pool swim','Masters','USMS sanctioned'], desc:'USMS-sanctioned masters swim meet at the Santa Monica Swim Center. All ages 18+, multiple distance events from 50m to 1500m. Register for individual events or full program.', details:{Distance:'50m–1500m',Start:'8:00 AM',Entry:'$30',Level:'Intermediate–Elite'}, attendees:[{i:'YT',bg:'#FCE7F3',c:'#9D174D'}] },
+];
+
+let currentSport = 'all';
+let currentView = 'grid';
+let currentDate = 'any';
+let joinedEvents = new Set();
+let modalEventIdx = null;
+
+// ── RENDER EVENTS ──
+function renderEvents(data) {
+  const grid = document.getElementById('events-grid');
+  if (data.length === 0) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="empty-icon">🔍</div>
+      <h3>No events found</h3>
+      <p>Try expanding your search radius or changing the sport filter.</p>
+      <button class="btn btn-primary" onclick="clearFilters()">Clear all filters</button>
+    </div>`;
+    document.getElementById('shown-count').textContent = '0';
+    return;
+  }
+  grid.innerHTML = data.map((ev, i) => renderCard(ev, i)).join('');
+  document.getElementById('shown-count').textContent = data.length;
+}
+
+function renderCard(ev, i) {
+  const sc = sportColors[ev.sport] || sportColors.running;
+  const joined = joinedEvents.has(ev.id);
+  return `
+  <div class="event-card" onclick="openModal(ev_idx_${i})">
+    <div class="event-card-header">
+      <div class="ec-date-box" style="background:${sc.bg}">
+        <div class="d" style="color:${sc.color}">${ev.date.d}</div>
+        <div class="m" style="color:${sc.color}">${ev.date.m}</div>
+      </div>
+      <div class="ec-info">
+        <div class="ec-sport-row">
+          <span class="ec-sport-tag" style="background:${sc.bg};color:${sc.color}">${sc.tag} ${ev.sport.charAt(0).toUpperCase()+ev.sport.slice(1)}</span>
+          <span class="ec-dist">📍 ${ev.dist} mi away</span>
+        </div>
+        <div class="ec-name">${ev.name}</div>
+        <div class="ec-location">📌 ${ev.location}</div>
+      </div>
+    </div>
+    <div class="ec-body">
+      <div class="ec-desc">${ev.desc}</div>
+      <div class="ec-tags">${ev.tags.map(t=>`<span class="ec-tag">${t}</span>`).join('')}<span class="ec-tag">${ev.type}</span></div>
+    </div>
+    <div class="ec-footer">
+      <div class="ec-going">
+        <div class="ec-going-avatars">
+          ${ev.attendees.slice(0,3).map(a=>`<div class="ec-going-av" style="background:${a.bg};color:${a.c}">${a.i}</div>`).join('')}
+        </div>
+        <span class="ec-going-count">${ev.going} going</span>
+      </div>
+      <button class="ec-join-btn ${joined?'joined':''}" onclick="event.stopPropagation();joinEvent(this,${ev.id})">${joined?'✓ Going':'+ Join'}</button>
+    </div>
+  </div>`;
+}
+
+// Replace ev_idx references with actual index mapping
+function renderEventsWithIndex(data) {
+  const grid = document.getElementById('events-grid');
+  if (data.length === 0) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="empty-icon">🔍</div>
+      <h3>No events found</h3>
+      <p>Try expanding your search radius or changing the sport filter.</p>
+      <button class="btn btn-primary" onclick="clearFilters()">Clear all filters</button>
+    </div>`;
+    document.getElementById('shown-count').textContent = '0';
+    return;
+  }
+  const sc_lookup = sportColors;
+  grid.innerHTML = data.map((ev) => {
+    const sc = sc_lookup[ev.sport] || sc_lookup.running;
+    const joined = joinedEvents.has(ev.id);
+    const evIdx = events.indexOf(ev);
+    return `
+    <div class="event-card" onclick="openModal(${evIdx})">
+      <div class="event-card-header">
+        <div class="ec-date-box" style="background:${sc.bg}">
+          <div class="d" style="color:${sc.color}">${ev.date.d}</div>
+          <div class="m" style="color:${sc.color}">${ev.date.m}</div>
+        </div>
+        <div class="ec-info">
+          <div class="ec-sport-row">
+            <span class="ec-sport-tag" style="background:${sc.bg};color:${sc.color}">${sc.tag} ${ev.sport.charAt(0).toUpperCase()+ev.sport.slice(1)}</span>
+            <span class="ec-dist">📍 ${ev.dist} mi away</span>
+          </div>
+          <div class="ec-name">${ev.name}</div>
+          <div class="ec-location">📌 ${ev.location}</div>
+        </div>
+      </div>
+      <div class="ec-body">
+        <div class="ec-desc">${ev.desc}</div>
+        <div class="ec-tags">${ev.tags.map(t=>`<span class="ec-tag">${t}</span>`).join('')}<span class="ec-tag">${ev.type}</span></div>
+      </div>
+      <div class="ec-footer">
+        <div class="ec-going">
+          <div class="ec-going-avatars">
+            ${ev.attendees.slice(0,3).map(a=>`<div class="ec-going-av" style="background:${a.bg};color:${a.c}">${a.i}</div>`).join('')}
+          </div>
+          <span class="ec-going-count">${ev.going} going</span>
+        </div>
+        <button class="ec-join-btn ${joined?'joined':''}" onclick="event.stopPropagation();joinEvent(this,${ev.id})">${joined?'✓ Going':'+ Join'}</button>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('shown-count').textContent = data.length;
+}
+
+function getFiltered() {
+  let data = [...events];
+  if (currentSport !== 'all') data = data.filter(e => e.sport === currentSport);
+  const radius = parseInt(document.getElementById('radius-select').value);
+  if (radius !== 9999) data = data.filter(e => e.dist <= radius);
+  return data;
+}
+
+function refresh() { renderEventsWithIndex(getFiltered()); }
+
+// ── FILTERS ──
+function setSportFilter(el, sport) {
+  currentSport = sport;
+  document.querySelectorAll('#sport-filter-pills .filter-pill').forEach(p => p.classList.remove('active','sport-active'));
+  el.classList.add('active');
+  // sync sidebar
+  document.querySelectorAll('#sidebar-sports .sidebar-item').forEach(s => {
+    s.classList.toggle('active', s.getAttribute('onclick')?.includes("'"+sport+"'"));
+  });
+  refresh();
+}
+
+function setSidebarSport(el, sport) {
+  currentSport = sport;
+  document.querySelectorAll('#sidebar-sports .sidebar-item').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  // sync top pills
+  document.querySelectorAll('#sport-filter-pills .filter-pill').forEach(p => {
+    p.classList.toggle('active', p.getAttribute('data-sport') === sport);
+  });
+  refresh();
+}
+
+function setDateFilter(val, el) {
+  currentDate = val;
+  document.querySelectorAll('.date-option').forEach(d => d.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function setView(v) {
+  currentView = v;
+  const grid = document.getElementById('events-grid');
+  grid.classList.toggle('list-view', v === 'list');
+  document.getElementById('btn-grid').classList.toggle('active', v === 'grid');
+  document.getElementById('btn-list').classList.toggle('active', v === 'list');
+}
+
+function updateRadius(val) {
+  document.getElementById('radius-label').textContent = val === '9999' ? 'anywhere' : val + ' miles';
+  document.getElementById('dist-slider').value = Math.min(val, 100);
+  document.getElementById('dist-val').textContent = val === '9999' ? '100+ mi' : val + ' mi';
+  refresh();
+}
+
+function updateDistSlider(val) {
+  document.getElementById('dist-val').textContent = val + ' mi';
+  document.getElementById('radius-label').textContent = val + ' miles';
+  const sel = document.getElementById('radius-select');
+  const opts = [5,10,25,50,100];
+  const closest = opts.reduce((a,b) => Math.abs(b-val)<Math.abs(a-val)?b:a);
+  sel.value = closest;
+}
+
+function applySort(val) {
+  const data = getFiltered();
+  if (val === 'distance') data.sort((a,b) => a.dist - b.dist);
+  else if (val === 'popular') data.sort((a,b) => b.going - a.going);
+  renderEventsWithIndex(data);
+}
+
+function clearFilters() {
+  currentSport = 'all';
+  document.querySelectorAll('#sport-filter-pills .filter-pill').forEach(p => p.classList.toggle('active', p.dataset.sport==='all'));
+  document.querySelectorAll('#sidebar-sports .sidebar-item').forEach((s,i) => s.classList.toggle('active', i===0));
+  refresh();
+}
+
+function loadMore() { showToast('All events loaded for your area'); }
+
+// ── JOIN ──
+function joinEvent(btn, id) {
+  if (joinedEvents.has(id)) {
+    joinedEvents.delete(id);
+    btn.textContent = '+ Join';
+    btn.classList.remove('joined');
+    showToast('Removed from your events');
+  } else {
+    joinedEvents.add(id);
+    btn.textContent = '✓ Going';
+    btn.classList.add('joined');
+    showToast('🎉 You\'re going! Added to your calendar');
+  }
+}
+
+// ── MODAL ──
+function openModal(idx) {
+  if (idx === 0) { // featured
+    const ev = events[0];
+    populateModal(ev);
+  } else {
+    const ev = events[idx];
+    if (!ev) return;
+    populateModal(ev);
+  }
+  document.getElementById('modal').classList.add('open');
+}
+
+function populateModal(ev) {
+  const sc = sportColors[ev.sport] || sportColors.running;
+  document.getElementById('modal-sport-tag').textContent = sc.tag + ' ' + ev.sport.charAt(0).toUpperCase()+ev.sport.slice(1);
+  document.getElementById('modal-sport-tag').style.cssText = `background:${sc.bg};color:${sc.color};display:inline-block;font-size:11px;font-weight:600;padding:2px 10px;border-radius:20px;margin-bottom:8px`;
+  document.getElementById('modal-name').textContent = ev.name;
+  document.getElementById('modal-location').textContent = '📌 ' + ev.location + ' · ' + ev.dist + ' mi from you';
+  document.getElementById('modal-desc').textContent = ev.desc;
+  document.getElementById('modal-map-pin').textContent = sc.tag;
+
+  const details = ev.details || {};
+  document.getElementById('modal-details').innerHTML = Object.entries(details).map(([k,v]) =>
+    `<div class="modal-detail-item"><div class="lbl">${k}</div><div class="val">${v}</div></div>`
+  ).join('') + `<div class="modal-detail-item"><div class="lbl">Date</div><div class="val">${ev.date.d} ${ev.date.m}</div></div>` +
+  `<div class="modal-detail-item"><div class="lbl">Going</div><div class="val">${ev.going}</div></div>`;
+
+  document.getElementById('modal-attendees').innerHTML = ev.attendees.map(a =>
+    `<div class="modal-att"><div class="modal-att-av" style="background:${a.bg};color:${a.c}">${a.i}</div><div class="modal-att-name">${a.i}</div></div>`
+  ).join('') + `<div class="modal-att" style="background:var(--gray-50)"><div style="font-size:12px;color:var(--gray-500);padding:0 4px">+${ev.going - ev.attendees.length} more</div></div>`;
+
+  const joined = joinedEvents.has(ev.id);
+  const jb = document.getElementById('modal-join-btn');
+  jb.textContent = joined ? '✓ Already going' : '+ Join this event';
+  jb.className = joined ? 'btn btn-ghost' : 'btn btn-yellow';
+  jb.onclick = () => { joinEventFromModal(ev.id); };
+}
+
+function joinEventFromModal(id) {
+  if (!id) return;
+  joinedEvents.add(id);
+  const jb = document.getElementById('modal-join-btn');
+  jb.textContent = '✓ Already going';
+  jb.className = 'btn btn-ghost';
+  showToast('🎉 You\'re going! Added to your calendar');
+  refresh();
+}
+
+function closeModal(e) {
+  if (!e || e.target === document.getElementById('modal')) {
+    document.getElementById('modal').classList.remove('open');
+  }
+}
+
+// ── ZIP / LOCATION ──
+const zipData = [
+  { zip:'90210', city:'Beverly Hills, CA' }, { zip:'90291', city:'Venice, CA' },
+  { zip:'90401', city:'Santa Monica, CA' }, { zip:'90028', city:'Hollywood, CA' },
+  { zip:'10001', city:'New York, NY' }, { zip:'10002', city:'Lower East Side, NY' },
+  { zip:'60601', city:'Chicago, IL' }, { zip:'77001', city:'Houston, TX' },
+  { zip:'85001', city:'Phoenix, AZ' }, { zip:'19101', city:'Philadelphia, PA' },
+  { zip:'78201', city:'San Antonio, TX' }, { zip:'92101', city:'San Diego, CA' },
+  { zip:'75201', city:'Dallas, TX' }, { zip:'95101', city:'San Jose, CA' },
+];
+
+let dropdownTimer;
+
+function handleZipInput(val) {
+  const zip = val.trim();
+  const matches = zipData.filter(z => z.zip.startsWith(zip) || z.city.toLowerCase().includes(zip.toLowerCase()));
+  const dd = document.getElementById('loc-dropdown');
+  if (matches.length && zip.length >= 2) {
+    dd.innerHTML = matches.slice(0,5).map(m =>
+      `<div class="loc-suggestion" onmousedown="selectLocation('${m.zip}','${m.city}')">
+        📍 <span class="zip">${m.zip}</span> <span class="city">${m.city}</span>
+      </div>`
+    ).join('');
+    dd.classList.add('open');
+  } else {
+    dd.classList.remove('open');
+  }
+}
+
+function showDropdown() { clearTimeout(dropdownTimer); handleZipInput(document.getElementById('zip-input').value); }
+function hideDropdown() { dropdownTimer = setTimeout(() => document.getElementById('loc-dropdown').classList.remove('open'), 200); }
+
+function selectLocation(zip, city) {
+  document.getElementById('zip-input').value = zip;
+  document.getElementById('loc-dropdown').classList.remove('open');
+  document.getElementById('location-label').textContent = zip;
+  document.getElementById('shown-location').textContent = city;
+  showToast('📍 Showing events near ' + city);
+  refresh();
+}
+
+// ── TOAST ──
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ── MINI EVENTS ──
+function renderMiniEvents() {
+  const list = document.getElementById('mini-events-list');
+  list.innerHTML = events.slice(0,5).map(ev => {
+    const sc = sportColors[ev.sport] || sportColors.running;
+    return `<div class="mini-event" onclick="openModal(${events.indexOf(ev)})">
+      <div class="mini-date-box"><div class="d">${ev.date.d}</div><div class="m">${ev.date.m}</div></div>
+      <div class="mini-event-info">
+        <div class="mini-event-name">${ev.name}</div>
+        <div class="mini-event-sport">${sc.tag} ${ev.dist} mi away</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── INIT ──
+refresh();
+renderMiniEvents();
+</script>
+</body>
+</html>

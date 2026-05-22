@@ -1,14 +1,28 @@
-import { useState } from "react";
 import { useLocation } from "wouter";
 
 interface TopbarProps {
   loggedIn?: boolean;
+  activeNav?: string;
 }
 
-export default function Topbar({ loggedIn = false }: TopbarProps) {
-  const [activeTab, setActiveTab] = useState("Community");
-  const [, setLocation] = useLocation();
+const NAV_ROUTES: Record<string, string> = {
+  Community:    "/community",
+  Athletes:     "/community",
+  Events:       "/events",
+  Leaderboards: "/community",
+  Challenges:   "/community",
+};
+
+export default function Topbar({ loggedIn = false, activeNav }: TopbarProps) {
+  const [location, setLocation] = useLocation();
   const navTabs = ["Community", "Athletes", "Events", "Leaderboards", "Challenges"];
+
+  function resolveActive(tab: string) {
+    if (activeNav) return activeNav === tab;
+    if (tab === "Events" && location.startsWith("/events")) return true;
+    if (tab === "Community" && location.startsWith("/community")) return true;
+    return false;
+  }
 
   return (
     <header className="topbar">
@@ -21,12 +35,9 @@ export default function Topbar({ loggedIn = false }: TopbarProps) {
           {navTabs.map((tab) => (
             <a
               key={tab}
-              href="#"
-              className={activeTab === tab ? "active" : ""}
-              onClick={(e) => {
-                e.preventDefault();
-                setActiveTab(tab);
-              }}
+              href={NAV_ROUTES[tab] || "#"}
+              className={resolveActive(tab) ? "active" : ""}
+              onClick={(e) => { e.preventDefault(); setLocation(NAV_ROUTES[tab] || "/"); }}
               data-testid={`nav-${tab.toLowerCase()}`}
             >
               {tab}
@@ -60,7 +71,7 @@ export default function Topbar({ loggedIn = false }: TopbarProps) {
           ) : (
             <>
               <a href="/login" className="btn btn-ghost" data-testid="btn-login" onClick={(e) => { e.preventDefault(); setLocation("/login"); }}>Log in</a>
-              <a href="/signup" className="btn btn-primary" data-testid="btn-signup" onClick={(e) => { e.preventDefault(); setLocation("/signup"); }}>Sign up</a>
+              <a href="/login?mode=signup" className="btn btn-primary" data-testid="btn-signup" onClick={(e) => { e.preventDefault(); setLocation("/login?mode=signup"); }}>Sign up</a>
               <div
                 className="avatar-sm"
                 title="My profile"
