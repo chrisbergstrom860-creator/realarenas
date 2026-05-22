@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arenas — Athletes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --yellow: #FFD21E; --yellow-dark: #E6B800; --yellow-light: #FFF9E0;
+  --gray-50: #F9FAFB; --gray-100: #F3F4F6; --gray-200: #E5E7EB;
+  --gray-300: #D1D5DB; --gray-400: #9CA3AF; --gray-500: #6B7280;
+  --gray-600: #4B5563; --gray-700: #374151; --gray-800: #1F2937; --gray-900: #111827;
+  --green: #10B981; --blue: #3B82F6; --red: #EF4444; --purple: #8B5CF6; --orange: #F97316;
+  --teal: #14B8A6; --pink: #EC4899;
+  --font: 'Source Sans 3', sans-serif; --mono: 'IBM Plex Mono', monospace;
+  --border: 1px solid var(--gray-200); --radius: 8px; --radius-lg: 12px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+}
+body { font-family: var(--font); background: var(--gray-50); color: var(--gray-800); font-size: 15px; line-height: 1.5; min-height: 100vh; }
+
+/* ── TOPBAR ── */
+.topbar { background: white; border-bottom: var(--border); position: sticky; top: 0; z-index: 200; }
+.topbar-inner { max-width: 1280px; margin: 0 auto; padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 24px; }
+.logo { display: flex; align-items: center; gap: 8px; text-decoration: none; cursor: pointer; flex-shrink: 0; }
+.logo-icon { width: 30px; height: 30px; background: var(--yellow); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.logo-text { font-size: 17px; font-weight: 600; color: var(--gray-900); }
+.topnav { display: flex; align-items: center; gap: 2px; flex: 1; }
+.topnav a { padding: 6px 12px; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--gray-600); text-decoration: none; transition: background 0.1s; }
+.topnav a:hover { background: var(--gray-100); color: var(--gray-900); }
+.topnav a.active { background: var(--yellow-light); color: var(--gray-900); }
+.topbar-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.btn { padding: 7px 14px; border-radius: 7px; font-size: 14px; font-weight: 500; cursor: pointer; border: var(--border); font-family: var(--font); transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.btn-ghost { background: transparent; color: var(--gray-700); }
+.btn-ghost:hover { background: var(--gray-100); }
+.btn-primary { background: var(--gray-900); color: white; border-color: var(--gray-900); }
+.btn-primary:hover { background: var(--gray-700); }
+.btn-yellow { background: var(--yellow); color: var(--gray-900); border-color: var(--yellow-dark); font-weight: 600; }
+.btn-yellow:hover { background: var(--yellow-dark); }
+.avatar-sm { width: 30px; height: 30px; border-radius: 50%; background: var(--yellow); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: var(--gray-900); cursor: pointer; }
+
+/* ── PAGE HEADER ── */
+.page-header { background: white; border-bottom: var(--border); padding: 28px 24px; }
+.page-header-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.page-header-left h1 { font-size: 26px; font-weight: 700; color: var(--gray-900); margin-bottom: 4px; letter-spacing: -0.01em; }
+.page-header-left p { font-size: 14px; color: var(--gray-500); }
+.header-stats { display: flex; gap: 20px; margin-top: 16px; flex-wrap: wrap; }
+.header-stat { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--gray-600); }
+.header-stat strong { color: var(--gray-900); font-family: var(--mono); font-weight: 500; }
+.stat-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── SEARCH + FILTER BAR ── */
+.filter-bar { background: white; border-bottom: var(--border); padding: 14px 24px; position: sticky; top: 56px; z-index: 100; }
+.filter-bar-inner { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+.search-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.search-wrap { position: relative; flex: 1; min-width: 240px; }
+.search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--gray-400); font-size: 14px; pointer-events: none; }
+.search-input { width: 100%; padding: 8px 12px 8px 34px; border: var(--border); border-radius: 8px; font-size: 14px; font-family: var(--font); color: var(--gray-800); background: var(--gray-50); outline: none; transition: border-color 0.15s, background 0.15s; }
+.search-input:focus { border-color: var(--gray-400); background: white; }
+.search-input::placeholder { color: var(--gray-400); }
+.filter-select { padding: 8px 12px; border: var(--border); border-radius: 8px; font-size: 13px; font-family: var(--font); color: var(--gray-600); background: var(--gray-50); outline: none; cursor: pointer; }
+.filter-select:focus { background: white; border-color: var(--gray-400); }
+.filter-pills-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.filter-label { font-size: 12px; color: var(--gray-500); white-space: nowrap; }
+.fp { padding: 5px 13px; border-radius: 20px; font-size: 13px; font-weight: 500; border: var(--border); background: white; color: var(--gray-600); cursor: pointer; font-family: var(--font); transition: all 0.12s; white-space: nowrap; }
+.fp:hover { border-color: var(--gray-400); color: var(--gray-800); }
+.fp.active { background: var(--gray-900); color: white; border-color: var(--gray-900); }
+.fp.active-yellow { background: var(--yellow-light); color: #7a5c00; border-color: #fde68a; }
+.divider-v { width: 1px; height: 20px; background: var(--gray-200); flex-shrink: 0; }
+
+/* ── MAIN LAYOUT ── */
+.main { max-width: 1280px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: 1fr 296px; gap: 20px; align-items: start; }
+
+/* ── SECTION LABELS ── */
+.section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.section-title { font-size: 14px; font-weight: 600; color: var(--gray-900); display: flex; align-items: center; gap: 8px; }
+.section-count { font-size: 12px; font-family: var(--mono); color: var(--gray-400); font-weight: 400; }
+.section-link { font-size: 13px; color: var(--gray-500); text-decoration: none; cursor: pointer; }
+.section-link:hover { color: var(--gray-700); }
+
+/* ── RECOMMENDED STRIP ── */
+.rec-strip-wrap { overflow-x: auto; padding-bottom: 6px; -webkit-overflow-scrolling: touch; }
+.rec-strip-wrap::-webkit-scrollbar { height: 4px; }
+.rec-strip-wrap::-webkit-scrollbar-track { background: var(--gray-100); border-radius: 2px; }
+.rec-strip-wrap::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius: 2px; }
+.rec-strip { display: flex; gap: 12px; min-width: max-content; }
+.rec-card { background: white; border: var(--border); border-radius: var(--radius-lg); padding: 16px 14px; width: 148px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s; text-align: center; flex-shrink: 0; }
+.rec-card:hover { border-color: var(--gray-300); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.rec-avatar { width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; flex-shrink: 0; position: relative; }
+.rec-online { position: absolute; bottom: 2px; right: 2px; width: 11px; height: 11px; border-radius: 50%; background: var(--green); border: 2px solid white; }
+.rec-name { font-size: 13px; font-weight: 600; color: var(--gray-900); }
+.rec-why { font-size: 11px; color: var(--gray-500); line-height: 1.5; }
+.rec-sport-tag { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 20px; }
+
+/* ── ATHLETE CARDS GRID ── */
+.athletes-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.athletes-grid.list-view { grid-template-columns: 1fr; }
+
+.ath-card { background: white; border: var(--border); border-radius: var(--radius-lg); overflow: hidden; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s; }
+.ath-card:hover { border-color: var(--gray-300); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.ath-card.is-you { border-color: var(--yellow-dark); }
+
+.ath-card-body { padding: 16px 18px; }
+.ath-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.ath-avatar-wrap { position: relative; flex-shrink: 0; }
+.ath-avatar { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; }
+.online-dot { position: absolute; bottom: 2px; right: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--green); border: 2px solid white; }
+.ath-name-row { flex: 1; min-width: 0; }
+.ath-name { font-size: 15px; font-weight: 600; color: var(--gray-900); display: flex; align-items: center; gap: 6px; }
+.verified-badge { font-size: 12px; }
+.ath-handle { font-size: 12px; color: var(--gray-500); margin-top: 2px; }
+.ath-location { font-size: 12px; color: var(--gray-400); display: flex; align-items: center; gap: 3px; margin-top: 1px; }
+
+.ath-bio { font-size: 13px; color: var(--gray-600); line-height: 1.6; margin-bottom: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+.ath-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 12px; }
+.tag { padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 500; border: 1px solid transparent; white-space: nowrap; }
+.tag-run { background: #FFF7ED; color: #9A3412; border-color: #FDBA74; }
+.tag-cyc { background: #EFF6FF; color: #1E40AF; border-color: #93C5FD; }
+.tag-clm { background: #F5F3FF; color: #5B21B6; border-color: #C4B5FD; }
+.tag-swm { background: #F0FDFA; color: #134E4A; border-color: #5EEAD4; }
+.tag-fbl { background: #F0FDF4; color: #14532D; border-color: #86EFAC; }
+.tag-bkt { background: #FEF2F2; color: #991B1B; border-color: #FECACA; }
+.tag-ten { background: #FEFCE8; color: #713F12; border-color: #FDE68A; }
+.tag-yog { background: #FDF4FF; color: #581C87; border-color: #D8B4FE; }
+.tag-tri { background: #EFF6FF; color: #1E40AF; border-color: #BFDBFE; }
+.tag-adv { background: #FAEEDA; color: #633806; border-color: #EF9F27; }
+.tag-int { background: var(--gray-100); color: var(--gray-600); border-color: var(--gray-200); }
+.tag-eli { background: #FCEBEB; color: #A32D2D; border-color: #F09595; }
+.tag-beg { background: #EAF3DE; color: #3B6D11; border-color: #A3D977; }
+
+/* Stats row */
+.ath-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.stat-pill { background: var(--gray-50); border: var(--border); border-radius: 7px; padding: 7px 8px; text-align: center; }
+.stat-pill .sv { font-size: 15px; font-weight: 600; color: var(--gray-900); font-family: var(--mono); line-height: 1; }
+.stat-pill .sl { font-size: 10px; color: var(--gray-500); margin-top: 3px; }
+
+/* Sparkline */
+.sparkline-wrap { margin-bottom: 12px; }
+.spark-label { font-size: 10px; color: var(--gray-400); margin-bottom: 5px; letter-spacing: 0.03em; }
+.sparkline { display: flex; align-items: flex-end; gap: 3px; height: 28px; }
+.s-bar { border-radius: 2px 2px 0 0; flex: 1; min-width: 0; transition: opacity 0.1s; }
+.s-bar:hover { opacity: 0.7 !important; }
+
+/* Card footer */
+.ath-footer { padding: 12px 18px 14px; border-top: var(--border); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mutual-wrap { display: flex; align-items: center; gap: 6px; }
+.mut-avs { display: flex; }
+.mut-av { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid white; margin-left: -5px; display: flex; align-items: center; justify-content: center; font-size: 7px; font-weight: 600; flex-shrink: 0; }
+.mut-av:first-child { margin-left: 0; }
+.mutual-text { font-size: 11px; color: var(--gray-500); }
+.follow-btn { padding: 6px 16px; border-radius: 7px; font-size: 13px; font-weight: 500; border: var(--border); background: white; color: var(--gray-700); cursor: pointer; font-family: var(--font); transition: all 0.12s; white-space: nowrap; }
+.follow-btn:hover { background: var(--gray-900); color: white; border-color: var(--gray-900); }
+.follow-btn.following { background: var(--gray-100); color: var(--gray-600); border-color: var(--gray-200); }
+.follow-btn.following:hover { background: #FCEBEB; color: #A32D2D; border-color: #F09595; }
+.follow-btn.you { background: var(--yellow-light); color: #7a5c00; border-color: #fde68a; cursor: default; }
+
+/* ── LIST VIEW VARIANT ── */
+.athletes-grid.list-view .ath-card-body { display: grid; grid-template-columns: 1fr 200px; gap: 16px; align-items: center; }
+.athletes-grid.list-view .ath-bio { -webkit-line-clamp: 1; margin-bottom: 8px; }
+.athletes-grid.list-view .ath-stats { grid-template-columns: repeat(3, 1fr); }
+.athletes-grid.list-view .sparkline-wrap { display: none; }
+.athletes-grid.list-view .ath-footer { padding: 0; border-top: none; flex-direction: column; align-items: flex-start; gap: 8px; }
+
+/* ── VIEW TOGGLE ── */
+.view-toggle { display: flex; border: var(--border); border-radius: 8px; overflow: hidden; }
+.view-btn { padding: 6px 10px; border: none; background: white; color: var(--gray-500); cursor: pointer; font-size: 14px; transition: background 0.1s; }
+.view-btn:hover { background: var(--gray-50); }
+.view-btn.active { background: var(--gray-900); color: white; }
+
+/* ── RIGHT SIDEBAR ── */
+.right-col { display: flex; flex-direction: column; gap: 14px; }
+.side-card { background: white; border: var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.side-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--gray-500); padding: 14px 16px 8px; }
+
+/* Network stats */
+.network-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; border-bottom: var(--border); }
+.net-stat { padding: 12px 10px; text-align: center; border-right: var(--border); }
+.net-stat:last-child { border-right: none; }
+.net-stat .nv { font-size: 20px; font-weight: 600; color: var(--gray-900); font-family: var(--mono); }
+.net-stat .nl { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
+
+/* Side rows */
+.side-row { display: flex; align-items: center; gap: 9px; padding: 9px 16px; border-bottom: var(--border); cursor: pointer; transition: background 0.1s; }
+.side-row:last-child { border-bottom: none; }
+.side-row:hover { background: var(--gray-50); }
+.sr-av { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.sr-info { flex: 1; min-width: 0; }
+.sr-name { font-size: 13px; font-weight: 600; color: var(--gray-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-sub { font-size: 11px; color: var(--gray-500); margin-top: 1px; }
+.sr-rank { font-size: 12px; font-family: var(--mono); color: var(--gray-400); width: 20px; text-align: center; flex-shrink: 0; font-weight: 500; }
+.sr-rank.gold { color: #D97706; font-weight: 700; }
+
+/* Activity feed */
+.feed-item { padding: 10px 16px; border-bottom: var(--border); cursor: pointer; transition: background 0.1s; }
+.feed-item:last-child { border-bottom: none; }
+.feed-item:hover { background: var(--gray-50); }
+.feed-item-row { display: flex; align-items: flex-start; gap: 9px; }
+.feed-av { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; flex-shrink: 0; margin-top: 1px; }
+.feed-text { font-size: 12px; color: var(--gray-600); line-height: 1.55; flex: 1; }
+.feed-text strong { color: var(--gray-900); font-weight: 600; }
+.feed-time { font-size: 11px; color: var(--gray-400); margin-top: 4px; }
+.feed-stat-chip { display: inline-block; background: var(--gray-100); border-radius: 5px; padding: 1px 6px; font-size: 11px; font-family: var(--mono); color: var(--gray-600); margin-top: 3px; }
+
+/* Recently followed you */
+.new-follower { display: flex; align-items: center; gap: 9px; padding: 9px 16px; border-bottom: var(--border); }
+.new-follower:last-child { border-bottom: none; }
+.nf-av { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; flex-shrink: 0; }
+.nf-info { flex: 1; min-width: 0; }
+.nf-name { font-size: 13px; font-weight: 600; color: var(--gray-900); }
+.nf-sub { font-size: 11px; color: var(--gray-500); }
+.nf-btn { padding: 4px 11px; border-radius: 6px; font-size: 12px; font-weight: 500; border: var(--border); background: white; color: var(--gray-700); cursor: pointer; font-family: var(--font); transition: all 0.12s; white-space: nowrap; }
+.nf-btn:hover { background: var(--gray-900); color: white; border-color: var(--gray-900); }
+.nf-btn.following { background: var(--gray-100); color: var(--gray-500); cursor: default; }
+
+/* Sport breakdown */
+.sport-breakdown-row { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-bottom: var(--border); }
+.sport-breakdown-row:last-child { border-bottom: none; }
+.sb-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.sb-name { font-size: 13px; color: var(--gray-700); flex: 1; }
+.sb-bar { flex: 2; height: 4px; background: var(--gray-100); border-radius: 2px; overflow: hidden; }
+.sb-fill { height: 100%; border-radius: 2px; }
+.sb-count { font-size: 12px; font-family: var(--mono); color: var(--gray-500); min-width: 36px; text-align: right; }
+
+/* Profile modal */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 500; display: none; align-items: center; justify-content: center; padding: 24px; backdrop-filter: blur(2px); }
+.modal-overlay.open { display: flex; }
+.modal { background: white; border-radius: var(--radius-lg); width: 100%; max-width: 580px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2); animation: modal-in 0.2s ease; }
+@keyframes modal-in { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: none; } }
+.modal-profile-header { padding: 28px 28px 20px; border-bottom: var(--border); display: flex; gap: 20px; align-items: flex-start; }
+.modal-av { width: 72px; height: 72px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 600; flex-shrink: 0; }
+.modal-name { font-size: 22px; font-weight: 700; color: var(--gray-900); letter-spacing: -0.01em; margin-bottom: 3px; }
+.modal-handle { font-size: 14px; color: var(--gray-500); margin-bottom: 8px; }
+.modal-close { width: 30px; height: 30px; border-radius: 50%; border: var(--border); background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--gray-500); flex-shrink: 0; transition: background 0.1s; margin-left: auto; }
+.modal-close:hover { background: var(--gray-100); }
+.modal-body { padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
+.modal-stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.modal-stat { background: var(--gray-50); border-radius: var(--radius); padding: 12px; text-align: center; }
+.modal-stat .mv { font-size: 20px; font-weight: 700; color: var(--gray-900); font-family: var(--mono); }
+.modal-stat .ml { font-size: 11px; color: var(--gray-500); margin-top: 3px; }
+.modal-section { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--gray-500); margin-bottom: 10px; }
+.modal-footer { padding: 16px 28px; border-top: var(--border); display: flex; gap: 10px; }
+.modal-recent-act { display: flex; flex-direction: column; gap: 8px; }
+.mra-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--gray-50); border-radius: var(--radius); }
+.mra-icon { font-size: 18px; flex-shrink: 0; }
+.mra-info { flex: 1; }
+.mra-name { font-size: 13px; font-weight: 600; color: var(--gray-900); }
+.mra-meta { font-size: 11px; color: var(--gray-500); margin-top: 1px; }
+.mra-stats { display: flex; gap: 6px; flex-shrink: 0; }
+.mra-stat { font-size: 11px; font-family: var(--mono); background: white; border: var(--border); border-radius: 5px; padding: 2px 7px; color: var(--gray-700); }
+
+/* Load more */
+.load-more { text-align: center; padding: 8px 0; }
+.load-more-btn { padding: 9px 24px; border: var(--border); border-radius: 8px; font-size: 14px; font-weight: 500; background: white; color: var(--gray-700); cursor: pointer; font-family: var(--font); transition: background 0.1s; }
+.load-more-btn:hover { background: var(--gray-50); }
+
+/* Toast */
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--gray-900); color: white; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; z-index: 999; transition: transform 0.3s ease; white-space: nowrap; box-shadow: var(--shadow-md); }
+.toast.show { transform: translateX(-50%) translateY(0); }
+
+/* Animations */
+@keyframes fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.fade-in { animation: fade-in 0.22s ease forwards; }
+
+/* Footer */
+.footer { background: white; border-top: var(--border); margin-top: 40px; padding: 20px 24px; }
+.footer-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--gray-400); }
+.footer-links { display: flex; gap: 16px; }
+.footer-links a { color: var(--gray-500); text-decoration: none; }
+.footer-links a:hover { color: var(--gray-700); }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <a href="#" class="logo"><div class="logo-icon">🏟</div><span class="logo-text">Arenas</span></a>
+    <nav class="topnav">
+      <a href="#">Community</a>
+      <a href="#" class="active">Athletes</a>
+      <a href="#">Events</a>
+      <a href="#">Leaderboards</a>
+      <a href="#">Challenges</a>
+    </nav>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost">Log in</button>
+      <button class="btn btn-primary">Sign up</button>
+      <div class="avatar-sm">JK</div>
+    </div>
+  </div>
+</header>
+
+<!-- PAGE HEADER -->
+<div class="page-header">
+  <div class="page-header-inner">
+    <div class="page-header-left">
+      <h1>Athletes 🏅</h1>
+      <p>Showing athletes who match your sports — Running, Cycling & Climbing. Follow to see their activities in your feed.</p>
+      <div class="header-stats">
+        <div class="header-stat"><div class="stat-dot" style="background:#10B981"></div> <strong>84,210</strong> athletes worldwide</div>
+        <div class="header-stat"><div class="stat-dot" style="background:#FFD21E"></div> <strong>4,120</strong> near London</div>
+        <div class="header-stat"><div class="stat-dot" style="background:#3B82F6"></div> You follow <strong>48</strong> athletes</div>
+        <div class="header-stat"><div class="stat-dot" style="background:#8B5CF6"></div> <strong>312</strong> followers</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;flex-shrink:0;margin-top:4px">
+      <div class="view-toggle">
+        <button class="view-btn active" id="btn-grid" onclick="setView('grid')" title="Grid view">⊞</button>
+        <button class="view-btn" id="btn-list" onclick="setView('list')" title="List view">≡</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FILTER BAR -->
+<div class="filter-bar">
+  <div class="filter-bar-inner">
+    <div class="search-row">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input class="search-input" id="search-input" type="text" placeholder="Search by name, city, @handle or sport…" oninput="filterAthletes()">
+      </div>
+      <select class="filter-select" id="level-filter" onchange="filterAthletes()">
+        <option value="all">All levels</option>
+        <option value="Beginner">Beginner</option>
+        <option value="Intermediate">Intermediate</option>
+        <option value="Advanced">Advanced</option>
+        <option value="Elite">Elite</option>
+      </select>
+      <select class="filter-select" id="sort-filter" onchange="filterAthletes()">
+        <option value="near">Near me first</option>
+        <option value="active">Most active</option>
+        <option value="followed">Most followed</option>
+        <option value="new">Newest</option>
+      </select>
+    </div>
+    <div class="filter-pills-row">
+      <span class="filter-label">Sport:</span>
+      <button class="fp active" id="fp-all" onclick="setSportFilter('all',this)">All my sports</button>
+      <button class="fp" id="fp-running" onclick="setSportFilter('running',this)">🏃 Running</button>
+      <button class="fp" id="fp-cycling" onclick="setSportFilter('cycling',this)">🚴 Cycling</button>
+      <button class="fp" id="fp-climbing" onclick="setSportFilter('climbing',this)">🧗 Climbing</button>
+      <div class="divider-v"></div>
+      <span class="filter-label">Show:</span>
+      <button class="fp active-yellow" id="show-all" onclick="setShowFilter('all',this)">Everyone</button>
+      <button class="fp" id="show-following" onclick="setShowFilter('following',this)">Following</button>
+      <button class="fp" id="show-followers" onclick="setShowFilter('followers',this)">Followers</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<main class="main">
+  <div style="display:flex;flex-direction:column;gap:20px">
+
+    <!-- ── RECOMMENDED STRIP ── -->
+    <div>
+      <div class="section-head">
+        <div class="section-title">Recommended for you <span class="section-count">· based on your sports & location</span></div>
+        <span class="section-link" onclick="showToast('Refreshing recommendations…')">Refresh →</span>
+      </div>
+      <div class="rec-strip-wrap">
+        <div class="rec-strip" id="rec-strip"></div>
+      </div>
+    </div>
+
+    <!-- ── MAIN ATHLETE GRID ── -->
+    <div>
+      <div class="section-head">
+        <div class="section-title">All athletes <span class="section-count" id="grid-count">· 84,210</span></div>
+        <span class="section-link" onclick="showToast('Map view coming soon')">📍 Map view</span>
+      </div>
+      <div class="athletes-grid" id="athletes-grid"></div>
+      <div class="load-more" style="margin-top:16px">
+        <button class="load-more-btn" onclick="showToast('Loading more athletes…')">Load more athletes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RIGHT SIDEBAR ── -->
+  <div class="right-col">
+
+    <!-- Network stats -->
+    <div class="side-card">
+      <div class="side-title">Your network</div>
+      <div class="network-grid">
+        <div class="net-stat"><div class="nv">48</div><div class="nl">Following</div></div>
+        <div class="net-stat"><div class="nv">312</div><div class="nl">Followers</div></div>
+        <div class="net-stat"><div class="nv">4</div><div class="nl">Mutuals</div></div>
+      </div>
+      <div style="padding:12px 16px 4px">
+        <div style="font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Recently followed you</div>
+      </div>
+      <div class="new-follower">
+        <div class="nf-av" style="background:#F0FDF4;color:#166534">OB</div>
+        <div class="nf-info"><div class="nf-name">Omar B.</div><div class="nf-sub">Cycling · Dubai · 2h ago</div></div>
+        <button class="nf-btn" onclick="followBack(this)">Follow back</button>
+      </div>
+      <div class="new-follower">
+        <div class="nf-av" style="background:#FBEAF0;color:#72243E">PK</div>
+        <div class="nf-info"><div class="nf-name">Priya K.</div><div class="nf-sub">Yoga · London · 1d ago</div></div>
+        <button class="nf-btn following" disabled>Following</button>
+      </div>
+      <div class="new-follower">
+        <div class="nf-av" style="background:#FEF3C7;color:#92400E">RW</div>
+        <div class="nf-info"><div class="nf-name">Rachel W.</div><div class="nf-sub">Swimming · London · 2d ago</div></div>
+        <button class="nf-btn" onclick="followBack(this)">Follow back</button>
+      </div>
+      <div style="padding:10px 16px">
+        <button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:13px" onclick="showToast('Showing all followers')">View all followers →</button>
+      </div>
+    </div>
+
+    <!-- Top in your sports -->
+    <div class="side-card">
+      <div class="side-title">Top in your sports this week</div>
+      <div class="side-row" onclick="openProfileModal('sl')">
+        <span class="sr-rank gold">1</span>
+        <div class="sr-av" style="background:#FEF9C3;color:#854D0E">SL</div>
+        <div class="sr-info"><div class="sr-name">Sofia L.</div><div class="sr-sub">Running · 9,840 pts</div></div>
+        <button class="follow-btn" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();toggleFollow(this)">Follow</button>
+      </div>
+      <div class="side-row" onclick="openProfileModal('mc')">
+        <span class="sr-rank" style="color:var(--gray-400);font-weight:700">2</span>
+        <div class="sr-av" style="background:#FEF9C3;color:#854D0E">MC</div>
+        <div class="sr-info"><div class="sr-name">Marco C.</div><div class="sr-sub">Cycling · 8,120 pts</div></div>
+        <button class="follow-btn following" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();toggleFollow(this)">Following</button>
+      </div>
+      <div class="side-row" onclick="openProfileModal('yt')">
+        <span class="sr-rank" style="color:#B45309;font-weight:700">3</span>
+        <div class="sr-av" style="background:#FCE7F3;color:#9D174D">YT</div>
+        <div class="sr-info"><div class="sr-name">Yuki T.</div><div class="sr-sub">Swimming · 7,610 pts</div></div>
+        <button class="follow-btn following" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();toggleFollow(this)">Following</button>
+      </div>
+      <div class="side-row" onclick="openProfileModal('am')">
+        <span class="sr-rank" style="color:var(--gray-400)">4</span>
+        <div class="sr-av" style="background:#ECFDF5;color:#065F46">AM</div>
+        <div class="sr-info"><div class="sr-name">Alena M.</div><div class="sr-sub">Climbing · 6,810 pts</div></div>
+        <button class="follow-btn" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();toggleFollow(this)">Follow</button>
+      </div>
+      <div class="side-row" onclick="openProfileModal('pr')">
+        <span class="sr-rank" style="color:var(--gray-400)">5</span>
+        <div class="sr-av" style="background:#FBEAF0;color:#72243E">PR</div>
+        <div class="sr-info"><div class="sr-name">Priya R.</div><div class="sr-sub">Running · 6,980 pts</div></div>
+        <button class="follow-btn" style="font-size:12px;padding:4px 12px" onclick="event.stopPropagation();toggleFollow(this)">Follow</button>
+      </div>
+    </div>
+
+    <!-- Following activity feed -->
+    <div class="side-card">
+      <div class="side-title">Following activity</div>
+      <div class="feed-item">
+        <div class="feed-item-row">
+          <div class="feed-av" style="background:#FEF9C3;color:#854D0E">MC</div>
+          <div>
+            <div class="feed-text"><strong>Marco C.</strong> logged an 88km ride — Stelvio approach</div>
+            <div class="feed-stat-chip">241W · 32.7 km/h</div>
+            <div class="feed-time">2h ago · Cycling</div>
+          </div>
+        </div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-item-row">
+          <div class="feed-av" style="background:#FCE7F3;color:#9D174D">YT</div>
+          <div>
+            <div class="feed-text"><strong>Yuki T.</strong> completed a 5K open water swim at Lake Geneva</div>
+            <div class="feed-stat-chip">1:32/100m · 54:22</div>
+            <div class="feed-time">4h ago · Swimming</div>
+          </div>
+        </div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-item-row">
+          <div class="feed-av" style="background:#FBEAF0;color:#72243E">PK</div>
+          <div>
+            <div class="feed-text"><strong>Priya K.</strong> joined the 100km May Run challenge</div>
+            <div class="feed-time">6h ago · Challenge</div>
+          </div>
+        </div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-item-row">
+          <div class="feed-av" style="background:#FEF9C3;color:#854D0E">MC</div>
+          <div>
+            <div class="feed-text"><strong>Marco C.</strong> registered for Granfondo Stelvio 2026</div>
+            <div class="feed-time">1d ago · Event</div>
+          </div>
+        </div>
+      </div>
+      <div class="feed-item">
+        <div class="feed-item-row">
+          <div class="feed-av" style="background:#FCE7F3;color:#9D174D">YT</div>
+          <div>
+            <div class="feed-text"><strong>Yuki T.</strong> hit a new weekly PB — 68 km running</div>
+            <div class="feed-stat-chip">4:18/km avg</div>
+            <div class="feed-time">2d ago · Running</div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:10px 16px">
+        <button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:13px">View full feed →</button>
+      </div>
+    </div>
+
+    <!-- Sport breakdown -->
+    <div class="side-card">
+      <div class="side-title">Athletes by sport — near you</div>
+      <div class="sport-breakdown-row">
+        <div class="sb-dot" style="background:#F97316"></div>
+        <span class="sb-name">Running</span>
+        <div class="sb-bar"><div class="sb-fill" style="width:88%;background:#F97316;opacity:0.6"></div></div>
+        <span class="sb-count">1,820</span>
+      </div>
+      <div class="sport-breakdown-row">
+        <div class="sb-dot" style="background:#3B82F6"></div>
+        <span class="sb-name">Cycling</span>
+        <div class="sb-bar"><div class="sb-fill" style="width:68%;background:#3B82F6;opacity:0.6"></div></div>
+        <span class="sb-count">1,210</span>
+      </div>
+      <div class="sport-breakdown-row">
+        <div class="sb-dot" style="background:#10B981"></div>
+        <span class="sb-name">Football</span>
+        <div class="sb-bar"><div class="sb-fill" style="width:52%;background:#10B981;opacity:0.6"></div></div>
+        <span class="sb-count">880</span>
+      </div>
+      <div class="sport-breakdown-row">
+        <div class="sb-dot" style="background:#14B8A6"></div>
+        <span class="sb-name">Swimming</span>
+        <div class="sb-bar"><div class="sb-fill" style="width:34%;background:#14B8A6;opacity:0.6"></div></div>
+        <span class="sb-count">610</span>
+      </div>
+      <div class="sport-breakdown-row">
+        <div class="sb-dot" style="background:#8B5CF6"></div>
+        <span class="sb-name">Climbing</span>
+        <div class="sb-bar"><div class="sb-fill" style="width:24%;background:#8B5CF6;opacity:0.6"></div></div>
+        <span class="sb-count">398</span>
+      </div>
+      <div class="sport-breakdown-row">
+        <div class="sb-dot" style="background:#EC4899"></div>
+        <span class="sb-name">Yoga</span>
+        <div class="sb-bar"><div class="sb-fill" style="width:18%;background:#EC4899;opacity:0.6"></div></div>
+        <span class="sb-count">290</span>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- PROFILE MODAL -->
+<div class="modal-overlay" id="profile-modal" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-profile-header">
+      <div id="pm-avatar" class="modal-av"></div>
+      <div style="flex:1">
+        <div class="modal-name" id="pm-name"></div>
+        <div class="modal-handle" id="pm-handle"></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap" id="pm-tags"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-stat-row" id="pm-stats"></div>
+      <div>
+        <div class="modal-section">About</div>
+        <p id="pm-bio" style="font-size:14px;color:var(--gray-600);line-height:1.65"></p>
+      </div>
+      <div>
+        <div class="modal-section">Recent activities</div>
+        <div class="modal-recent-act" id="pm-activities"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="pm-follow-btn" style="flex:1;justify-content:center" onclick="modalFollow()">Follow</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="width:22px;height:22px;background:var(--yellow);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px">🏟</div>
+      <span>Arenas © 2026</span>
+    </div>
+    <div class="footer-links">
+      <a href="#">About</a><a href="#">Blog</a><a href="#">API</a><a href="#">Terms</a><a href="#">Privacy</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+// ── DATA ──
+const athletes = [
+  {
+    id:'sl', init:'SL', bg:'#FEF9C3', c:'#854D0E',
+    name:'Sofia L.', handle:'@sofialopes', location:'Prague, CZ', dist:'0.8 mi',
+    bio:'Marathon runner chasing sub-2:55. Logging every mile publicly. Coach at Sparta Athletic Club. Triathlon off-season.',
+    sports:['running'], tags:['running','adv'], level:'Advanced', online:true,
+    stats:[{v:'312',l:'activities'},{v:'2.4k',l:'followers'},{v:'88km',l:'this week'}],
+    spark:[0.6,0.8,0.5,1.0,0.7,0.9,0.75], sparkColor:'#F97316',
+    mutuals:[{i:'AL',bg:'#E0F2FE',c:'#0369A1'},{i:'TR',bg:'#F5F3FF',c:'#5B21B6'}],
+    mutualCount:2, following:false, isYou:false,
+    fullStats:[{v:'312',l:'activities'},{v:'2.4k',l:'followers'},{v:'88 km',l:'this week'},{v:'9,840',l:'pts'}],
+    activities:[{icon:'🏃',name:'Morning long run',meta:'London · Apr 21',stats:['12.4 km','4:23/km','148 bpm']},{icon:'🏃',name:'Parkrun PB',meta:'Victoria Park · Apr 19',stats:['5 km','4:12/km']},{icon:'🚴',name:'Recovery ride',meta:'Apr 18',stats:['22 km','1h 10m']}],
+    recWhy:'Prague · Advanced · Runs similar distances to you', recSport:'Running'
+  },
+  {
+    id:'mc', init:'MC', bg:'#FEF9C3', c:'#854D0E',
+    name:'Marco C.', handle:'@marcocycliste', location:'Milan, IT', dist:'8.1 mi',
+    bio:'Granfondo specialist. 40,000 km logged in 2025. Stelvio is home. Leading the Milan Cycling collective on weekends.',
+    sports:['cycling'], tags:['cycling','eli'], level:'Elite', online:false,
+    stats:[{v:'287',l:'activities'},{v:'1.8k',l:'followers'},{v:'88km',l:'this week'}],
+    spark:[0.9,1.0,0.6,0.8,1.0,0.7,0.85], sparkColor:'#3B82F6',
+    mutuals:[{i:'OB',bg:'#F0FDF4',c:'#166534'}],
+    mutualCount:1, following:true, isYou:false,
+    fullStats:[{v:'287',l:'activities'},{v:'1.8k',l:'followers'},{v:'88 km',l:'this week'},{v:'8,120',l:'pts'}],
+    activities:[{icon:'🚴',name:'Stelvio approach',meta:'Milan · Apr 21',stats:['88 km','32.7 km/h','241W']},{icon:'🚴',name:'Tuesday group ride',meta:'Apr 19',stats:['54 km','29.1 km/h']},{icon:'🚴',name:'Recovery spin',meta:'Apr 18',stats:['24 km','1h 2m']}],
+    recWhy:'Milan · Elite · 3 friends follow him', recSport:'Cycling'
+  },
+  {
+    id:'am', init:'AM', bg:'#ECFDF5', c:'#065F46',
+    name:'Alena M.', handle:'@alenasends', location:'Barcelona, ES', dist:'12.4 mi',
+    bio:'Sport climbing 7c+ and projecting 8a. Beta queen — detailed route breakdowns on every post. Guides trips to Siurana.',
+    sports:['climbing'], tags:['climbing','adv'], level:'Advanced', online:true,
+    stats:[{v:'144',l:'activities'},{v:'980',l:'followers'},{v:'V8',l:'top grade'}],
+    spark:[0.5,0,0.8,1.0,0,0.9,0.7], sparkColor:'#8B5CF6',
+    mutuals:[], mutualCount:0, following:false, isYou:false,
+    fullStats:[{v:'144',l:'activities'},{v:'980',l:'followers'},{v:'V8',l:'top grade'},{v:'6,810',l:'pts'}],
+    activities:[{icon:'🧗',name:'Montserrat — V7 send',meta:'Barcelona · Apr 21',stats:['V7','3-wk project']},{icon:'🧗',name:'Siurana sport climb',meta:'Apr 19',stats:['7b+','2h session']},{icon:'🧗',name:'Campus board training',meta:'Apr 18',stats:['45 min','strength']}],
+    recWhy:'Barcelona · Advanced · Similar grade to you', recSport:'Climbing'
+  },
+  {
+    id:'yt', init:'YT', bg:'#FCE7F3', c:'#9D174D',
+    name:'Yuki T.', handle:'@yukitri', location:'Tokyo, JP', dist:'5,941 mi',
+    bio:'Triathlete and open water swimmer. ITU age group competitor. Currently building toward Ironman 70.3 Cairns in October.',
+    sports:['swimming','running'], tags:['swm','run','adv'], level:'Advanced', online:false,
+    stats:[{v:'401',l:'activities'},{v:'1.2k',l:'followers'},{v:'7.6k',l:'pts'}],
+    spark:[0.7,0.9,0.8,1.0,0.6,0.85,0.75], sparkColor:'#14B8A6',
+    mutuals:[{i:'SL',bg:'#FEF9C3',c:'#854D0E'}],
+    mutualCount:1, following:true, isYou:false,
+    fullStats:[{v:'401',l:'activities'},{v:'1.2k',l:'followers'},{v:'68 km',l:'this week'},{v:'7,610',l:'pts'}],
+    activities:[{icon:'🏊',name:'Open water 5K',meta:'Lake Geneva · Apr 21',stats:['5 km','54:22','1:32/100m']},{icon:'🏃',name:'Long run',meta:'Tokyo · Apr 20',stats:['21 km','4:18/km']},{icon:'🚴',name:'Tempo ride',meta:'Apr 18',stats:['62 km','2h 14m']}],
+    recWhy:'Tokyo · Advanced · Also does triathlons', recSport:'Swimming'
+  },
+  {
+    id:'pr', init:'PR', bg:'#FBEAF0', c:'#72243E',
+    name:'Priya R.', handle:'@priyaruns', location:'Mumbai, IN', dist:'4,488 mi',
+    bio:'Running for mental health. Completed 3 marathons in 2025. Targeting Boston 2027. Community running coach at weekends.',
+    sports:['running'], tags:['running','adv'], level:'Advanced', online:false,
+    stats:[{v:'198',l:'activities'},{v:'640',l:'followers'},{v:'62km',l:'this week'}],
+    spark:[0.8,0.6,0.9,0.7,1.0,0.5,0.8], sparkColor:'#F97316',
+    mutuals:[], mutualCount:0, following:false, isYou:false,
+    fullStats:[{v:'198',l:'activities'},{v:'640',l:'followers'},{v:'62 km',l:'this week'},{v:'6,980',l:'pts'}],
+    activities:[{icon:'🏃',name:'Marathon pace run',meta:'Mumbai · Apr 21',stats:['20 km','4:28/km']},{icon:'🏃',name:'Recovery jog',meta:'Apr 19',stats:['6 km','5:40/km']},{icon:'🏃',name:'Track intervals',meta:'Apr 18',stats:['8× 800m','3:44 avg']}],
+    recWhy:'Mumbai · Advanced · Near your pace targets', recSport:'Running'
+  },
+  {
+    id:'ob', init:'OB', bg:'#F0FDF4', c:'#166534',
+    name:'Omar B.', handle:'@omarbikes', location:'Dubai, AE', dist:'3,382 mi',
+    bio:'Cycling and basketball. Rides before sunrise every day. Planning a coast-to-coast UAE ride in Q3. Weekend 5-a-side too.',
+    sports:['cycling','basketball'], tags:['cycling','bkt','int'], level:'Intermediate', online:false,
+    stats:[{v:'156',l:'activities'},{v:'430',l:'followers'},{v:'74km',l:'this week'}],
+    spark:[1.0,0.7,0.9,0.8,0.6,1.0,0.85], sparkColor:'#3B82F6',
+    mutuals:[{i:'MC',bg:'#FEF9C3',c:'#854D0E'}],
+    mutualCount:1, following:false, isYou:false,
+    fullStats:[{v:'156',l:'activities'},{v:'430',l:'followers'},{v:'74 km',l:'this week'},{v:'6,990',l:'pts'}],
+    activities:[{icon:'🚴',name:'Sunrise coast ride',meta:'Dubai · Apr 21',stats:['74 km','2h 28m','32.1 km/h']},{icon:'🏀',name:'5-a-side pickup',meta:'Apr 20',stats:['60 min','social']},{icon:'🚴',name:'Hill intervals',meta:'Apr 18',stats:['38 km','6× climbs']}],
+    recWhy:'Dubai · Intermediate · Followed by Marco C.', recSport:'Cycling'
+  },
+  {
+    id:'tr', init:'TR', bg:'#F5F3FF', c:'#5B21B6',
+    name:'Tom R.', handle:'@tomruns', location:'London, UK', dist:'2.1 mi',
+    bio:'Runner and cyclist. Commute by bike every day. Running club on Tuesdays. Head-to-head challenge with Jamie this week.',
+    sports:['running','cycling'], tags:['running','cycling','int'], level:'Intermediate', online:true,
+    stats:[{v:'212',l:'activities'},{v:'280',l:'followers'},{v:'21km',l:'this week'}],
+    spark:[0.4,0.7,0.5,0.8,0.6,0.9,0.65], sparkColor:'#F97316',
+    mutuals:[{i:'JK',bg:'#FFF7ED',c:'#9A3412'},{i:'AL',bg:'#E0F2FE',c:'#0369A1'}],
+    mutualCount:2, following:false, isYou:false,
+    fullStats:[{v:'212',l:'activities'},{v:'280',l:'followers'},{v:'21 km',l:'this week'},{v:'5,880',l:'pts'}],
+    activities:[{icon:'🏃',name:'Morning 5K',meta:'London · Apr 21',stats:['5.2 km','4:44/km']},{icon:'🚴',name:'Commute ride',meta:'Apr 21',stats:['14 km','28 min']},{icon:'🏃',name:'Running club',meta:'Apr 19',stats:['8 km','group run']}],
+    recWhy:'London · 2.1 mi away · 2 mutual friends', recSport:'Running'
+  },
+  {
+    id:'al', init:'AL', bg:'#E0F2FE', c:'#0369A1',
+    name:'Alena L.', handle:'@alenaprague', location:'Prague, CZ', dist:'1.4 mi',
+    bio:'Running and climbing. Prague parkrun regular. Just moved to London — looking for running buddies and climbing partners.',
+    sports:['running','climbing'], tags:['running','climbing','adv'], level:'Advanced', online:false,
+    stats:[{v:'178',l:'activities'},{v:'520',l:'followers'},{v:'71km',l:'this week'}],
+    spark:[0.6,0.9,0.7,0.5,0.8,1.0,0.75], sparkColor:'#F97316',
+    mutuals:[{i:'MC',bg:'#FEF9C3',c:'#854D0E'},{i:'TR',bg:'#F5F3FF',c:'#5B21B6'}],
+    mutualCount:2, following:false, isYou:false,
+    fullStats:[{v:'178',l:'activities'},{v:'520',l:'followers'},{v:'71 km',l:'this week'},{v:'7,220',l:'pts'}],
+    activities:[{icon:'🏃',name:'Long run',meta:'London · Apr 21',stats:['18 km','4:30/km']},{icon:'🧗',name:'Bouldering session',meta:'Apr 20',stats:['2h 10m','V6+']},{icon:'🏃',name:'Easy recovery',meta:'Apr 18',stats:['6 km','5:20/km']}],
+    recWhy:'London · Advanced · 2 mutual friends', recSport:'Running'
+  },
+];
+
+const tagClass = { running:'tag-run', cycling:'tag-cyc', climbing:'tag-clm', swm:'tag-swm', run:'tag-run', adv:'tag-adv', int:'tag-int', eli:'tag-eli', beg:'tag-beg', bkt:'tag-bkt', tri:'tag-tri' };
+const tagLabel = { running:'Running', cycling:'Cycling', climbing:'Climbing', swm:'Swimming', run:'Running', adv:'Advanced', int:'Intermediate', eli:'Elite', beg:'Beginner', bkt:'Basketball', tri:'Triathlon' };
+
+let followed = new Set(['mc','yt']);
+let currentSport = 'all';
+let currentShow = 'all';
+let currentView = 'grid';
+
+// ── RENDER REC STRIP ──
+function renderRec() {
+  const strip = document.getElementById('rec-strip');
+  const recs = athletes.filter(a => !a.isYou).slice(0,6);
+  strip.innerHTML = recs.map(a => `
+    <div class="rec-card" onclick="openProfileModal('${a.id}')">
+      <div class="rec-avatar" style="background:${a.bg};color:${a.c};position:relative;width:52px;height:52px">
+        ${a.init}
+        ${a.online ? '<div class="rec-online"></div>' : ''}
+      </div>
+      <div class="rec-name">${a.name}</div>
+      <span class="rec-sport-tag ${tagClass[a.sports[0]]||'tag-run'}">${a.sports[0].charAt(0).toUpperCase()+a.sports[0].slice(1)}</span>
+      <div class="rec-why">${a.recWhy}</div>
+      <button class="follow-btn ${followed.has(a.id)?'following':''}" style="width:100%;font-size:12px;padding:5px" onclick="event.stopPropagation();toggleFollowById('${a.id}',this)">${followed.has(a.id)?'Following':'Follow'}</button>
+    </div>
+  `).join('');
+}
+
+// ── RENDER ATHLETE GRID ──
+function renderAthletes(list) {
+  const grid = document.getElementById('athletes-grid');
+  if (!list.length) {
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:48px 24px;background:white;border:var(--border);border-radius:var(--radius-lg)">
+      <div style="font-size:36px;margin-bottom:12px">🔍</div>
+      <div style="font-size:17px;font-weight:600;color:var(--gray-900);margin-bottom:6px">No athletes found</div>
+      <div style="font-size:14px;color:var(--gray-500)">Try adjusting your filters or search term.</div>
+    </div>`;
+    document.getElementById('grid-count').textContent = '· 0';
+    return;
+  }
+  document.getElementById('grid-count').textContent = `· ${list.length.toLocaleString()}`;
+  grid.innerHTML = list.map(a => renderCard(a)).join('');
+}
+
+function renderCard(a) {
+  const isFollowing = followed.has(a.id);
+  const sparkBars = a.spark.map(h =>
+    `<div class="s-bar" style="height:${Math.max(h*100,8)}%;background:${a.sparkColor};opacity:${0.35 + h*0.65}"></div>`
+  ).join('');
+  const tagHtml = a.tags.map(t => `<span class="tag ${tagClass[t]||'tag-int'}">${tagLabel[t]||t}</span>`).join('');
+  const mutHtml = a.mutuals.map(m =>
+    `<div class="mut-av" style="background:${m.bg};color:${m.c}">${m.i}</div>`
+  ).join('');
+  return `
+  <div class="ath-card${a.isYou?' is-you':''} fade-in" onclick="openProfileModal('${a.id}')">
+    <div class="ath-card-body">
+      <div class="ath-head">
+        <div class="ath-avatar-wrap">
+          <div class="ath-avatar" style="background:${a.bg};color:${a.c}">${a.init}</div>
+          ${a.online ? '<div class="online-dot"></div>' : ''}
+        </div>
+        <div class="ath-name-row">
+          <div class="ath-name">${a.name}${a.isYou?' <span style="font-size:11px;color:var(--gray-400);font-weight:400">(you)</span>':''}</div>
+          <div class="ath-handle">${a.handle}</div>
+          <div class="ath-location">📍 ${a.location} · ${a.dist}</div>
+        </div>
+      </div>
+      <div class="ath-bio">${a.bio}</div>
+      <div class="ath-tags">${tagHtml}</div>
+      <div class="ath-stats">
+        ${a.stats.map(s => `<div class="stat-pill"><div class="sv">${s.v}</div><div class="sl">${s.l}</div></div>`).join('')}
+      </div>
+      <div class="sparkline-wrap">
+        <div class="spark-label">WEEKLY ACTIVITY (7 DAYS)</div>
+        <div class="sparkline">${sparkBars}</div>
+      </div>
+    </div>
+    <div class="ath-footer">
+      <div class="mutual-wrap">
+        ${a.mutualCount > 0
+          ? `<div class="mut-avs">${mutHtml}</div><span class="mutual-text">${a.mutualCount} mutual</span>`
+          : `<span class="mutual-text" style="color:var(--gray-400)">No mutuals yet</span>`
+        }
+      </div>
+      ${a.isYou
+        ? `<button class="follow-btn you">Your profile</button>`
+        : `<button class="follow-btn ${isFollowing?'following':''}" onclick="event.stopPropagation();toggleFollowById('${a.id}',this)">${isFollowing?'Following':'Follow'}</button>`
+      }
+    </div>
+  </div>`;
+}
+
+// ── FILTERS ──
+function filterAthletes() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  const level = document.getElementById('level-filter').value;
+  let list = athletes;
+  if (currentSport !== 'all') list = list.filter(a => a.sports.includes(currentSport));
+  if (currentShow === 'following') list = list.filter(a => followed.has(a.id));
+  if (currentShow === 'followers') list = list.filter(a => ['sl','mc','yt','tr','al'].includes(a.id));
+  if (level !== 'all') list = list.filter(a => a.level === level);
+  if (q) list = list.filter(a =>
+    a.name.toLowerCase().includes(q) ||
+    a.handle.toLowerCase().includes(q) ||
+    a.location.toLowerCase().includes(q) ||
+    a.sports.some(s => s.includes(q)) ||
+    a.bio.toLowerCase().includes(q)
+  );
+  const sort = document.getElementById('sort-filter').value;
+  if (sort === 'active') list = [...list].sort((a,b) => b.stats[0].v - a.stats[0].v);
+  else if (sort === 'followed') list = [...list].sort((a,b) => parseFloat(b.stats[1].v) - parseFloat(a.stats[1].v));
+  renderAthletes(list);
+}
+
+function setSportFilter(sport, el) {
+  currentSport = sport;
+  document.querySelectorAll('.fp[id^="fp-"]').forEach(f => f.classList.remove('active'));
+  el.classList.add('active');
+  filterAthletes();
+}
+
+function setShowFilter(show, el) {
+  currentShow = show;
+  document.querySelectorAll('#show-all,#show-following,#show-followers').forEach(f => f.classList.remove('active-yellow'));
+  el.classList.add('active-yellow');
+  filterAthletes();
+}
+
+function setView(v) {
+  currentView = v;
+  const grid = document.getElementById('athletes-grid');
+  grid.classList.toggle('list-view', v === 'list');
+  document.getElementById('btn-grid').classList.toggle('active', v === 'grid');
+  document.getElementById('btn-list').classList.toggle('active', v === 'list');
+}
+
+// ── FOLLOW ──
+function toggleFollow(btn) {
+  const isF = btn.classList.contains('following');
+  btn.classList.toggle('following', !isF);
+  btn.textContent = isF ? 'Follow' : 'Following';
+  showToast(isF ? 'Unfollowed' : '✓ Following — they\'ll appear in your feed');
+}
+
+function toggleFollowById(id, btn) {
+  if (followed.has(id)) {
+    followed.delete(id);
+    btn.classList.remove('following');
+    btn.textContent = 'Follow';
+    showToast('Unfollowed');
+  } else {
+    followed.add(id);
+    btn.classList.add('following');
+    btn.textContent = 'Following';
+    showToast('✓ Following — they\'ll appear in your feed');
+  }
+  renderRec();
+}
+
+function followBack(btn) {
+  btn.textContent = 'Following';
+  btn.classList.add('following');
+  btn.disabled = true;
+  showToast('✓ Following back');
+}
+
+// ── MODAL ──
+let currentModalId = null;
+function openProfileModal(id) {
+  const a = athletes.find(x => x.id === id);
+  if (!a) return;
+  currentModalId = id;
+  document.getElementById('pm-avatar').style.cssText = `background:${a.bg};color:${a.c};width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:600;flex-shrink:0`;
+  document.getElementById('pm-avatar').textContent = a.init;
+  document.getElementById('pm-name').textContent = a.name;
+  document.getElementById('pm-handle').innerHTML = `${a.handle} · ${a.location}`;
+  document.getElementById('pm-tags').innerHTML = a.tags.map(t => `<span class="tag ${tagClass[t]||'tag-int'}">${tagLabel[t]||t}</span>`).join('');
+  document.getElementById('pm-stats').innerHTML = a.fullStats.map(s =>
+    `<div class="modal-stat"><div class="mv">${s.v}</div><div class="ml">${s.l}</div></div>`
+  ).join('');
+  document.getElementById('pm-bio').textContent = a.bio;
+  document.getElementById('pm-activities').innerHTML = a.activities.map(act =>
+    `<div class="mra-item">
+      <div class="mra-icon">${act.icon}</div>
+      <div class="mra-info"><div class="mra-name">${act.name}</div><div class="mra-meta">${act.meta}</div></div>
+      <div class="mra-stats">${act.stats.map(s=>`<span class="mra-stat">${s}</span>`).join('')}</div>
+    </div>`
+  ).join('');
+  const fb = document.getElementById('pm-follow-btn');
+  if (followed.has(id)) {
+    fb.textContent = '✓ Following'; fb.className = 'btn btn-ghost';
+  } else {
+    fb.textContent = 'Follow'; fb.className = 'btn btn-primary';
+  }
+  fb.style.flex = '1'; fb.style.justifyContent = 'center';
+  document.getElementById('profile-modal').classList.add('open');
+}
+
+function modalFollow() {
+  if (!currentModalId) return;
+  const btn = document.getElementById('pm-follow-btn');
+  if (followed.has(currentModalId)) {
+    followed.delete(currentModalId);
+    btn.textContent = 'Follow'; btn.className = 'btn btn-primary'; btn.style.flex='1'; btn.style.justifyContent='center';
+    showToast('Unfollowed');
+  } else {
+    followed.add(currentModalId);
+    btn.textContent = '✓ Following'; btn.className = 'btn btn-ghost'; btn.style.flex='1'; btn.style.justifyContent='center';
+    showToast('✓ Following — they\'ll appear in your feed');
+  }
+  renderAthletes(athletes); renderRec();
+}
+
+function closeModal(e) {
+  if (!e || e.target === document.getElementById('profile-modal')) {
+    document.getElementById('profile-modal').classList.remove('open');
+  }
+}
+
+// ── TOAST ──
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ── INIT ──
+renderRec();
+renderAthletes(athletes);
+</script>
+</body>
+</html>

@@ -10,6 +10,7 @@ import Profile from "@/pages/Profile";
 import Events from "@/pages/Events";
 import Leaderboards from "@/pages/Leaderboards";
 import Challenges from "@/pages/Challenges";
+import Athletes from "@/pages/Athletes";
 
 const queryClient = new QueryClient();
 
@@ -21,6 +22,7 @@ function Router() {
       <Route path="/events" component={Events} />
       <Route path="/leaderboards" component={Leaderboards} />
       <Route path="/challenges" component={Challenges} />
+      <Route path="/athletes" component={Athletes} />
       <Route path="/login" component={Login} />
       <Route path="/profile" component={Profile} />
       <Route component={NotFound} />

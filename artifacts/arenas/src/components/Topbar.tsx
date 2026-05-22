@@ -7,7 +7,7 @@ interface TopbarProps {
 
 const NAV_ROUTES: Record<string, string> = {
   Community:    "/community",
-  Athletes:     "/community",
+  Athletes:     "/athletes",
   Events:       "/events",
   Leaderboards: "/leaderboards",
   Challenges:   "/challenges",
