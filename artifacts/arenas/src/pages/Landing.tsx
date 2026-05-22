@@ -28,7 +28,7 @@ export default function Landing() {
             <a href="#features" onClick={e => { e.preventDefault(); document.getElementById("features")?.scrollIntoView({ behavior: "smooth" }); }}>Features</a>
             <a href="#pricing"  onClick={e => { e.preventDefault(); document.getElementById("pricing")?.scrollIntoView({ behavior: "smooth" }); }}>Pricing</a>
             <a href="#for-clubs" onClick={e => { e.preventDefault(); document.getElementById("for-clubs")?.scrollIntoView({ behavior: "smooth" }); }}>For clubs</a>
-            <a href="#blog">Blog</a>
+            <a href="#" onClick={e => { e.preventDefault(); setLocation("/blog"); }}>Blog</a>
           </nav>
           <div className="topbar-actions">
             <button className="btn btn-ghost" onClick={goLogin} data-testid="btn-login">Log in</button>

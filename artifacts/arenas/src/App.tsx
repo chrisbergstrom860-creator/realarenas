@@ -12,6 +12,7 @@ import Events from "@/pages/Events";
 import Leaderboards from "@/pages/Leaderboards";
 import Challenges from "@/pages/Challenges";
 import Athletes from "@/pages/Athletes";
+import Blog from "@/pages/Blog";
 import { useEffect } from "react";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ function Router() {
       <Route path="/leaderboards"  component={() => <ProtectedRoute component={Leaderboards} />} />
       <Route path="/challenges"    component={() => <ProtectedRoute component={Challenges} />} />
       <Route path="/profile"       component={() => <ProtectedRoute component={Profile} />} />
+      <Route path="/blog"          component={Blog} />
       <Route component={NotFound} />
     </Switch>
   );
