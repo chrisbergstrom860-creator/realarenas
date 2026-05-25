@@ -14,6 +14,7 @@ import Challenges from "@/pages/Challenges";
 import Athletes from "@/pages/Athletes";
 import Blog from "@/pages/Blog";
 import ClubDashboard from "@/pages/ClubDashboard";
+import ClubMemberDashboard from "@/pages/ClubMemberDashboard";
 import { useEffect } from "react";
 
 const queryClient = new QueryClient();
@@ -43,7 +44,8 @@ function Router() {
       <Route path="/challenges"    component={() => <ProtectedRoute component={Challenges} />} />
       <Route path="/profile"       component={() => <ProtectedRoute component={Profile} />} />
       <Route path="/blog"           component={Blog} />
-      <Route path="/club-dashboard" component={() => <ProtectedRoute component={ClubDashboard} />} />
+      <Route path="/club-dashboard"   component={() => <ProtectedRoute component={ClubDashboard} />} />
+      <Route path="/member-dashboard" component={() => <ProtectedRoute component={ClubMemberDashboard} />} />
       <Route component={NotFound} />
     </Switch>
   );

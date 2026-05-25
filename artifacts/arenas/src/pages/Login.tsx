@@ -64,7 +64,7 @@ export default function Login() {
 
   function goToFeed() {
     if (clubMode) { setLocation("/club-dashboard"); }
-    else { setLocation("/community"); }
+    else { setLocation("/member-dashboard"); }
   }
 
   const score = pwScore(password);
