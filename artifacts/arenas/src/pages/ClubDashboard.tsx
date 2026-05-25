@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/context/AuthContext";
+import ClubInviteView, { type InviteView } from "./ClubInviteView";
 
-type Tab = "overview" | "members" | "training" | "leaderboard" | "challenges" | "events" | "feed" | "reports";
+type Tab = "overview" | "members" | "training" | "leaderboard" | "challenges" | "events" | "feed" | "reports" | "invites" | "import" | "history";
 type Modal = "invite" | "event" | "event-rsvp" | "challenge" | null;
 
 const STREAK = (pattern: string) => pattern.split("").map((c, i) =>
@@ -78,6 +79,7 @@ export default function ClubDashboard() {
         <div className="cd-nav-label">Club management</div>
         {([
           ["overview",    "📊", "Overview",       ""],
+          ["invites",     "✉️", "Invite members",  "8"],
           ["members",     "👥", "Members",         "48"],
           ["training",    "📈", "Training load",   "3"],
           ["leaderboard", "🏆", "Leaderboard",     ""],
@@ -86,13 +88,14 @@ export default function ClubDashboard() {
         ] as [Tab, string, string, string][]).map(([id, icon, label, badge]) => (
           <div key={id} className={`cd-nav-item${tab === id ? " active" : ""}`} onClick={() => setTab(id)}>
             <span className="cd-nav-icon">{icon}</span> {label}
-            {badge && <span className={`cd-nav-badge${id === "training" ? " alert" : ""}`}>{badge}</span>}
+            {badge && <span className={`cd-nav-badge${id === "training" ? " alert" : id === "invites" ? " alert" : ""}`}>{badge}</span>}
           </div>
         ))}
         <div className="cd-nav-label">Analytics</div>
         {([
-          ["feed",    "🏃", "Club feed",  ""],
-          ["reports", "📋", "Reports",    ""],
+          ["feed",    "🏃", "Club feed",       ""],
+          ["history", "📋", "Invite history",  ""],
+          ["reports", "📋", "Reports",         ""],
         ] as [Tab, string, string, string][]).map(([id, icon, label]) => (
           <div key={id} className={`cd-nav-item${tab === id ? " active" : ""}`} onClick={() => setTab(id)}>
             <span className="cd-nav-icon">{icon}</span> {label}
@@ -121,6 +124,16 @@ export default function ClubDashboard() {
                 <button className="cd-btn cd-btn-ghost" onClick={() => showToast("Generating weekly report PDF…")}>📋 Export report</button>
                 <button className="cd-btn cd-btn-yellow" onClick={() => setModal("event")}>+ New event</button>
               </div>
+            </div>
+
+            {/* Pending invites banner */}
+            <div className="ci-pending-banner" onClick={() => setTab("invites")}>
+              <div style={{ fontSize: 22 }}>✉️</div>
+              <div style={{ flex: 1 }}>
+                <div className="ci-pb-title">8 pending invitations waiting</div>
+                <div className="ci-pb-sub">3 members expire in 2 days — resend now to avoid losing them.</div>
+              </div>
+              <button className="cd-btn cd-btn-yellow cd-btn-sm" onClick={e => { e.stopPropagation(); setTab("invites"); }}>View pending →</button>
             </div>
 
             {/* Risk alert */}
@@ -535,6 +548,16 @@ export default function ClubDashboard() {
             </div>
           </div>
         )}
+
+        {/* ══ INVITE / IMPORT / HISTORY ══ */}
+        {(tab === "invites" || tab === "import" || tab === "history") && (
+          <ClubInviteView
+            view={tab as InviteView}
+            onNavigate={(v) => setTab(v as Tab)}
+            showToast={showToast}
+          />
+        )}
+
       </main>
 
       {/* ── MODALS ── */}
