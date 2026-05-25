@@ -15,6 +15,7 @@ import Athletes from "@/pages/Athletes";
 import Blog from "@/pages/Blog";
 import ClubDashboard from "@/pages/ClubDashboard";
 import ClubMemberDashboard from "@/pages/ClubMemberDashboard";
+import Feed from "@/pages/Feed";
 import { useEffect } from "react";
 
 const queryClient = new QueryClient();
@@ -46,6 +47,7 @@ function Router() {
       <Route path="/blog"           component={Blog} />
       <Route path="/club-dashboard"   component={() => <ProtectedRoute component={ClubDashboard} />} />
       <Route path="/member-dashboard" component={() => <ProtectedRoute component={ClubMemberDashboard} />} />
+      <Route path="/feed"             component={() => <ProtectedRoute component={Feed} />} />
       <Route component={NotFound} />
     </Switch>
   );

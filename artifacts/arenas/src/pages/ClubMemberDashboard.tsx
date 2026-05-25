@@ -119,7 +119,7 @@ export default function ClubMemberDashboard() {
       {/* ── SIDEBAR ── */}
       <aside className="cm-sidebar">
         <div className="cm-nav-label">My Arenas</div>
-        <div className="cm-nav-item" onClick={() => showToast("Going to your personal feed…")}><span className="cm-nav-icon">🏠</span> My feed</div>
+        <div className="cm-nav-item" onClick={() => setLocation("/feed")}><span className="cm-nav-icon">🏠</span> My feed</div>
         <div className="cm-nav-item" onClick={() => setLocation("/profile")}><span className="cm-nav-icon">👤</span> My profile</div>
         <div className="cm-nav-item" onClick={() => showToast("Going to events near you…")}><span className="cm-nav-icon">📅</span> Events</div>
 
