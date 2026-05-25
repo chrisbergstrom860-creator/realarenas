@@ -111,7 +111,7 @@ export default function ClubMemberDashboard() {
           <div className="cm-notif-btn" onClick={() => nav("notifications")}>
             🔔<div className="cm-notif-dot" />
           </div>
-          <div className="cm-av-btn" onClick={() => showToast("Opening your profile…")}>JK</div>
+          <div className="cm-av-btn" onClick={() => setLocation("/profile")}>JK</div>
           <button className="cm-btn cm-btn-ghost cm-btn-sm" style={{ marginLeft: 4 }} onClick={() => { logout(); setLocation("/"); }}>Log out</button>
         </div>
       </header>
@@ -120,7 +120,7 @@ export default function ClubMemberDashboard() {
       <aside className="cm-sidebar">
         <div className="cm-nav-label">My Arenas</div>
         <div className="cm-nav-item" onClick={() => showToast("Going to your personal feed…")}><span className="cm-nav-icon">🏠</span> My feed</div>
-        <div className="cm-nav-item" onClick={() => showToast("Going to your profile…")}><span className="cm-nav-icon">👤</span> My profile</div>
+        <div className="cm-nav-item" onClick={() => setLocation("/profile")}><span className="cm-nav-icon">👤</span> My profile</div>
         <div className="cm-nav-item" onClick={() => showToast("Going to events near you…")}><span className="cm-nav-icon">📅</span> Events</div>
 
         <div className="cm-nav-label" style={{ marginTop: 4 }}>Hackney Running Club</div>
@@ -770,7 +770,7 @@ export default function ClubMemberDashboard() {
               </div>
               <div className="cm-mc-footer">
                 <div style={{ fontSize: 11, color: "#7a5c00" }}>Your profile</div>
-                <Btn cls="cm-btn-ghost cm-btn-sm" onClick={() => showToast("Opening your profile…")}>Edit profile</Btn>
+                <Btn cls="cm-btn-ghost cm-btn-sm" onClick={() => setLocation("/profile")}>Edit profile</Btn>
               </div>
             </div>
           </div>

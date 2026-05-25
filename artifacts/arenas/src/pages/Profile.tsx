@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useLocation } from "wouter";
 
 /* ─── DATA ─────────────────────────────────────────────────────────── */
 
@@ -342,6 +343,7 @@ type ModalId = "edit-profile" | "comment" | "avatar" | "goal" | null;
 type TabId = "overview" | "activities" | "stats" | "achievements" | "clubs" | "following" | "settings";
 
 export default function Profile() {
+  const [, setLocation] = useLocation();
   const [tab, setTab] = useState<TabId>("overview");
   const [modal, setModal] = useState<ModalId>(null);
   const [toast, setToast] = useState("");
@@ -417,7 +419,7 @@ export default function Profile() {
         {/* ── SIDEBAR ── */}
         <aside className="mp-sidebar">
           <div className="mp-nav-label">My Arenas</div>
-          <div className="mp-nav-item" onClick={() => showToast("Opening feed…")}><span className="mp-nav-icon">🏠</span> Feed</div>
+          <div className="mp-nav-item" onClick={() => setLocation("/member-dashboard")}><span className="mp-nav-icon">🏠</span> Feed</div>
           <div className={`mp-nav-item ${tab !== "settings" ? "active" : ""}`} onClick={() => switchTab("overview")}><span className="mp-nav-icon">👤</span> My profile</div>
           <div className="mp-nav-item" onClick={() => showToast("Opening events…")}><span className="mp-nav-icon">📅</span> Events</div>
           <div className="mp-nav-item" onClick={() => showToast("Opening leaderboards…")}><span className="mp-nav-icon">🏆</span> Leaderboards</div>
