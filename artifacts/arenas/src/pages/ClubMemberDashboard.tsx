@@ -121,7 +121,7 @@ export default function ClubMemberDashboard() {
         <div className="cm-nav-label">My Arenas</div>
         <div className="cm-nav-item" onClick={() => setLocation("/feed")}><span className="cm-nav-icon">🏠</span> My feed</div>
         <div className="cm-nav-item" onClick={() => setLocation("/profile")}><span className="cm-nav-icon">👤</span> My profile</div>
-        <div className="cm-nav-item" onClick={() => showToast("Going to events near you…")}><span className="cm-nav-icon">📅</span> Events</div>
+        <div className="cm-nav-item" onClick={() => setLocation("/events")}><span className="cm-nav-icon">📅</span> Events</div>
 
         <div className="cm-nav-label" style={{ marginTop: 4 }}>Hackney Running Club</div>
         <div className="cm-club-hdr">

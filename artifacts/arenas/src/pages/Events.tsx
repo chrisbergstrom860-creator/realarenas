@@ -1,566 +1,688 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
-import Topbar from "@/components/Topbar";
-import Footer from "@/components/Footer";
+import { useAuth } from "@/context/AuthContext";
 
-const sportColors: Record<string, { bg: string; color: string; dot: string; tag: string }> = {
-  running:    { bg: "#FFF7ED", color: "#9A3412", dot: "#F97316", tag: "🏃" },
-  cycling:    { bg: "#EFF6FF", color: "#1D4ED8", dot: "#3B82F6", tag: "🚴" },
-  swimming:   { bg: "#F0FDF4", color: "#166534", dot: "#14B8A6", tag: "🏊" },
-  climbing:   { bg: "#F5F3FF", color: "#6D28D9", dot: "#8B5CF6", tag: "🧗" },
-  football:   { bg: "#F0FDF4", color: "#14532D", dot: "#10B981", tag: "⚽" },
-  basketball: { bg: "#FEF2F2", color: "#991B1B", dot: "#EF4444", tag: "🏀" },
-  tennis:     { bg: "#FEFCE8", color: "#713F12", dot: "#F59E0B", tag: "🎾" },
-  yoga:       { bg: "#FDF4FF", color: "#6B21A8", dot: "#EC4899", tag: "🧘" },
-};
+type Sport = "run" | "cyc" | "clm" | "swm" | "tri";
+type ViewMode = "grid" | "map" | "list";
+type ModalId =
+  | "london-half" | "victoria-parkrun" | "hackney-half"
+  | "richmond-sportive" | "arch-open" | "east-end-10k"
+  | "tooting-swim" | "generic";
+type RsvpChoice = "going" | "maybe" | "cant";
 
-interface Attendee { i: string; bg: string; c: string; }
-interface Event {
-  id: number; sport: string; name: string; location: string; dist: number;
-  date: { d: string; m: string }; time: string; going: number; type: string;
-  tags: string[]; desc: string;
-  details: Record<string, string>;
-  attendees: Attendee[];
+interface CardDef {
+  id: string;
+  day: string; mon: string;
+  title: string; loc: string;
+  sport: Sport; ai: number;
+  dateBg: string; dayColor: string; monColor: string;
+  tags: Array<{ label: string; cls: string }>;
+  socialAvs: Array<{ bg: string; fg: string; label: string }>;
+  overflow?: string;
+  socialText: string;
+  modalId: ModalId;
 }
 
-const ALL_EVENTS: Event[] = [
-  { id: 1,  sport: "running",    name: "LA Spring Half Marathon",         location: "Santa Monica, CA",   dist: 4.2,  date: { d: "13", m: "Apr" }, time: "7:00 AM",  going: 847, type: "Race",   tags: ["Medal", "Chip timed", "All levels"],        desc: "Join 800+ runners for the annual LA Spring Half Marathon along the iconic Santa Monica beachfront. Flat fast course, perfect for a PB attempt. Finisher medal and post-race brunch included.",                                                                                      details: { Distance: "13.1 mi", Start: "7:00 AM", Entry: "$45", Level: "All levels" },          attendees: [{ i: "JK", bg: "#FFF7ED", c: "#9A3412" }, { i: "SL", bg: "#FEF9C3", c: "#854D0E" }, { i: "MC", bg: "#E0F2FE", c: "#0369A1" }, { i: "YT", bg: "#FCE7F3", c: "#9D174D" }] },
-  { id: 2,  sport: "cycling",    name: "Pacific Coast Century Ride",      location: "Malibu, CA",         dist: 8.1,  date: { d: "19", m: "Apr" }, time: "6:30 AM",  going: 203, type: "Social", tags: ["100 mi", "Scenic", "SAG support"],           desc: "A stunning 100-mile ride along PCH from Malibu to Ventura and back. SAG wagons every 20 miles, rest stops with food and drinks. Suitable for experienced cyclists.",                                                                                                             details: { Distance: "100 mi", Start: "6:30 AM", Entry: "$35", Level: "Advanced" },             attendees: [{ i: "MC", bg: "#FEF9C3", c: "#854D0E" }, { i: "OB", bg: "#F0FDF4", c: "#166534" }] },
-  { id: 3,  sport: "climbing",   name: "SoCal Bouldering Open",           location: "Claremont, CA",      dist: 12.4, date: { d: "27", m: "Apr" }, time: "9:00 AM",  going: 88,  type: "Race",   tags: ["V4–V10", "Cash prizes", "Community"],       desc: "Indoor bouldering competition open to all levels, with categories from V4 to V10+. Cash prizes for top 3 in each category. Qualifiers + finals format, spectators welcome.",                                                                                                   details: { Distance: "N/A", Start: "9:00 AM", Entry: "$30", Level: "Intermediate–Elite" },      attendees: [{ i: "AM", bg: "#ECFDF5", c: "#065F46" }, { i: "SR", bg: "#F5F3FF", c: "#6D28D9" }] },
-  { id: 4,  sport: "swimming",   name: "Open Water 5K — Marina del Rey", location: "Marina del Rey, CA", dist: 6.8,  date: { d: "3",  m: "May" }, time: "7:30 AM",  going: 154, type: "Race",   tags: ["Ocean swim", "Wetsuit OK", "Chip timed"],   desc: "Annual open water 5K in the protected waters of Marina del Rey. Calm conditions, buoyed course, safety kayakers throughout. Wetsuits permitted but not required.",                                                                                                               details: { Distance: "5K", Start: "7:30 AM", Entry: "$40", Level: "All levels" },               attendees: [{ i: "YT", bg: "#FCE7F3", c: "#9D174D" }, { i: "JK", bg: "#FFF7ED", c: "#9A3412" }] },
-  { id: 5,  sport: "running",    name: "Griffith Park 10K Trailblazer",   location: "Los Feliz, CA",      dist: 9.3,  date: { d: "10", m: "May" }, time: "7:00 AM",  going: 312, type: "Race",   tags: ["Trail", "Elevation", "Dog-friendly"],       desc: "A scenic 10K trail race through Griffith Park with 800ft of elevation gain. Stunning views of the city and Hollywood sign. Dog-friendly with leash.",                                                                                                                           details: { Distance: "10K", Start: "7:00 AM", Entry: "$28", Level: "Intermediate" },            attendees: [{ i: "SL", bg: "#FEF9C3", c: "#854D0E" }, { i: "JK", bg: "#FFF7ED", c: "#9A3412" }] },
-  { id: 6,  sport: "yoga",       name: "Sunrise Yoga in the Park",        location: "Echo Park, CA",      dist: 5.1,  date: { d: "17", m: "May" }, time: "6:00 AM",  going: 67,  type: "Social", tags: ["All levels", "Free", "Outdoor"],            desc: "Weekly sunrise yoga session in Echo Park led by certified instructors. Bring your own mat. Free for all levels — beginners very welcome. Followed by optional coffee meetup.",                                                                                                  details: { Distance: "N/A", Start: "6:00 AM", Entry: "Free", Level: "All levels" },             attendees: [{ i: "AM", bg: "#ECFDF5", c: "#065F46" }] },
-  { id: 7,  sport: "basketball", name: "3x3 Venice Beach Tournament",     location: "Venice Beach, CA",   dist: 7.2,  date: { d: "24", m: "May" }, time: "10:00 AM", going: 196, type: "Race",   tags: ["3v3", "Cash prize", "Outdoor"],             desc: "The annual Venice Beach 3x3 basketball tournament on the world-famous outdoor courts. Register as a team of 3–4. Cash prizes for winners. Spectators welcome on the boardwalk.",                                                                                               details: { Distance: "N/A", Start: "10:00 AM", Entry: "$20/team", Level: "All levels" },        attendees: [{ i: "OB", bg: "#F0FDF4", c: "#166534" }, { i: "JK", bg: "#FFF7ED", c: "#9A3412" }] },
-  { id: 8,  sport: "cycling",    name: "Pasadena Gran Fondo",              location: "Pasadena, CA",       dist: 14.7, date: { d: "31", m: "May" }, time: "6:00 AM",  going: 421, type: "Race",   tags: ["Timed", "Scenic", "Multiple distances"],    desc: "Choose your distance: 40, 75, or 100 miles through the San Gabriel foothills. Fully supported with SAG, mechanical support, and post-ride festival. One of Southern California's premier sportives.", details: { Distance: "40/75/100 mi", Start: "6:00 AM", Entry: "$55", Level: "Intermediate–Pro" }, attendees: [{ i: "MC", bg: "#FEF9C3", c: "#854D0E" }] },
-  { id: 9,  sport: "tennis",     name: "Westside Open Tennis Tournament", location: "Brentwood, CA",      dist: 3.8,  date: { d: "7",  m: "Jun" }, time: "8:00 AM",  going: 44,  type: "Race",   tags: ["NTRP rated", "Singles + Doubles", "All ages"], desc: "NTRP-rated singles and doubles tournament across 3.0 to 5.0 levels. Matches played on hard courts at Brentwood Recreation Center. Prize balls and trophies for winners.",                                                                                                         details: { Distance: "N/A", Start: "8:00 AM", Entry: "$35", Level: "All levels" },              attendees: [{ i: "SL", bg: "#FEF9C3", c: "#854D0E" }] },
-  { id: 10, sport: "football",   name: "LAFC Community 5-a-side League",  location: "Hollywood, CA",      dist: 11.0, date: { d: "1",  m: "Jun" }, time: "11:00 AM", going: 88,  type: "Social", tags: ["Weekly", "5v5", "All welcome"],             desc: "Weekly recreational 5-a-side football league running through summer. Register as a team or as an individual to be placed. Turf pitches, refs provided, no slide tackling.",                                                                                                     details: { Distance: "N/A", Start: "11:00 AM", Entry: "$15/session", Level: "Beginner–Intermediate" }, attendees: [{ i: "OB", bg: "#F0FDF4", c: "#166534" }, { i: "MC", bg: "#FEF9C3", c: "#854D0E" }] },
-  { id: 11, sport: "running",    name: "Sunset Strip Night Run 8K",       location: "West Hollywood, CA", dist: 2.9,  date: { d: "14", m: "Jun" }, time: "9:00 PM",  going: 502, type: "Race",   tags: ["Night race", "LED lit", "Party finish"],    desc: "Run 8K through the famous Sunset Strip after dark. LED accessories encouraged. DJ at the finish line, after-party at a rooftop venue. One of LA's most fun evening events.",                                                                                                   details: { Distance: "8K", Start: "9:00 PM", Entry: "$38", Level: "All levels" },               attendees: [{ i: "JK", bg: "#FFF7ED", c: "#9A3412" }, { i: "SL", bg: "#FEF9C3", c: "#854D0E" }, { i: "YT", bg: "#FCE7F3", c: "#9D174D" }] },
-  { id: 12, sport: "swimming",   name: "Santa Monica Pool Masters",       location: "Santa Monica, CA",   dist: 4.5,  date: { d: "21", m: "Jun" }, time: "8:00 AM",  going: 78,  type: "Race",   tags: ["Pool swim", "Masters", "USMS sanctioned"], desc: "USMS-sanctioned masters swim meet at the Santa Monica Swim Center. All ages 18+, multiple distance events from 50m to 1500m. Register for individual events or full program.",                                                                                                   details: { Distance: "50m–1500m", Start: "8:00 AM", Entry: "$30", Level: "Intermediate–Elite" }, attendees: [{ i: "YT", bg: "#FCE7F3", c: "#9D174D" }] },
+const CARDS: CardDef[] = [
+  { id: "victoria-parkrun", day: "19", mon: "Apr", sport: "run", ai: 91,
+    title: "Victoria Park Parkrun — Club Takeover", loc: "📍 Victoria Park, London · 0.4 mi",
+    dateBg: "#FFF7ED", dayColor: "#9A3412", monColor: "#C2410C",
+    tags: [{ label: "🏃 Running", cls: "run" }, { label: "Free", cls: "free" }, { label: "22 clubmates going", cls: "going" }],
+    socialAvs: [{ bg: "#FEF9C3", fg: "#854D0E", label: "SL" }, { bg: "#E0F2FE", fg: "#0369A1", label: "AL" }],
+    overflow: "+20", socialText: "going", modalId: "victoria-parkrun" },
+  { id: "richmond-sportive", day: "26", mon: "Apr", sport: "cyc", ai: 88,
+    title: "Richmond Park Spring Sportive", loc: "📍 Richmond, London · 8.2 mi",
+    dateBg: "#EFF6FF", dayColor: "#1E40AF", monColor: "#2563EB",
+    tags: [{ label: "🚴 Cycling", cls: "cyc" }, { label: "80km · £28", cls: "gray" }, { label: "✦ 88% match", cls: "ai" }],
+    socialAvs: [], socialText: "No clubmates yet — be first!", modalId: "richmond-sportive" },
+  { id: "hackney-half", day: "3", mon: "May", sport: "run", ai: 91,
+    title: "Hackney Half Marathon 2026", loc: "📍 Hackney, London · 1.1 mi",
+    dateBg: "#FFF7ED", dayColor: "#9A3412", monColor: "#C2410C",
+    tags: [{ label: "🏃 Running", cls: "run" }, { label: "13.1 mi · £38", cls: "gray" }, { label: "✦ 91% match", cls: "ai" }, { label: "8 clubmates", cls: "going" }],
+    socialAvs: [{ bg: "#FCE7F3", fg: "#9D174D", label: "YT" }],
+    overflow: "+7", socialText: "going", modalId: "hackney-half" },
+  { id: "arch-open", day: "10", mon: "May", sport: "clm", ai: 72,
+    title: "The Arch Bouldering Open", loc: "📍 Bermondsey, London · 2.8 mi",
+    dateBg: "#F5F3FF", dayColor: "#5B21B6", monColor: "#7C3AED",
+    tags: [{ label: "🧗 Climbing", cls: "clm" }, { label: "V4–V7", cls: "gray" }, { label: "Free entry", cls: "free" }],
+    socialAvs: [], socialText: "No clubmates yet", modalId: "arch-open" },
+  { id: "east-end-10k", day: "17", mon: "May", sport: "run", ai: 76,
+    title: "East End 10K — Spring Series", loc: "📍 Victoria Park, London · 0.4 mi",
+    dateBg: "#FFF7ED", dayColor: "#9A3412", monColor: "#C2410C",
+    tags: [{ label: "🏃 Running", cls: "run" }, { label: "10K · £22", cls: "gray" }, { label: "✦ 76% match", cls: "ai" }, { label: "4 pending", cls: "pend" }],
+    socialAvs: [{ bg: "#FBEAF0", fg: "#72243E", label: "PR" }],
+    overflow: "+3", socialText: "pending RSVP", modalId: "east-end-10k" },
+  { id: "tooting-swim", day: "24", mon: "May", sport: "swm", ai: 60,
+    title: "Tooting Bec Lido Open Water Swim", loc: "📍 Tooting, London · 6.4 mi",
+    dateBg: "#F0FDFA", dayColor: "#134E4A", monColor: "#0F766E",
+    tags: [{ label: "🏊 Swimming", cls: "swm" }, { label: "Free", cls: "free" }, { label: "All levels", cls: "gray" }],
+    socialAvs: [], socialText: "Be the first from your club!", modalId: "tooting-swim" },
+  { id: "greenwich-5k", day: "7", mon: "Jun", sport: "run", ai: 85,
+    title: "Greenwich Park 5K Fun Run", loc: "📍 Greenwich, London · 4.2 mi",
+    dateBg: "#FFF7ED", dayColor: "#9A3412", monColor: "#C2410C",
+    tags: [{ label: "🏃 Running", cls: "run" }, { label: "Free", cls: "free" }, { label: "✦ 85% match", cls: "ai" }],
+    socialAvs: [], socialText: "No clubmates yet", modalId: "generic" },
+  { id: "london-tri", day: "15", mon: "Jun", sport: "tri", ai: 55,
+    title: "London Sprint Triathlon 2026", loc: "📍 Docklands, London · 5.8 mi",
+    dateBg: "#FBEAF0", dayColor: "#72243E", monColor: "#9D174D",
+    tags: [{ label: "🔱 Triathlon", cls: "tri" }, { label: "Sprint · £65", cls: "gray" }, { label: "3 clubmates interested", cls: "gray" }],
+    socialAvs: [{ bg: "#FCE7F3", fg: "#9D174D", label: "YT" }],
+    overflow: "+2", socialText: "interested", modalId: "generic" },
 ];
 
-const ZIP_DATA = [
-  { zip: "90210", city: "Beverly Hills, CA" }, { zip: "90291", city: "Venice, CA" },
-  { zip: "90401", city: "Santa Monica, CA" }, { zip: "90028", city: "Hollywood, CA" },
-  { zip: "10001", city: "New York, NY" }, { zip: "10002", city: "Lower East Side, NY" },
-  { zip: "60601", city: "Chicago, IL" }, { zip: "77001", city: "Houston, TX" },
-  { zip: "85001", city: "Phoenix, AZ" }, { zip: "19101", city: "Philadelphia, PA" },
-  { zip: "78201", city: "San Antonio, TX" }, { zip: "92101", city: "San Diego, CA" },
-  { zip: "75201", city: "Dallas, TX" }, { zip: "95101", city: "San Jose, CA" },
+const MORE_CARDS: CardDef[] = [
+  { id: "regents-5k", day: "21", mon: "Jun", sport: "run", ai: 82,
+    title: "Regent's Park 5K Series", loc: "📍 Regent's Park · 0.9 mi",
+    dateBg: "#FFF7ED", dayColor: "#9A3412", monColor: "#C2410C",
+    tags: [{ label: "🏃 Running", cls: "run" }, { label: "Free", cls: "free" }],
+    socialAvs: [], socialText: "No clubmates yet", modalId: "generic" },
+  { id: "crystal-tri", day: "28", mon: "Jun", sport: "tri", ai: 58,
+    title: "Crystal Palace Triathlon", loc: "📍 Crystal Palace · 7.3 mi",
+    dateBg: "#FBEAF0", dayColor: "#72243E", monColor: "#9D174D",
+    tags: [{ label: "🔱 Triathlon", cls: "tri" }, { label: "£75", cls: "gray" }],
+    socialAvs: [], socialText: "2 interested", modalId: "generic" },
 ];
 
-const SPORTS_SIDEBAR = [
-  { key: "all",        label: "All sports",   dot: "#6B7280", count: 2140 },
-  { key: "running",    label: "Running",      dot: "#F97316", count: 612 },
-  { key: "cycling",    label: "Cycling",      dot: "#3B82F6", count: 488 },
-  { key: "swimming",   label: "Swimming",     dot: "#14B8A6", count: 201 },
-  { key: "climbing",   label: "Climbing",     dot: "#8B5CF6", count: 134 },
-  { key: "football",   label: "Football",     dot: "#10B981", count: 298 },
-  { key: "basketball", label: "Basketball",   dot: "#EF4444", count: 187 },
-  { key: "tennis",     label: "Tennis",       dot: "#F59E0B", count: 110 },
-  { key: "yoga",       label: "Yoga",         dot: "#EC4899", count: 110 },
+const SPORT_LABELS: [string, string][] = [
+  ["all", "All sports"], ["run", "🏃 Running"], ["cyc", "🚴 Cycling"],
+  ["clm", "🧗 Climbing"], ["swm", "🏊 Swimming"], ["tri", "🔱 Triathlon"],
 ];
 
-const EVENT_TYPES = [
-  { label: "All types",          dot: "#6B7280", count: 2140 },
-  { label: "Race / Competition", dot: "#EF4444", count: 840 },
-  { label: "Group training",     dot: "#3B82F6", count: 612 },
-  { label: "Social ride / run",  dot: "#10B981", count: 398 },
-  { label: "Workshop / Clinic",  dot: "#F59E0B", count: 290 },
+const TYPE_OPTS = ["5K", "10K", "Half marathon", "Marathon", "Sportive", "Fun run", "Free only"];
+
+const MAP_PINS = [
+  { left: "32%", top: "40%", label: "London Half · Apr 13",  bg: "var(--ev-yellow)",      color: "var(--ev-gray-900)", border: "var(--ev-yellow-dark)", toast: "London Half Marathon — Apr 13" },
+  { left: "55%", top: "30%", label: "Parkrun · Apr 19",      bg: "var(--ev-green-light)",  color: "#166534",           border: "#86EFAC",               toast: "Victoria Park Parkrun — Apr 19" },
+  { left: "48%", top: "58%", label: "Hackney Half · May 3",  bg: "var(--ev-orange-light)", color: "#9A3412",           border: "#FDBA74",               toast: "Hackney Half — May 3" },
+  { left: "22%", top: "62%", label: "Richmond Sportive",     bg: "var(--ev-blue-light)",   color: "#1E40AF",           border: "#93C5FD",               toast: "Richmond Sportive — Apr 26" },
+  { left: "65%", top: "70%", label: "Arch Open · May 10",    bg: "var(--ev-purple-light)", color: "#5B21B6",           border: "#C4B5FD",               toast: "The Arch Bouldering — May 10" },
+  { left: "70%", top: "48%", label: "East End 10K",          bg: "var(--ev-orange-light)", color: "#9A3412",           border: "#FDBA74",               toast: "East End 10K — May 17" },
+  { left: "42%", top: "78%", label: "Lido Swim · May 24",    bg: "var(--ev-teal-light)",   color: "#134E4A",           border: "#5EEAD4",               toast: "Tooting Lido Swim — May 24" },
 ];
 
-const SPORT_FILTER_PILLS = [
-  { key: "all",        label: "All sports" },
-  { key: "running",    label: "🏃 Running" },
-  { key: "cycling",    label: "🚴 Cycling" },
-  { key: "swimming",   label: "🏊 Swimming" },
-  { key: "climbing",   label: "🧗 Climbing" },
-  { key: "football",   label: "⚽ Football" },
-  { key: "basketball", label: "🏀 Basketball" },
-  { key: "tennis",     label: "🎾 Tennis" },
-  { key: "yoga",       label: "🧘 Yoga" },
-];
+interface ModalHeader {
+  day: string; mon: string; title: string; meta: string;
+  dateBg: string; dayColor: string; monColor: string; hasBorder?: boolean;
+  tags: Array<{ label: string; cls: string }>;
+}
+
+const MODAL_HEADERS: Record<ModalId, ModalHeader> = {
+  "london-half":       { day: "13", mon: "Apr", title: "London Half Marathon 2026",            meta: "📍 Blackheath, London · 13.1 miles · £45 entry · Gun start 7:00 AM · 8,000 runners", dateBg: "var(--ev-yellow)", dayColor: "var(--ev-gray-900)", monColor: "var(--ev-gray-700)", hasBorder: true, tags: [{ label: "🏃 Running", cls: "run" }, { label: "34 clubmates going", cls: "going" }, { label: "✦ 94% match", cls: "ai" }] },
+  "victoria-parkrun":  { day: "19", mon: "Apr", title: "Victoria Park Parkrun — Club Takeover", meta: "📍 Victoria Park, London · 5K · Free · 9:00 AM",                                    dateBg: "#FFF7ED",          dayColor: "#9A3412",            monColor: "#C2410C",                         tags: [{ label: "🏃 Running", cls: "run" }, { label: "Free", cls: "free" }, { label: "22 clubmates going", cls: "going" }] },
+  "hackney-half":      { day: "3",  mon: "May", title: "Hackney Half Marathon 2026",            meta: "📍 Hackney, London · 13.1 miles · £38 · 7:30 AM start",                              dateBg: "#FFF7ED",          dayColor: "#9A3412",            monColor: "#C2410C",                         tags: [{ label: "🏃 Running", cls: "run" }, { label: "✦ 91% match", cls: "ai" }, { label: "RSVP deadline: May 1", cls: "pend" }] },
+  "richmond-sportive": { day: "26", mon: "Apr", title: "Richmond Park Spring Sportive",         meta: "📍 Richmond, London · 80km · £28 · 8:00 AM start",                                   dateBg: "#EFF6FF",          dayColor: "#1E40AF",            monColor: "#2563EB",                         tags: [{ label: "🚴 Cycling", cls: "cyc" }, { label: "✦ 88% match", cls: "ai" }] },
+  "arch-open":         { day: "10", mon: "May", title: "The Arch Bouldering Open",              meta: "📍 Bermondsey, London · Free entry · All day · V4–V7 categories",                    dateBg: "#F5F3FF",          dayColor: "#5B21B6",            monColor: "#7C3AED",                         tags: [{ label: "🧗 Climbing", cls: "clm" }, { label: "Free", cls: "free" }, { label: "V4–V7", cls: "gray" }] },
+  "east-end-10k":      { day: "17", mon: "May", title: "East End 10K — Spring Series",          meta: "📍 Victoria Park, London · 10K · £22 · 10:00 AM",                                    dateBg: "#FFF7ED",          dayColor: "#9A3412",            monColor: "#C2410C",                         tags: [{ label: "🏃 Running", cls: "run" }, { label: "✦ 76% match", cls: "ai" }, { label: "4 clubmates pending", cls: "pend" }] },
+  "tooting-swim":      { day: "24", mon: "May", title: "Tooting Bec Lido Open Water Swim",      meta: "📍 Tooting, London · Free · Open water · All levels",                                dateBg: "#F0FDFA",          dayColor: "#134E4A",            monColor: "#0F766E",                         tags: [{ label: "🏊 Swimming", cls: "swm" }, { label: "Free", cls: "free" }, { label: "All levels", cls: "gray" }] },
+  "generic":           { day: "7",  mon: "Jun", title: "Upcoming Event",                        meta: "📍 London · More details available",                                                  dateBg: "#FFF7ED",          dayColor: "#9A3412",            monColor: "#C2410C",                         tags: [{ label: "🏃 Running", cls: "run" }] },
+};
 
 export default function Events() {
   const [, setLocation] = useLocation();
-  const [sport, setSport] = useState("all");
-  const [view, setView] = useState<"grid" | "list">("grid");
-  const [dateFilter, setDateFilter] = useState("any");
-  const [radius, setRadius] = useState(25);
-  const [zipInput, setZipInput] = useState("90210");
-  const [locationCity, setLocationCity] = useState("Beverly Hills, CA");
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [sort, setSort] = useState("date");
-  const [joined, setJoined] = useState<Set<number>>(new Set());
-  const [modalEvent, setModalEvent] = useState<Event | null>(null);
+  const { logout } = useAuth();
+
+  const [sportActive, setSportActive] = useState<Set<string>>(new Set(["all", "run", "cyc"]));
+  const [when, setWhen] = useState<"this-month" | "next-3" | "any">("this-month");
+  const [distance, setDistance] = useState<"10" | "25" | "50" | "any">("10");
+  const [typeActive, setTypeActive] = useState<Set<string>>(new Set(["Half marathon"]));
+  const [aiOnly, setAiOnly] = useState(false);
+  const [search, setSearch] = useState("");
+  const [view, setView] = useState<ViewMode>("grid");
+
+  const [featGoing, setFeatGoing] = useState(false);
+  const [cardRsvp, setCardRsvp] = useState<Record<string, boolean>>({ "victoria-parkrun": true });
+  const [modalRsvp, setModalRsvp] = useState<Record<string, RsvpChoice | null>>({});
+  const [modal, setModal] = useState<{ cardId: string; modalId: ModalId } | null>(null);
+  const [loadedMore, setLoadedMore] = useState(false);
+
   const [toast, setToast] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
-  const [eventTypeActive, setEventTypeActive] = useState(0);
-  const dropdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const zipMatches = ZIP_DATA.filter(z =>
-    zipInput.length >= 2 && (z.zip.startsWith(zipInput) || z.city.toLowerCase().includes(zipInput.toLowerCase()))
-  ).slice(0, 5);
+  const showToast = useCallback((msg: string) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast(msg); setToastVisible(true);
+    toastTimer.current = setTimeout(() => setToastVisible(false), 2800);
+  }, []);
 
-  function showToast(msg: string) {
-    setToast(msg);
-    setToastVisible(true);
-    setTimeout(() => setToastVisible(false), 3000);
-  }
-
-  function getFiltered(): Event[] {
-    let data = [...ALL_EVENTS];
-    if (sport !== "all") data = data.filter(e => e.sport === sport);
-    if (radius !== 9999) data = data.filter(e => e.dist <= radius);
-    if (sort === "distance") data.sort((a, b) => a.dist - b.dist);
-    else if (sort === "popular") data.sort((a, b) => b.going - a.going);
-    return data;
-  }
-
-  function toggleJoin(id: number) {
-    setJoined(prev => {
+  const toggleSport = (val: string) => {
+    setSportActive(prev => {
       const next = new Set(prev);
-      if (next.has(id)) { next.delete(id); showToast("Removed from your events"); }
-      else { next.add(id); showToast("🎉 You're going! Added to your calendar"); }
+      if (val === "all") return next.has("all") ? new Set<string>() : new Set(["all", "run", "cyc", "clm", "swm", "tri"]);
+      if (next.has(val)) { next.delete(val); next.delete("all"); }
+      else { next.add(val); if (["run","cyc","clm","swm","tri"].every(s => next.has(s))) next.add("all"); }
       return next;
     });
-  }
+  };
 
-  function joinFromModal(id: number) {
-    setJoined(prev => { const next = new Set(prev); next.add(id); return next; });
-    setModalEvent(prev => prev ? { ...prev } : null);
-    showToast("🎉 You're going! Added to your calendar");
-  }
+  const toggleType = (val: string) => {
+    setTypeActive(prev => { const n = new Set(prev); if (n.has(val)) n.delete(val); else n.add(val); return n; });
+  };
 
-  function selectLocation(zip: string, city: string) {
-    setZipInput(zip);
-    setLocationCity(city);
-    setShowDropdown(false);
-    showToast("📍 Showing events near " + city);
-  }
+  const setViewMode = (v: ViewMode) => {
+    setView(v);
+    showToast(v === "grid" ? "Grid view" : v === "map" ? "Map view — click pins to preview events" : "List view");
+  };
 
-  const filtered = getFiltered();
-  const featuredEvent = ALL_EVENTS[0];
+  const cardVisible = useCallback((card: CardDef): boolean => {
+    const sportOk = sportActive.has("all") || sportActive.has(card.sport);
+    const aiOk = !aiOnly || card.ai >= 80;
+    const searchOk = !search || (card.title + " " + card.loc + " " + card.tags.map(t => t.label).join(" ")).toLowerCase().includes(search.toLowerCase());
+    return sportOk && aiOk && searchOk;
+  }, [sportActive, aiOnly, search]);
+
+  const allCards = useMemo(() => [...CARDS, ...(loadedMore ? MORE_CARDS : [])], [loadedMore]);
+  const visibleCards = useMemo(() => allCards.filter(cardVisible), [allCards, cardVisible]);
+
+  const quickRsvp = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCardRsvp(prev => ({ ...prev, [id]: true }));
+    showToast("✓ RSVP confirmed — added to your events!");
+  };
+
+  const doModalRsvp = (choice: RsvpChoice) => {
+    if (!modal) return;
+    setModalRsvp(prev => ({ ...prev, [modal.modalId]: choice }));
+    const msg = choice === "going"
+      ? (modal.modalId === "london-half" ? "✓ Going! Coach Rachel notified" : "✓ RSVP confirmed!")
+      : choice === "maybe" ? "Maybe recorded"
+      : (modal.modalId === "london-half" ? "Declined — Rachel notified" : "Declined");
+    showToast(msg);
+  };
+
+  const closeModal = () => setModal(null);
+
+  const renderTags = (tags: Array<{ label: string; cls: string }>) =>
+    tags.map((t, i) => <span key={i} className={`ev-tag ev-t-${t.cls}`}>{t.label}</span>);
+
+  const renderCard = (card: CardDef, idx: number) => {
+    const isGoing = !!cardRsvp[card.id];
+    const noBorderRight = view === "list" || idx % 2 === 1 || idx === visibleCards.length - 1;
+    return (
+      <div key={card.id} className={`ev-ev-card${noBorderRight ? " no-right-border" : ""}`}
+        style={{ animationDelay: `${idx * 0.05}s` }}
+        onClick={() => setModal({ cardId: card.id, modalId: card.modalId })}>
+        <div className="ev-ev-card-top">
+          <div className="ev-ev-date-box" style={{ background: card.dateBg }}>
+            <div className="ev-edb-day" style={{ color: card.dayColor }}>{card.day}</div>
+            <div className="ev-edb-mon" style={{ color: card.monColor }}>{card.mon}</div>
+          </div>
+          <div>
+            <div className="ev-ev-title">{card.title}</div>
+            <div className="ev-ev-loc">{card.loc}</div>
+          </div>
+        </div>
+        <div className="ev-ev-tags">{renderTags(card.tags)}</div>
+        <div className="ev-ev-footer">
+          <div className="ev-ev-social">
+            {card.socialAvs.length > 0 ? (
+              <>
+                {card.socialAvs.map((av, i) => <div key={i} className="ev-ev-av" style={{ background: av.bg, color: av.fg }}>{av.label}</div>)}
+                {card.overflow && <div className="ev-ev-av" style={{ background: "var(--ev-gray-100)", color: "var(--ev-gray-500)", fontSize: 6 }}>{card.overflow}</div>}
+                <span className="ev-ev-social-text">{card.socialText}</span>
+              </>
+            ) : (
+              <><div className="ev-no-dot" /><span className="ev-ev-social-text">{card.socialText}</span></>
+            )}
+          </div>
+          {isGoing
+            ? <button className="ev-rsvp-btn going" onClick={e => e.stopPropagation()}>✓ Going</button>
+            : <button className="ev-rsvp-btn default" onClick={e => quickRsvp(card.id, e)}>RSVP</button>}
+        </div>
+      </div>
+    );
+  };
+
+  const renderModalBody = () => {
+    if (!modal) return null;
+    const cur = modalRsvp[modal.modalId] ?? null;
+
+    const RsvpSection = ({ label }: { label: string }) => (
+      <div className="ev-rsvp-section">
+        <div className="ev-rs-label">{label}</div>
+        <div className="ev-rs-buttons">
+          <button className={`ev-btn${cur === "going" ? " ev-btn-green" : ""}`} onClick={() => doModalRsvp("going")}>✓ Going</button>
+          <button className={`ev-btn${cur === "maybe" ? " ev-btn-primary" : ""}`} onClick={() => doModalRsvp("maybe")}>Maybe</button>
+          <button className="ev-btn" onClick={() => doModalRsvp("cant")}>Can't make it</button>
+        </div>
+      </div>
+    );
+
+    const DetailGrid = ({ rows }: { rows: [string, string, string?][] }) => (
+      <div className="ev-detail-grid">
+        {rows.map(([l, v, color]) => (
+          <div key={l} className="ev-detail-item">
+            <div className="ev-detail-label">{l}</div>
+            <div className="ev-detail-val" style={color ? { color } : undefined}>{v}</div>
+          </div>
+        ))}
+      </div>
+    );
+
+    const AiSection = ({ text }: { text: string }) => (
+      <div className="ev-ai-section">
+        <div className="ev-ai-s-label">✦ AI coach insight</div>
+        <div className="ev-ai-s-text" dangerouslySetInnerHTML={{ __html: text }} />
+      </div>
+    );
+
+    switch (modal.modalId) {
+      case "london-half": return (
+        <>
+          <DetailGrid rows={[["Distance","13.1 miles"],["Start time","7:00 AM"],["Entry fee","£45"],["RSVP deadline","Apr 6 · 8 days"],["Field size","8,000 runners"],["Your AI match","94% ✦","var(--ev-green)"]]} />
+          <div className="ev-coach-note">
+            <div className="ev-cn-label">📣 Coach Rachel's note</div>
+            <div className="ev-cn-text">Meet at the start village at 6:30 AM in your club vest. Use group booking code <strong>HRC2026</strong> for the club rate. We're aiming for a group photo at the finish line — bring your best race face!</div>
+          </div>
+          <div className="ev-attendees-row">
+            <div className="ev-clubmate-avs">
+              {[["SL","#FEF9C3","#854D0E"],["YT","#FCE7F3","#9D174D"],["AL","#E0F2FE","#0369A1"],["PR","#FBEAF0","#72243E"]].map(([l,b,c]) => (
+                <div key={l} className="ev-cm-av" style={{ background: b, color: c }}>{l}</div>
+              ))}
+              <div className="ev-cm-av" style={{ background: "var(--ev-gray-100)", color: "var(--ev-gray-500)", fontSize: 7 }}>+30</div>
+            </div>
+            <div style={{ fontSize: 12, color: "var(--ev-gray-600)" }}><strong style={{ color: "var(--ev-gray-900)" }}>34 Hackney RC members going</strong> · 8 still pending RSVP</div>
+          </div>
+          <AiSection text="Based on your current 1:54 HM PB and 62km/week training, your AI coach projects a finish time of <strong>1:50–1:52</strong> at current form — a realistic PB. Your training load needs to stay consistent for 3 more weeks. Consider tapering the week before the race." />
+          <RsvpSection label="Your RSVP" />
+        </>
+      );
+      case "victoria-parkrun": return (
+        <>
+          <DetailGrid rows={[["Distance","5 km"],["Start time","9:00 AM"],["Entry fee","Free"],["Location","0.4 mi away"]]} />
+          <div className="ev-coach-note">
+            <div className="ev-cn-label">📣 Coach Rachel's note</div>
+            <div className="ev-cn-text">No registration needed — just show up in your club vest. We'll do a group photo at the finish. Great way to meet new Hackney RC members if you just joined!</div>
+          </div>
+          <AiSection text="This is a great opportunity to log a controlled 5K effort ahead of your London Half taper. The AI coach recommends running this at easy–moderate pace (zone 2–3) rather than racing it, to preserve your legs for the half marathon two weeks later." />
+        </>
+      );
+      case "hackney-half": return (
+        <>
+          <div className="ev-detail-grid">
+            {[["Distance","13.1 miles"],["Start time","7:30 AM"],["Entry fee","£38"],["Clubmates going","8"]].map(([l,v]) => (
+              <div key={l} className="ev-detail-item"><div className="ev-detail-label">{l}</div><div className="ev-detail-val">{v}</div></div>
+            ))}
+            <div className="ev-detail-item"><div className="ev-detail-label">RSVP deadline</div><div className="ev-detail-val" style={{ color: "var(--ev-orange)" }}>May 1 · 8 days!</div></div>
+            <div className="ev-detail-item"><div className="ev-detail-label">AI match</div><div className="ev-detail-val" style={{ color: "var(--ev-green)" }}>91% ✦</div></div>
+          </div>
+          <AiSection text="Your 91% match means this event suits your current fitness level well. Running Hackney Half 3 weeks after London gives a good recovery window — your AI coach can generate a tailored training plan between both events if you register for both." />
+          <RsvpSection label="Your RSVP · deadline in 8 days" />
+        </>
+      );
+      case "richmond-sportive": return (
+        <>
+          <div className="ev-detail-grid">
+            {[["Distance","80 km"],["Start time","8:00 AM"],["Entry fee","£28"],["Elevation","~1,200 m"],["Location","8.2 mi away"]].map(([l,v]) => (
+              <div key={l} className="ev-detail-item"><div className="ev-detail-label">{l}</div><div className="ev-detail-val">{v}</div></div>
+            ))}
+            <div className="ev-detail-item"><div className="ev-detail-label">AI match</div><div className="ev-detail-val" style={{ color: "var(--ev-green)" }}>88% ✦</div></div>
+          </div>
+          <AiSection text="At 241W FTP and recent 88km long rides, this sportive is well within your capability. Your AI coach suggests treating this as a zone 2–3 endurance effort rather than a race — ideal preparation for building your cycling base this spring." />
+        </>
+      );
+      case "arch-open": return (
+        <>
+          <DetailGrid rows={[["Format","Bouldering"],["Entry","Free"],["Categories","V4, V5, V6, V7"],["Location","2.8 mi away"]]} />
+          <AiSection text="Based on your recent V5 sends, you're well placed for the V5 category and could attempt V6 if you continue projecting over the next few weeks. This would be a great milestone to track in your climbing progression on Arenas." />
+        </>
+      );
+      case "east-end-10k": return (
+        <>
+          <DetailGrid rows={[["Distance","10 km"],["Start time","10:00 AM"],["Entry fee","£22"],["Location","0.4 mi away"]]} />
+          <AiSection text="Your 76% match reflects that this 10K comes 2 weeks after Hackney Half — an aggressive double. Your AI coach recommends treating it as a supported tempo run rather than a race if you're competing in both events." />
+        </>
+      );
+      case "tooting-swim": return (
+        <>
+          <DetailGrid rows={[["Format","Open water"],["Entry","Free"],["Location","6.4 mi away"],["Level","All welcome"]]} />
+          <AiSection text="You'd be the first Hackney RC member to register for this event — a great opportunity to introduce a cross-training discipline. Open water swimming is excellent low-impact recovery training for runners." />
+        </>
+      );
+      default: return (
+        <AiSection text="Register and we'll generate a personalised match score and training plan for this event based on your current fitness data." />
+      );
+    }
+  };
+
+  const mh = modal ? MODAL_HEADERS[modal.modalId] : null;
+  const hasInlineRsvp = modal?.modalId === "london-half" || modal?.modalId === "hackney-half";
 
   return (
-    <div>
-      <Topbar loggedIn={false} activeNav="Events" />
+    <div className="ev-app">
+      <div className={`ev-toast${toastVisible ? " show" : ""}`}>{toast}</div>
 
-      {/* Page Header */}
-      <div className="ev-page-header">
-        <div className="ev-page-header-inner">
-          <h1>Events near you 📅</h1>
-          <p>Races, meetups, competitions and group sessions across every sport — filtered to your area.</p>
-          <div className="ev-header-meta">
-            <div className="ev-header-stat">
-              <div className="ev-header-stat-dot" style={{ background: "#10B981" }} />
-              <strong>2,140</strong> upcoming events
-            </div>
-            <div className="ev-header-stat">
-              <div className="ev-header-stat-dot" style={{ background: "#3B82F6" }} />
-              <strong>47</strong> sports
-            </div>
-            <div className="ev-header-stat">
-              <div className="ev-header-stat-dot" style={{ background: "#F97316" }} />
-              Showing events within <strong>{radius === 9999 ? "anywhere" : `${radius} miles`}</strong> of <strong>{zipInput}</strong>
-            </div>
-          </div>
+      {/* ── TOPBAR ── */}
+      <header className="ev-topbar">
+        <div className="ev-topbar-logo">
+          <div className="ev-logo-icon">🏟</div>
+          <span className="ev-logo-text">Arenas</span>
         </div>
-      </div>
-
-      {/* Filter Bar */}
-      <div className="ev-filter-bar">
-        <div className="ev-filter-bar-inner">
-          <div className="ev-search-group">
-            <div className="ev-location-wrap">
-              <span className="ev-loc-icon">📍</span>
-              <input
-                className="ev-location-input"
-                type="text"
-                placeholder="Enter zip code or city…"
-                value={zipInput}
-                data-testid="input-location"
-                onChange={e => setZipInput(e.target.value)}
-                onFocus={() => { if (dropdownTimerRef.current) clearTimeout(dropdownTimerRef.current); setShowDropdown(true); }}
-                onBlur={() => { dropdownTimerRef.current = setTimeout(() => setShowDropdown(false), 200); }}
-              />
-              {showDropdown && zipMatches.length > 0 && (
-                <div className="ev-loc-dropdown">
-                  {zipMatches.map(m => (
-                    <div key={m.zip} className="ev-loc-suggestion" onMouseDown={() => selectLocation(m.zip, m.city)}>
-                      📍 <span className="ev-zip">{m.zip}</span> <span className="ev-city">{m.city}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <select
-              className="ev-radius-select"
-              value={radius}
-              data-testid="select-radius"
-              onChange={e => setRadius(Number(e.target.value))}
-            >
-              <option value={5}>Within 5 mi</option>
-              <option value={10}>Within 10 mi</option>
-              <option value={25}>Within 25 mi</option>
-              <option value={50}>Within 50 mi</option>
-              <option value={100}>Within 100 mi</option>
-              <option value={9999}>Anywhere</option>
-            </select>
+        <div className="ev-topbar-center">
+          <div className="ev-topbar-search">
+            <span style={{ color: "var(--ev-gray-400)", fontSize: 13 }}>🔍</span>
+            <input type="text" placeholder="Search events, locations, distances…" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
+          <div className="ev-topbar-live"><div className="ev-live-dot" />2,100 events live</div>
+        </div>
+        <div className="ev-topbar-actions">
+          <div className="ev-icon-btn" onClick={() => showToast("Opening notifications…")}>🔔<div className="ev-notif-dot" /></div>
+          <div className="ev-user-av" onClick={() => setLocation("/profile")}>JK</div>
+        </div>
+      </header>
 
-          <div className="ev-filter-divider" />
+      {/* ── LEFT SIDEBAR ── */}
+      <aside className="ev-sidebar">
+        <div className="ev-nav-label">My Arenas</div>
+        <div className="ev-nav-item" onClick={() => setLocation("/feed")}><span className="ev-nav-icon">🏠</span> Feed</div>
+        <div className="ev-nav-item" onClick={() => setLocation("/profile")}><span className="ev-nav-icon">👤</span> My profile</div>
+        <div className="ev-nav-item active"><span className="ev-nav-icon">📅</span> Events</div>
+        <div className="ev-nav-item" onClick={() => showToast("Opening leaderboards…")}><span className="ev-nav-icon">🏆</span> Leaderboards</div>
+        <div className="ev-nav-item" onClick={() => showToast("Opening challenges…")}><span className="ev-nav-icon">⚡</span> Challenges <span className="ev-nav-badge">3</span></div>
+        <div className="ev-nav-item" onClick={() => showToast("Opening athletes…")}><span className="ev-nav-icon">👥</span> Athletes</div>
+        <div className="ev-nav-label">My clubs</div>
+        <div className="ev-nav-item" onClick={() => showToast("Opening club…")}><span className="ev-nav-icon">🏃</span> Hackney RC <span className="ev-nav-badge ev-badge-red">2</span></div>
+        <div className="ev-nav-label">Account</div>
+        <div className="ev-nav-item" onClick={() => showToast("Opening settings…")}><span className="ev-nav-icon">⚙️</span> Settings</div>
+        <div className="ev-nav-item" onClick={() => showToast("Opening billing…")}><span className="ev-nav-icon">💳</span> Pro plan</div>
+        <div className="ev-sidebar-footer">
+          <div style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--ev-yellow)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, color: "var(--ev-gray-900)", flexShrink: 0 }}>JK</div>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ev-gray-900)" }}>Jamie King</div>
+            <div style={{ fontSize: 10, color: "var(--ev-gray-500)" }}>@jamiek · Pro</div>
+          </div>
+          <button style={{ marginLeft: "auto", padding: "4px 8px", fontSize: 11, borderRadius: 6, border: "var(--ev-border)", background: "white", color: "var(--ev-gray-600)", cursor: "pointer" }} onClick={() => { logout(); setLocation("/"); }}>Log out</button>
+        </div>
+      </aside>
 
-          <div className="ev-filter-pills">
-            {SPORT_FILTER_PILLS.map(p => (
-              <button
-                key={p.key}
-                className={`ev-filter-pill${sport === p.key ? " active" : ""}`}
-                onClick={() => setSport(p.key)}
-                data-testid={`pill-sport-${p.key}`}
-              >{p.label}</button>
+      {/* ── MAIN ── */}
+      <div className="ev-main">
+
+        {/* FILTER ZONE */}
+        <div className="ev-filter-zone">
+          <div className="ev-filter-row">
+            <span className="ev-f-group-label">Sport</span>
+            {SPORT_LABELS.map(([val, label]) => (
+              <div key={val} className={`ev-f-pill${sportActive.has(val) ? " on" : ""}`} onClick={() => toggleSport(val)}>{label}</div>
+            ))}
+            <div className="ev-f-sep" />
+            <span className="ev-f-group-label">When</span>
+            {(["this-month","next-3","any"] as const).map((val, i) => (
+              <div key={val} className={`ev-f-pill${when === val ? " on" : ""}`} onClick={() => setWhen(val)}>{["This month","Next 3 months","Any time"][i]}</div>
             ))}
           </div>
-
-          <div className="ev-view-toggle">
-            <button className={`ev-view-btn${view === "grid" ? " active" : ""}`} onClick={() => setView("grid")} title="Grid view" data-testid="btn-view-grid">⊞</button>
-            <button className={`ev-view-btn${view === "list" ? " active" : ""}`} onClick={() => setView("list")} title="List view" data-testid="btn-view-list">≡</button>
-          </div>
-        </div>
-      </div>
-
-      {/* Main */}
-      <main className="ev-main">
-
-        {/* Sidebar */}
-        <aside className="ev-sidebar">
-
-          {/* Date */}
-          <div className="sidebar-card">
-            <div className="ev-sidebar-title">Date</div>
-            <div className="ev-date-options">
-              {[
-                { val: "any",     label: "Any date" },
-                { val: "week",    label: "This week" },
-                { val: "month",   label: "This month" },
-                { val: "3months", label: "Next 3 months" },
-                { val: "weekend", label: "Weekends only" },
-              ].map(opt => (
-                <label key={opt.val} className={`ev-date-option${dateFilter === opt.val ? " active" : ""}`} onClick={() => setDateFilter(opt.val)}>
-                  <input type="radio" name="date" readOnly checked={dateFilter === opt.val} /> {opt.label}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Distance slider */}
-          <div className="sidebar-card">
-            <div className="ev-sidebar-title">Distance from you</div>
-            <div className="ev-distance-slider-wrap">
-              <div className="ev-distance-label">
-                <span>0 mi</span>
-                <strong>{radius >= 9999 ? "100+ mi" : `${radius} mi`}</strong>
+          <div className="ev-filter-row">
+            <span className="ev-f-group-label">Within</span>
+            {(["10","25","50","any"] as const).map((val, i) => (
+              <div key={val} className={`ev-f-pill${distance === val ? " on" : ""}`} onClick={() => setDistance(val)}>{["10 miles","25 miles","50 miles","Anywhere"][i]}</div>
+            ))}
+            <div className="ev-f-sep" />
+            <span className="ev-f-group-label">Type</span>
+            {TYPE_OPTS.map(label => (
+              <div key={label} className={`ev-f-pill${typeActive.has(label) ? " on" : ""}`} onClick={() => toggleType(label)}>{label}</div>
+            ))}
+            <div className="ev-f-sep" />
+            <div className={`ev-f-pill ai-pill${aiOnly ? " on" : ""}`} onClick={() => setAiOnly(a => !a)}>✦ AI matched only</div>
+            <div className="ev-f-right">
+              <span className="ev-filter-count">{visibleCards.length} events</span>
+              <div className="ev-view-toggle">
+                <div className={`ev-vt-btn${view === "grid" ? " on" : ""}`} onClick={() => setViewMode("grid")}>⊞ Grid</div>
+                <div className={`ev-vt-btn${view === "map"  ? " on" : ""}`} onClick={() => setViewMode("map")}>🗺 Map</div>
+                <div className={`ev-vt-btn${view === "list" ? " on" : ""}`} onClick={() => setViewMode("list")}>☰ List</div>
               </div>
-              <input
-                type="range" min={1} max={100}
-                value={Math.min(radius, 100)}
-                data-testid="slider-radius"
-                onChange={e => setRadius(Number(e.target.value))}
-                style={{ width: "100%", accentColor: "var(--gray-900)", cursor: "pointer" }}
-              />
-            </div>
-          </div>
-
-          {/* Sport */}
-          <div className="sidebar-card">
-            <div className="ev-sidebar-title">Sport</div>
-            <div className="ev-sidebar-section">
-              {SPORTS_SIDEBAR.map(s => (
-                <div
-                  key={s.key}
-                  className={`ev-sidebar-item${sport === s.key ? " active" : ""}`}
-                  onClick={() => setSport(s.key)}
-                  data-testid={`sidebar-sport-${s.key}`}
-                >
-                  <div className="ev-sidebar-item-left">
-                    <div className="ev-sport-dot" style={{ background: s.dot }} />
-                    {s.label}
-                  </div>
-                  <span className="ev-sidebar-count">{s.count.toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Event type */}
-          <div className="sidebar-card">
-            <div className="ev-sidebar-title">Event type</div>
-            <div className="ev-sidebar-section">
-              {EVENT_TYPES.map((t, i) => (
-                <div
-                  key={t.label}
-                  className={`ev-sidebar-item${eventTypeActive === i ? " active" : ""}`}
-                  onClick={() => setEventTypeActive(i)}
-                >
-                  <div className="ev-sidebar-item-left">
-                    <div className="ev-sport-dot" style={{ background: t.dot }} />
-                    {t.label}
-                  </div>
-                  <span className="ev-sidebar-count">{t.count.toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* My sports */}
-          <div className="sidebar-card">
-            <div className="ev-sidebar-title">My sports</div>
-            <div className="ev-sidebar-section">
-              <div className="ev-sidebar-item" style={{ background: "var(--yellow-light)", color: "#7a5c00", fontWeight: 500 }} onClick={() => setSport("running")}>
-                <div className="ev-sidebar-item-left">
-                  <div className="ev-sport-dot" style={{ background: "#F97316" }} />
-                  Running
-                </div>
-                <span className="ev-sidebar-count" style={{ color: "#7a5c00" }}>612</span>
-              </div>
-              <div className="ev-sidebar-item" onClick={() => setSport("cycling")}>
-                <div className="ev-sidebar-item-left">
-                  <div className="ev-sport-dot" style={{ background: "#3B82F6" }} />
-                  Cycling
-                </div>
-                <span className="ev-sidebar-count">488</span>
-              </div>
-              <div style={{ padding: "8px 8px 4px" }}>
-                <button className="btn btn-ghost" style={{ fontSize: "12px", width: "100%", justifyContent: "center", padding: "5px" }}>+ Add sport</button>
-              </div>
-            </div>
-          </div>
-
-          {/* Coming up soon */}
-          <div className="sidebar-card">
-            <div className="ev-sidebar-title">Coming up soon</div>
-            <div>
-              {ALL_EVENTS.slice(0, 5).map(ev => {
-                const sc = sportColors[ev.sport] || sportColors.running;
-                return (
-                  <div key={ev.id} className="ev-mini-event" onClick={() => setModalEvent(ev)}>
-                    <div className="ev-mini-date-box">
-                      <div className="ev-mini-d">{ev.date.d}</div>
-                      <div className="ev-mini-m">{ev.date.m}</div>
-                    </div>
-                    <div className="ev-mini-info">
-                      <div className="ev-mini-name">{ev.name}</div>
-                      <div className="ev-mini-sport">{sc.tag} {ev.dist} mi away</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-        </aside>
-
-        {/* Content */}
-        <div className="ev-content">
-
-          {/* Results header */}
-          <div className="ev-results-header">
-            <div className="ev-results-count">
-              Showing <strong>{filtered.length}</strong> events near <strong>{locationCity}</strong>
-            </div>
-            <div className="ev-sort-wrap">
-              Sort by
-              <select className="ev-sort-select" value={sort} onChange={e => setSort(e.target.value)} data-testid="select-sort">
-                <option value="date">Date</option>
-                <option value="distance">Distance</option>
-                <option value="popular">Most popular</option>
+              <select className="ev-sort-select" onChange={e => showToast("Sorted: " + e.target.value)}>
+                <option>Sort: By date</option>
+                <option>Sort: Nearest first</option>
+                <option>Sort: AI match score</option>
+                <option>Sort: Clubmates going</option>
+                <option>Sort: Price: low to high</option>
               </select>
             </div>
           </div>
+        </div>
 
-          {/* Featured event */}
-          <div className="ev-featured" onClick={() => setModalEvent(featuredEvent)} data-testid="featured-event">
-            <div className="ev-featured-badge">⭐ Featured</div>
-            <div className="ev-featured-date-box">
-              <div className="ev-fd">{featuredEvent.date.d}</div>
-              <div className="ev-fm">{featuredEvent.date.m}</div>
-            </div>
-            <div className="ev-featured-info">
-              <div className="ev-featured-sport-tag">🏃 Running</div>
-              <div className="ev-featured-name">{featuredEvent.name}</div>
-              <div className="ev-featured-meta">
-                <div className="ev-featured-meta-item">📍 Santa Monica, CA · 4.2 mi away</div>
-                <div className="ev-featured-meta-item">⏱ 7:00 AM start</div>
-                <div className="ev-featured-meta-item">🏅 Medal finisher event</div>
-              </div>
-            </div>
-            <div className="ev-featured-actions">
-              <div className="ev-att-avatars">
-                {[{ i: "JK", bg: "#FFF7ED", c: "#9A3412" }, { i: "MC", bg: "#E0F2FE", c: "#0369A1" }, { i: "SL", bg: "#FEF9C3", c: "#854D0E" }].map(a => (
-                  <div key={a.i} className="ev-att-av" style={{ background: a.bg, color: a.c }}>{a.i}</div>
-                ))}
-                <div className="ev-att-av" style={{ background: "#6B7280", color: "white", fontSize: 8 }}>+42</div>
-              </div>
-              <div className="ev-featured-going">847 athletes going</div>
-              <button
-                className={`btn btn-yellow${joined.has(featuredEvent.id) ? " ev-joined" : ""}`}
-                onClick={e => { e.stopPropagation(); toggleJoin(featuredEvent.id); }}
-                data-testid="btn-join-featured"
-              >
-                {joined.has(featuredEvent.id) ? "✓ Going" : "+ Join event"}
-              </button>
-            </div>
-          </div>
+        {/* BODY GRID */}
+        <div className="ev-body-grid">
 
-          {/* Events grid / list */}
-          {filtered.length === 0 ? (
-            <div className="ev-empty-state">
-              <div className="ev-empty-icon">🔍</div>
-              <h3>No events found</h3>
-              <p>Try expanding your search radius or changing the sport filter.</p>
-              <button className="btn btn-primary" onClick={() => { setSport("all"); setRadius(25); }} data-testid="btn-clear-filters">Clear all filters</button>
-            </div>
-          ) : (
-            <div className={`ev-events-grid${view === "list" ? " ev-list-view" : ""}`}>
-              {filtered.map(ev => {
-                const sc = sportColors[ev.sport] || sportColors.running;
-                const isJoined = joined.has(ev.id);
-                return (
-                  <div key={ev.id} className="ev-card" onClick={() => setModalEvent(ev)} data-testid={`event-card-${ev.id}`}>
-                    <div className="ev-card-header">
-                      <div className="ev-ec-date-box" style={{ background: sc.bg }}>
-                        <div className="ev-ec-d" style={{ color: sc.color }}>{ev.date.d}</div>
-                        <div className="ev-ec-m" style={{ color: sc.color }}>{ev.date.m}</div>
-                      </div>
-                      <div className="ev-ec-info">
-                        <div className="ev-ec-sport-row">
-                          <span className="ev-ec-sport-tag" style={{ background: sc.bg, color: sc.color }}>{sc.tag} {ev.sport.charAt(0).toUpperCase() + ev.sport.slice(1)}</span>
-                          <span className="ev-ec-dist">📍 {ev.dist} mi away</span>
-                        </div>
-                        <div className="ev-ec-name">{ev.name}</div>
-                        <div className="ev-ec-location">📌 {ev.location}</div>
+          {/* EVENTS COLUMN */}
+          <div className="ev-events-col">
+
+            {/* Featured */}
+            {view !== "map" && (
+              <div className="ev-featured-wrap">
+                <div className="ev-featured-label">✦ Top AI match for you · based on your current fitness and training history</div>
+                <div className="ev-featured-card" onClick={() => setModal({ cardId: "london-half", modalId: "london-half" })}>
+                  <div className="ev-feat-top">
+                    <div className="ev-feat-date-box"><div className="ev-fdb-day">13</div><div className="ev-fdb-mon">Apr</div></div>
+                    <div className="ev-feat-info">
+                      <div className="ev-feat-rec-badge">✦ 94% fitness match · Recommended for you</div>
+                      <div className="ev-feat-title">London Half Marathon 2026</div>
+                      <div className="ev-feat-meta">📍 Blackheath, London · 0.8 miles away · 13.1 miles · £45 entry · 8,000 runners · Gun start 7:00 AM</div>
+                      <div className="ev-feat-tags">
+                        <span className="ev-tag ev-t-run">🏃 Running</span>
+                        <span className="ev-tag ev-t-going">34 Hackney RC members going</span>
+                        <span className="ev-tag ev-t-ai">✦ 94% match</span>
+                        <span className="ev-tag ev-t-gray">8 days to RSVP</span>
                       </div>
                     </div>
-                    <div className="ev-card-body">
-                      <div className="ev-ec-desc">{ev.desc}</div>
-                      <div className="ev-ec-tags">
-                        {ev.tags.map(t => <span key={t} className="ev-ec-tag">{t}</span>)}
-                        <span className="ev-ec-tag">{ev.type}</span>
+                    <div className="ev-feat-actions">
+                      <div className="ev-ai-match-score">
+                        <div className="ev-ams-value">94<span style={{ fontSize: 14 }}>%</span></div>
+                        <div className="ev-ams-bar"><div className="ev-ams-fill" style={{ width: "94%" }} /></div>
+                        <div className="ev-ams-label">AI match</div>
                       </div>
-                    </div>
-                    <div className="ev-card-footer">
-                      <div className="ev-ec-going">
-                        <div className="ev-ec-going-avatars">
-                          {ev.attendees.slice(0, 3).map(a => (
-                            <div key={a.i} className="ev-ec-going-av" style={{ background: a.bg, color: a.c }}>{a.i}</div>
-                          ))}
-                        </div>
-                        <span className="ev-ec-going-count">{ev.going} going</span>
-                      </div>
-                      <button
-                        className={`ev-join-btn${isJoined ? " joined" : ""}`}
-                        onClick={e => { e.stopPropagation(); toggleJoin(ev.id); }}
-                        data-testid={`btn-join-${ev.id}`}
-                      >
-                        {isJoined ? "✓ Going" : "+ Join"}
-                      </button>
+                      {featGoing
+                        ? <button className="ev-btn ev-btn-green ev-btn-full" disabled style={{ justifyContent: "center" }}>✓ You're going!</button>
+                        : <button className="ev-btn ev-btn-yellow ev-btn-full" style={{ justifyContent: "center" }} onClick={e => { e.stopPropagation(); setFeatGoing(true); showToast("✓ RSVP confirmed for London Half Marathon — Coach Rachel notified!"); }}>✓ I'm going</button>}
+                      <button className="ev-btn ev-btn-full" style={{ justifyContent: "center", fontSize: 12 }} onClick={e => { e.stopPropagation(); setModal({ cardId: "london-half", modalId: "london-half" }); }}>View details →</button>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
+                  <div className="ev-feat-bottom">
+                    <div className="ev-clubmate-avs">
+                      {[["SL","#FEF9C3","#854D0E"],["YT","#FCE7F3","#9D174D"],["AL","#E0F2FE","#0369A1"],["PR","#FBEAF0","#72243E"],["TR","#F5F3FF","#5B21B6"]].map(([l,b,c]) => (
+                        <div key={l} className="ev-cm-av" style={{ background: b, color: c }}>{l}</div>
+                      ))}
+                      <div className="ev-cm-av" style={{ background: "var(--ev-gray-100)", color: "var(--ev-gray-500)", fontSize: 7 }}>+29</div>
+                    </div>
+                    <div className="ev-clubmate-text"><strong>Sofia L., Yuki T., Alena L.</strong> and 31 other Hackney RC members are going</div>
+                  </div>
+                </div>
+              </div>
+            )}
 
-          <div className="ev-load-more">
-            <button className="ev-load-more-btn" onClick={() => showToast("All events loaded for your area")} data-testid="btn-load-more">
-              Load more events
-            </button>
+            {/* Map */}
+            {view === "map" && (
+              <div className="ev-map-view">
+                <div className="ev-map-bg">
+                  <div className="ev-map-grid" />
+                  {MAP_PINS.map((pin, i) => (
+                    <div key={i} className="ev-map-pin" style={{ left: pin.left, top: pin.top }} onClick={() => showToast(pin.toast)}>
+                      <div className="ev-mp-bubble" style={{ background: pin.bg, color: pin.color, borderColor: pin.border }}>{pin.label}</div>
+                      <div className="ev-mp-tail" style={{ borderTopColor: pin.bg }} />
+                    </div>
+                  ))}
+                  <span style={{ position: "relative", zIndex: 1, fontSize: 12, color: "var(--ev-gray-500)", background: "white", padding: "4px 12px", borderRadius: 20, border: "1px solid var(--ev-gray-200)" }}>
+                    2,100 events across London · click pins to preview
+                  </span>
+                  <div className="ev-map-legend">
+                    {[["var(--ev-yellow)","Featured"],["var(--ev-green)","Going"],["var(--ev-orange)","Club event"],["var(--ev-blue)","Cycling"],["var(--ev-purple)","Climbing"]].map(([c,l]) => (
+                      <div key={l} className="ev-ml-item"><div className="ev-ml-dot" style={{ background: c }} />{l}</div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Section header */}
+            {view !== "map" && (
+              <div className="ev-section-header">
+                <div className="ev-section-title">Upcoming events near you</div>
+                <div className="ev-section-meta">{visibleCards.length} events · London · sorted by date</div>
+              </div>
+            )}
+
+            {/* Events grid + load more */}
+            {view !== "map" && (
+              <div>
+                <div className={`ev-events-grid${view === "list" ? " list-mode" : ""}`}>
+                  {visibleCards.map((card, idx) => renderCard(card, idx))}
+                </div>
+                <div className="ev-load-more">
+                  {!loadedMore
+                    ? <button className="ev-load-btn" onClick={() => { setLoadedMore(true); showToast("Loading more events…"); }}>Load more events</button>
+                    : <p style={{ fontSize: 13, color: "var(--ev-gray-400)", padding: 16, margin: 0 }}>All nearby events loaded</p>}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT SIDEBAR */}
+          <div className="ev-sidebar-col">
+
+            <div className="ev-ai-rec-card">
+              <div className="ev-ai-rec-label">✦ AI coach recommendation</div>
+              <div className="ev-ai-rec-text">Based on your 1:54 HM PB and current 62km/week training, the <strong>London Half Marathon (Apr 13)</strong> is a strong PB target. Your AI coach projects 1:50–1:52 at current form. 34 Hackney RC members are going — ideal for pacing support in the final 5km.</div>
+            </div>
+
+            {/* Your RSVPs */}
+            <div className="ev-side-card">
+              <div className="ev-sc-header">
+                <span className="ev-sc-title">📋 Your RSVPs</span>
+                <span className="ev-sc-link" onClick={() => showToast("Opening your events list…")}>Manage all →</span>
+              </div>
+              <div className="ev-stats-strip" style={{ borderBottom: "var(--ev-border)" }}>
+                <div className="ev-stat-block"><div className="ev-sb-val" style={{ color: "var(--ev-green)" }}>2</div><div className="ev-sb-label">Going</div></div>
+                <div className="ev-stat-block"><div className="ev-sb-val" style={{ color: "var(--ev-orange)" }}>1</div><div className="ev-sb-label">Pending</div></div>
+                <div className="ev-stat-block"><div className="ev-sb-val">3</div><div className="ev-sb-label">Interested</div></div>
+              </div>
+              {[
+                { id: "london-half",      dot: "going", dateBg: "var(--ev-yellow)",       dayC: "var(--ev-gray-900)", monC: "var(--ev-gray-700)", day: "13", mon: "Apr", name: "London Half Marathon",  sport: "Running · Blackheath",        s: "going" },
+                { id: "victoria-parkrun", dot: "going", dateBg: "var(--ev-gray-100)",     dayC: "var(--ev-gray-700)", monC: "var(--ev-gray-500)", day: "19", mon: "Apr", name: "Victoria Park Parkrun", sport: "Running · Club event",        s: "going" },
+                { id: "hackney-half",     dot: "pend",  dateBg: "var(--ev-orange-light)", dayC: "#9A3412",            monC: "#C2410C",            day: "3",  mon: "May", name: "Hackney Half Marathon", sport: "Running · 8 clubmates going", s: "pend" },
+              ].map(item => (
+                <div key={item.id} className="ev-rsvp-item" onClick={() => setModal({ cardId: item.id, modalId: item.id as ModalId })}>
+                  <div className={item.dot === "going" ? "ev-going-dot" : "ev-pend-dot"} />
+                  <div className="ev-ri-date-box" style={{ background: item.dateBg }}>
+                    <div className="ev-ri-day" style={{ color: item.dayC }}>{item.day}</div>
+                    <div className="ev-ri-mon" style={{ color: item.monC }}>{item.mon}</div>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div className="ev-ri-name">{item.name}</div>
+                    <div className="ev-ri-sport">{item.sport}</div>
+                  </div>
+                  <span className={`ev-ri-status ${item.s === "going" ? "ev-ris-going" : "ev-ris-pend"}`}>{item.s === "going" ? "✓ Going" : "Pending"}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Near you this month */}
+            <div className="ev-side-card">
+              <div className="ev-sc-header">
+                <span className="ev-sc-title">📍 Near you this month</span>
+                <span className="ev-sc-link" onClick={() => setViewMode("map")}>Map view →</span>
+              </div>
+              {[
+                { date: "19 Apr", name: "Victoria Park Parkrun",  cls: "run", label: "Run",   dist: "0.4 mi", id: "victoria-parkrun"  as ModalId },
+                { date: "17 May", name: "East End 10K",           cls: "run", label: "Run",   dist: "0.4 mi", id: "east-end-10k"      as ModalId },
+                { date: "3 May",  name: "Hackney Half Marathon",  cls: "run", label: "Run",   dist: "1.1 mi", id: "hackney-half"      as ModalId },
+                { date: "10 May", name: "Arch Bouldering Open",   cls: "clm", label: "Climb", dist: "2.8 mi", id: "arch-open"         as ModalId },
+                { date: "26 Apr", name: "Richmond Sportive",      cls: "cyc", label: "Cycle", dist: "8.2 mi", id: "richmond-sportive" as ModalId },
+              ].map(item => (
+                <div key={item.id} className="ev-nearby-item" onClick={() => setModal({ cardId: item.id, modalId: item.id })}>
+                  <div className="ev-ni-date">{item.date}</div>
+                  <div style={{ flex: 1 }}>
+                    <div className="ev-ni-name">{item.name}</div>
+                    <span className={`ev-tag ev-t-${item.cls}`} style={{ fontSize: 10, padding: "1px 6px" }}>{item.label}</span>
+                  </div>
+                  <div className="ev-ni-dist">{item.dist}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Hackney RC events */}
+            <div className="ev-side-card">
+              <div className="ev-sc-header">
+                <span className="ev-sc-title">🏃 Hackney RC events</span>
+                <span className="ev-sc-link" onClick={() => showToast("Opening club events…")}>All →</span>
+              </div>
+              <div className="ev-club-ev-item" onClick={() => setModal({ cardId: "london-half", modalId: "london-half" })}>
+                <div className="ev-going-dot" />
+                <div style={{ width: 28, height: 28, background: "var(--ev-yellow)", borderRadius: 6, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, fontFamily: "var(--ev-mono)", color: "var(--ev-gray-900)", lineHeight: 1 }}>13</div>
+                  <div style={{ fontSize: 7, fontWeight: 700, textTransform: "uppercase" as const, color: "var(--ev-gray-700)" }}>Apr</div>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ev-gray-900)" }}>London Half Marathon</div>
+                  <div style={{ fontSize: 10, color: "var(--ev-gray-500)" }}>34 going · coach organised</div>
+                </div>
+                <span style={{ fontSize: 10, fontWeight: 600, color: "#166534" }}>Going</span>
+              </div>
+              <div className="ev-club-ev-item" onClick={() => setModal({ cardId: "victoria-parkrun", modalId: "victoria-parkrun" })}>
+                <div className="ev-going-dot" />
+                <div style={{ width: 28, height: 28, background: "var(--ev-gray-100)", borderRadius: 6, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, fontFamily: "var(--ev-mono)", color: "var(--ev-gray-700)", lineHeight: 1 }}>19</div>
+                  <div style={{ fontSize: 7, fontWeight: 700, textTransform: "uppercase" as const, color: "var(--ev-gray-500)" }}>Apr</div>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ev-gray-900)" }}>Victoria Park Parkrun</div>
+                  <div style={{ fontSize: 10, color: "var(--ev-gray-500)" }}>22 going · free</div>
+                </div>
+                <span style={{ fontSize: 10, fontWeight: 600, color: "#166534" }}>Going</span>
+              </div>
+              <div className="ev-club-ev-item" style={{ background: "var(--ev-yellow-light)" }} onClick={() => setModal({ cardId: "hackney-half", modalId: "hackney-half" })}>
+                <div className="ev-pend-dot" />
+                <div style={{ width: 28, height: 28, background: "var(--ev-orange-light)", borderRadius: 6, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, fontFamily: "var(--ev-mono)", color: "#9A3412", lineHeight: 1 }}>3</div>
+                  <div style={{ fontSize: 7, fontWeight: 700, textTransform: "uppercase" as const, color: "#C2410C" }}>May</div>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--ev-gray-900)" }}>Hackney Half Marathon</div>
+                  <div style={{ fontSize: 10, color: "var(--ev-orange)" }}>RSVP by May 1 — 8 days left</div>
+                </div>
+                {cardRsvp["hackney-half"]
+                  ? <span style={{ fontSize: 10, fontWeight: 600, color: "#166534" }}>Going</span>
+                  : <button className="ev-rsvp-btn default" style={{ padding: "3px 8px", fontSize: 10 }} onClick={e => quickRsvp("hackney-half", e)}>RSVP</button>}
+              </div>
+            </div>
+
           </div>
         </div>
-      </main>
+      </div>
 
-      {/* Event Detail Modal */}
-      {modalEvent && (
-        <div className="ev-modal-overlay open" onClick={e => { if (e.target === e.currentTarget) setModalEvent(null); }}>
-          <div className="ev-modal" onClick={e => e.stopPropagation()}>
+      {/* ── EVENT DETAIL MODAL ── */}
+      {modal && mh && (
+        <div className="ev-modal-overlay" onClick={e => { if (e.target === e.currentTarget) closeModal(); }}>
+          <div className="ev-modal">
             <div className="ev-modal-header">
-              <div>
-                {(() => {
-                  const sc = sportColors[modalEvent.sport] || sportColors.running;
-                  return (
-                    <>
-                      <span className="ev-modal-sport-tag" style={{ background: sc.bg, color: sc.color }}>
-                        {sc.tag} {modalEvent.sport.charAt(0).toUpperCase() + modalEvent.sport.slice(1)}
-                      </span>
-                      <div className="ev-modal-name">{modalEvent.name}</div>
-                      <div className="ev-modal-location">📌 {modalEvent.location} · {modalEvent.dist} mi from you</div>
-                    </>
-                  );
-                })()}
-              </div>
-              <button className="ev-modal-close" onClick={() => setModalEvent(null)} data-testid="btn-modal-close">✕</button>
-            </div>
-            <div className="ev-modal-body">
-              <div className="ev-modal-map">
-                <div className="ev-modal-map-bg" />
-                <div className="ev-modal-map-pin">{(sportColors[modalEvent.sport] || sportColors.running).tag}</div>
-              </div>
-              <div>
-                <div className="ev-modal-section-title">Event details</div>
-                <div className="ev-modal-detail-grid">
-                  {Object.entries(modalEvent.details).map(([k, v]) => (
-                    <div key={k} className="ev-modal-detail-item">
-                      <div className="ev-modal-detail-lbl">{k}</div>
-                      <div className="ev-modal-detail-val">{v}</div>
-                    </div>
-                  ))}
-                  <div className="ev-modal-detail-item">
-                    <div className="ev-modal-detail-lbl">Date</div>
-                    <div className="ev-modal-detail-val">{modalEvent.date.d} {modalEvent.date.m}</div>
+              <div className="ev-modal-event-hero">
+                <div className="ev-modal-date-box" style={{ background: mh.dateBg, border: mh.hasBorder ? "1px solid var(--ev-yellow-dark)" : "none" }}>
+                  <div className="ev-mdb-day" style={{ color: mh.dayColor }}>{mh.day}</div>
+                  <div className="ev-mdb-mon" style={{ color: mh.monColor }}>{mh.mon}</div>
+                </div>
+                <div className="ev-modal-event-info">
+                  <div style={{ marginBottom: 8, display: "flex", gap: 5, flexWrap: "wrap" }}>
+                    {mh.tags.map((t, i) => <span key={i} className={`ev-tag ev-t-${t.cls}`}>{t.label}</span>)}
                   </div>
-                  <div className="ev-modal-detail-item">
-                    <div className="ev-modal-detail-lbl">Going</div>
-                    <div className="ev-modal-detail-val">{modalEvent.going}</div>
-                  </div>
+                  <h2>{mh.title}</h2>
+                  <p>{mh.meta}</p>
                 </div>
               </div>
-              <div>
-                <div className="ev-modal-section-title">Description</div>
-                <p className="ev-modal-desc">{modalEvent.desc}</p>
-              </div>
-              <div>
-                <div className="ev-modal-section-title">Athletes attending</div>
-                <div className="ev-modal-attendees">
-                  {modalEvent.attendees.map(a => (
-                    <div key={a.i} className="ev-modal-att">
-                      <div className="ev-modal-att-av" style={{ background: a.bg, color: a.c }}>{a.i}</div>
-                      <div className="ev-modal-att-name">{a.i}</div>
-                    </div>
-                  ))}
-                  <div className="ev-modal-att" style={{ background: "var(--gray-50)" }}>
-                    <div style={{ fontSize: 12, color: "var(--gray-500)", padding: "0 4px" }}>+{modalEvent.going - modalEvent.attendees.length} more</div>
-                  </div>
-                </div>
-              </div>
+              <button className="ev-modal-close" onClick={closeModal}>✕</button>
             </div>
+            <div className="ev-modal-body">{renderModalBody()}</div>
             <div className="ev-modal-footer">
-              <button
-                className={`btn${joined.has(modalEvent.id) ? " btn-ghost" : " btn-yellow"}`}
-                style={{ flex: 1, justifyContent: "center" }}
-                onClick={() => { if (!joined.has(modalEvent.id)) joinFromModal(modalEvent.id); }}
-                data-testid="btn-modal-join"
-              >
-                {joined.has(modalEvent.id) ? "✓ Already going" : "+ Join this event"}
-              </button>
-              <button className="btn btn-ghost" onClick={() => setModalEvent(null)} data-testid="btn-modal-close-2">Close</button>
+              {!hasInlineRsvp && (
+                <>
+                  <button className="ev-btn ev-btn-yellow" style={{ flex: 1, justifyContent: "center" }} onClick={() => { setCardRsvp(prev => ({ ...prev, [modal.cardId]: true })); closeModal(); showToast("✓ RSVP confirmed!"); }}>✓ I'm going</button>
+                  <button className="ev-btn" onClick={() => { closeModal(); showToast("Can't make it recorded"); }}>Can't make it</button>
+                </>
+              )}
+              <button className="ev-btn" onClick={closeModal}>Close</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Toast */}
-      <div className={`ev-toast${toastVisible ? " show" : ""}`}>{toast}</div>
-
-      <Footer />
     </div>
   );
 }

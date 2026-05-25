@@ -121,7 +121,7 @@ export default function Feed() {
         <div className="fd-nav-label">My Arenas</div>
         <div className="fd-nav-item active"><span className="fd-nav-icon">🏠</span> Feed</div>
         <div className="fd-nav-item" onClick={() => setLocation("/profile")}><span className="fd-nav-icon">👤</span> My profile</div>
-        <div className="fd-nav-item" onClick={() => showToast("Opening events…")}><span className="fd-nav-icon">📅</span> Events</div>
+        <div className="fd-nav-item" onClick={() => setLocation("/events")}><span className="fd-nav-icon">📅</span> Events</div>
         <div className="fd-nav-item" onClick={() => showToast("Opening leaderboards…")}><span className="fd-nav-icon">🏆</span> Leaderboards</div>
         <div className="fd-nav-item" onClick={() => showToast("Opening challenges…")}><span className="fd-nav-icon">⚡</span> Challenges <span className="fd-nav-badge">3</span></div>
         <div className="fd-nav-item" onClick={() => showToast("Opening athletes…")}><span className="fd-nav-icon">👥</span> Athletes</div>
