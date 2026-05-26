@@ -424,7 +424,7 @@ export default function Profile() {
           <div className="mp-nav-item" onClick={() => setLocation("/events")}><span className="mp-nav-icon">📅</span> Events</div>
           <div className="mp-nav-item" onClick={() => showToast("Opening leaderboards…")}><span className="mp-nav-icon">🏆</span> Leaderboards</div>
           <div className="mp-nav-item" onClick={() => showToast("Opening challenges…")}><span className="mp-nav-icon">⚡</span> Challenges <span className="mp-nav-badge">3</span></div>
-          <div className="mp-nav-item" onClick={() => showToast("Opening athletes…")}><span className="mp-nav-icon">👥</span> Athletes</div>
+          <div className="mp-nav-item" onClick={() => setLocation("/athletes")}><span className="mp-nav-icon">👥</span> Athletes</div>
           <div className="mp-nav-label">Clubs</div>
           <div className="mp-nav-item" onClick={() => showToast("Opening club…")}><span className="mp-nav-icon">🏃</span> Hackney RC <span className="mp-nav-badge red">2</span></div>
           <div className="mp-nav-label">Account</div>

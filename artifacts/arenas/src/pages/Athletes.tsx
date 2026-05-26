@@ -1,594 +1,732 @@
 import { useState, useMemo } from "react";
-import Topbar from "@/components/Topbar";
-import Footer from "@/components/Footer";
+import { useLocation } from "wouter";
+import { useAuth } from "@/context/AuthContext";
 
-// ── TYPES ──
-type Sport = "running" | "cycling" | "climbing" | "swimming" | "basketball";
-type Level = "Beginner" | "Intermediate" | "Advanced" | "Elite";
-type SortKey = "near" | "active" | "followed" | "new";
-type ShowFilter = "all" | "following" | "followers";
-type SportFilter = "all" | "running" | "cycling" | "climbing";
+type SportTab = "all" | "run" | "cyc" | "clm" | "swm";
+type ViewMode = "grid" | "list";
 
-interface Athlete {
-  id: string; init: string; bg: string; c: string;
-  name: string; handle: string; location: string; dist: string;
-  bio: string; sports: Sport[]; tags: string[]; level: Level; online: boolean;
-  stats: { v: string; l: string }[];
-  spark: number[]; sparkColor: string;
-  mutuals: { i: string; bg: string; c: string }[];
-  mutualCount: number; isYou: boolean;
-  fullStats: { v: string; l: string }[];
-  activities: { icon: string; name: string; meta: string; stats: string[] }[];
-  recWhy: string; recSport: string;
+interface GridCard {
+  id: string; sport: SportTab;
+  av: string; avBg: string; avColor: string;
+  name: string; loc: string;
+  tags: Array<{ label: string; cls: string }>;
+  stats: Array<{ v: string; l: string }>;
+  bars: Array<{ h: number; color: string }>;
+  mutual: string; initFollow: boolean;
 }
 
-const TAG_CLS: Record<string, string> = {
-  running: "ath-tag-run", cycling: "ath-tag-cyc", climbing: "ath-tag-clm",
-  swm: "ath-tag-swm", run: "ath-tag-run", adv: "ath-tag-adv",
-  int: "ath-tag-int", eli: "ath-tag-eli", beg: "ath-tag-beg",
-  bkt: "ath-tag-bkt", tri: "ath-tag-tri",
-};
-const TAG_LABEL: Record<string, string> = {
-  running: "Running", cycling: "Cycling", climbing: "Climbing",
-  swm: "Swimming", run: "Running", adv: "Advanced",
-  int: "Intermediate", eli: "Elite", beg: "Beginner",
-  bkt: "Basketball", tri: "Triathlon",
-};
+interface NearbyCard {
+  dist: string; av: string; avBg: string; avColor: string;
+  id: string; name: string; meta: string;
+  clubPill?: { label: string; cls: string };
+  initFollow: boolean;
+}
 
-const ATHLETES: Athlete[] = [
+interface ModalProfile {
+  av: string; avBg: string; avColor: string;
+  name: string; handle: string;
+  tags: string[]; tagStyles: string[];
+  stats: Array<{ v: string; l: string }>;
+  bio: string;
+  initFollowing: boolean;
+  activity: { sport: string; sportStyle: string; desc: string; stats: string[]; ai: string };
+}
+
+const RUN_BARS = (hs: number[]) => hs.map(h => ({ h, color: "var(--orange)" }));
+const CYC_BARS = (hs: number[]) => hs.map(h => ({ h, color: "var(--blue)" }));
+const CLM_BARS = (hs: number[]) => hs.map(h => ({ h, color: "var(--purple)" }));
+const SWM_BARS = (hs: number[]) => hs.map(h => ({ h, color: "var(--teal)" }));
+const GRAY_BAR = { color: "var(--gray-200)" };
+
+const BASE_CARDS: GridCard[] = [
   {
-    id: "sl", init: "SL", bg: "#FEF9C3", c: "#854D0E",
-    name: "Sofia L.", handle: "@sofialopes", location: "Prague, CZ", dist: "0.8 mi",
-    bio: "Marathon runner chasing sub-2:55. Logging every mile publicly. Coach at Sparta Athletic Club. Triathlon off-season.",
-    sports: ["running"], tags: ["running","adv"], level: "Advanced", online: true,
-    stats: [{v:"312",l:"activities"},{v:"2.4k",l:"followers"},{v:"88km",l:"this week"}],
-    spark: [0.6,0.8,0.5,1.0,0.7,0.9,0.75], sparkColor: "#F97316",
-    mutuals: [{i:"AL",bg:"#E0F2FE",c:"#0369A1"},{i:"TR",bg:"#F5F3FF",c:"#5B21B6"}], mutualCount: 2, isYou: false,
-    fullStats: [{v:"312",l:"activities"},{v:"2.4k",l:"followers"},{v:"88 km",l:"this week"},{v:"9,840",l:"pts"}],
-    activities: [{icon:"🏃",name:"Morning long run",meta:"London · Apr 21",stats:["12.4 km","4:23/km","148 bpm"]},{icon:"🏃",name:"Parkrun PB",meta:"Victoria Park · Apr 19",stats:["5 km","4:12/km"]},{icon:"🚴",name:"Recovery ride",meta:"Apr 18",stats:["22 km","1h 10m"]}],
-    recWhy: "Prague · Advanced · Runs similar distances to you", recSport: "Running",
+    id: "sofia-l", sport: "run",
+    av: "SL", avBg: "#FEF9C3", avColor: "#854D0E",
+    name: "Sofia L.", loc: "📍 Prague · @sofialopes",
+    tags: [{ label: "🏃 Running", cls: "run" }, { label: "Advanced", cls: "adv" }, { label: "Hackney RC", cls: "club" }],
+    stats: [{ v: "9,840", l: "pts" }, { v: "88km", l: "this week" }, { v: "21d", l: "streak" }],
+    bars: RUN_BARS([48, 58, 0, 72, 68, 100, 82, 93]).map((b, i) => i === 2 ? { ...GRAY_BAR, h: 35 } : b),
+    mutual: "142 followers · coach · Hackney RC", initFollow: true,
   },
   {
-    id: "mc", init: "MC", bg: "#FEF9C3", c: "#854D0E",
-    name: "Marco C.", handle: "@marcocycliste", location: "Milan, IT", dist: "8.1 mi",
-    bio: "Granfondo specialist. 40,000 km logged in 2025. Stelvio is home. Leading the Milan Cycling collective on weekends.",
-    sports: ["cycling"], tags: ["cycling","eli"], level: "Elite", online: false,
-    stats: [{v:"287",l:"activities"},{v:"1.8k",l:"followers"},{v:"88km",l:"this week"}],
-    spark: [0.9,1.0,0.6,0.8,1.0,0.7,0.85], sparkColor: "#3B82F6",
-    mutuals: [{i:"OB",bg:"#F0FDF4",c:"#166534"}], mutualCount: 1, isYou: false,
-    fullStats: [{v:"287",l:"activities"},{v:"1.8k",l:"followers"},{v:"88 km",l:"this week"},{v:"8,120",l:"pts"}],
-    activities: [{icon:"🚴",name:"Stelvio approach",meta:"Milan · Apr 21",stats:["88 km","32.7 km/h","241W"]},{icon:"🚴",name:"Tuesday group ride",meta:"Apr 19",stats:["54 km","29.1 km/h"]},{icon:"🚴",name:"Recovery spin",meta:"Apr 18",stats:["24 km","1h 2m"]}],
-    recWhy: "Milan · Elite · 3 friends follow him", recSport: "Cycling",
+    id: "yuki", sport: "run",
+    av: "YT", avBg: "#FCE7F3", avColor: "#9D174D",
+    name: "Yuki T.", loc: "📍 Tokyo · @yukitri",
+    tags: [{ label: "🏃 Running", cls: "run" }, { label: "Advanced", cls: "adv" }, { label: "Hackney RC", cls: "club" }],
+    stats: [{ v: "7,610", l: "pts" }, { v: "68km", l: "this week" }, { v: "14d", l: "streak" }],
+    bars: RUN_BARS([52, 75, 82, 65, 100, 90, 86, 94]),
+    mutual: "98 followers · 3 mutual follows", initFollow: true,
   },
   {
-    id: "am", init: "AM", bg: "#ECFDF5", c: "#065F46",
-    name: "Alena M.", handle: "@alenasends", location: "Barcelona, ES", dist: "12.4 mi",
-    bio: "Sport climbing 7c+ and projecting 8a. Beta queen — detailed route breakdowns on every post. Guides trips to Siurana.",
-    sports: ["climbing"], tags: ["climbing","adv"], level: "Advanced", online: true,
-    stats: [{v:"144",l:"activities"},{v:"980",l:"followers"},{v:"V8",l:"top grade"}],
-    spark: [0.5,0,0.8,1.0,0,0.9,0.7], sparkColor: "#8B5CF6",
-    mutuals: [], mutualCount: 0, isYou: false,
-    fullStats: [{v:"144",l:"activities"},{v:"980",l:"followers"},{v:"V8",l:"top grade"},{v:"6,810",l:"pts"}],
-    activities: [{icon:"🧗",name:"Montserrat — V7 send",meta:"Barcelona · Apr 21",stats:["V7","3-wk project"]},{icon:"🧗",name:"Siurana sport climb",meta:"Apr 19",stats:["7b+","2h session"]},{icon:"🧗",name:"Campus board training",meta:"Apr 18",stats:["45 min","strength"]}],
-    recWhy: "Barcelona · Advanced · Similar grade to you", recSport: "Climbing",
+    id: "alena", sport: "run",
+    av: "AL", avBg: "#E0F2FE", avColor: "#0369A1",
+    name: "Alena L.", loc: "📍 London · @alenaprague",
+    tags: [{ label: "🏃 Running", cls: "run" }, { label: "Advanced", cls: "adv" }, { label: "Hackney RC", cls: "club" }, { label: "0.4 mi", cls: "near" }],
+    stats: [{ v: "7,220", l: "pts" }, { v: "71km", l: "this week" }, { v: "6d", l: "streak" }],
+    bars: [{ h: 30, color: "var(--gray-200)" }, ...RUN_BARS([50, 62, 78, 88, 100, 84, 88])],
+    mutual: "76 followers · nearby · Hackney RC", initFollow: true,
   },
   {
-    id: "yt", init: "YT", bg: "#FCE7F3", c: "#9D174D",
-    name: "Yuki T.", handle: "@yukitri", location: "Tokyo, JP", dist: "5,941 mi",
-    bio: "Triathlete and open water swimmer. ITU age group competitor. Currently building toward Ironman 70.3 Cairns in October.",
-    sports: ["swimming","running"], tags: ["swm","run","adv"], level: "Advanced", online: false,
-    stats: [{v:"401",l:"activities"},{v:"1.2k",l:"followers"},{v:"7.6k",l:"pts"}],
-    spark: [0.7,0.9,0.8,1.0,0.6,0.85,0.75], sparkColor: "#14B8A6",
-    mutuals: [{i:"SL",bg:"#FEF9C3",c:"#854D0E"}], mutualCount: 1, isYou: false,
-    fullStats: [{v:"401",l:"activities"},{v:"1.2k",l:"followers"},{v:"68 km",l:"this week"},{v:"7,610",l:"pts"}],
-    activities: [{icon:"🏊",name:"Open water 5K",meta:"Lake Geneva · Apr 21",stats:["5 km","54:22","1:32/100m"]},{icon:"🏃",name:"Long run",meta:"Tokyo · Apr 20",stats:["21 km","4:18/km"]},{icon:"🚴",name:"Tempo ride",meta:"Apr 18",stats:["62 km","2h 14m"]}],
-    recWhy: "Tokyo · Advanced · Also does triathlons", recSport: "Swimming",
+    id: "sofia-r", sport: "clm",
+    av: "SR", avBg: "#F5F3FF", avColor: "#5B21B6",
+    name: "Sofia R.", loc: "📍 Barcelona · @sofiaboulders",
+    tags: [{ label: "🧗 Climbing", cls: "clm" }, { label: "Advanced", cls: "adv" }, { label: "✦ Similar level", cls: "similar" }],
+    stats: [{ v: "V7", l: "top grade" }, { v: "3×", l: "per week" }, { v: "14d", l: "streak" }],
+    bars: CLM_BARS([75, 100, 0, 75, 75, 100, 75, 100]).map((b, i) => i === 2 ? { ...GRAY_BAR, h: 50 } : b),
+    mutual: "203 followers · V7 sender", initFollow: true,
   },
   {
-    id: "pr", init: "PR", bg: "#FBEAF0", c: "#72243E",
-    name: "Priya R.", handle: "@priyaruns", location: "Mumbai, IN", dist: "4,488 mi",
-    bio: "Running for mental health. Completed 3 marathons in 2025. Targeting Boston 2027. Community running coach at weekends.",
-    sports: ["running"], tags: ["running","adv"], level: "Advanced", online: false,
-    stats: [{v:"198",l:"activities"},{v:"640",l:"followers"},{v:"62km",l:"this week"}],
-    spark: [0.8,0.6,0.9,0.7,1.0,0.5,0.8], sparkColor: "#F97316",
-    mutuals: [], mutualCount: 0, isYou: false,
-    fullStats: [{v:"198",l:"activities"},{v:"640",l:"followers"},{v:"62 km",l:"this week"},{v:"6,980",l:"pts"}],
-    activities: [{icon:"🏃",name:"Marathon pace run",meta:"Mumbai · Apr 21",stats:["20 km","4:28/km"]},{icon:"🏃",name:"Recovery jog",meta:"Apr 19",stats:["6 km","5:40/km"]},{icon:"🏃",name:"Track intervals",meta:"Apr 18",stats:["8× 800m","3:44 avg"]}],
-    recWhy: "Mumbai · Advanced · Near your pace targets", recSport: "Running",
+    id: "marco", sport: "cyc",
+    av: "MC", avBg: "#FEF3C7", avColor: "#92400E",
+    name: "Marco C.", loc: "📍 Milan · @marcocycles",
+    tags: [{ label: "🚴 Cycling", cls: "cyc" }, { label: "Advanced", cls: "adv" }, { label: "✦ Similar FTP", cls: "similar" }],
+    stats: [{ v: "241W", l: "FTP" }, { v: "88km", l: "this week" }, { v: "3.2", l: "W/kg" }],
+    bars: CYC_BARS([55, 70, 65, 80, 0, 100, 90, 78]).map((b, i) => i === 4 ? { ...GRAY_BAR, h: 70 } : b),
+    mutual: "164 followers · 9-day streak", initFollow: true,
   },
   {
-    id: "ob", init: "OB", bg: "#F0FDF4", c: "#166534",
-    name: "Omar B.", handle: "@omarbikes", location: "Dubai, AE", dist: "3,382 mi",
-    bio: "Cycling and basketball. Rides before sunrise every day. Planning a coast-to-coast UAE ride in Q3. Weekend 5-a-side too.",
-    sports: ["cycling","basketball"], tags: ["cycling","bkt","int"], level: "Intermediate", online: false,
-    stats: [{v:"156",l:"activities"},{v:"430",l:"followers"},{v:"74km",l:"this week"}],
-    spark: [1.0,0.7,0.9,0.8,0.6,1.0,0.85], sparkColor: "#3B82F6",
-    mutuals: [{i:"MC",bg:"#FEF9C3",c:"#854D0E"}], mutualCount: 1, isYou: false,
-    fullStats: [{v:"156",l:"activities"},{v:"430",l:"followers"},{v:"74 km",l:"this week"},{v:"6,990",l:"pts"}],
-    activities: [{icon:"🚴",name:"Sunrise coast ride",meta:"Dubai · Apr 21",stats:["74 km","2h 28m","32.1 km/h"]},{icon:"🏀",name:"5-a-side pickup",meta:"Apr 20",stats:["60 min","social"]},{icon:"🚴",name:"Hill intervals",meta:"Apr 18",stats:["38 km","6× climbs"]}],
-    recWhy: "Dubai · Intermediate · Followed by Marco C.", recSport: "Cycling",
+    id: "tom", sport: "run",
+    av: "TR", avBg: "#F5F3FF", avColor: "#5B21B6",
+    name: "Tom R.", loc: "📍 London · @tomruns",
+    tags: [{ label: "🏃 Running", cls: "run" }, { label: "Intermediate", cls: "int" }, { label: "Hackney RC", cls: "club" }, { label: "1.2 mi", cls: "near" }],
+    stats: [{ v: "5,880", l: "pts" }, { v: "21km", l: "this week" }, { v: "4d", l: "streak" }],
+    bars: RUN_BARS([45, 60, 100, 0, 55, 70, 48, 55]).map((b, i) => i === 3 ? { ...GRAY_BAR, h: 30 } : b),
+    mutual: "41 followers · nearby", initFollow: false,
   },
   {
-    id: "tr", init: "TR", bg: "#F5F3FF", c: "#5B21B6",
-    name: "Tom R.", handle: "@tomruns", location: "London, UK", dist: "2.1 mi",
-    bio: "Runner and cyclist. Commute by bike every day. Running club on Tuesdays. Head-to-head challenge with Jamie this week.",
-    sports: ["running","cycling"], tags: ["running","cycling","int"], level: "Intermediate", online: true,
-    stats: [{v:"212",l:"activities"},{v:"280",l:"followers"},{v:"21km",l:"this week"}],
-    spark: [0.4,0.7,0.5,0.8,0.6,0.9,0.65], sparkColor: "#F97316",
-    mutuals: [{i:"JK",bg:"#FFF7ED",c:"#9A3412"},{i:"AL",bg:"#E0F2FE",c:"#0369A1"}], mutualCount: 2, isYou: false,
-    fullStats: [{v:"212",l:"activities"},{v:"280",l:"followers"},{v:"21 km",l:"this week"},{v:"5,880",l:"pts"}],
-    activities: [{icon:"🏃",name:"Morning 5K",meta:"London · Apr 21",stats:["5.2 km","4:44/km"]},{icon:"🚴",name:"Commute ride",meta:"Apr 21",stats:["14 km","28 min"]},{icon:"🏃",name:"Running club",meta:"Apr 19",stats:["8 km","group run"]}],
-    recWhy: "London · 2.1 mi away · 2 mutual friends", recSport: "Running",
+    id: "yuki-n", sport: "swm",
+    av: "YN", avBg: "#F0FDFA", avColor: "#134E4A",
+    name: "Yuki N.", loc: "📍 London · @yukinswims",
+    tags: [{ label: "🏊 Swimming", cls: "swm" }, { label: "Advanced", cls: "adv" }, { label: "3.2 mi", cls: "near" }],
+    stats: [{ v: "1:28", l: "/100m" }, { v: "18km", l: "this week" }, { v: "Open", l: "water" }],
+    bars: SWM_BARS([65, 80, 70, 0, 85, 100, 75, 82]).map((b, i) => i === 3 ? { ...GRAY_BAR, h: 40 } : b),
+    mutual: "88 followers", initFollow: false,
   },
   {
-    id: "al", init: "AL", bg: "#E0F2FE", c: "#0369A1",
-    name: "Alena L.", handle: "@alenaprague", location: "Prague, CZ", dist: "1.4 mi",
-    bio: "Running and climbing. Prague parkrun regular. Just moved to London — looking for running buddies and climbing partners.",
-    sports: ["running","climbing"], tags: ["running","climbing","adv"], level: "Advanced", online: false,
-    stats: [{v:"178",l:"activities"},{v:"520",l:"followers"},{v:"71km",l:"this week"}],
-    spark: [0.6,0.9,0.7,0.5,0.8,1.0,0.75], sparkColor: "#F97316",
-    mutuals: [{i:"MC",bg:"#FEF9C3",c:"#854D0E"},{i:"TR",bg:"#F5F3FF",c:"#5B21B6"}], mutualCount: 2, isYou: false,
-    fullStats: [{v:"178",l:"activities"},{v:"520",l:"followers"},{v:"71 km",l:"this week"},{v:"7,220",l:"pts"}],
-    activities: [{icon:"🏃",name:"Long run",meta:"London · Apr 21",stats:["18 km","4:30/km"]},{icon:"🧗",name:"Bouldering session",meta:"Apr 20",stats:["2h 10m","V6+"]},{icon:"🏃",name:"Easy recovery",meta:"Apr 18",stats:["6 km","5:20/km"]}],
-    recWhy: "London · Advanced · 2 mutual friends", recSport: "Running",
+    id: "priya", sport: "run",
+    av: "PR", avBg: "#FBEAF0", avColor: "#72243E",
+    name: "Priya R.", loc: "📍 Mumbai · @priyaruns",
+    tags: [{ label: "🏃 Running", cls: "run" }, { label: "Advanced", cls: "adv" }, { label: "Hackney RC", cls: "club" }, { label: "✦ Same pace", cls: "similar" }],
+    stats: [{ v: "6,980", l: "pts" }, { v: "62km", l: "this week" }, { v: "4:24", l: "avg pace" }],
+    bars: RUN_BARS([50, 60, 68, 75, 80, 100, 90, 91]),
+    mutual: "54 followers · rank #4 Hackney RC", initFollow: false,
   },
 ];
 
-const FOLLOWER_IDS = new Set(["sl","mc","yt","tr","al"]);
+const MORE_CARDS: GridCard[] = [
+  {
+    id: "jamie-o", sport: "run",
+    av: "JO", avBg: "#FFF7ED", avColor: "#9A3412",
+    name: "Jamie O.", loc: "📍 Birmingham · @jamieo",
+    tags: [{ label: "🏃 Running", cls: "run" }, { label: "Intermediate", cls: "int" }],
+    stats: [{ v: "3,200", l: "pts" }, { v: "18km", l: "this week" }, { v: "5d", l: "streak" }],
+    bars: RUN_BARS([40, 55, 48, 62, 70, 58, 65, 50]),
+    mutual: "New to Arenas", initFollow: false,
+  },
+  {
+    id: "kai-w", sport: "swm",
+    av: "KW", avBg: "#F0FDFA", avColor: "#134E4A",
+    name: "Kai W.", loc: "📍 London · @kaiswims",
+    tags: [{ label: "🏊 Swimming", cls: "swm" }, { label: "Advanced", cls: "adv" }],
+    stats: [{ v: "2,800", l: "pts" }, { v: "14km", l: "this week" }, { v: "8d", l: "streak" }],
+    bars: SWM_BARS([60, 70, 65, 80, 75, 90, 85, 88]),
+    mutual: "New to Arenas", initFollow: false,
+  },
+];
 
-function Sparkline({ values, color }: { values: number[]; color: string }) {
-  return (
-    <div className="ath-sparkline-wrap">
-      <div className="ath-spark-label">WEEKLY ACTIVITY (7 DAYS)</div>
-      <div className="ath-sparkline">
-        {values.map((h, i) => (
-          <div key={i} className="ath-s-bar" style={{ height: `${Math.max(h * 100, 8)}%`, background: color, opacity: 0.35 + h * 0.65 }} />
-        ))}
-      </div>
-    </div>
-  );
+const NEARBY: NearbyCard[] = [
+  { id: "alena", dist: "0.4 mi", av: "AL", avBg: "#E0F2FE", avColor: "#0369A1", name: "Alena L.", meta: "Running · Advanced · 71km this week", clubPill: { label: "Hackney RC", cls: "club" }, initFollow: true },
+  { id: "omar", dist: "0.6 mi", av: "OB", avBg: "#ECFDF5", avColor: "#065F46", name: "Omar B.", meta: "Cycling · Intermediate · 21km this week", clubPill: { label: "Hackney RC", cls: "club" }, initFollow: false },
+  { id: "tom", dist: "1.2 mi", av: "TR", avBg: "#F5F3FF", avColor: "#5B21B6", name: "Tom R.", meta: "Running · Intermediate · 4:30/km avg", clubPill: { label: "Hackney RC", cls: "club" }, initFollow: false },
+  { id: "jake", dist: "2.8 mi", av: "JH", avBg: "#EEEDFE", avColor: "#3C3489", name: "Jake H.", meta: "Running · Advanced · 4:10/km · 52km this week", initFollow: false },
+  { id: "rachel", dist: "3.4 mi", av: "RH", avBg: "#FEF9C3", avColor: "#854D0E", name: "Rachel H.", meta: "Running · Coach · Club organiser", clubPill: { label: "Hackney RC", cls: "club" }, initFollow: false },
+  { id: "yuki-n", dist: "3.2 mi", av: "YN", avBg: "#F0FDFA", avColor: "#134E4A", name: "Yuki N.", meta: "Swimming · Advanced · 1:28/100m", initFollow: false },
+];
+
+const MODAL_DATA: Record<string, ModalProfile> = {
+  "sofia-l": {
+    av: "SL", avBg: "#FEF9C3", avColor: "#854D0E", name: "Sofia L.", handle: "@sofialopes · Prague, CZ",
+    tags: ["🏃 Running", "Advanced", "Coach", "Hackney RC"],
+    tagStyles: ["background:rgba(249,115,22,.2);color:#FDBA74;border-color:rgba(249,115,22,.3)", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.15)", "background:rgba(16,185,129,.2);color:#6EE7B7;border-color:rgba(16,185,129,.25)", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.15)"],
+    stats: [{ v: "9,840", l: "Points" }, { v: "88km", l: "This week" }, { v: "21d", l: "Streak" }, { v: "142", l: "Followers" }],
+    bio: "Long-distance runner and Hackney RC coach. Marathon PB: 3:08. Training group meets Tuesday evenings and Saturday mornings at London Fields.",
+    initFollowing: true,
+    activity: { sport: "🏃 Running", sportStyle: "background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74", desc: "Sunday progression long run — 18.2km. Held 4:22 for the back half. That's 94.2km this month!", stats: ["18.2 km", "4:24/km", "144 bpm", "1:20:04"], ai: "Negative split execution excellent — second half 4:22 vs 4:26 first half. HR only rose 6 bpm. Full recovery recommended tomorrow." },
+  },
+  "yuki": {
+    av: "YT", avBg: "#FCE7F3", avColor: "#9D174D", name: "Yuki T.", handle: "@yukitri · Tokyo, JP",
+    tags: ["🏃 Running", "Advanced", "Hackney RC"],
+    tagStyles: ["background:rgba(249,115,22,.2);color:#FDBA74;border-color:rgba(249,115,22,.3)", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.15)", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.15)"],
+    stats: [{ v: "7,610", l: "Points" }, { v: "68km", l: "This week" }, { v: "14d", l: "Streak" }, { v: "98", l: "Followers" }],
+    bio: "Running coach and triathlete based in Tokyo. Sub-3 marathoner. Member of Hackney RC remotely — follows the leaderboard closely from Japan.",
+    initFollowing: true,
+    activity: { sport: "🏃 Running", sportStyle: "background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74", desc: "Tempo block — 3×5km at 3:58/km. Felt controlled throughout. Fitness is coming together.", stats: ["15.0 km", "4:02/km", "171 bpm"], ai: "Tempo execution was solid. HR at 171 is within your threshold for this effort. The ×3 repeat structure shows excellent pacing discipline." },
+  },
+  "alena": {
+    av: "AL", avBg: "#E0F2FE", avColor: "#0369A1", name: "Alena L.", handle: "@alenaprague · London, UK",
+    tags: ["🏃 Running", "Advanced", "Hackney RC", "0.4 mi away"],
+    tagStyles: ["background:rgba(249,115,22,.2);color:#FDBA74;border-color:rgba(249,115,22,.3)", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.15)", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.15)", "background:rgba(59,130,246,.2);color:#93C5FD;border-color:rgba(59,130,246,.3)"],
+    stats: [{ v: "7,220", l: "Points" }, { v: "71km", l: "This week" }, { v: "6d", l: "Streak" }, { v: "76", l: "Followers" }],
+    bio: "Czech runner now based in London. Just completed the 100km May Run challenge — first in Hackney RC. Running the Hackney Half in May.",
+    initFollowing: true,
+    activity: { sport: "🏃 Running", sportStyle: "background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74", desc: "Week 3 of marathon build — biggest week yet at 71.4km and it felt manageable. 100km May Run done ✓", stats: ["71.4 km", "4:30/km", "138 bpm"], ai: "Excellent volume management — your aerobic base is clearly strong. The consistent 4:30 pace across 5+ hour training weeks is very impressive." },
+  },
+  "sofia-r": {
+    av: "SR", avBg: "#F5F3FF", avColor: "#5B21B6", name: "Sofia R.", handle: "@sofiaboulders · Barcelona, ES",
+    tags: ["🧗 Climbing", "Advanced", "V7 climber"],
+    tagStyles: ["background:rgba(139,92,246,.2);color:#C4B5FD;border-color:rgba(139,92,246,.3)", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.15)", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.15)"],
+    stats: [{ v: "V7", l: "Top grade" }, { v: "3×/wk", l: "Sessions" }, { v: "14d", l: "Streak" }, { v: "203", l: "Followers" }],
+    bio: "Boulderer based in Barcelona projecting V8 at Montserrat. Ex-competition climber. Posts detailed beta in comments — follow for technique breakdowns.",
+    initFollowing: true,
+    activity: { sport: "🧗 Climbing", sportStyle: "background:var(--purple-light);color:#5B21B6;border:1px solid #C4B5FD", desc: "Sent the V7 at Montserrat after 3 weeks of projecting. Crux was the undercling sequence. Beta in comments.", stats: ["V7 sent", "3 weeks", "project"], ai: "Sending a 3-week project shows excellent persistence. Session volume has been well-managed — the send was earned through smart training, not luck." },
+  },
+  "marco": {
+    av: "MC", avBg: "#FEF3C7", avColor: "#92400E", name: "Marco C.", handle: "@marcocycles · Milan, IT",
+    tags: ["🚴 Cycling", "Advanced", "Similar FTP"],
+    tagStyles: ["background:rgba(59,130,246,.2);color:#93C5FD;border-color:rgba(59,130,246,.3)", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.15)", "background:rgba(255,210,30,.2);color:#FDE68A;border-color:rgba(255,210,30,.3)"],
+    stats: [{ v: "241W", l: "FTP" }, { v: "88km", l: "This week" }, { v: "3.2", l: "W/kg" }, { v: "164", l: "Followers" }],
+    bio: "Cyclist based in Milan targeting gran fondos in the Alps. Weekly rides up Stelvio during summer. Group ride Saturday AM — DM to join.",
+    initFollowing: true,
+    activity: { sport: "🚴 Cycling", sportStyle: "background:var(--blue-light);color:#1E40AF;border:1px solid #93C5FD", desc: "Stelvio approach — 241W normalised for the full climb which is a PR by 18W. Group ride open Saturday.", stats: ["88 km", "241W", "1,240m"], ai: "241W normalised on Stelvio is outstanding. Your FTP test result is now clearly underestimating your capability — schedule a new test this week." },
+  },
+  "tom": {
+    av: "TR", avBg: "#F5F3FF", avColor: "#5B21B6", name: "Tom R.", handle: "@tomruns · London, UK",
+    tags: ["🏃 Running", "Intermediate", "Hackney RC", "1.2 mi away"],
+    tagStyles: ["background:rgba(249,115,22,.2);color:#FDBA74", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)", "background:rgba(59,130,246,.2);color:#93C5FD"],
+    stats: [{ v: "5,880", l: "Points" }, { v: "21km", l: "This week" }, { v: "4d", l: "Streak" }, { v: "41", l: "Followers" }],
+    bio: "Social runner based in East London. Hackney RC Tuesday track sessions. Working toward a sub-25 5K — down from 27:30 last year.",
+    initFollowing: false,
+    activity: { sport: "🏃 Running", sportStyle: "background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74", desc: "Tuesday track session with Hackney RC — 6×800m at 5K pace. Felt strong on the last two reps.", stats: ["4.8 km", "4:30/km", "158 bpm"], ai: "Pacing improvement on the final two reps suggests your aerobic fitness is progressing well. Keep these track sessions weekly." },
+  },
+  "priya": {
+    av: "PR", avBg: "#FBEAF0", avColor: "#72243E", name: "Priya R.", handle: "@priyaruns · Mumbai, IN",
+    tags: ["🏃 Running", "Advanced", "Hackney RC", "Same pace"],
+    tagStyles: ["background:rgba(249,115,22,.2);color:#FDBA74", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)", "background:rgba(255,210,30,.2);color:#FDE68A"],
+    stats: [{ v: "6,980", l: "Points" }, { v: "62km", l: "This week" }, { v: "4:24", l: "Avg pace" }, { v: "54", l: "Followers" }],
+    bio: "Runner and product designer based in Mumbai. Competing remotely with Hackney RC. HM PB 1:56 and chasing sub-1:50. AI coaching fan.",
+    initFollowing: false,
+    activity: { sport: "🏃 Running", sportStyle: "background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74", desc: "Morning long run in Mumbai — humidity is no joke but pace held well throughout the 16km.", stats: ["16 km", "4:26/km", "152 bpm"], ai: "HR management in high humidity is excellent — 152 bpm average at 4:26 pace shows strong heat adaptation. Great aerobic base work." },
+  },
+  "omar": {
+    av: "OB", avBg: "#ECFDF5", avColor: "#065F46", name: "Omar B.", handle: "@omarbikes · London, UK",
+    tags: ["🚴 Cycling", "Intermediate", "Hackney RC", "0.6 mi away"],
+    tagStyles: ["background:rgba(59,130,246,.2);color:#93C5FD", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)", "background:rgba(59,130,246,.2);color:#93C5FD"],
+    stats: [{ v: "4,100", l: "Points" }, { v: "21km", l: "This week" }, { v: "4d", l: "Streak" }, { v: "29", l: "Followers" }],
+    bio: "Cyclist and occasional runner based in Hackney. Commutes by bike daily and does weekend leisure rides. Working on getting a power meter.",
+    initFollowing: false,
+    activity: { sport: "🚴 Cycling", sportStyle: "background:var(--blue-light);color:#1E40AF;border:1px solid #93C5FD", desc: "Evening loop through Victoria Park and back — casual 21km to wind down after a long week.", stats: ["21 km", "25km/h", "138 bpm"], ai: "Solid Zone 2 effort — HR of 138 is perfect recovery pace. These easy rides are building your aerobic base more than you might think." },
+  },
+  "kate": {
+    av: "KM", avBg: "#EEEDFE", avColor: "#3C3489", name: "Kate M.", handle: "@katemclimbs · Bristol, UK",
+    tags: ["🧗 Climbing", "Advanced", "V5 climber"],
+    tagStyles: ["background:rgba(139,92,246,.2);color:#C4B5FD", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)", "background:rgba(255,210,30,.2);color:#FDE68A"],
+    stats: [{ v: "V5", l: "Top grade" }, { v: "3×/wk", l: "Sessions" }, { v: "Projecting", l: "V6" }, { v: "88", l: "Followers" }],
+    bio: "Boulderer and route setter at The Climbing Academy Bristol. Projecting a V6 compression problem at Avon Gorge. Posts climbing journals weekly.",
+    initFollowing: false,
+    activity: { sport: "🧗 Climbing", sportStyle: "background:var(--purple-light);color:#5B21B6;border:1px solid #C4B5FD", desc: "V5 flash at the climbing gym — felt like the strongest session in months. Starting a V6 project next week.", stats: ["V5 flash", "2h 30m", "6 problems"], ai: "A flash at your current limit shows your technique has improved significantly. The next training block should focus on the specific movement type of your V6 project." },
+  },
+  "yuki-n": {
+    av: "YN", avBg: "#F0FDFA", avColor: "#134E4A", name: "Yuki N.", handle: "@yukinswims · London, UK",
+    tags: ["🏊 Swimming", "Advanced", "Open water"],
+    tagStyles: ["background:rgba(20,184,166,.2);color:#5EEAD4", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)"],
+    stats: [{ v: "1:28", l: "/100m pace" }, { v: "18km", l: "This week" }, { v: "88", l: "Followers" }, { v: "3.2 mi", l: "From you" }],
+    bio: "Open water swimmer and triathlete. Swims at Hampstead Heath Ponds year-round. Training for the Tooting Bec open water season.",
+    initFollowing: false,
+    activity: { sport: "🏊 Swimming", sportStyle: "background:var(--teal-light);color:#134E4A;border:1px solid #5EEAD4", desc: "Long pool session — 4km at mixed pace. Open water preparation work, focusing on sighting drills.", stats: ["4 km", "1:28/100m", "132 bpm"], ai: "Your pace consistency across the 4km set is excellent — deviation of only 3s/100m across all intervals indicates strong pacing control." },
+  },
+  "jake": {
+    av: "JH", avBg: "#EEEDFE", avColor: "#3C3489", name: "Jake H.", handle: "@jakehurst · London, UK",
+    tags: ["🏃 Running", "Advanced", "4:10/km pace"],
+    tagStyles: ["background:rgba(249,115,22,.2);color:#FDBA74", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)", "background:rgba(255,210,30,.2);color:#FDE68A"],
+    stats: [{ v: "52km", l: "This week" }, { v: "4:10", l: "Avg pace" }, { v: "2.8 mi", l: "From you" }, { v: "67", l: "Followers" }],
+    bio: "Freelance photographer and runner. No club yet — looking for a Tuesday track group in Hackney. Sub-3 marathon ambition.",
+    initFollowing: false,
+    activity: { sport: "🏃 Running", sportStyle: "background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74", desc: "Early morning tempo — 12km at threshold pace. New pair of shoes making a real difference.", stats: ["12 km", "4:08/km", "162 bpm"], ai: "Excellent threshold work — 162 bpm at 4:08 is very efficient for your fitness level. This is exactly the right training to reach sub-3 marathon form." },
+  },
+  "rachel": {
+    av: "RH", avBg: "#FEF9C3", avColor: "#854D0E", name: "Rachel H.", handle: "@rachelhackney · London, UK",
+    tags: ["🏃 Running", "Coach", "Hackney RC organiser"],
+    tagStyles: ["background:rgba(249,115,22,.2);color:#FDBA74", "background:rgba(16,185,129,.2);color:#6EE7B7;border-color:rgba(16,185,129,.25)", "background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)"],
+    stats: [{ v: "48", l: "Members coached" }, { v: "5 yrs", l: "Coaching" }, { v: "142", l: "Followers" }, { v: "3.4 mi", l: "From you" }],
+    bio: "Head coach at Hackney Running Club. Tuesday evenings, Saturday long runs. All abilities welcome. DM to join the club.",
+    initFollowing: false,
+    activity: { sport: "🏃 Running", sportStyle: "background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74", desc: "Club session — 10×400m with the Tuesday group. Proud of how the newer members are progressing.", stats: ["6 km", "4:45/km", "145 bpm"], ai: "As a coach running alongside athletes, your controlled HR shows excellent pacing awareness. You're modelling exactly the right behaviour for your athletes." },
+  },
+};
+
+function parseStyleStr(s: string): React.CSSProperties {
+  const obj: Record<string, string> = {};
+  s.split(";").forEach(part => {
+    const colonIdx = part.indexOf(":");
+    if (colonIdx === -1) return;
+    const key = part.slice(0, colonIdx).trim();
+    const val = part.slice(colonIdx + 1).trim();
+    if (!key || !val) return;
+    const camel = key.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+    obj[camel] = val;
+  });
+  return obj as React.CSSProperties;
 }
 
-function AthTag({ tag }: { tag: string }) {
-  return <span className={`ath-tag ${TAG_CLS[tag] || "ath-tag-int"}`}>{TAG_LABEL[tag] || tag}</span>;
-}
+const PILL_CLS: Record<string, string> = {
+  run: "at-pill-run", cyc: "at-pill-cyc", clm: "at-pill-clm", swm: "at-pill-swm",
+  adv: "at-pill-adv", int: "at-pill-int", club: "at-pill-club", near: "at-pill-near",
+  similar: "at-pill-similar",
+};
 
-function AthleteCard({
-  a, isFollowing, listView, onFollow, onOpen,
-}: {
-  a: Athlete; isFollowing: boolean; listView: boolean; onFollow: (id: string) => void; onOpen: (id: string) => void;
-}) {
-  return (
-    <div className={`ath-card${a.isYou ? " is-you" : ""}`} onClick={() => onOpen(a.id)} data-testid={`athlete-card-${a.id}`}>
-      <div className="ath-card-body">
-        {listView ? (
-          <div className="ath-list-inner">
-            <div style={{ flex: 1 }}>
-              <div className="ath-head">
-                <div className="ath-avatar-wrap">
-                  <div className="ath-avatar" style={{ background: a.bg, color: a.c }}>{a.init}</div>
-                  {a.online && <div className="ath-online-dot" />}
-                </div>
-                <div className="ath-name-row">
-                  <div className="ath-name">{a.name}{a.isYou && <span style={{ fontSize: 11, color: "var(--gray-400)", fontWeight: 400 }}> (you)</span>}</div>
-                  <div className="ath-handle">{a.handle}</div>
-                  <div className="ath-location">📍 {a.location} · {a.dist}</div>
-                </div>
-              </div>
-              <div className="ath-bio">{a.bio}</div>
-              <div className="ath-tags">{a.tags.map(t => <AthTag key={t} tag={t} />)}</div>
-            </div>
-            <div style={{ width: 200 }}>
-              <div className="ath-stats">{a.stats.map(s => (
-                <div key={s.l} className="ath-stat-pill"><div className="ath-sv">{s.v}</div><div className="ath-sl">{s.l}</div></div>
-              ))}</div>
-              <div className="ath-footer" style={{ padding: 0, borderTop: "none", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
-                <div className="ath-mutual-wrap">
-                  {a.mutualCount > 0 ? (
-                    <><div className="ath-mut-avs">{a.mutuals.map(m => <div key={m.i} className="ath-mut-av" style={{ background: m.bg, color: m.c }}>{m.i}</div>)}</div>
-                    <span className="ath-mutual-text">{a.mutualCount} mutual</span></>
-                  ) : <span className="ath-mutual-text" style={{ color: "var(--gray-400)" }}>No mutuals yet</span>}
-                </div>
-                {a.isYou ? (
-                  <button className="ath-follow-btn you">Your profile</button>
-                ) : (
-                  <button
-                    className={`ath-follow-btn${isFollowing ? " following" : ""}`}
-                    onClick={e => { e.stopPropagation(); onFollow(a.id); }}
-                  >{isFollowing ? "Following" : "Follow"}</button>
-                )}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="ath-head">
-              <div className="ath-avatar-wrap">
-                <div className="ath-avatar" style={{ background: a.bg, color: a.c }}>{a.init}</div>
-                {a.online && <div className="ath-online-dot" />}
-              </div>
-              <div className="ath-name-row">
-                <div className="ath-name">{a.name}{a.isYou && <span style={{ fontSize: 11, color: "var(--gray-400)", fontWeight: 400 }}> (you)</span>}</div>
-                <div className="ath-handle">{a.handle}</div>
-                <div className="ath-location">📍 {a.location} · {a.dist}</div>
-              </div>
-            </div>
-            <div className="ath-bio">{a.bio}</div>
-            <div className="ath-tags">{a.tags.map(t => <AthTag key={t} tag={t} />)}</div>
-            <div className="ath-stats">{a.stats.map(s => (
-              <div key={s.l} className="ath-stat-pill"><div className="ath-sv">{s.v}</div><div className="ath-sl">{s.l}</div></div>
-            ))}</div>
-            <Sparkline values={a.spark} color={a.sparkColor} />
-          </>
-        )}
-      </div>
-      {!listView && (
-        <div className="ath-footer">
-          <div className="ath-mutual-wrap">
-            {a.mutualCount > 0 ? (
-              <><div className="ath-mut-avs">{a.mutuals.map(m => <div key={m.i} className="ath-mut-av" style={{ background: m.bg, color: m.c }}>{m.i}</div>)}</div>
-              <span className="ath-mutual-text">{a.mutualCount} mutual</span></>
-            ) : <span className="ath-mutual-text" style={{ color: "var(--gray-400)" }}>No mutuals yet</span>}
-          </div>
-          {a.isYou ? (
-            <button className="ath-follow-btn you">Your profile</button>
-          ) : (
-            <button
-              className={`ath-follow-btn${isFollowing ? " following" : ""}`}
-              onClick={e => { e.stopPropagation(); onFollow(a.id); }}
-            >{isFollowing ? "Following" : "Follow"}</button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
+const TAB_COUNTS: Record<SportTab, number> = { all: 48, run: 28, cyc: 11, clm: 6, swm: 3 };
 
 export default function Athletes() {
-  const [followed, setFollowed] = useState<Set<string>>(new Set(["mc","yt"]));
-  const [sportFilter, setSportFilter] = useState<SportFilter>("all");
-  const [showFilter, setShowFilter] = useState<ShowFilter>("all");
-  const [levelFilter, setLevelFilter] = useState<string>("all");
-  const [sortFilter, setSortFilter] = useState<SortKey>("near");
-  const [searchQ, setSearchQ] = useState("");
-  const [listView, setListView] = useState(false);
+  const [, setLocation] = useLocation();
+  const { logout } = useAuth();
+
+  const [showFilter, setShowFilter] = useState("all");
+  const [levelFilter, setLevelFilter] = useState("all");
+  const [locFilter, setLocFilter] = useState("near");
+  const [actFilter, setActFilter] = useState("week");
+  const [sportTab, setSportTab] = useState<SportTab>("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [search, setSearch] = useState("");
   const [modalId, setModalId] = useState<string | null>(null);
+  const [modalFollowing, setModalFollowing] = useState(false);
+  const [followed, setFollowed] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    [...BASE_CARDS, ...MORE_CARDS].forEach(c => { init[c.id] = c.initFollow; });
+    NEARBY.forEach(n => { if (!(n.id in init)) init[n.id] = n.initFollow; });
+    return init;
+  });
+  const [loaded, setLoaded] = useState(false);
+  const [joinedClubs, setJoinedClubs] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState("");
   const [toastVisible, setToastVisible] = useState(false);
-  const [newFollowers, setNewFollowers] = useState<Set<string>>(new Set(["pk"]));
 
   function showToast(msg: string) {
     setToast(msg); setToastVisible(true);
     setTimeout(() => setToastVisible(false), 2800);
   }
 
-  function toggleFollow(id: string) {
+  function toggleFollow(id: string, e?: React.MouseEvent) {
+    e?.stopPropagation();
     setFollowed(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) { next.delete(id); showToast("Unfollowed"); }
-      else { next.add(id); showToast("✓ Following — they'll appear in your feed"); }
+      const next = { ...prev, [id]: !prev[id] };
+      showToast(next[id] ? "✓ Following — their activities will appear in your feed" : "Unfollowed");
       return next;
     });
   }
 
-  const filtered = useMemo(() => {
-    let list = ATHLETES;
-    if (sportFilter !== "all") list = list.filter(a => a.sports.includes(sportFilter as Sport));
-    if (showFilter === "following") list = list.filter(a => followed.has(a.id));
-    if (showFilter === "followers") list = list.filter(a => FOLLOWER_IDS.has(a.id));
-    if (levelFilter !== "all") list = list.filter(a => a.level === levelFilter);
-    if (searchQ) {
-      const q = searchQ.toLowerCase();
-      list = list.filter(a =>
-        a.name.toLowerCase().includes(q) ||
-        a.handle.toLowerCase().includes(q) ||
-        a.location.toLowerCase().includes(q) ||
-        a.sports.some(s => s.includes(q)) ||
-        a.bio.toLowerCase().includes(q)
-      );
-    }
-    if (sortFilter === "active") list = [...list].sort((a, b) => parseInt(b.stats[0].v) - parseInt(a.stats[0].v));
-    else if (sortFilter === "followed") list = [...list].sort((a, b) => parseFloat(b.stats[1].v) - parseFloat(a.stats[1].v));
-    return list;
-  }, [sportFilter, showFilter, levelFilter, sortFilter, searchQ, followed]);
+  function openModal(id: string) {
+    const profile = MODAL_DATA[id];
+    if (!profile) return;
+    setModalId(id);
+    setModalFollowing(profile.initFollowing);
+  }
 
-  const modalAthlete = modalId ? ATHLETES.find(a => a.id === modalId) : null;
+  function closeModal(e?: React.MouseEvent) {
+    if (!e || (e.target as HTMLElement).classList.contains("at-modal-overlay")) {
+      setModalId(null);
+    }
+  }
+
+  function modalToggleFollow() {
+    const next = !modalFollowing;
+    setModalFollowing(next);
+    showToast(next ? "✓ Following — their activities will appear in your feed" : "Unfollowed");
+  }
+
+  const visibleCards = useMemo(() => {
+    const cards = loaded ? [...BASE_CARDS, ...MORE_CARDS] : BASE_CARDS;
+    if (sportTab === "all" && !search) return cards;
+    return cards.filter(c => {
+      const matchSport = sportTab === "all" || c.sport === sportTab;
+      const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.loc.toLowerCase().includes(search.toLowerCase());
+      return matchSport && matchSearch;
+    });
+  }, [sportTab, search, loaded]);
+
+  const showRec = !search;
+  const showNearby = !search;
+  const athleteCount = search ? visibleCards.length : TAB_COUNTS[sportTab];
+
+  const modalProfile = modalId ? MODAL_DATA[modalId] : null;
+
+  function NavItem({ to, icon, label, badge, badgeRed, active }: { to?: string; icon: string; label: string; badge?: string; badgeRed?: boolean; active?: boolean }) {
+    return (
+      <div className={`at-nav-item${active ? " active" : ""}`} onClick={() => to ? setLocation(to) : undefined}>
+        <span className="at-nav-icon">{icon}</span> {label}
+        {badge && <span className={`at-nav-badge${badgeRed ? " red" : ""}`}>{badge}</span>}
+      </div>
+    );
+  }
 
   return (
-    <div>
-      <Topbar loggedIn={false} activeNav="Athletes" />
+    <div className="at-app">
 
-      {/* Page header */}
-      <div className="ath-page-header">
-        <div className="ath-page-header-inner">
-          <div className="ath-header-left">
-            <h1>Athletes 🏅</h1>
-            <p>Showing athletes who match your sports — Running, Cycling & Climbing. Follow to see their activities in your feed.</p>
-            <div className="ath-header-stats">
-              <div className="ath-header-stat"><div className="ath-stat-dot" style={{ background: "#10B981" }} /><strong>84,210</strong> athletes worldwide</div>
-              <div className="ath-header-stat"><div className="ath-stat-dot" style={{ background: "#FFD21E" }} /><strong>4,120</strong> near London</div>
-              <div className="ath-header-stat"><div className="ath-stat-dot" style={{ background: "#3B82F6" }} />You follow <strong>48</strong> athletes</div>
-              <div className="ath-header-stat"><div className="ath-stat-dot" style={{ background: "#8B5CF6" }} /><strong>312</strong> followers</div>
-            </div>
+      <header className="at-topbar">
+        <div className="at-topbar-logo">
+          <div className="at-logo-icon">🏟</div>
+          <span className="at-logo-text">Arenas</span>
+        </div>
+        <div className="at-topbar-center">
+          <div className="at-topbar-search">
+            <span style={{ color: "var(--gray-400)", fontSize: 13 }}>🔍</span>
+            <input
+              type="text"
+              placeholder="Search by name, sport, location, pace…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end", flexShrink: 0, marginTop: 4 }}>
-            <div className="ath-view-toggle">
-              <button className={`ath-view-btn${!listView ? " active" : ""}`} onClick={() => setListView(false)} title="Grid view" data-testid="btn-grid-view">⊞</button>
-              <button className={`ath-view-btn${listView ? " active" : ""}`} onClick={() => setListView(true)} title="List view" data-testid="btn-list-view">≡</button>
+          <div className="at-topbar-live"><div className="at-live-dot" />84,000+ athletes</div>
+        </div>
+        <div className="at-topbar-actions">
+          <div className="at-icon-btn" onClick={() => showToast("Opening notifications…")}>🔔<div className="at-notif-dot" /></div>
+          <div className="at-user-av" onClick={() => setLocation("/profile")}>JK</div>
+        </div>
+      </header>
+
+      <aside className="at-sidebar">
+        <div className="at-nav-label">My Arenas</div>
+        <NavItem to="/feed" icon="🏠" label="Feed" />
+        <NavItem to="/profile" icon="👤" label="My profile" />
+        <NavItem to="/events" icon="📅" label="Events" />
+        <NavItem icon="🏆" label="Leaderboards" />
+        <NavItem icon="⚡" label="Challenges" badge="3" />
+        <NavItem icon="👥" label="Athletes" active />
+        <div className="at-nav-label">My clubs</div>
+        <NavItem icon="🏃" label="Hackney RC" badge="2" badgeRed />
+        <div className="at-nav-label">Account</div>
+        <NavItem icon="⚙️" label="Settings" />
+        <NavItem icon="💳" label="Pro plan" />
+        <div className="at-sidebar-footer">
+          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+            <div className="at-user-av" style={{ width: 30, height: 30, flexShrink: 0, fontSize: 11 }}>JK</div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--gray-900)" }}>Jamie King</div>
+              <div style={{ fontSize: 10, color: "var(--gray-500)" }}>@jamiek · Pro</div>
             </div>
+            <button className="at-logout-btn" onClick={() => { logout(); setLocation("/"); }}>Log out</button>
           </div>
         </div>
-      </div>
+      </aside>
 
-      {/* Filter bar */}
-      <div className="ath-filter-bar">
-        <div className="ath-filter-bar-inner">
-          <div className="ath-search-row">
-            <div className="ath-search-wrap">
-              <span className="ath-search-icon">🔍</span>
-              <input
-                className="ath-search-input"
-                type="text"
-                placeholder="Search by name, city, @handle or sport…"
-                value={searchQ}
-                onChange={e => setSearchQ(e.target.value)}
-                data-testid="athlete-search"
-              />
-            </div>
-            <select className="ath-filter-select" value={levelFilter} onChange={e => setLevelFilter(e.target.value)}>
-              <option value="all">All levels</option>
-              <option value="Beginner">Beginner</option>
-              <option value="Intermediate">Intermediate</option>
-              <option value="Advanced">Advanced</option>
-              <option value="Elite">Elite</option>
-            </select>
-            <select className="ath-filter-select" value={sortFilter} onChange={e => setSortFilter(e.target.value as SortKey)}>
-              <option value="near">Near me first</option>
-              <option value="active">Most active</option>
-              <option value="followed">Most followed</option>
-              <option value="new">Newest</option>
-            </select>
-          </div>
-          <div className="ath-filter-pills-row">
-            <span className="ath-filter-label">Sport:</span>
-            {(["all","running","cycling","climbing"] as SportFilter[]).map(s => (
-              <button key={s} className={`ath-fp${sportFilter === s ? " active" : ""}`} onClick={() => setSportFilter(s)}>
-                {s === "all" ? "All my sports" : s === "running" ? "🏃 Running" : s === "cycling" ? "🚴 Cycling" : "🧗 Climbing"}
-              </button>
+      <div className="at-main">
+
+        <div className="at-filter-zone">
+          <div className="at-filter-row">
+            <span className="at-f-label">Show</span>
+            {[["all", "All athletes"], ["following", "Following"], ["followers", "Followers"], ["hackney", "Hackney RC"], ["recommended", "✦ Recommended"]].map(([v, l]) => (
+              <div key={v} className={`at-f-pill${showFilter === v ? " on" : ""}`} onClick={() => { setShowFilter(v); showToast("Filter: " + l); }}>{l}</div>
             ))}
-            <div className="ath-divider-v" />
-            <span className="ath-filter-label">Show:</span>
-            {(["all","following","followers"] as ShowFilter[]).map(s => (
-              <button key={s} className={`ath-fp${showFilter === s ? " active-yellow" : ""}`} onClick={() => setShowFilter(s)}>
-                {s === "all" ? "Everyone" : s === "following" ? "Following" : "Followers"}
-              </button>
+            <div className="at-f-sep" />
+            <span className="at-f-label">Level</span>
+            {[["all", "All levels"], ["advanced", "Advanced"], ["intermediate", "Intermediate"], ["beginner", "Beginner"]].map(([v, l]) => (
+              <div key={v} className={`at-f-pill${levelFilter === v ? " on" : ""}`} onClick={() => { setLevelFilter(v); showToast("Filter: " + l); }}>{l}</div>
             ))}
           </div>
-        </div>
-      </div>
-
-      {/* Main */}
-      <main className="ath-main">
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-
-          {/* Recommended strip */}
-          <div>
-            <div className="ath-section-head">
-              <div className="ath-section-title">Recommended for you <span className="ath-section-count">· based on your sports & location</span></div>
-              <span className="ath-section-link" onClick={() => showToast("Refreshing recommendations…")}>Refresh →</span>
-            </div>
-            <div className="ath-rec-strip-wrap">
-              <div className="ath-rec-strip">
-                {ATHLETES.slice(0, 6).map(a => (
-                  <div key={a.id} className="ath-rec-card" onClick={() => setModalId(a.id)}>
-                    <div className="ath-rec-avatar" style={{ background: a.bg, color: a.c }}>
-                      {a.init}
-                      {a.online && <div className="ath-rec-online" />}
-                    </div>
-                    <div className="ath-rec-name">{a.name}</div>
-                    <span className={`ath-rec-sport-tag ${TAG_CLS[a.sports[0]] || "ath-tag-run"}`}>{a.recSport}</span>
-                    <div className="ath-rec-why">{a.recWhy}</div>
-                    <button
-                      className={`ath-follow-btn${followed.has(a.id) ? " following" : ""}`}
-                      style={{ width: "100%", fontSize: 12, padding: "5px 0" }}
-                      onClick={e => { e.stopPropagation(); toggleFollow(a.id); }}
-                    >{followed.has(a.id) ? "Following" : "Follow"}</button>
-                  </div>
-                ))}
+          <div className="at-filter-row">
+            <span className="at-f-label">Location</span>
+            {[["near", "Near me"], ["london", "London"], ["uk", "UK"], ["global", "Global"]].map(([v, l]) => (
+              <div key={v} className={`at-f-pill${locFilter === v ? " on" : ""}`} onClick={() => { setLocFilter(v); showToast("Filter: " + l); }}>{l}</div>
+            ))}
+            <div className="at-f-sep" />
+            <span className="at-f-label">Activity</span>
+            {[["week", "Active this week"], ["month", "Active this month"], ["all", "All time"]].map(([v, l]) => (
+              <div key={v} className={`at-f-pill${actFilter === v ? " on" : ""}`} onClick={() => { setActFilter(v); showToast("Filter: " + l); }}>{l}</div>
+            ))}
+            <div className="at-f-right">
+              <span className="at-athlete-count">{athleteCount} athletes</span>
+              <div className="at-view-toggle">
+                <div className={`at-vt-btn${viewMode === "grid" ? " on" : ""}`} onClick={() => { setViewMode("grid"); showToast("Grid view"); }}>⊞ Grid</div>
+                <div className={`at-vt-btn${viewMode === "list" ? " on" : ""}`} onClick={() => { setViewMode("list"); showToast("List view"); }}>☰ List</div>
               </div>
-            </div>
-          </div>
-
-          {/* Grid / list */}
-          <div>
-            <div className="ath-section-head">
-              <div className="ath-section-title">All athletes <span className="ath-section-count">· {filtered.length.toLocaleString()}</span></div>
-              <span className="ath-section-link" onClick={() => showToast("Map view coming soon")}>📍 Map view</span>
-            </div>
-
-            {filtered.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "48px 24px", background: "white", border: "var(--border)", borderRadius: "var(--radius-lg)" }}>
-                <div style={{ fontSize: 36, marginBottom: 12 }}>🔍</div>
-                <div style={{ fontSize: 17, fontWeight: 600, color: "var(--gray-900)", marginBottom: 6 }}>No athletes found</div>
-                <div style={{ fontSize: 14, color: "var(--gray-500)" }}>Try adjusting your filters or search term.</div>
-              </div>
-            ) : (
-              <div className={`ath-athletes-grid${listView ? " list-view" : ""}`}>
-                {filtered.map(a => (
-                  <AthleteCard key={a.id} a={a} isFollowing={followed.has(a.id)} listView={listView} onFollow={toggleFollow} onOpen={setModalId} />
-                ))}
-              </div>
-            )}
-
-            <div className="ath-load-more">
-              <button className="ath-load-more-btn" onClick={() => showToast("Loading more athletes…")}>Load more athletes</button>
+              <select className="at-sort-select" onChange={e => showToast("Sorted: " + e.target.value)}>
+                <option>Sort: Most active</option>
+                <option>Sort: Nearest first</option>
+                <option>Sort: Points</option>
+                <option>Sort: New to Arenas</option>
+                <option>Sort: Mutual followers</option>
+              </select>
             </div>
           </div>
         </div>
 
-        {/* Right sidebar */}
-        <div className="ath-right-col">
+        <div className="at-body-grid">
+          <div className="at-athletes-col">
 
-          {/* Network */}
-          <div className="ath-side-card">
-            <div className="ath-side-title">Your network</div>
-            <div className="ath-network-grid">
-              {[["48","Following"],["312","Followers"],["4","Mutuals"]].map(([v,l]) => (
-                <div key={l} className="ath-net-stat"><div className="ath-nv">{v}</div><div className="ath-nl">{l}</div></div>
-              ))}
-            </div>
-            <div style={{ padding: "12px 16px 4px" }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--gray-500)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Recently followed you</div>
-            </div>
-            {[
-              { init: "OB", bg: "#F0FDF4", c: "#166534", name: "Omar B.",   sub: "Cycling · Dubai · 2h ago",    id: "ob-nf" },
-              { init: "PK", bg: "#FBEAF0", c: "#72243E", name: "Priya K.",  sub: "Yoga · London · 1d ago",      id: "pk-nf" },
-              { init: "RW", bg: "#FEF3C7", c: "#92400E", name: "Rachel W.", sub: "Swimming · London · 2d ago",   id: "rw-nf" },
-            ].map(f => (
-              <div key={f.id} className="ath-new-follower">
-                <div className="ath-nf-av" style={{ background: f.bg, color: f.c }}>{f.init}</div>
-                <div className="ath-nf-info"><div className="ath-nf-name">{f.name}</div><div className="ath-nf-sub">{f.sub}</div></div>
-                <button
-                  className={`ath-nf-btn${newFollowers.has(f.id) ? " following" : ""}`}
-                  disabled={newFollowers.has(f.id)}
-                  onClick={() => { setNewFollowers(prev => new Set([...prev, f.id])); showToast("✓ Following back"); }}
-                >{newFollowers.has(f.id) ? "Following" : "Follow back"}</button>
-              </div>
-            ))}
-            <div style={{ padding: "10px 16px" }}>
-              <button className="btn btn-ghost" style={{ width: "100%", justifyContent: "center", fontSize: 13 }} onClick={() => showToast("Showing all followers")}>View all followers →</button>
-            </div>
-          </div>
-
-          {/* Top in sports */}
-          <div className="ath-side-card">
-            <div className="ath-side-title">Top in your sports this week</div>
-            {[
-              { rank: 1,  rankCls: "gold",    init: "SL", bg: "#FEF9C3", c: "#854D0E", name: "Sofia L.",  sub: "Running · 9,840 pts",  id: "sl" },
-              { rank: 2,  rankCls: "silver",  init: "MC", bg: "#FEF9C3", c: "#854D0E", name: "Marco C.",  sub: "Cycling · 8,120 pts",  id: "mc" },
-              { rank: 3,  rankCls: "bronze",  init: "YT", bg: "#FCE7F3", c: "#9D174D", name: "Yuki T.",   sub: "Swimming · 7,610 pts", id: "yt" },
-              { rank: 4,  rankCls: "",        init: "AM", bg: "#ECFDF5", c: "#065F46", name: "Alena M.",  sub: "Climbing · 6,810 pts", id: "am" },
-              { rank: 5,  rankCls: "",        init: "PR", bg: "#FBEAF0", c: "#72243E", name: "Priya R.",  sub: "Running · 6,980 pts",  id: "pr" },
-            ].map(r => (
-              <div key={r.id} className="ath-side-row" onClick={() => setModalId(r.id)}>
-                <span className={`ath-sr-rank${r.rankCls ? ` ${r.rankCls}` : ""}`}>{r.rank}</span>
-                <div className="ath-sr-av" style={{ background: r.bg, color: r.c }}>{r.init}</div>
-                <div className="ath-sr-info"><div className="ath-sr-name">{r.name}</div><div className="ath-sr-sub">{r.sub}</div></div>
-                <button
-                  className={`ath-follow-btn${followed.has(r.id) ? " following" : ""}`}
-                  style={{ fontSize: 12, padding: "4px 12px" }}
-                  onClick={e => { e.stopPropagation(); toggleFollow(r.id); }}
-                >{followed.has(r.id) ? "Following" : "Follow"}</button>
-              </div>
-            ))}
-          </div>
-
-          {/* Activity feed */}
-          <div className="ath-side-card">
-            <div className="ath-side-title">Following activity</div>
-            {[
-              { init: "MC", bg: "#FEF9C3", c: "#854D0E", text: <><strong>Marco C.</strong> logged an 88km ride — Stelvio approach</>, chip: "241W · 32.7 km/h", time: "2h ago · Cycling" },
-              { init: "YT", bg: "#FCE7F3", c: "#9D174D", text: <><strong>Yuki T.</strong> completed a 5K open water swim at Lake Geneva</>, chip: "1:32/100m · 54:22", time: "4h ago · Swimming" },
-              { init: "PK", bg: "#FBEAF0", c: "#72243E", text: <><strong>Priya K.</strong> joined the 100km May Run challenge</>, chip: null, time: "6h ago · Challenge" },
-              { init: "MC", bg: "#FEF9C3", c: "#854D0E", text: <><strong>Marco C.</strong> registered for Granfondo Stelvio 2026</>, chip: null, time: "1d ago · Event" },
-              { init: "YT", bg: "#FCE7F3", c: "#9D174D", text: <><strong>Yuki T.</strong> hit a new weekly PB — 68 km running</>, chip: "4:18/km avg", time: "2d ago · Running" },
-            ].map((f, i) => (
-              <div key={i} className="ath-feed-item">
-                <div className="ath-feed-item-row">
-                  <div className="ath-feed-av" style={{ background: f.bg, color: f.c }}>{f.init}</div>
-                  <div>
-                    <div className="ath-feed-text">{f.text}</div>
-                    {f.chip && <div className="ath-feed-stat-chip">{f.chip}</div>}
-                    <div className="ath-feed-time">{f.time}</div>
-                  </div>
+            {showRec && (
+              <div id="at-rec-section">
+                <div className="at-section-hdr" style={{ position: "relative", top: "auto" }}>
+                  <span className="at-sh-title">✦ Recommended for you · <span style={{ fontWeight: 400, color: "var(--gray-500)" }}>based on your sports, location and training</span></span>
+                  <span className="at-sh-link" onClick={() => showToast("Loading more recommendations…")}>Refresh →</span>
                 </div>
-              </div>
-            ))}
-            <div style={{ padding: "10px 16px" }}>
-              <button className="btn btn-ghost" style={{ width: "100%", justifyContent: "center", fontSize: 13 }} onClick={() => showToast("Showing full feed")}>View full feed →</button>
-            </div>
-          </div>
-
-          {/* Sport breakdown */}
-          <div className="ath-side-card">
-            <div className="ath-side-title">Athletes by sport — near you</div>
-            {[
-              { dot: "#F97316", name: "Running",  w: 88, count: "1,820" },
-              { dot: "#3B82F6", name: "Cycling",  w: 68, count: "1,210" },
-              { dot: "#10B981", name: "Football", w: 52, count: "880"   },
-              { dot: "#14B8A6", name: "Swimming", w: 34, count: "610"   },
-              { dot: "#8B5CF6", name: "Climbing", w: 24, count: "398"   },
-              { dot: "#EC4899", name: "Yoga",     w: 18, count: "290"   },
-            ].map(s => (
-              <div key={s.name} className="ath-sport-breakdown-row">
-                <div className="ath-sb-dot" style={{ background: s.dot }} />
-                <span className="ath-sb-name">{s.name}</span>
-                <div className="ath-sb-bar"><div className="ath-sb-fill" style={{ width: `${s.w}%`, background: s.dot, opacity: 0.6 }} /></div>
-                <span className="ath-sb-count">{s.count}</span>
-              </div>
-            ))}
-          </div>
-
-        </div>
-      </main>
-
-      {/* Profile modal */}
-      {modalAthlete && (
-        <div className="ath-modal-overlay open" onClick={e => { if (e.target === e.currentTarget) setModalId(null); }}>
-          <div className="ath-modal" onClick={e => e.stopPropagation()}>
-            <div className="ath-modal-profile-header">
-              <div className="ath-modal-av" style={{ background: modalAthlete.bg, color: modalAthlete.c }}>{modalAthlete.init}</div>
-              <div style={{ flex: 1 }}>
-                <div className="ath-modal-name">{modalAthlete.name}</div>
-                <div className="ath-modal-handle">{modalAthlete.handle} · {modalAthlete.location}</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {modalAthlete.tags.map(t => <AthTag key={t} tag={t} />)}
-                </div>
-              </div>
-              <button className="ath-modal-close" onClick={() => setModalId(null)}>✕</button>
-            </div>
-            <div className="ath-modal-body">
-              <div className="ath-modal-stat-row">
-                {modalAthlete.fullStats.map(s => (
-                  <div key={s.l} className="ath-modal-stat"><div className="ath-mv">{s.v}</div><div className="ath-ml">{s.l}</div></div>
-                ))}
-              </div>
-              <div>
-                <div className="ath-modal-section">About</div>
-                <p style={{ fontSize: 14, color: "var(--gray-600)", lineHeight: 1.65 }}>{modalAthlete.bio}</p>
-              </div>
-              <div>
-                <div className="ath-modal-section">Recent activities</div>
-                <div className="ath-modal-recent-act">
-                  {modalAthlete.activities.map((act, i) => (
-                    <div key={i} className="ath-mra-item">
-                      <div className="ath-mra-icon">{act.icon}</div>
-                      <div className="ath-mra-info">
-                        <div className="ath-mra-name">{act.name}</div>
-                        <div className="ath-mra-meta">{act.meta}</div>
+                <div className="at-rec-strip">
+                  {[
+                    { id: "priya", av: "PR", avBg: "#FBEAF0", avColor: "#72243E", name: "Priya R.", handle: "@priyaruns · Mumbai", why: "Hackney RC · rank #4 · same pace bracket as you (4:20–4:30/km)", stats: [{ v: "6,980", l: "pts" }, { v: "62km", l: "/wk" }, { v: "6d", l: "streak" }], delay: ".05s" },
+                    { id: "marco", av: "MC", avBg: "#FEF3C7", avColor: "#92400E", name: "Marco C.", handle: "@marcocycles · Milan", why: "Similar FTP to you (241W vs your 241W) · both targeting Stelvio climbs", stats: [{ v: "3.2", l: "W/kg" }, { v: "88km", l: "/wk" }, { v: "241W", l: "FTP" }], delay: ".1s" },
+                    { id: "omar", av: "OB", avBg: "#ECFDF5", avColor: "#065F46", name: "Omar B.", handle: "@omarbikes · London", why: "0.6 mi from you · trains the same Hackney Marshes routes on Tuesdays", stats: [{ v: "4,100", l: "pts" }, { v: "21km", l: "/wk" }, { v: "Hackney RC", l: "" }], delay: ".15s" },
+                    { id: "kate", av: "KM", avBg: "#EEEDFE", avColor: "#3C3489", name: "Kate M.", handle: "@katemclimbs · Bristol", why: "V5 climber — you're projecting V6. Following her beta could help your send.", stats: [{ v: "V5", l: "grade" }, { v: "3×", l: "/week" }, { v: "Adv", l: "" }], delay: ".2s" },
+                  ].map(rc => (
+                    <div key={rc.id} className="at-rec-card" style={{ animationDelay: rc.delay }} onClick={() => openModal(rc.id)}>
+                      <div className="at-rc-av" style={{ background: rc.avBg, color: rc.avColor }}>{rc.av}</div>
+                      <div>
+                        <div className="at-rc-name">{rc.name}</div>
+                        <div className="at-rc-handle">{rc.handle}</div>
                       </div>
-                      <div className="ath-mra-stats">
-                        {act.stats.map(s => <span key={s} className="ath-mra-stat">{s}</span>)}
+                      <div className="at-rc-why">{rc.why}</div>
+                      <div className="at-rc-stats">
+                        {rc.stats.map((s, i) => (
+                          <div key={i} className="at-rc-stat"><strong>{s.v}</strong>{s.l ? " " + s.l : ""}</div>
+                        ))}
                       </div>
+                      <button
+                        className={`at-follow-btn${followed[rc.id] ? " following" : " default"}`}
+                        onClick={e => toggleFollow(rc.id, e)}
+                      >{followed[rc.id] ? "Following" : "Follow"}</button>
                     </div>
                   ))}
                 </div>
               </div>
+            )}
+
+            <div className="at-sport-tabs">
+              {([["all", "All sports"], ["run", "🏃 Running"], ["cyc", "🚴 Cycling"], ["clm", "🧗 Climbing"], ["swm", "🏊 Swimming"]] as [SportTab, string][]).map(([s, l]) => (
+                <div key={s} className={`at-sport-tab${sportTab === s ? " on" : ""}`} onClick={() => setSportTab(s)}>
+                  {l} <span className="at-tab-count">{TAB_COUNTS[s]}</span>
+                </div>
+              ))}
             </div>
-            <div className="ath-modal-footer">
-              <button
-                className={`btn${followed.has(modalAthlete.id) ? " btn-ghost" : " btn-primary"}`}
-                style={{ flex: 1, justifyContent: "center" }}
-                onClick={() => toggleFollow(modalAthlete.id)}
-              >{followed.has(modalAthlete.id) ? "✓ Following" : "Follow"}</button>
-              <button className="btn btn-ghost" onClick={() => setModalId(null)}>Close</button>
+
+            <div className={`at-athlete-grid${viewMode === "list" ? " list-view" : " grid-2"}`}>
+              {visibleCards.map((card, idx) => (
+                <div
+                  key={card.id}
+                  className="at-athlete-card"
+                  style={{ animationDelay: `${(idx % 8) * 0.05 + 0.05}s` }}
+                  onClick={() => openModal(card.id)}
+                >
+                  <div className="at-ac-head">
+                    <div className="at-ac-av" style={{ background: card.avBg, color: card.avColor }}>{card.av}</div>
+                    <div><div className="at-ac-name">{card.name}</div><div className="at-ac-location">{card.loc}</div></div>
+                  </div>
+                  <div className="at-ac-tags">
+                    {card.tags.map((t, i) => (
+                      <span key={i} className={`at-pill ${PILL_CLS[t.cls] || ""}`}>{t.label}</span>
+                    ))}
+                  </div>
+                  <div className="at-ac-mini-stats">
+                    {card.stats.map((s, i) => (
+                      <div key={i} className="at-ms-item"><span className="at-ms-val">{s.v}</span><span className="at-ms-label">{s.l}</span></div>
+                    ))}
+                  </div>
+                  {viewMode === "grid" && (
+                    <div className="at-sparkline-wrap">
+                      <div className="at-sparkline-label"><span>8 weeks</span></div>
+                      <div className="at-sparkline">
+                        {card.bars.map((b, i) => (
+                          <div key={i} className="at-spark-bar" style={{ height: `${b.h}%`, background: b.color }} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="at-ac-footer">
+                    <div className="at-ac-mutual">{card.mutual}</div>
+                    <button
+                      className={`at-follow-btn${followed[card.id] ? " following" : " default"}`}
+                      onClick={e => toggleFollow(card.id, e)}
+                    >{followed[card.id] ? "Following" : "Follow"}</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {showNearby && (
+              <div>
+                <div className="at-section-hdr" style={{ position: "relative", top: "auto" }}>
+                  <span className="at-sh-title">📍 Athletes near you · London</span>
+                  <span className="at-sh-link" onClick={() => showToast("Opening map view…")}>See on map →</span>
+                </div>
+                <div className="at-nearby-grid">
+                  {NEARBY.map((n, idx) => (
+                    <div key={n.id + idx} className="at-nearby-card" style={{ animationDelay: `${idx * 0.05 + 0.05}s` }} onClick={() => openModal(n.id)}>
+                      <div className="at-nb-dist">{n.dist}</div>
+                      <div className="at-nb-av" style={{ background: n.avBg, color: n.avColor }}>{n.av}</div>
+                      <div className="at-nb-info">
+                        <div className="at-nb-name">{n.name}</div>
+                        <div className="at-nb-meta">{n.meta}</div>
+                        {n.clubPill && (
+                          <div className="at-nb-tags"><span className={`at-pill ${PILL_CLS[n.clubPill.cls]}`}>{n.clubPill.label}</span></div>
+                        )}
+                        {!n.clubPill && (
+                          <div className="at-nb-tags"><span className="at-pill at-pill-int">No clubs yet</span></div>
+                        )}
+                      </div>
+                      <button
+                        className={`at-follow-btn at-follow-sm${followed[n.id] ? " following" : " default"}`}
+                        onClick={e => toggleFollow(n.id, e)}
+                      >{followed[n.id] ? "Following" : "Follow"}</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="at-load-more">
+              {loaded ? (
+                <p style={{ fontSize: 13, color: "var(--gray-400)", padding: 16 }}>All athletes in your area loaded</p>
+              ) : (
+                <button className="at-load-btn" onClick={() => { setLoaded(true); showToast("Loaded more athletes"); }}>
+                  Load more athletes
+                </button>
+              )}
+            </div>
+
+          </div>
+
+          <div className="at-sidebar-col">
+
+            <div className="at-side-card">
+              <div className="at-sc-header">
+                <span className="at-sc-title">People you follow</span>
+                <span className="at-sc-link" onClick={() => showToast("Opening full following list…")}>All 89 →</span>
+              </div>
+              {[
+                { id: "sofia-l", av: "SL", bg: "#FEF9C3", color: "#854D0E", name: "Sofia L.", meta: "🔥 21d · 88km" },
+                { id: "yuki", av: "YT", bg: "#FCE7F3", color: "#9D174D", name: "Yuki T.", meta: "🔥 14d · 68km" },
+                { id: "alena", av: "AL", bg: "#E0F2FE", color: "#0369A1", name: "Alena L.", meta: "🔥 6d · 71km" },
+                { id: "sofia-r", av: "SR", bg: "#F5F3FF", color: "#5B21B6", name: "Sofia R.", meta: "V7 sent ✓" },
+                { id: "marco", av: "MC", bg: "#FEF3C7", color: "#92400E", name: "Marco C.", meta: "🔥 9d · 88km" },
+              ].map(f => (
+                <div key={f.id} className="at-following-item" onClick={() => openModal(f.id)}>
+                  <div className="at-fi-av" style={{ background: f.bg, color: f.color }}>{f.av}</div>
+                  <div className="at-fi-name">{f.name}</div>
+                  <div className="at-fi-meta">{f.meta}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="at-side-card">
+              <div className="at-sc-header"><span className="at-sc-title">Your network</span></div>
+              <div className="at-network-stats">
+                <div className="at-ns-item">
+                  <div className="at-ns-val">89</div>
+                  <div className="at-ns-label">Following</div>
+                </div>
+                <div className="at-ns-item">
+                  <div className="at-ns-val">142</div>
+                  <div className="at-ns-label">Followers</div>
+                  <div className="at-ns-delta">↑ +4 this week</div>
+                </div>
+              </div>
+              <div style={{ padding: "8px 14px", borderTop: "var(--border)", fontSize: 12, color: "var(--gray-600)" }}>
+                Priya R., Jake H. and 2 others followed you this week
+              </div>
+            </div>
+
+            <div className="at-side-card">
+              <div className="at-sc-header"><span className="at-sc-title">Your network by sport</span></div>
+              {[
+                { sport: "🏃 Running", pct: "71%", color: "var(--orange)", count: 63 },
+                { sport: "🚴 Cycling", pct: "18%", color: "var(--blue)", count: 16 },
+                { sport: "🧗 Climbing", pct: "7%", color: "var(--purple)", count: 6 },
+                { sport: "🏊 Swimming", pct: "4%", color: "var(--teal)", count: 4 },
+              ].map(b => (
+                <div key={b.sport} className="at-sport-bar-row">
+                  <span className="at-sbar-sport">{b.sport}</span>
+                  <div className="at-sbar-track"><div className="at-sbar-fill" style={{ width: b.pct, background: b.color }} /></div>
+                  <span className="at-sbar-count">{b.count}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="at-side-card">
+              <div className="at-sc-header">
+                <span className="at-sc-title">Clubs to discover</span>
+                <span className="at-sc-link" onClick={() => showToast("Browsing all clubs…")}>Browse all →</span>
+              </div>
+              {[
+                { id: "slcc", icon: "🚴", bg: "var(--blue-light)", name: "South London CC", meta: "64 members · Cycling · South London" },
+                { id: "eec", icon: "🧗", bg: "var(--purple-light)", name: "East End Climbers", meta: "28 members · Bouldering · Bethnal Green" },
+                { id: "ltc", icon: "🔱", bg: "#FBEAF0", name: "London Tri Club", meta: "120 members · Triathlon · All London" },
+              ].map(c => (
+                <div key={c.id} className="at-club-suggest" onClick={() => showToast(`Opening ${c.name}…`)}>
+                  <div className="at-cs-icon" style={{ background: c.bg }}>{c.icon}</div>
+                  <div style={{ flex: 1 }}>
+                    <div className="at-cs-name">{c.name}</div>
+                    <div className="at-cs-meta">{c.meta}</div>
+                  </div>
+                  <button
+                    className="at-btn at-btn-sm"
+                    onClick={e => { e.stopPropagation(); setJoinedClubs(prev => ({ ...prev, [c.id]: true })); showToast(joinedClubs[c.id] ? `Already requested ${c.name}` : "Request sent!"); }}
+                  >{joinedClubs[c.id] ? "Requested" : "Join"}</button>
+                </div>
+              ))}
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      {modalProfile && (
+        <div className="at-modal-overlay open" onClick={closeModal}>
+          <div className="at-modal" onClick={e => e.stopPropagation()}>
+            <div className="at-modal-hero">
+              <div className="at-mh-av" style={{ background: modalProfile.avBg, color: modalProfile.avColor }}>{modalProfile.av}</div>
+              <div className="at-mh-info">
+                <div className="at-mh-name">{modalProfile.name}</div>
+                <div className="at-mh-handle">{modalProfile.handle}</div>
+                <div className="at-mh-tags">
+                  {modalProfile.tags.map((t, i) => (
+                    <span key={i} className="at-mh-tag" style={modalProfile.tagStyles[i] ? parseStyleStr(modalProfile.tagStyles[i]) : {}}>{t}</span>
+                  ))}
+                </div>
+              </div>
+              <div className="at-mh-actions">
+                <button
+                  className="at-btn at-btn-sm"
+                  style={modalFollowing ? { background: "var(--green-light)", color: "#166534", borderColor: "#86EFAC" } : { background: "var(--yellow)", color: "var(--gray-900)", borderColor: "var(--yellow-dark)", fontWeight: 600 }}
+                  onClick={modalToggleFollow}
+                >{modalFollowing ? "✓ Following" : "Follow"}</button>
+                <button className="at-btn at-btn-sm" onClick={() => showToast("Opening message…")}>💬 Message</button>
+              </div>
+              <button className="at-modal-close" onClick={() => setModalId(null)}>✕</button>
+            </div>
+            <div className="at-modal-body">
+              <div className="at-modal-stats">
+                {modalProfile.stats.map((s, i) => (
+                  <div key={i} className="at-modal-stat"><div className="at-mv">{s.v}</div><div className="at-ml">{s.l}</div></div>
+                ))}
+              </div>
+              <div>
+                <div className="at-modal-section-title">About</div>
+                <div style={{ fontSize: 13, color: "var(--gray-600)", lineHeight: 1.65 }}>{modalProfile.bio}</div>
+              </div>
+              <div>
+                <div className="at-modal-section-title">Latest activity</div>
+                <div className="at-recent-activity">
+                  <div className="at-ra-head">
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--gray-900)" }}>Recent activity</div>
+                    <div className="at-ra-sport-tag" style={parseStyleStr(modalProfile.activity.sportStyle)}>{modalProfile.activity.sport}</div>
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--gray-600)" }}>{modalProfile.activity.desc}</div>
+                  <div className="at-ra-stats">
+                    {modalProfile.activity.stats.map((s, i) => <div key={i} className="at-ra-stat">{s}</div>)}
+                  </div>
+                  <div className="at-ra-ai">
+                    <div style={{ width: 16, height: 16, borderRadius: "50%", background: "var(--yellow)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7, fontWeight: 700, color: "var(--gray-900)", flexShrink: 0, marginTop: 1 }}>AI</div>
+                    <span>{modalProfile.activity.ai}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="at-modal-footer-actions">
+                <button className="at-btn" style={{ flex: 1, justifyContent: "center" }} onClick={() => showToast("Opening message…")}>💬 Message</button>
+                <button className="at-btn" style={{ flex: 1, justifyContent: "center" }} onClick={() => showToast("Viewing full profile…")}>View full profile →</button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      <div className={`ath-toast${toastVisible ? " show" : ""}`}>{toast}</div>
-      <Footer />
+      <div className={`at-toast${toastVisible ? " show" : ""}`}>{toast}</div>
     </div>
   );
 }
