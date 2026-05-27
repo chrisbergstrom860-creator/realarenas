@@ -18,6 +18,7 @@ app.get(BASE + '/clubs/dashboard', (req, res) => res.sendFile(path.join(HTML, 'a
 app.get(BASE + '/clubs/member', (req, res) => res.sendFile(path.join(HTML, 'arenas-club-member.html')));
 app.get(BASE + '/clubs/invite', (req, res) => res.sendFile(path.join(HTML, 'arenas-club-invite.html')));
 app.get(BASE + '/landing', (req, res) => res.sendFile(path.join(HTML, 'arenas-landing-login.html')));
+app.get(BASE + '/notifications', (req, res) => res.sendFile(path.join(HTML, 'arenas-notifications.html')));
 
 app.listen(PORT, () => {
   console.log('Arenas HTML prototype on port ' + PORT + ' base ' + (BASE || '/'));

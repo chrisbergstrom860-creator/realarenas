@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arenas — Notifications</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --yellow:#FFD21E;--yellow-dark:#E6B800;--yellow-light:#FFF9E0;
+  --gray-50:#F9FAFB;--gray-100:#F3F4F6;--gray-200:#E5E7EB;--gray-300:#D1D5DB;
+  --gray-400:#9CA3AF;--gray-500:#6B7280;--gray-600:#4B5563;--gray-700:#374151;
+  --gray-800:#1F2937;--gray-900:#111827;
+  --green:#10B981;--green-light:#ECFDF5;
+  --blue:#3B82F6;--blue-light:#EFF6FF;
+  --red:#EF4444;--red-light:#FEF2F2;
+  --orange:#F97316;--orange-light:#FFF7ED;
+  --purple:#8B5CF6;--purple-light:#F5F3FF;
+  --teal:#14B8A6;--teal-light:#F0FDFA;
+  --font:'Source Sans 3',sans-serif;--mono:'IBM Plex Mono',monospace;
+  --border:1px solid var(--gray-200);--radius:8px;--radius-lg:12px;
+  --shadow:0 1px 3px rgba(0,0,0,0.07);--shadow-md:0 4px 16px rgba(0,0,0,0.09);
+  --sidebar-w:220px;
+}
+body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);font-size:14px;line-height:1.5;overflow-x:hidden}
+button,select,input{font-family:var(--font)}
+@keyframes fade-up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.8)}}
+@keyframes slide-in{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
+@keyframes unread-pulse{0%{background:var(--yellow-light)}100%{background:transparent}}
+
+/* ── LAYOUT ── */
+.app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;grid-template-rows:56px 1fr;min-height:100vh}
+
+/* ── TOPBAR ── */
+.topbar{grid-column:1/-1;background:white;border-bottom:var(--border);display:flex;align-items:center;padding:0 20px 0 0;position:sticky;top:0;z-index:200}
+.topbar-logo{width:var(--sidebar-w);padding:0 16px;display:flex;align-items:center;gap:8px;border-right:var(--border);flex-shrink:0;height:100%}
+.logo-icon{width:28px;height:28px;background:var(--yellow);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.logo-text{font-size:15px;font-weight:600;color:var(--gray-900)}
+.topbar-center{flex:1;padding:0 20px;display:flex;align-items:center;gap:12px}
+.topbar-search{display:flex;align-items:center;gap:8px;background:var(--gray-50);border:var(--border);border-radius:7px;padding:6px 12px;width:260px;transition:border-color .15s}
+.topbar-search:focus-within{border-color:var(--gray-400)}
+.topbar-search input{background:none;border:none;outline:none;font-size:13px;color:var(--gray-700);width:100%}
+.topbar-search input::placeholder{color:var(--gray-400)}
+.topbar-actions{display:flex;align-items:center;gap:8px;margin-left:auto}
+.icon-btn{width:34px;height:34px;border-radius:7px;border:var(--border);background:var(--yellow-light);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;position:relative}
+.icon-btn .notif-dot{position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--red);border:1.5px solid white}
+.user-av{width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900);cursor:pointer}
+
+/* ── SIDEBAR ── */
+.sidebar{background:white;border-right:var(--border);display:flex;flex-direction:column;padding:12px 0;position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto}
+.sidebar::-webkit-scrollbar{display:none}
+.nav-section-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--gray-400);padding:10px 16px 4px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 16px;cursor:pointer;font-size:13px;color:var(--gray-600);transition:background .1s,color .1s;position:relative}
+.nav-item:hover{background:var(--gray-50);color:var(--gray-900)}
+.nav-item.active{background:var(--yellow-light);color:#7a5c00;font-weight:500}
+.nav-item.active::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--yellow-dark);border-radius:0 2px 2px 0}
+.nav-icon{font-size:15px;flex-shrink:0;width:18px;text-align:center}
+.nav-badge{margin-left:auto;font-size:10px;font-family:var(--mono);background:var(--gray-100);color:var(--gray-500);padding:1px 6px;border-radius:10px}
+.nav-item.active .nav-badge{background:rgba(255,216,30,.3);color:#7a5c00}
+.nav-badge.red{background:var(--red-light);color:var(--red)}
+.sidebar-footer{margin-top:auto;padding:12px 16px;border-top:var(--border)}
+
+/* ── MAIN ── */
+.main{display:flex;flex-direction:column}
+
+/* ── PAGE HEADER ── */
+.page-header{background:white;border-bottom:var(--border);padding:16px 24px 0;position:sticky;top:56px;z-index:100}
+.header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:16px}
+.header-left h1{font-size:20px;font-weight:700;color:var(--gray-900);letter-spacing:-.01em;margin-bottom:2px}
+.header-left p{font-size:13px;color:var(--gray-500)}
+.header-right{display:flex;align-items:center;gap:8px}
+.btn{padding:7px 14px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;border:var(--border);transition:all .13s;display:inline-flex;align-items:center;gap:6px;background:transparent;color:var(--gray-700)}
+.btn:hover{background:var(--gray-100)}
+.btn-primary{background:var(--gray-900);color:white;border-color:var(--gray-900)}.btn-primary:hover{background:var(--gray-700)}
+.btn-yellow{background:var(--yellow);color:var(--gray-900);border-color:var(--yellow-dark);font-weight:600}.btn-yellow:hover{background:var(--yellow-dark)}
+.btn-sm{padding:4px 10px;font-size:12px;border-radius:6px}
+.btn-full{width:100%;justify-content:center}
+.btn-ghost-danger{background:transparent;color:var(--red);border-color:#FECACA}.btn-ghost-danger:hover{background:var(--red-light)}
+
+/* ── FILTER TABS ── */
+.filter-tabs{display:flex;gap:0;overflow-x:auto}
+.filter-tabs::-webkit-scrollbar{display:none}
+.ftab{padding:10px 16px;font-size:13px;font-weight:500;color:var(--gray-500);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;transition:color .1s,border-color .1s;display:flex;align-items:center;gap:6px;flex-shrink:0}
+.ftab:hover{color:var(--gray-800)}
+.ftab.active{color:var(--gray-900);border-bottom-color:var(--gray-900)}
+.ftab .badge{font-size:10px;font-family:var(--mono);padding:1px 6px;border-radius:10px;background:var(--gray-100);color:var(--gray-500)}
+.ftab.active .badge{background:var(--gray-200);color:var(--gray-700)}
+.ftab .badge.unread{background:var(--red-light);color:var(--red)}
+
+/* ── BODY GRID ── */
+.body-grid{display:grid;grid-template-columns:1fr 280px;gap:0;flex:1}
+.notif-col{border-right:var(--border);overflow-y:auto}
+.notif-col::-webkit-scrollbar{width:4px}
+.notif-col::-webkit-scrollbar-thumb{background:var(--gray-200);border-radius:2px}
+.summary-col{overflow-y:auto;padding:18px 16px;display:flex;flex-direction:column;gap:14px}
+.summary-col::-webkit-scrollbar{display:none}
+
+/* ── NOTIFICATION GROUPS ── */
+.notif-group{background:white}
+.group-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-400);padding:10px 20px 6px;background:var(--gray-50);border-top:var(--border);border-bottom:var(--border);position:sticky;top:0;z-index:5}
+.group-label:first-child{border-top:none}
+
+/* ── NOTIFICATION ITEMS ── */
+.notif-item{display:flex;align-items:flex-start;gap:12px;padding:14px 20px;border-bottom:var(--border);cursor:pointer;transition:background .1s;position:relative;animation:fade-up .2s ease both}
+.notif-item:hover{background:var(--gray-50)}
+.notif-item.unread{background:#FFFBEB}
+.notif-item.unread:hover{background:#FFF5D0}
+.notif-item:last-child{border-bottom:none}
+.unread-bar{position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--yellow-dark);border-radius:0 2px 2px 0}
+
+/* Icon */
+.notif-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;position:relative}
+.notif-av{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;flex-shrink:0;position:relative}
+.notif-av-badge{position:absolute;bottom:-2px;right:-2px;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;border:2px solid white}
+
+/* Content */
+.notif-content{flex:1;min-width:0}
+.notif-text{font-size:13px;color:var(--gray-700);line-height:1.55;margin-bottom:4px}
+.notif-text strong{color:var(--gray-900);font-weight:600}
+.notif-text em{color:var(--gray-600);font-style:normal}
+.notif-meta{font-size:11px;color:var(--gray-400);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.notif-time{font-family:var(--mono)}
+.notif-source{font-weight:500;color:var(--gray-500)}
+.notif-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.na-btn{padding:5px 13px;border-radius:7px;font-size:12px;font-weight:500;cursor:pointer;border:var(--border);background:white;color:var(--gray-700);transition:all .13s;flex-shrink:0}
+.na-btn:hover{background:var(--gray-50)}
+.na-btn.primary{background:var(--gray-900);color:white;border-color:var(--gray-900)}.na-btn.primary:hover{background:var(--gray-700)}
+.na-btn.yellow{background:var(--yellow);color:var(--gray-900);border-color:var(--yellow-dark);font-weight:600}.na-btn.yellow:hover{background:var(--yellow-dark)}
+.na-btn.green{background:var(--green-light);color:#166534;border-color:#86EFAC}
+.na-btn.done{background:var(--green-light);color:#166534;border-color:#86EFAC;cursor:default}
+
+/* Right dismiss */
+.notif-dismiss{width:24px;height:24px;border-radius:50%;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--gray-300);transition:all .1s;flex-shrink:0;margin-top:2px}
+.notif-dismiss:hover{background:var(--gray-100);color:var(--gray-500)}
+
+/* Unread dot */
+.unread-dot{width:8px;height:8px;border-radius:50%;background:var(--yellow-dark);flex-shrink:0;margin-top:6px}
+
+/* ── EMPTY STATE ── */
+.empty-state{text-align:center;padding:56px 24px;background:white}
+.empty-icon{font-size:40px;margin-bottom:14px}
+.empty-title{font-size:16px;font-weight:600;color:var(--gray-900);margin-bottom:6px}
+.empty-sub{font-size:13px;color:var(--gray-500);line-height:1.6}
+
+/* ── LOAD MORE ── */
+.load-more{padding:20px;text-align:center;background:white;border-top:var(--border)}
+.load-btn{padding:9px 28px;border:var(--border);border-radius:8px;font-size:13px;font-weight:500;background:white;color:var(--gray-700);cursor:pointer;transition:background .1s}
+.load-btn:hover{background:var(--gray-50)}
+
+/* ── SIDEBAR CARDS ── */
+.side-card{background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden}
+.sc-header{padding:12px 16px 9px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between}
+.sc-title{font-size:13px;font-weight:600;color:var(--gray-900)}
+.sc-link{font-size:12px;color:var(--gray-500);cursor:pointer;transition:color .1s}
+.sc-link:hover{color:var(--gray-700)}
+
+/* Summary stats */
+.summary-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:0}
+.ss-item{padding:12px 14px;text-align:center;border-right:var(--border)}
+.ss-item:last-child{border-right:none}
+.ss-val{font-size:22px;font-weight:700;font-family:var(--mono);color:var(--gray-900);line-height:1}
+.ss-label{font-size:10px;color:var(--gray-500);margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
+
+/* Activity breakdown */
+.breakdown-row{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:var(--border);cursor:pointer;transition:background .1s}
+.breakdown-row:hover{background:var(--gray-50)}
+.breakdown-row:last-child{border-bottom:none}
+.br-icon{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.br-label{flex:1;font-size:12px;font-weight:500;color:var(--gray-900)}
+.br-count{font-size:11px;font-family:var(--mono);font-weight:600;color:var(--gray-700);background:var(--gray-100);padding:2px 7px;border-radius:10px}
+.br-unread{font-size:11px;font-family:var(--mono);font-weight:600;color:var(--red);background:var(--red-light);padding:2px 7px;border-radius:10px}
+
+/* Preferences toggles */
+.pref-row{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:var(--border)}
+.pref-row:last-child{border-bottom:none}
+.pref-label{font-size:12px;font-weight:500;color:var(--gray-800)}
+.pref-sub{font-size:11px;color:var(--gray-400);margin-top:1px}
+.toggle{width:34px;height:18px;border-radius:9px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
+.toggle.on{background:var(--green)}.toggle.off{background:var(--gray-300)}
+.toggle::after{content:'';position:absolute;top:2px;width:14px;height:14px;border-radius:50%;background:white;transition:left .2s;box-shadow:var(--shadow)}
+.toggle.on::after{left:18px}.toggle.off::after{left:2px}
+
+/* ── PILLS ── */
+.pill{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid transparent;white-space:nowrap;display:inline-block}
+.p-run{background:var(--orange-light);color:#9A3412;border-color:#FDBA74}
+.p-cyc{background:var(--blue-light);color:#1E40AF;border-color:#93C5FD}
+.p-clm{background:var(--purple-light);color:#5B21B6;border-color:#C4B5FD}
+.p-green{background:var(--green-light);color:#166534;border-color:#86EFAC}
+.p-yellow{background:var(--yellow-light);color:#7a5c00;border-color:#fde68a}
+.p-gray{background:var(--gray-100);color:var(--gray-600);border-color:var(--gray-200)}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--gray-900);color:white;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:500;z-index:999;transition:transform .3s ease;white-space:nowrap;box-shadow:var(--shadow-md)}
+.toast.show{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="topbar-logo">
+    <div class="logo-icon">🏟</div>
+    <span class="logo-text">Arenas</span>
+  </div>
+  <div class="topbar-center">
+    <div class="topbar-search">
+      <span style="color:var(--gray-400);font-size:13px">🔍</span>
+      <input type="text" placeholder="Search athletes, clubs, events…">
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <div class="icon-btn" style="background:var(--yellow-light);border-color:#fde68a">🔔</div>
+    <div class="user-av" onclick="showToast('Opening your profile…')">JK</div>
+  </div>
+</header>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="nav-section-label">My Arenas</div>
+  <div class="nav-item" onclick="showToast('Going to feed…')"><span class="nav-icon">🏠</span> Feed</div>
+  <div class="nav-item" onclick="showToast('Going to profile…')"><span class="nav-icon">👤</span> My profile</div>
+  <div class="nav-item" onclick="showToast('Going to events…')"><span class="nav-icon">📅</span> Events</div>
+  <div class="nav-item" onclick="showToast('Going to leaderboards…')"><span class="nav-icon">🏆</span> Leaderboards</div>
+  <div class="nav-item" onclick="showToast('Going to challenges…')"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">3</span></div>
+  <div class="nav-item" onclick="showToast('Going to athletes…')"><span class="nav-icon">👥</span> Athletes</div>
+  <div class="nav-item active"><span class="nav-icon">🔔</span> Notifications <span class="nav-badge active" id="nav-unread-badge">7</span></div>
+  <div class="nav-section-label">My clubs</div>
+  <div class="nav-item" onclick="showToast('Going to club…')"><span class="nav-icon">🏃</span> Hackney RC <span class="nav-badge red">2</span></div>
+  <div class="nav-section-label">Account</div>
+  <div class="nav-item" onclick="showToast('Opening settings…')"><span class="nav-icon">⚙️</span> Settings</div>
+  <div class="sidebar-footer">
+    <div style="display:flex;align-items:center;gap:9px">
+      <div style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">JK</div>
+      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div><div style="font-size:10px;color:var(--gray-500)">@jamiek · Pro</div></div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- PAGE HEADER -->
+  <div class="page-header">
+    <div class="header-top">
+      <div class="header-left">
+        <h1>Notifications</h1>
+        <p id="header-subtitle">7 unread · Last updated just now</p>
+      </div>
+      <div class="header-right">
+        <button class="btn btn-sm" onclick="markAllRead()">✓ Mark all read</button>
+        <button class="btn btn-sm" onclick="showToast('Opening notification settings…')">⚙️ Settings</button>
+        <button class="btn btn-ghost-danger btn-sm" onclick="clearAll()">Clear all</button>
+      </div>
+    </div>
+    <div class="filter-tabs" id="filter-tabs">
+      <div class="ftab active" onclick="setTab(this,'all')" data-tab="all">All <span class="badge unread" id="badge-all">7</span></div>
+      <div class="ftab" onclick="setTab(this,'club')" data-tab="club">Club <span class="badge unread" id="badge-club">3</span></div>
+      <div class="ftab" onclick="setTab(this,'social')" data-tab="social">Social <span class="badge unread" id="badge-social">2</span></div>
+      <div class="ftab" onclick="setTab(this,'challenge')" data-tab="challenge">Challenges <span class="badge" id="badge-challenge">4</span></div>
+      <div class="ftab" onclick="setTab(this,'event')" data-tab="event">Events <span class="badge unread" id="badge-event">2</span></div>
+      <div class="ftab" onclick="setTab(this,'ai')" data-tab="ai">AI Coach <span class="badge" id="badge-ai">3</span></div>
+      <div class="ftab" onclick="setTab(this,'system')" data-tab="system">System <span class="badge" id="badge-system">2</span></div>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div class="body-grid">
+
+    <!-- NOTIFICATIONS COLUMN -->
+    <div class="notif-col" id="notif-col">
+
+      <!-- TODAY -->
+      <div class="group-label" data-group="today">Today</div>
+
+      <!-- 1. Club event invite — RSVP inline -->
+      <div class="notif-item unread" data-type="club event" data-id="1" style="animation-delay:.04s">
+        <div class="unread-bar"></div>
+        <div class="notif-av" style="background:var(--orange-light);color:#9A3412">
+          RC
+          <div class="notif-av-badge" style="background:var(--orange-light);color:#9A3412">📅</div>
+        </div>
+        <div class="notif-content">
+          <div class="notif-text"><strong>Coach Rachel</strong> invited you to the <strong>London Half Marathon</strong> on Apr 13. 34 clubmates are already confirmed.</div>
+          <div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:6px;padding:8px 11px;margin:6px 0;font-size:12px;color:#7a5c00">
+            <strong>Rachel says:</strong> Meet at the start village 6:30 AM. Use code HRC2026 for group booking. Bring your club vest!
+          </div>
+          <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">
+            <span class="pill p-run">Running</span>
+            <span class="pill p-green">34 going</span>
+            <span class="pill" style="background:var(--orange-light);color:#9A3412;border-color:#FDBA74">RSVP by Apr 6</span>
+          </div>
+          <div class="notif-actions" id="rsvp-actions-1">
+            <button class="na-btn yellow" onclick="rsvpAction(1,'going')">✓ I'm going</button>
+            <button class="na-btn" onclick="rsvpAction(1,'cant')">Can't make it</button>
+            <button class="na-btn" onclick="showToast('Opening event details…')">View event →</button>
+          </div>
+          <div class="notif-meta"><span class="notif-time">2 min ago</span><span class="notif-source">Hackney Running Club</span></div>
+        </div>
+        <div class="unread-dot"></div>
+        <button class="notif-dismiss" onclick="dismissItem(this)" title="Dismiss">✕</button>
+      </div>
+
+      <!-- 2. AI coaching urgent -->
+      <div class="notif-item unread" data-type="ai" data-id="2" style="animation-delay:.08s">
+        <div class="unread-bar"></div>
+        <div class="notif-icon" style="background:var(--yellow-light)">✦</div>
+        <div class="notif-content">
+          <div class="notif-text"><strong>AI Coach:</strong> Your training load this week is <strong>42% above your 4-week average</strong>. Based on your HR drift in yesterday's ride, a rest day today is strongly recommended before Sunday's long run.</div>
+          <div class="notif-actions">
+            <button class="na-btn yellow" onclick="markRestDay(this)">Mark rest day</button>
+            <button class="na-btn" onclick="showToast('Opening your load data…')">See load data</button>
+            <button class="na-btn" onclick="dismissItem(this.closest('.notif-item').querySelector('.notif-dismiss'))">Dismiss</button>
+          </div>
+          <div class="notif-meta"><span class="notif-time">18 min ago</span><span class="notif-source">✦ AI Coach · personalised</span></div>
+        </div>
+        <div class="unread-dot"></div>
+        <button class="notif-dismiss" onclick="dismissItem(this)" title="Dismiss">✕</button>
+      </div>
+
+      <!-- 3. Streak warning -->
+      <div class="notif-item unread" data-type="challenge" data-id="3" style="animation-delay:.12s">
+        <div class="unread-bar"></div>
+        <div class="notif-icon" style="background:var(--orange-light)">🔥</div>
+        <div class="notif-content">
+          <div class="notif-text"><strong>7-day streak at risk</strong> — you haven't logged an activity today. Log something before midnight to keep your streak alive and earn this week's 100 club points.</div>
+          <div style="display:flex;gap:3px;margin:6px 0">
+            <div style="width:22px;height:22px;border-radius:4px;background:var(--green-light);color:#166534;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600">✓</div>
+            <div style="width:22px;height:22px;border-radius:4px;background:var(--green-light);color:#166634;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600">✓</div>
+            <div style="width:22px;height:22px;border-radius:4px;background:var(--green-light);color:#166634;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600">✓</div>
+            <div style="width:22px;height:22px;border-radius:4px;background:var(--green-light);color:#166634;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600">✓</div>
+            <div style="width:22px;height:22px;border-radius:4px;background:var(--green-light);color:#166634;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600">✓</div>
+            <div style="width:22px;height:22px;border-radius:4px;background:var(--green-light);color:#166634;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600">✓</div>
+            <div style="width:22px;height:22px;border-radius:4px;background:var(--yellow-light);border:1.5px solid var(--yellow-dark);color:#7a5c00;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600">?</div>
+          </div>
+          <div class="notif-actions">
+            <button class="na-btn yellow" onclick="showToast('Opening activity log…')">Log an activity →</button>
+            <button class="na-btn" onclick="dismissItem(this.closest('.notif-item').querySelector('.notif-dismiss'))">Dismiss</button>
+          </div>
+          <div class="notif-meta"><span class="notif-time">1h ago</span><span class="notif-source">⚡ 7-day streak challenge</span></div>
+        </div>
+        <div class="unread-dot"></div>
+        <button class="notif-dismiss" onclick="dismissItem(this)" title="Dismiss">✕</button>
+      </div>
+
+      <!-- 4. Kudos from multiple people -->
+      <div class="notif-item unread" data-type="social" data-id="4" style="animation-delay:.16s">
+        <div class="unread-bar"></div>
+        <div class="notif-av" style="background:#FEF9C3;color:#854D0E">SL</div>
+        <div class="notif-content">
+          <div class="notif-text"><strong>Sofia L.</strong>, <strong>Yuki T.</strong> and 4 others gave kudos on your morning long run — <em>"Morning long run ✓ PB attempt this Sunday"</em></div>
+          <div class="notif-actions">
+            <button class="na-btn" onclick="showToast('Opening your activity…')">View activity</button>
+            <button class="na-btn" onclick="showToast('Opening comments…')">💬 3 comments</button>
+          </div>
+          <div class="notif-meta"><span class="notif-time">3h ago</span><span class="notif-source">👍 6 kudos total</span></div>
+        </div>
+        <div class="unread-dot"></div>
+        <button class="notif-dismiss" onclick="dismissItem(this)" title="Dismiss">✕</button>
+      </div>
+
+      <!-- 5. New follower -->
+      <div class="notif-item unread" data-type="social" data-id="5" style="animation-delay:.2s">
+        <div class="unread-bar"></div>
+        <div class="notif-av" style="background:#EEEDFE;color:#3C3489">
+          JH
+          <div class="notif-av-badge" style="background:var(--blue-light);color:#1E40AF">👤</div>
+        </div>
+        <div class="notif-content">
+          <div class="notif-text"><strong>Jake H.</strong> started following you. Jake is a runner based in London, 2.8 miles from you, training at 4:10/km pace.</div>
+          <div class="notif-actions" id="follow-back-5">
+            <button class="na-btn yellow" onclick="followBack(5,this)">Follow back</button>
+            <button class="na-btn" onclick="showToast('Opening Jake\'s profile…')">View profile</button>
+          </div>
+          <div class="notif-meta"><span class="notif-time">4h ago</span><span class="notif-source">👥 New follower</span></div>
+        </div>
+        <div class="unread-dot"></div>
+        <button class="notif-dismiss" onclick="dismissItem(this)" title="Dismiss">✕</button>
+      </div>
+
+      <!-- 6. Club leaderboard rank up -->
+      <div class="notif-item unread" data-type="club" data-id="6" style="animation-delay:.24s">
+        <div class="unread-bar"></div>
+        <div class="notif-icon" style="background:var(--yellow-light)">🏆</div>
+        <div class="notif-content">
+          <div class="notif-text">You moved up to <strong>rank #5</strong> on the Hackney RC leaderboard this week — up 3 places. You're <strong>540 pts</strong> away from overtaking Priya R. for rank #4. Log one more run today.</div>
+          <div class="notif-actions">
+            <button class="na-btn primary" onclick="showToast('Opening leaderboard…')">View leaderboard</button>
+            <button class="na-btn yellow" onclick="showToast('Opening activity log…')">Log a run →</button>
+          </div>
+          <div class="notif-meta"><span class="notif-time">5h ago</span><span class="notif-source">🏃 Hackney Running Club</span></div>
+        </div>
+        <div class="unread-dot"></div>
+        <button class="notif-dismiss" onclick="dismissItem(this)" title="Dismiss">✕</button>
+      </div>
+
+      <!-- 7. Challenge nudge from club -->
+      <div class="notif-item unread" data-type="club challenge" data-id="7" style="animation-delay:.28s">
+        <div class="unread-bar"></div>
+        <div class="notif-icon" style="background:var(--purple-light)">⚡</div>
+        <div class="notif-content">
+          <div class="notif-text"><strong>Alena L.</strong> just completed the 100km May Run — she's the first in Hackney RC! You're at 62.4km with 9 days remaining. You need 4.2km/day to finish.</div>
+          <div style="height:5px;background:var(--gray-100);border-radius:3px;overflow:hidden;margin:6px 0;max-width:240px">
+            <div style="width:62%;height:100%;background:var(--orange);border-radius:3px"></div>
+          </div>
+          <div class="notif-actions">
+            <button class="na-btn" onclick="showToast('Opening challenge…')">View challenge</button>
+            <button class="na-btn yellow" onclick="showToast('Opening activity log…')">Log a run →</button>
+            <button class="na-btn" onclick="showToast('🎉 Kudos sent to Alena!')">🎉 Kudos Alena</button>
+          </div>
+          <div class="notif-meta"><span class="notif-time">6h ago</span><span class="notif-source">⚡ 100km May Run</span></div>
+        </div>
+        <div class="unread-dot"></div>
+        <button class="notif-dismiss" onclick="dismissItem(this)" title="Dismiss">✕</button>
+      </div>
+
+      <!-- YESTERDAY GROUP -->
+      <div class="group-label" data-group="yesterday">Yesterday</div>
+
+      <!-- 8. New club member welcome -->
+      <div class="notif-item" data-type="club" data-id="8" style="animation-delay:.3s">
+        <div class="notif-icon" style="background:var(--green-light)">🎉</div>
+        <div class="notif-content">
+          <div class="notif-text"><strong>Rachel H.</strong> welcomed you to <strong>Hackney Running Club</strong>. Your account is now linked and you can see the private leaderboard, club challenges, and upcoming events.</div>
+          <div class="notif-actions">
+            <button class="na-btn primary" onclick="showToast('Opening club view…')">Open club →</button>
+            <button class="na-btn" onclick="showToast('Connecting Strava…')">Connect Strava</button>
+          </div>
+          <div class="notif-meta"><span class="notif-time">Yesterday · 2:14 PM</span><span class="notif-source">🏃 Hackney Running Club</span></div>
+        </div>
+        <button class="notif-dismiss" onclick="dismissItem(this)" title="Dismiss">✕</button>
+      </div>
+
+      <!-- 9. AI weekly summary -->
+      <div class="notif-item" data-type="ai" data-id="9" style="animation-delay:.34s">
+        <div class="notif-icon" style="background:var(--yellow-light)">✦</div>
+        <div class="notif-content">
+          <div class="notif-text"><strong>Your weekly AI coaching summary</strong> is ready. This week: 62.4km across 3 sports, training load trending up 12% vs last 4 weeks, and your cycling FTP estimate improved by 8W based on your ride data.</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin:6px 0;max-width:320px">
+            <div style="background:var(--gray-50);border:var(--border);border-radius:6px;padding:6px 8px;text-align:center"><div style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">62.4</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em">km total</div></div>
+            <div style="background:var(--gray-50);border:var(--border);border-radius:6px;padding:6px 8px;text-align:center"><div style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--green)">↑12%</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em">load trend</div></div>
+            <div style="background:var(--gray-50);border:var(--border);border-radius:6px;padding:6px 8px;text-align:center"><div style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--blue)">+8W</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em">FTP est.</div></div>
+          </div>
+          <div class="notif-actions">
+            <button class="na-btn primary" onclick="showToast('Opening full AI summary…')">Read full summary →</button>
+          </div>
+          <div class="notif-meta"><span class="notif-time">Yesterday · 7:00 AM</span><span class="notif-source">✦ Weekly AI report</span></div>
+        </div>
+        <button class="notif-dismiss" onclick="dismissItem(this)" title="Dismiss">✕</button>
+      </div>
+
+      <!-- 10. Follow + comment -->
+      <div class="notif-item" data-type="social" data-id="10" style="animation-delay:.38s">
+        <div class="notif-av" style="background:#FEF9C3;color:#854D0E">SL</div>
+        <div class="notif-content">
+          <div class="notif-text"><strong>Sofia L.</strong> commented on your evening ride: <em>"Great power output — what's your next FTP test date? I think you're ready for 260W."</em></div>
+          <div class="notif-actions">
+            <button class="na-btn" onclick="showToast('Opening comment thread…')">Reply</button>
+            <button class="na-btn" onclick="showToast('Opening activity…')">View activity</button>
+          </div>
+          <div class="notif-meta"><span class="notif-time">Yesterday · 9:22 PM</span><span class="notif-source">💬 Comment on your activity</span></div>
+        </div>
+        <button class="notif-dismiss" onclick="dismissItem(this)" title="Dismiss">✕</button>
+      </div>
+
+      <!-- 11. Event RSVP confirmed by peer -->
+      <div class="notif-item" data-type="event" data-id="11" style="animation-delay:.42s">
+        <div class="notif-icon" style="background:var(--blue-light)">📅</div>
+        <div class="notif-content">
+          <div class="notif-text"><strong>Yuki T.</strong> and <strong>Alena L.</strong> just confirmed for the London Half Marathon. 34 Hackney RC members are now going — you still haven't responded.</div>
+          <div class="notif-actions" id="rsvp-actions-11">
+            <button class="na-btn yellow" onclick="rsvpAction(11,'going')">✓ I'm going</button>
+            <button class="na-btn" onclick="rsvpAction(11,'cant')">Can't make it</button>
+          </div>
+          <div class="notif-meta"><span class="notif-time">Yesterday · 4:15 PM</span><span class="notif-source">📅 London Half Marathon · Apr 13</span></div>
+        </div>
+        <button class="notif-dismiss" onclick="dismissItem(this)" title="Dismiss">✕</button>
+      </div>
+
+      <!-- THIS WEEK GROUP -->
+      <div class="group-label" data-group="week">This week</div>
+
+      <!-- 12. Challenge milestone -->
+      <div class="notif-item" data-type="challenge" data-id="12" style="animation-delay:.46s">
+        <div class="notif-icon" style="background:var(--orange-light)">🏅</div>
+        <div class="notif-content">
+          <div class="notif-text">You hit <strong>50km</strong> in the 100km May Run challenge — halfway there! You're currently rank #5 of 44. Sofia L. leads with 82km.</div>
+          <div class="notif-actions">
+            <button class="na-btn" onclick="showToast('Opening challenge…')">View challenge</button>
+          </div>
+          <div class="notif-meta"><span class="notif-time">Mon · 8:41 AM</span><span class="notif-source">⚡ 100km May Run · milestone</span></div>
+        </div>
+        <button class="notif-dismiss" onclick="dismissItem(this)" title="Dismiss">✕</button>
+      </div>
+
+      <!-- 13. Achievement unlocked -->
+      <div class="notif-item" data-type="challenge" data-id="13" style="animation-delay:.5s">
+        <div class="notif-icon" style="background:var(--yellow-light)">🏆</div>
+        <div class="notif-content">
+          <div class="notif-text">Achievement unlocked: <strong>Challenge finisher</strong> — you completed your first Arenas club challenge (Sub-25 5K Club). +250 points added to your profile.</div>
+          <div class="notif-actions">
+            <button class="na-btn" onclick="showToast('Opening your achievements…')">View achievements</button>
+          </div>
+          <div class="notif-meta"><span class="notif-time">Sun · 10:12 AM</span><span class="notif-source">🏆 Achievement · +250 pts</span></div>
+        </div>
+        <button class="notif-dismiss" onclick="dismissItem(this)" title="Dismiss">✕</button>
+      </div>
+
+      <!-- 14. AI coaching PB tip -->
+      <div class="notif-item" data-type="ai" data-id="14" style="animation-delay:.54s">
+        <div class="notif-icon" style="background:var(--yellow-light)">✦</div>
+        <div class="notif-content">
+          <div class="notif-text"><strong>AI Coach:</strong> Based on your last 4 long runs, Sunday's PB attempt is well-timed. Your AI coach recommends starting at 5:00/km for the first 3km, then settling into 4:28/km target pace. Don't go out faster than that.</div>
+          <div class="notif-actions">
+            <button class="na-btn primary" onclick="showToast('Opening race plan…')">View full race plan →</button>
+          </div>
+          <div class="notif-meta"><span class="notif-time">Sat · 7:30 PM</span><span class="notif-source">✦ AI Coach · race prep</span></div>
+        </div>
+        <button class="notif-dismiss" onclick="dismissItem(this)" title="Dismiss">✕</button>
+      </div>
+
+      <!-- 15. System: Strava sync -->
+      <div class="notif-item" data-type="system" data-id="15" style="animation-delay:.58s">
+        <div class="notif-icon" style="background:var(--gray-100)">🔶</div>
+        <div class="notif-content">
+          <div class="notif-text"><strong>Strava sync active</strong> — 312 past activities imported successfully. All future activities will sync automatically within 60 seconds of completion.</div>
+          <div class="notif-meta"><span class="notif-time">Sat · 2:05 PM</span><span class="notif-source">⚙️ Integration</span></div>
+        </div>
+        <button class="notif-dismiss" onclick="dismissItem(this)" title="Dismiss">✕</button>
+      </div>
+
+      <!-- 16. System: Plan upgrade -->
+      <div class="notif-item" data-type="system" data-id="16" style="animation-delay:.62s">
+        <div class="notif-icon" style="background:var(--yellow-light)">✦</div>
+        <div class="notif-content">
+          <div class="notif-text"><strong>Welcome to Arenas Pro!</strong> Unlimited AI coaching is now active on your account. Your 14-day free trial started today — no charge until May 29, 2026.</div>
+          <div class="notif-actions">
+            <button class="na-btn primary" onclick="showToast('Opening Pro features…')">Explore Pro features →</button>
+          </div>
+          <div class="notif-meta"><span class="notif-time">Sat · 9:00 AM</span><span class="notif-source">💳 Arenas Pro · trial started</span></div>
+        </div>
+        <button class="notif-dismiss" onclick="dismissItem(this)" title="Dismiss">✕</button>
+      </div>
+
+      <div class="load-more" id="load-more">
+        <button class="load-btn" onclick="loadOlder()">Load older notifications</button>
+      </div>
+
+    </div>
+
+    <!-- SUMMARY SIDEBAR -->
+    <div class="summary-col">
+
+      <!-- Stats -->
+      <div class="side-card">
+        <div class="sc-header"><span class="sc-title">This week</span></div>
+        <div class="summary-stats">
+          <div class="ss-item"><div class="ss-val" id="stat-unread" style="color:var(--red)">7</div><div class="ss-label">Unread</div></div>
+          <div class="ss-item"><div class="ss-val">16</div><div class="ss-label">Total</div></div>
+          <div class="ss-item"><div class="ss-val" style="color:var(--green)">9</div><div class="ss-label">Actioned</div></div>
+        </div>
+      </div>
+
+      <!-- By type -->
+      <div class="side-card">
+        <div class="sc-header">
+          <span class="sc-title">By type</span>
+          <span class="sc-link" onclick="setTab(document.querySelector('.ftab'),'all')">Show all</span>
+        </div>
+        <div class="breakdown-row" onclick="setTabByName('club')">
+          <div class="br-icon" style="background:var(--orange-light)">🏃</div>
+          <div class="br-label">Club updates</div>
+          <div class="br-unread" id="br-club">3</div>
+        </div>
+        <div class="breakdown-row" onclick="setTabByName('social')">
+          <div class="br-icon" style="background:var(--blue-light)">👥</div>
+          <div class="br-label">Social</div>
+          <div class="br-unread" id="br-social">2</div>
+        </div>
+        <div class="breakdown-row" onclick="setTabByName('challenge')">
+          <div class="br-icon" style="background:var(--purple-light)">⚡</div>
+          <div class="br-label">Challenges</div>
+          <div class="br-count" id="br-challenge">4</div>
+        </div>
+        <div class="breakdown-row" onclick="setTabByName('event')">
+          <div class="br-icon" style="background:var(--yellow-light)">📅</div>
+          <div class="br-label">Events</div>
+          <div class="br-unread" id="br-event">2</div>
+        </div>
+        <div class="breakdown-row" onclick="setTabByName('ai')">
+          <div class="br-icon" style="background:var(--yellow-light)">✦</div>
+          <div class="br-label">AI Coach</div>
+          <div class="br-count" id="br-ai">3</div>
+        </div>
+        <div class="breakdown-row" onclick="setTabByName('system')">
+          <div class="br-icon" style="background:var(--gray-100)">⚙️</div>
+          <div class="br-label">System</div>
+          <div class="br-count" id="br-system">2</div>
+        </div>
+      </div>
+
+      <!-- Requires action -->
+      <div class="side-card">
+        <div class="sc-header"><span class="sc-title">⚡ Needs your action</span></div>
+        <div style="padding:10px 14px;display:flex;flex-direction:column;gap:8px">
+          <div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:var(--radius);padding:10px 12px;cursor:pointer" onclick="scrollToNotif(1)">
+            <div style="font-size:12px;font-weight:600;color:#7a5c00;margin-bottom:2px">📅 London Half Marathon RSVP</div>
+            <div style="font-size:11px;color:#854D0E">Deadline Apr 6 · 34 clubmates going</div>
+          </div>
+          <div style="background:var(--red-light);border:1px solid #FECACA;border-radius:var(--radius);padding:10px 12px;cursor:pointer" onclick="scrollToNotif(3)">
+            <div style="font-size:12px;font-weight:600;color:#A32D2D;margin-bottom:2px">🔥 Streak at risk</div>
+            <div style="font-size:11px;color:#B91C1C">Log something before midnight</div>
+          </div>
+          <div style="background:var(--orange-light);border:1px solid #FDBA74;border-radius:var(--radius);padding:10px 12px;cursor:pointer" onclick="scrollToNotif(2)">
+            <div style="font-size:12px;font-weight:600;color:#9A3412;margin-bottom:2px">✦ AI Coach recommendation</div>
+            <div style="font-size:11px;color:#C2410C">Rest day strongly advised today</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notification preferences -->
+      <div class="side-card">
+        <div class="sc-header">
+          <span class="sc-title">Preferences</span>
+          <span class="sc-link" onclick="showToast('Opening full notification settings…')">All settings →</span>
+        </div>
+        <div class="pref-row">
+          <div><div class="pref-label">Club events &amp; invites</div><div class="pref-sub">RSVPs and coach messages</div></div>
+          <div class="toggle on" onclick="togglePref(this)"></div>
+        </div>
+        <div class="pref-row">
+          <div><div class="pref-label">AI coaching nudges</div><div class="pref-sub">Load alerts and race prep</div></div>
+          <div class="toggle on" onclick="togglePref(this)"></div>
+        </div>
+        <div class="pref-row">
+          <div><div class="pref-label">Kudos and comments</div><div class="pref-sub">On your activities</div></div>
+          <div class="toggle on" onclick="togglePref(this)"></div>
+        </div>
+        <div class="pref-row">
+          <div><div class="pref-label">Challenge updates</div><div class="pref-sub">Milestones and deadlines</div></div>
+          <div class="toggle on" onclick="togglePref(this)"></div>
+        </div>
+        <div class="pref-row">
+          <div><div class="pref-label">New followers</div><div class="pref-sub">When someone follows you</div></div>
+          <div class="toggle on" onclick="togglePref(this)"></div>
+        </div>
+        <div class="pref-row">
+          <div><div class="pref-label">Weekly AI summary</div><div class="pref-sub">Every Monday 7 AM</div></div>
+          <div class="toggle on" onclick="togglePref(this)"></div>
+        </div>
+        <div class="pref-row">
+          <div><div class="pref-label">System &amp; billing</div><div class="pref-sub">Account updates</div></div>
+          <div class="toggle on" onclick="togglePref(this)"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let unreadCount = 7;
+
+// ── TAB FILTERING ──
+function setTab(el, tabName) {
+  document.querySelectorAll('.ftab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  const items = document.querySelectorAll('.notif-item');
+  const groups = document.querySelectorAll('.group-label');
+  if (tabName === 'all') {
+    items.forEach(i => i.style.display = 'flex');
+    groups.forEach(g => g.style.display = 'block');
+    return;
+  }
+  const groupHasVisible = {};
+  items.forEach(i => {
+    const types = i.dataset.type || '';
+    const show = types.includes(tabName);
+    i.style.display = show ? 'flex' : 'none';
+    if (show) {
+      // find which group it's in
+      let prev = i.previousElementSibling;
+      while (prev) {
+        if (prev.classList.contains('group-label')) { groupHasVisible[prev.dataset.group] = true; break; }
+        prev = prev.previousElementSibling;
+      }
+    }
+  });
+  groups.forEach(g => {
+    g.style.display = groupHasVisible[g.dataset.group] ? 'block' : 'none';
+  });
+  checkEmpty(tabName);
+}
+
+function setTabByName(name) {
+  const tab = document.querySelector(`.ftab[data-tab="${name}"]`);
+  if (tab) setTab(tab, name);
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function checkEmpty(tab) {
+  const visible = [...document.querySelectorAll('.notif-item')].filter(i => i.style.display !== 'none');
+  const col = document.getElementById('notif-col');
+  const existing = col.querySelector('.empty-state');
+  if (existing) existing.remove();
+  if (!visible.length) {
+    const es = document.createElement('div');
+    es.className = 'empty-state';
+    es.innerHTML = '<div class="empty-icon">🔔</div><div class="empty-title">No ' + tab + ' notifications</div><div class="empty-sub">When you receive ' + tab + ' notifications they\'ll appear here.</div>';
+    col.insertBefore(es, document.getElementById('load-more'));
+  }
+}
+
+// ── DISMISS / MARK READ ──
+function dismissItem(btn) {
+  const item = btn.closest ? btn.closest('.notif-item') : btn;
+  const wasUnread = item.classList.contains('unread');
+  item.style.transition = 'opacity .25s, transform .25s, max-height .3s .1s, padding .3s .1s, margin .3s .1s';
+  item.style.opacity = '0';
+  item.style.transform = 'translateX(12px)';
+  setTimeout(() => {
+    item.style.maxHeight = '0';
+    item.style.paddingTop = '0';
+    item.style.paddingBottom = '0';
+    item.style.overflow = 'hidden';
+    setTimeout(() => {
+      item.remove();
+      if (wasUnread) decrementUnread();
+    }, 320);
+  }, 220);
+}
+
+function decrementUnread() {
+  unreadCount = Math.max(0, unreadCount - 1);
+  document.getElementById('stat-unread').textContent = unreadCount;
+  document.getElementById('badge-all').textContent = unreadCount || '';
+  document.getElementById('badge-all').className = unreadCount ? 'badge unread' : 'badge';
+  document.getElementById('nav-unread-badge').textContent = unreadCount || '';
+  document.getElementById('header-subtitle').textContent = (unreadCount ? unreadCount + ' unread · ' : 'All caught up · ') + 'Last updated just now';
+}
+
+function markAllRead() {
+  document.querySelectorAll('.notif-item.unread').forEach(item => {
+    item.classList.remove('unread');
+    const bar = item.querySelector('.unread-bar');
+    const dot = item.querySelector('.unread-dot');
+    if (bar) bar.remove();
+    if (dot) dot.remove();
+  });
+  unreadCount = 0;
+  document.getElementById('stat-unread').textContent = '0';
+  document.getElementById('badge-all').textContent = '';
+  document.getElementById('badge-all').className = 'badge';
+  ['club','social','event'].forEach(t => {
+    const b = document.getElementById('badge-' + t);
+    if (b) { b.textContent = document.getElementById('br-' + t).textContent; b.className = 'badge'; }
+  });
+  document.getElementById('nav-unread-badge').textContent = '';
+  document.getElementById('header-subtitle').textContent = 'All caught up · Last updated just now';
+  showToast('✓ All notifications marked as read');
+}
+
+function clearAll() {
+  if (!confirm('Clear all notifications? This cannot be undone.')) return;
+  document.querySelectorAll('.notif-item, .group-label').forEach(el => el.remove());
+  const col = document.getElementById('notif-col');
+  const es = document.createElement('div');
+  es.className = 'empty-state';
+  es.innerHTML = '<div class="empty-icon">✓</div><div class="empty-title">All clear</div><div class="empty-sub">No notifications to show. New ones will appear here when they arrive.</div>';
+  col.insertBefore(es, document.getElementById('load-more'));
+  unreadCount = 0;
+  document.getElementById('stat-unread').textContent = '0';
+  document.getElementById('badge-all').textContent = '';
+  document.getElementById('nav-unread-badge').textContent = '';
+  document.getElementById('header-subtitle').textContent = 'All clear · Last updated just now';
+  showToast('All notifications cleared');
+}
+
+// ── INLINE ACTIONS ──
+function rsvpAction(id, decision) {
+  const actions = document.getElementById('rsvp-actions-' + id);
+  if (!actions) return;
+  if (decision === 'going') {
+    actions.innerHTML = '<button class="na-btn done">✓ Going — Coach Rachel notified!</button>';
+    showToast('✓ RSVP confirmed for London Half Marathon!');
+  } else {
+    actions.innerHTML = '<button class="na-btn" style="color:var(--gray-500);border-color:var(--gray-200)">Declined — Rachel notified</button>';
+    showToast('Declined — Coach Rachel has been notified');
+  }
+  const item = actions.closest('.notif-item');
+  if (item && item.classList.contains('unread')) {
+    item.classList.remove('unread');
+    const bar = item.querySelector('.unread-bar');
+    const dot = item.querySelector('.unread-dot');
+    if (bar) bar.remove();
+    if (dot) dot.remove();
+    decrementUnread();
+  }
+}
+
+function followBack(id, btn) {
+  const wrap = document.getElementById('follow-back-' + id);
+  if (wrap) wrap.innerHTML = '<button class="na-btn done">✓ Following Jake H.</button><button class="na-btn" onclick="showToast(\'Opening Jake\'s profile…\')">View profile</button>';
+  showToast('✓ Following Jake H. — their activities will appear in your feed');
+  const item = btn.closest('.notif-item');
+  if (item && item.classList.contains('unread')) {
+    item.classList.remove('unread');
+    const bar = item.querySelector('.unread-bar');
+    const dot = item.querySelector('.unread-dot');
+    if (bar) bar.remove();
+    if (dot) dot.remove();
+    decrementUnread();
+  }
+}
+
+function markRestDay(btn) {
+  btn.textContent = '✓ Rest day logged';
+  btn.className = 'na-btn done';
+  btn.disabled = true;
+  showToast('✓ Rest day logged — AI Coach will adjust Sunday\'s plan');
+  const item = btn.closest('.notif-item');
+  if (item && item.classList.contains('unread')) {
+    item.classList.remove('unread');
+    const bar = item.querySelector('.unread-bar');
+    const dot = item.querySelector('.unread-dot');
+    if (bar) bar.remove();
+    if (dot) dot.remove();
+    decrementUnread();
+  }
+}
+
+// ── SCROLL TO NOTIFICATION ──
+function scrollToNotif(id) {
+  const item = document.querySelector(`.notif-item[data-id="${id}"]`);
+  if (!item) return;
+  item.scrollIntoView({behavior:'smooth', block:'center'});
+  item.style.transition = 'background .3s';
+  item.style.background = '#FEF9C3';
+  setTimeout(() => {
+    item.style.background = item.classList.contains('unread') ? '#FFFBEB' : '';
+  }, 1200);
+}
+
+// ── LOAD OLDER ──
+function loadOlder() {
+  const col = document.getElementById('notif-col');
+  const loadMore = document.getElementById('load-more');
+  const group = document.createElement('div');
+  group.className = 'group-label';
+  group.textContent = 'Earlier this month';
+  group.dataset.group = 'earlier';
+  col.insertBefore(group, loadMore);
+  const olderItems = [
+    {icon:'👍',bg:'var(--orange-light)',text:'<strong>Marco C.</strong> gave kudos on your cycling tempo ride.',time:'May 12 · 6:44 PM',source:'👍 Kudos',type:'social'},
+    {icon:'⚡',bg:'var(--purple-light)',text:'You joined the <strong>Sub-25 5K club challenge</strong>. 17 members are currently in the club. Your best time to beat: 25:48.',time:'May 11 · 10:30 AM',source:'⚡ Challenge joined',type:'challenge'},
+    {icon:'📅',bg:'var(--blue-light)',text:'<strong>Hackney RC Parkrun Takeover</strong> confirmed for Apr 19. 22 members going. No registration needed — just show up in your vest.',time:'May 10 · 3:00 PM',source:'📅 Club event',type:'event club'},
+  ];
+  olderItems.forEach((n, i) => {
+    const item = document.createElement('div');
+    item.className = 'notif-item';
+    item.dataset.type = n.type;
+    item.style.animationDelay = (i * 0.08) + 's';
+    item.innerHTML = `
+      <div class="notif-icon" style="background:${n.bg}">${n.icon}</div>
+      <div class="notif-content">
+        <div class="notif-text">${n.text}</div>
+        <div class="notif-meta"><span class="notif-time">${n.time}</span><span class="notif-source">${n.source}</span></div>
+      </div>
+      <button class="notif-dismiss" onclick="dismissItem(this)" title="Dismiss">✕</button>`;
+    col.insertBefore(item, loadMore);
+  });
+  loadMore.innerHTML = '<p style="font-size:13px;color:var(--gray-400);padding:16px;text-align:center">All notifications loaded</p>';
+}
+
+// ── PREFERENCES ──
+function togglePref(el) {
+  const on = el.classList.contains('on');
+  el.classList.toggle('on', !on);
+  el.classList.toggle('off', on);
+  showToast(on ? 'Notification type disabled' : 'Notification type enabled');
+}
+
+// ── TOAST ──
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>
