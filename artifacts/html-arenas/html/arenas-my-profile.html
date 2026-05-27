@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arenas — Jamie King · Profile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --yellow:#FFD21E;--yellow-dark:#E6B800;--yellow-light:#FFF9E0;
+  --gray-50:#F9FAFB;--gray-100:#F3F4F6;--gray-200:#E5E7EB;--gray-300:#D1D5DB;
+  --gray-400:#9CA3AF;--gray-500:#6B7280;--gray-600:#4B5563;--gray-700:#374151;
+  --gray-800:#1F2937;--gray-900:#111827;
+  --green:#10B981;--green-light:#ECFDF5;--blue:#3B82F6;--blue-light:#EFF6FF;
+  --red:#EF4444;--red-light:#FEF2F2;--orange:#F97316;--orange-light:#FFF7ED;
+  --purple:#8B5CF6;--purple-light:#F5F3FF;--teal:#14B8A6;--teal-light:#F0FDFA;
+  --font:'Source Sans 3',sans-serif;--mono:'IBM Plex Mono',monospace;
+  --border:1px solid var(--gray-200);--radius:8px;--radius-lg:12px;--radius-xl:16px;
+  --shadow:0 1px 3px rgba(0,0,0,0.07),0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:0 4px 12px rgba(0,0,0,0.08);--shadow-lg:0 10px 40px rgba(0,0,0,0.12);
+  --sidebar-w:220px;
+}
+body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);font-size:14px;line-height:1.5;overflow-x:hidden}
+button,select,input,textarea{font-family:var(--font)}
+@keyframes fade-up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes scale-in{from{opacity:0;transform:scale(0.94)}to{opacity:1;transform:none}}
+@keyframes slide-in{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+@keyframes count-up{from{opacity:0}to{opacity:1}}
+@keyframes pulse-ring{0%{box-shadow:0 0 0 0 rgba(255,210,30,0.4)}70%{box-shadow:0 0 0 10px rgba(255,210,30,0)}100%{box-shadow:0 0 0 0 rgba(255,210,30,0)}}
+
+/* ── LAYOUT ── */
+.app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;grid-template-rows:56px 1fr;min-height:100vh}
+
+/* ── TOPBAR ── */
+.topbar{grid-column:1/-1;background:white;border-bottom:var(--border);display:flex;align-items:center;padding:0 20px 0 0;position:sticky;top:0;z-index:100}
+.topbar-logo{width:var(--sidebar-w);padding:0 16px;display:flex;align-items:center;gap:8px;border-right:var(--border);flex-shrink:0;height:100%}
+.logo-icon{width:28px;height:28px;background:var(--yellow);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.logo-text{font-size:15px;font-weight:600;color:var(--gray-900)}
+.topbar-center{flex:1;padding:0 20px;display:flex;align-items:center;gap:10px}
+.topbar-search{display:flex;align-items:center;gap:8px;background:var(--gray-50);border:var(--border);border-radius:7px;padding:6px 12px;width:240px}
+.topbar-search input{background:none;border:none;outline:none;font-size:13px;color:var(--gray-700);width:100%}
+.topbar-search input::placeholder{color:var(--gray-400)}
+.topbar-actions{display:flex;align-items:center;gap:8px;margin-left:auto}
+.notif-btn{width:34px;height:34px;border-radius:7px;border:var(--border);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;position:relative;transition:background .1s}
+.notif-btn:hover{background:var(--gray-50)}
+.notif-dot{position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--red);border:1.5px solid white}
+.user-av{width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900);cursor:pointer;animation:pulse-ring 2s ease 1s}
+
+/* ── SIDEBAR ── */
+.sidebar{background:white;border-right:var(--border);display:flex;flex-direction:column;padding:12px 0;position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto}
+.sidebar::-webkit-scrollbar{display:none}
+.nav-section-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--gray-400);padding:10px 16px 4px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 16px;cursor:pointer;font-size:13px;color:var(--gray-600);transition:background .1s,color .1s;position:relative}
+.nav-item:hover{background:var(--gray-50);color:var(--gray-900)}
+.nav-item.active{background:var(--yellow-light);color:#7a5c00;font-weight:500}
+.nav-item.active::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--yellow-dark);border-radius:0 2px 2px 0}
+.nav-icon{font-size:15px;flex-shrink:0;width:18px;text-align:center}
+.nav-badge{margin-left:auto;font-size:10px;font-family:var(--mono);background:var(--gray-100);color:var(--gray-500);padding:1px 6px;border-radius:10px}
+.nav-item.active .nav-badge{background:rgba(255,216,30,0.3);color:#7a5c00}
+.nav-badge.red{background:var(--red-light);color:var(--red)}
+.sidebar-footer{margin-top:auto;padding:12px 16px;border-top:var(--border)}
+.sf-row{display:flex;align-items:center;gap:8px}
+
+/* ── MAIN ── */
+.main{padding:0;overflow-y:auto}
+.tab-content{display:none;animation:fade-up .2s ease}
+.tab-content.active{display:block}
+
+/* ── BUTTONS ── */
+.btn{padding:7px 14px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;border:var(--border);transition:all .13s;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.btn-ghost{background:transparent;color:var(--gray-700)}.btn-ghost:hover{background:var(--gray-100)}
+.btn-primary{background:var(--gray-900);color:white;border-color:var(--gray-900)}.btn-primary:hover{background:var(--gray-700)}
+.btn-yellow{background:var(--yellow);color:var(--gray-900);border-color:var(--yellow-dark);font-weight:600}.btn-yellow:hover{background:var(--yellow-dark)}
+.btn-sm{padding:4px 10px;font-size:12px;border-radius:6px}
+.btn-full{width:100%;justify-content:center}
+
+/* ── PROFILE HERO ── */
+.profile-hero{background:var(--gray-900);position:relative;overflow:hidden}
+.hero-bg{position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,210,30,.08) 0%,transparent 50%),linear-gradient(225deg,rgba(249,115,22,.05) 0%,transparent 50%);pointer-events:none}
+.hero-bg-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);background-size:32px 32px;pointer-events:none}
+.hero-inner{max-width:1200px;margin:0 auto;padding:32px 28px;display:flex;align-items:flex-end;gap:24px;position:relative;z-index:1}
+.hero-av-wrap{position:relative;flex-shrink:0}
+.hero-av{width:96px;height:96px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:700;color:var(--gray-900);border:4px solid rgba(255,255,255,.15);flex-shrink:0;cursor:pointer;transition:border-color .2s}
+.hero-av:hover{border-color:var(--yellow)}
+.hero-av-edit{position:absolute;bottom:2px;right:2px;width:26px;height:26px;border-radius:50%;background:white;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;border:2px solid var(--gray-900);opacity:0;transition:opacity .2s}
+.hero-av-wrap:hover .hero-av-edit{opacity:1}
+.hero-online{position:absolute;top:6px;right:6px;width:14px;height:14px;border-radius:50%;background:var(--green);border:2.5px solid var(--gray-900)}
+.hero-info{flex:1}
+.hero-name{font-size:26px;font-weight:700;color:white;letter-spacing:-.02em;margin-bottom:3px;animation:fade-up .3s ease .1s both}
+.hero-handle{font-size:13px;color:var(--gray-400);font-family:var(--mono);margin-bottom:10px;animation:fade-up .3s ease .15s both}
+.hero-tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;animation:fade-up .3s ease .2s both}
+.hero-tag{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border:1px solid rgba(255,255,255,.15);display:flex;align-items:center;gap:4px}
+.hero-tag.sport-run{background:rgba(249,115,22,.2);color:#FDBA74;border-color:rgba(249,115,22,.3)}
+.hero-tag.sport-cyc{background:rgba(59,130,246,.2);color:#93C5FD;border-color:rgba(59,130,246,.3)}
+.hero-tag.sport-clm{background:rgba(139,92,246,.2);color:#C4B5FD;border-color:rgba(139,92,246,.3)}
+.hero-bio{font-size:13px;color:var(--gray-400);line-height:1.6;max-width:480px;animation:fade-up .3s ease .22s both}
+.hero-stats{display:flex;gap:28px;animation:fade-up .3s ease .25s both}
+.hero-stat{text-align:center}
+.hero-stat-val{font-size:20px;font-weight:700;color:white;font-family:var(--mono);line-height:1}
+.hero-stat-label{font-size:10px;color:var(--gray-500);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
+.hero-stat-sep{width:1px;background:rgba(255,255,255,.1);align-self:stretch;margin:2px 0}
+.hero-actions{display:flex;flex-direction:column;gap:8px;flex-shrink:0;align-self:center;animation:slide-in .3s ease .3s both}
+.hero-rank-badge{background:var(--yellow);color:var(--gray-900);padding:6px 16px;border-radius:20px;font-size:12px;font-weight:700;text-align:center;font-family:var(--mono);display:flex;align-items:center;gap:6px;justify-content:center}
+.hero-connections{padding:12px 28px;border-top:1px solid rgba(255,255,255,.07);display:flex;align-items:center;gap:16px;position:relative;z-index:1}
+.hc-avs{display:flex}
+.hc-av{width:24px;height:24px;border-radius:50%;border:2px solid var(--gray-900);margin-left:-6px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600;flex-shrink:0}
+.hc-av:first-child{margin-left:0}
+.hc-text{font-size:12px;color:var(--gray-500)}
+.hc-text strong{color:rgba(255,255,255,.7);font-weight:500}
+.hero-tab-bar{background:white;border-bottom:var(--border);position:sticky;top:56px;z-index:50}
+.htb-inner{max-width:1200px;margin:0 auto;padding:0 28px;display:flex;gap:0}
+.htab{padding:13px 18px;font-size:13px;font-weight:500;color:var(--gray-500);border-bottom:2px solid transparent;cursor:pointer;transition:color .1s,border-color .1s;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.htab:hover{color:var(--gray-800)}
+.htab.active{color:var(--gray-900);border-bottom-color:var(--gray-900)}
+.htab .tab-count{font-size:10px;font-family:var(--mono);background:var(--gray-100);color:var(--gray-500);padding:1px 6px;border-radius:10px}
+.htab.active .tab-count{background:var(--gray-200);color:var(--gray-700)}
+
+/* ── CONTENT LAYOUT ── */
+.content-wrap{max-width:1200px;margin:0 auto;padding:24px 28px}
+.content-cols{display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start}
+.content-cols-full{max-width:1200px;margin:0 auto;padding:24px 28px}
+
+/* ── CARDS ── */
+.card{background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden}
+.card-hdr{padding:14px 18px 10px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
+.card-title{font-size:13px;font-weight:600;color:var(--gray-900);display:flex;align-items:center;gap:6px}
+
+/* ── STAT CARDS ── */
+.stats-4{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:var(--border);border-radius:var(--radius-lg);overflow:hidden;background:white;margin-bottom:16px}
+.stat-block{padding:16px 18px;border-right:var(--border);position:relative}
+.stat-block:last-child{border-right:none}
+.stat-block::after{content:'';position:absolute;bottom:0;left:18px;right:18px;height:2px;border-radius:2px;opacity:0;transition:opacity .2s}
+.stat-block:hover::after{opacity:1}
+.sb-label{font-size:10px;color:var(--gray-400);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.sb-value{font-size:24px;font-weight:700;color:var(--gray-900);font-family:var(--mono);line-height:1;margin-bottom:4px}
+.sb-delta{font-size:11px;font-family:var(--mono);font-weight:500}
+.sb-delta.up{color:var(--green)}.sb-delta.neutral{color:var(--gray-400)}.sb-delta.warn{color:var(--orange)}
+.sb-bar{height:2px;background:var(--gray-100);border-radius:1px;margin-top:10px;overflow:hidden}
+.sb-bar-fill{height:100%;border-radius:1px;transition:width .6s ease}
+
+/* ── PILLS ── */
+.pill{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid transparent;white-space:nowrap;display:inline-block}
+.pill-run{background:var(--orange-light);color:#9A3412;border-color:#FDBA74}
+.pill-cyc{background:var(--blue-light);color:#1E40AF;border-color:#93C5FD}
+.pill-clm{background:var(--purple-light);color:#5B21B6;border-color:#C4B5FD}
+.pill-swm{background:var(--teal-light);color:#134E4A;border-color:#5EEAD4}
+.pill-green{background:var(--green-light);color:#166534;border-color:#86EFAC}
+.pill-gray{background:var(--gray-100);color:var(--gray-600);border-color:var(--gray-200)}
+.pill-yellow{background:var(--yellow-light);color:#7a5c00;border-color:#fde68a}
+.pill-new{background:var(--yellow-light);color:#7a5c00;border-color:#fde68a}
+
+/* ── ACTIVITY CARD ── */
+.activity-card{background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden;transition:border-color .13s,box-shadow .13s;cursor:pointer}
+.activity-card:hover{border-color:var(--gray-300);box-shadow:var(--shadow-md)}
+.ac-body{padding:16px 18px}
+.ac-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.ac-sport-tag{margin-left:auto;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;flex-shrink:0}
+.ac-stats-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.ac-stat{background:var(--gray-50);border:var(--border);border-radius:6px;padding:6px 10px;text-align:center;min-width:60px}
+.ac-stat .sv{font-size:15px;font-weight:700;color:var(--gray-900);font-family:var(--mono);line-height:1}
+.ac-stat .sl{font-size:9px;color:var(--gray-400);margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
+.ac-desc{font-size:13px;color:var(--gray-600);line-height:1.55}
+.ac-ai{background:var(--yellow-light);border:1px solid #fde68a;border-radius:6px;padding:9px 12px;display:flex;gap:8px;align-items:flex-start;margin-top:8px}
+.ai-icon{width:18px;height:18px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:var(--gray-900);flex-shrink:0;margin-top:1px}
+.ac-ai-text{font-size:12px;color:#7a5c00;line-height:1.55}
+.ac-footer{padding:10px 18px 14px;border-top:var(--border);display:flex;align-items:center;gap:8px}
+.ac-action{padding:5px 12px;border-radius:6px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer;transition:all .12s}
+.ac-action:hover{background:var(--gray-50)}
+.ac-action.liked{background:var(--yellow-light);border-color:#fde68a;color:#7a5c00}
+
+/* ── ACHIEVEMENT CARDS ── */
+.achievement-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.ach-card{border:var(--border);border-radius:var(--radius-lg);padding:14px;text-align:center;transition:border-color .13s,box-shadow .13s,transform .13s;cursor:default}
+.ach-card:hover{border-color:var(--gray-300);box-shadow:var(--shadow-md);transform:translateY(-2px)}
+.ach-card.locked{opacity:.45;filter:grayscale(.6)}
+.ach-icon{font-size:28px;margin-bottom:8px;display:block}
+.ach-name{font-size:12px;font-weight:600;color:var(--gray-900);margin-bottom:3px}
+.ach-desc{font-size:10px;color:var(--gray-500);line-height:1.4}
+.ach-date{font-size:10px;color:var(--gray-400);margin-top:5px;font-family:var(--mono)}
+.ach-card.gold{background:linear-gradient(135deg,#FFFBEB 0%,#FEF9C3 100%);border-color:#FDE68A}
+.ach-card.silver{background:linear-gradient(135deg,var(--gray-50) 0%,var(--gray-100) 100%);border-color:var(--gray-300)}
+.ach-card.bronze{background:linear-gradient(135deg,#FFF7ED 0%,#FEF3C7 100%);border-color:#FDBA74}
+
+/* ── CHART ── */
+.chart-wrap{padding:16px 18px}
+.chart-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--gray-400);font-family:var(--mono);margin-bottom:6px}
+.bar-chart{display:flex;align-items:flex-end;gap:4px;height:80px}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer}
+.bar-fill{width:100%;border-radius:4px 4px 0 0;transition:opacity .15s;min-height:3px}
+.bar-col:hover .bar-fill{opacity:.75}
+.bar-label{font-size:9px;color:var(--gray-400);font-family:var(--mono)}
+.bar-val{font-size:9px;color:var(--gray-500);font-family:var(--mono)}
+
+/* ── SPORT BREAKDOWN ── */
+.sport-breakdown{display:flex;flex-direction:column;gap:10px;padding:14px 18px}
+.sb-row{display:flex;align-items:center;gap:10px}
+.sb-sport-name{font-size:13px;font-weight:500;color:var(--gray-900);width:80px;flex-shrink:0}
+.sb-track{flex:1;height:6px;background:var(--gray-100);border-radius:3px;overflow:hidden}
+.sb-fill{height:100%;border-radius:3px;transition:width .6s ease .2s}
+.sb-meta{font-size:11px;font-family:var(--mono);color:var(--gray-500);white-space:nowrap;flex-shrink:0;min-width:70px;text-align:right}
+
+/* ── PERSONAL BESTS ── */
+.pb-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:14px 18px}
+.pb-card{background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:12px 14px}
+.pb-event{font-size:11px;color:var(--gray-500);margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.pb-time{font-size:20px;font-weight:700;color:var(--gray-900);font-family:var(--mono);line-height:1;margin-bottom:3px}
+.pb-date{font-size:10px;color:var(--gray-400);font-family:var(--mono)}
+.pb-delta{font-size:11px;color:var(--green);font-family:var(--mono);margin-top:3px;font-weight:600}
+
+/* ── TRAINING CALENDAR ── */
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:14px 18px}
+.cal-day{aspect-ratio:1;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;font-family:var(--mono);cursor:default;transition:transform .1s}
+.cal-day:hover{transform:scale(1.15)}
+.cd-empty{background:transparent}
+.cd-rest{background:var(--gray-100);color:var(--gray-400)}
+.cd-light{background:#D1FAE5;color:#065F46}
+.cd-med{background:#6EE7B7;color:#064E3B}
+.cd-hard{background:#10B981;color:white}
+.cd-race{background:var(--yellow);color:var(--gray-900);font-weight:700}
+.cd-today{ring:2px solid var(--gray-900);outline:2px solid var(--gray-900)}
+.cal-labels{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:10px 18px 4px;font-size:9px;color:var(--gray-400);text-align:center;text-transform:uppercase;letter-spacing:.05em;font-family:var(--mono)}
+.cal-legend{display:flex;align-items:center;gap:10px;padding:8px 18px 14px;flex-wrap:wrap}
+.cl-item{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--gray-500)}
+.cl-dot{width:10px;height:10px;border-radius:2px}
+
+/* ── CLUBS ── */
+.club-card{background:white;border:var(--border);border-radius:var(--radius-lg);padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color .13s,box-shadow .13s}
+.club-card:hover{border-color:var(--gray-300);box-shadow:var(--shadow-md)}
+.club-icon{width:42px;height:42px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.club-name{font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:2px}
+.club-meta{font-size:12px;color:var(--gray-500)}
+.club-role{font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px}
+
+/* ── FOLLOWING GRID ── */
+.following-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 18px}
+.follow-card{display:flex;align-items:center;gap:9px;cursor:pointer;padding:4px;border-radius:var(--radius);transition:background .1s}
+.follow-card:hover{background:var(--gray-50)}
+.fc-av{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}
+.fc-name{font-size:13px;font-weight:600;color:var(--gray-900)}
+.fc-sport{font-size:11px;color:var(--gray-500)}
+.fc-streak{font-size:10px;font-family:var(--mono);color:var(--gray-400);margin-top:1px}
+
+/* ── SETTINGS / EDIT ── */
+.settings-section{padding:20px 24px}
+.settings-section + .settings-section{border-top:var(--border)}
+.ss-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-500);margin-bottom:14px}
+.form-field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.form-label{font-size:12px;font-weight:600;color:var(--gray-700)}
+.form-label span{font-weight:400;color:var(--gray-400);margin-left:4px}
+.form-input{padding:8px 11px;border:var(--border);border-radius:var(--radius);font-size:13px;color:var(--gray-800);outline:none;transition:border-color .13s}
+.form-input:focus{border-color:var(--gray-400);box-shadow:0 0 0 3px rgba(107,114,128,0.08)}
+.form-input::placeholder{color:var(--gray-400)}
+.form-select{padding:8px 11px;border:var(--border);border-radius:var(--radius);font-size:13px;color:var(--gray-700);background:white;outline:none;cursor:pointer}
+.form-textarea{padding:8px 11px;border:var(--border);border-radius:var(--radius);font-size:13px;color:var(--gray-800);outline:none;resize:vertical;min-height:72px;line-height:1.5;transition:border-color .13s}
+.form-textarea:focus{border-color:var(--gray-400);box-shadow:0 0 0 3px rgba(107,114,128,0.08)}
+.form-textarea::placeholder{color:var(--gray-400)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-hint{font-size:11px;color:var(--gray-400);margin-top:2px}
+.sport-chip-grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}
+.sport-chip{padding:5px 13px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer;transition:all .12s}
+.sport-chip:hover{border-color:var(--gray-400)}
+.sport-chip.on{background:var(--yellow-light);border-color:#fde68a;color:#7a5c00}
+.integration-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:var(--border)}
+.integration-row:last-child{border-bottom:none}
+.ir-left{display:flex;align-items:center;gap:12px}
+.ir-icon{font-size:22px;width:36px;text-align:center}
+.ir-name{font-size:13px;font-weight:600;color:var(--gray-900)}
+.ir-status{font-size:11px;margin-top:1px}
+.toggle-wrap{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--gray-700)}
+.toggle{width:36px;height:20px;border-radius:10px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
+.toggle.on{background:var(--green)}.toggle.off{background:var(--gray-300)}
+.toggle::after{content:'';position:absolute;top:2px;width:16px;height:16px;border-radius:50%;background:white;transition:left .2s;box-shadow:var(--shadow)}
+.toggle.on::after{left:18px}.toggle.off::after{left:2px}
+.privacy-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:var(--border)}
+.privacy-row:last-child{border-bottom:none}
+.pr-text{font-size:13px;color:var(--gray-800)}
+.pr-sub{font-size:11px;color:var(--gray-500);margin-top:1px}
+.danger-zone{border:1px solid #FECACA;border-radius:var(--radius-lg);padding:16px 20px;background:#FFF5F5}
+.dz-title{font-size:13px;font-weight:600;color:var(--red);margin-bottom:3px}
+.dz-sub{font-size:12px;color:var(--gray-600);margin-bottom:12px}
+
+/* ── STREAK ── */
+.streak-row{display:flex;gap:3px;flex-wrap:wrap}
+.s-dot{width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600;flex-shrink:0;cursor:default}
+.sd-on{background:var(--green-light);color:#166534}
+.sd-off{background:var(--gray-100);color:var(--gray-300)}
+.sd-today{background:var(--yellow-light);color:#7a5c00;border:1.5px solid var(--yellow-dark)}
+.sd-race{background:var(--yellow);color:var(--gray-900)}
+
+/* ── LEADERBOARD SNAPSHOT ── */
+.lb-snap-row{display:flex;align-items:center;gap:10px;padding:9px 18px;border-bottom:var(--border);cursor:pointer;transition:background .1s}
+.lb-snap-row:hover{background:var(--gray-50)}
+.lb-snap-row:last-child{border-bottom:none}
+.lb-snap-row.is-you{background:#FFFBEB}
+.lsr-rank{font-family:var(--mono);font-size:13px;color:var(--gray-400);width:28px;text-align:center;font-weight:600}
+.lsr-rank.r1{color:#D97706}.lsr-rank.r2{color:var(--gray-500)}.lsr-rank.r3{color:#B45309}
+.lsr-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0}
+.lsr-name{flex:1;font-size:13px;font-weight:500;color:var(--gray-900)}
+.lsr-score{font-size:12px;font-family:var(--mono);color:var(--gray-700);font-weight:600}
+.you-tag{font-size:10px;font-weight:600;padding:1px 7px;border-radius:10px;background:var(--yellow-light);color:#7a5c00;border:1px solid #fde68a}
+
+/* ── MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;display:none;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(3px)}
+.modal-overlay.open{display:flex}
+.modal{background:white;border-radius:var(--radius-xl);width:100%;max-width:500px;max-height:88vh;overflow-y:auto;box-shadow:var(--shadow-lg);animation:scale-in .2s ease}
+.modal-header{padding:22px 26px 18px;border-bottom:var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.modal-close{width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--gray-500);transition:background .1s}
+.modal-close:hover{background:var(--gray-100)}
+.modal-body{padding:22px 26px;display:flex;flex-direction:column;gap:14px}
+.modal-footer{padding:16px 26px;border-top:var(--border);display:flex;gap:10px;background:var(--gray-50)}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--gray-900);color:white;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:500;z-index:999;transition:transform .3s ease;white-space:nowrap;box-shadow:var(--shadow-md)}
+.toast.show{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="topbar-logo" onclick="window.location.href='/html'" style="cursor:pointer">
+    <div class="logo-icon">🏟</div>
+    <span class="logo-text">Arenas</span>
+  </div>
+  <div class="topbar-center">
+    <div class="topbar-search">
+      <span style="color:var(--gray-400);font-size:13px">🔍</span>
+      <input type="text" placeholder="Search athletes, clubs, events…">
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <div class="notif-btn" onclick="showToast('3 new notifications')">🔔<div class="notif-dot"></div></div>
+    <div class="user-av" onclick="showToast('That\'s you!')">JK</div>
+  </div>
+</header>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="nav-section-label">My Arenas</div>
+  <div class="nav-item" onclick="window.location.href='/html'"><span class="nav-icon">🏠</span> Feed</div>
+  <div class="nav-item active" onclick="setTab('overview')"><span class="nav-icon">👤</span> My profile</div>
+  <div class="nav-item" onclick="window.location.href='/html/events'"><span class="nav-icon">📅</span> Events</div>
+  <div class="nav-item" onclick="window.location.href='/html/leaderboards'"><span class="nav-icon">🏆</span> Leaderboards</div>
+  <div class="nav-item" onclick="window.location.href='/html/challenges'"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">3</span></div>
+  <div class="nav-item" onclick="window.location.href='/html/athletes'"><span class="nav-icon">👥</span> Athletes</div>
+  <div class="nav-section-label">Clubs</div>
+  <div class="nav-item" onclick="window.location.href='/html/clubs/member'"><span class="nav-icon">🏃</span> Hackney RC <span class="nav-badge red">2</span></div>
+  <div class="nav-section-label">Account</div>
+  <div class="nav-item" onclick="setTab('settings')"><span class="nav-icon">⚙️</span> Settings</div>
+  <div class="nav-item" onclick="showToast('Opening billing…')"><span class="nav-icon">💳</span> Pro plan</div>
+  <div class="sidebar-footer">
+    <div class="sf-row">
+      <div style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">JK</div>
+      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div><div style="font-size:10px;color:var(--gray-500)">@jamiek · Pro</div></div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN CONTENT -->
+<main class="main" id="main-content">
+
+<!-- PROFILE HERO (shared across tabs) -->
+<div id="profile-hero-section">
+  <div class="profile-hero">
+    <div class="hero-bg"></div>
+    <div class="hero-bg-grid"></div>
+    <div class="hero-inner">
+      <div class="hero-av-wrap">
+        <div class="hero-av" onclick="openModal('avatar')">JK</div>
+        <div class="hero-av-edit" onclick="openModal('avatar')">✏️</div>
+        <div class="hero-online" title="Online now"></div>
+      </div>
+      <div class="hero-info">
+        <div class="hero-name">Jamie King</div>
+        <div class="hero-handle">@jamiek · London, UK · Member since Apr 2026</div>
+        <div class="hero-tags">
+          <span class="hero-tag sport-run">🏃 Running</span>
+          <span class="hero-tag sport-cyc">🚴 Cycling</span>
+          <span class="hero-tag sport-clm">🧗 Climbing</span>
+          <span class="hero-tag" style="background:rgba(16,185,129,.15);color:#6EE7B7;border-color:rgba(16,185,129,.25)">Advanced</span>
+          <span class="hero-tag">✦ Pro</span>
+        </div>
+        <div class="hero-bio">Marathon runner, weekend cyclist, occasional wall climber. Chasing a sub-3:30 marathon. Hackney RC member since 2024. Always looking for Sunday long run partners in East London.</div>
+      </div>
+      <div class="hero-stats">
+        <div class="hero-stat"><div class="hero-stat-val">312</div><div class="hero-stat-label">Activities</div></div>
+        <div class="hero-stat-sep"></div>
+        <div class="hero-stat"><div class="hero-stat-val">4,820</div><div class="hero-stat-label">km logged</div></div>
+        <div class="hero-stat-sep"></div>
+        <div class="hero-stat"><div class="hero-stat-val">142</div><div class="hero-stat-label">Followers</div></div>
+        <div class="hero-stat-sep"></div>
+        <div class="hero-stat"><div class="hero-stat-val">89</div><div class="hero-stat-label">Following</div></div>
+      </div>
+      <div class="hero-actions">
+        <div class="hero-rank-badge">🏆 #5 Hackney RC · #2,841 Global</div>
+        <button class="btn btn-yellow btn-sm" onclick="openModal('edit-profile')" style="justify-content:center">✏️ Edit profile</button>
+        <button class="btn btn-ghost btn-sm" style="color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.15);justify-content:center" onclick="copyProfileLink()">🔗 Share profile</button>
+      </div>
+    </div>
+    <div class="hero-connections">
+      <div class="hc-avs">
+        <div class="hc-av" style="background:#FEF9C3;color:#854D0E">SL</div>
+        <div class="hc-av" style="background:#FCE7F3;color:#9D174D">YT</div>
+        <div class="hc-av" style="background:#E0F2FE;color:#0369A1">AL</div>
+        <div class="hc-av" style="background:#F5F3FF;color:#5B21B6">TR</div>
+        <div class="hc-av" style="background:var(--gray-200);color:var(--gray-500);font-size:7px">+85</div>
+      </div>
+      <div class="hc-text"><strong>Sofia L., Yuki T., Alena L.</strong> and 86 others follow you</div>
+    </div>
+  </div>
+
+  <!-- TAB BAR -->
+  <div class="hero-tab-bar">
+    <div class="htb-inner">
+      <div class="htab active" id="htab-overview" onclick="setTab('overview')">Overview</div>
+      <div class="htab" id="htab-activities" onclick="setTab('activities')">Activities <span class="tab-count">312</span></div>
+      <div class="htab" id="htab-stats" onclick="setTab('stats')">Stats & PRs</div>
+      <div class="htab" id="htab-achievements" onclick="setTab('achievements')">Achievements <span class="tab-count">18</span></div>
+      <div class="htab" id="htab-clubs" onclick="setTab('clubs')">Clubs <span class="tab-count">1</span></div>
+      <div class="htab" id="htab-following" onclick="setTab('following')">Following <span class="tab-count">89</span></div>
+      <div class="htab" id="htab-settings" onclick="setTab('settings')">Settings</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ OVERVIEW TAB ═══ -->
+<div class="tab-content active" id="tab-overview">
+  <div class="content-cols">
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <!-- Stat cards -->
+      <div class="stats-4">
+        <div class="stat-block"><div class="sb-bar" style="--bar-color:var(--orange)"><div class="sb-bar-fill" style="width:72%;background:var(--orange)"></div></div><div class="sb-label">This week</div><div class="sb-value">12.4<span style="font-size:14px;font-weight:400;color:var(--gray-500)"> km</span></div><div class="sb-delta up">↑ +3.2km vs last wk</div></div>
+        <div class="stat-block"><div class="sb-bar"><div class="sb-bar-fill" style="width:44%;background:var(--blue)"></div></div><div class="sb-label">This month</div><div class="sb-value">62.4<span style="font-size:14px;font-weight:400;color:var(--gray-500)"> km</span></div><div class="sb-delta up">↑ +8km vs last mo</div></div>
+        <div class="stat-block"><div class="sb-bar"><div class="sb-bar-fill" style="width:60%;background:var(--purple)"></div></div><div class="sb-label">Current streak</div><div class="sb-value">6<span style="font-size:14px;font-weight:400;color:var(--gray-500)"> days</span></div><div class="sb-delta neutral">Best: 14 days</div></div>
+        <div class="stat-block"><div class="sb-bar"><div class="sb-bar-fill" style="width:100%;background:var(--yellow-dark)"></div></div><div class="sb-label">Club rank</div><div class="sb-value">#5<span style="font-size:14px;font-weight:400;color:var(--gray-500)"> /48</span></div><div class="sb-delta up">↑ +3 this week</div></div>
+      </div>
+
+      <!-- Recent activities -->
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">🏃 Recent activities</span><button class="btn btn-sm btn-ghost" onclick="setTab('activities')">All 312 →</button></div>
+        <div style="display:flex;flex-direction:column;gap:0">
+          <div class="activity-card" style="border:none;border-radius:0;border-bottom:var(--border)">
+            <div class="ac-body">
+              <div class="ac-head">
+                <div style="width:32px;height:32px;border-radius:50%;background:var(--orange-light);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#9A3412;flex-shrink:0">JK</div>
+                <div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Morning long run</div><div style="font-size:11px;color:var(--gray-400)">Today · 6:42 AM · London</div></div>
+                <div class="ac-sport-tag" style="background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74">🏃 Running</div>
+              </div>
+              <div class="ac-stats-row">
+                <div class="ac-stat"><div class="sv">12.4</div><div class="sl">km</div></div>
+                <div class="ac-stat"><div class="sv">54:22</div><div class="sl">time</div></div>
+                <div class="ac-stat"><div class="sv">4:23</div><div class="sl">/km</div></div>
+                <div class="ac-stat"><div class="sv">148</div><div class="sl">bpm</div></div>
+                <div class="ac-stat"><div class="sv">486</div><div class="sl">kcal</div></div>
+              </div>
+              <div class="ac-desc">Morning long run ✓ Legs felt heavy miles 8–10 but pushed through. PB attempt Sunday — anyone in London want to pace the last 5km?</div>
+              <div class="ac-ai">
+                <div class="ai-icon">AI</div>
+                <div class="ac-ai-text"><strong>AI Coach:</strong> HR spiked 12 bpm in the final 3km — classic glycogen depletion. Keep tomorrow easy and you'll be fresh for Sunday's PB attempt. Consider fuelling at km 8 next long run.</div>
+              </div>
+            </div>
+            <div class="ac-footer">
+              <button class="ac-action liked" onclick="toggleLike(this)">👍 6 kudos</button>
+              <button class="ac-action" onclick="openModal('comment')">💬 3 comments</button>
+              <button class="ac-action" onclick="showToast('Activity link copied!')">🔗 Share</button>
+              <span style="margin-left:auto;font-size:11px;color:var(--gray-400)">✦ AI analysed</span>
+            </div>
+          </div>
+          <div class="activity-card" style="border:none;border-radius:0">
+            <div class="ac-body">
+              <div class="ac-head">
+                <div style="width:32px;height:32px;border-radius:50%;background:var(--blue-light);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#1E40AF;flex-shrink:0">JK</div>
+                <div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Evening tempo ride</div><div style="font-size:11px;color:var(--gray-400)">Yesterday · 6:15 PM · London</div></div>
+                <div class="ac-sport-tag" style="background:var(--blue-light);color:#1E40AF;border:1px solid #93C5FD">🚴 Cycling</div>
+              </div>
+              <div class="ac-stats-row">
+                <div class="ac-stat"><div class="sv">34.8</div><div class="sl">km</div></div>
+                <div class="ac-stat"><div class="sv">1:12:04</div><div class="sl">time</div></div>
+                <div class="ac-stat"><div class="sv">29.1</div><div class="sl">km/h</div></div>
+                <div class="ac-stat"><div class="sv">218</div><div class="sl">avg W</div></div>
+              </div>
+              <div class="ac-desc">Threshold intervals on the Regents Park loop. Held 230W for the 3×8 blocks — best ever. New FTP test incoming.</div>
+            </div>
+            <div class="ac-footer">
+              <button class="ac-action" onclick="toggleLike(this)">👍 11 kudos</button>
+              <button class="ac-action" onclick="openModal('comment')">💬 5 comments</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Weekly bar chart -->
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">📊 Training volume — last 8 weeks</span><select style="font-size:12px;border:var(--border);border-radius:6px;padding:3px 8px;outline:none;cursor:pointer;background:white" onchange="showToast('View updated')"><option>Distance (km)</option><option>Time (hrs)</option><option>Elevation (m)</option></select></div>
+        <div class="chart-wrap">
+          <div class="chart-labels">
+            <span>Mar 24</span><span>Mar 31</span><span>Apr 7</span><span>Apr 14</span><span>Apr 21</span><span>Apr 28</span><span>May 5</span><span>May 12</span>
+          </div>
+          <div class="bar-chart" id="bar-chart">
+            <div class="bar-col" onclick="showToast('Week of Mar 24: 48.2km')"><div class="bar-fill" style="height:68%;background:linear-gradient(180deg,#F97316,#FDBA74)"></div><div class="bar-label">48</div></div>
+            <div class="bar-col" onclick="showToast('Week of Mar 31: 52.0km')"><div class="bar-fill" style="height:74%;background:linear-gradient(180deg,#F97316,#FDBA74)"></div><div class="bar-label">52</div></div>
+            <div class="bar-col" onclick="showToast('Week of Apr 7: 38.6km — rest week')"><div class="bar-fill" style="height:55%;background:linear-gradient(180deg,#D1D5DB,#E5E7EB)"></div><div class="bar-label">38</div></div>
+            <div class="bar-col" onclick="showToast('Week of Apr 14: 64.0km')"><div class="bar-fill" style="height:91%;background:linear-gradient(180deg,#F97316,#FDBA74)"></div><div class="bar-label">64</div></div>
+            <div class="bar-col" onclick="showToast('Week of Apr 21: 58.4km')"><div class="bar-fill" style="height:83%;background:linear-gradient(180deg,#F97316,#FDBA74)"></div><div class="bar-label">58</div></div>
+            <div class="bar-col" onclick="showToast('Week of Apr 28: 70.2km — biggest week!')"><div class="bar-fill" style="height:100%;background:linear-gradient(180deg,#EA580C,#F97316)"></div><div class="bar-label" style="font-weight:600;color:var(--orange)">70</div></div>
+            <div class="bar-col" onclick="showToast('Week of May 5: 56.8km')"><div class="bar-fill" style="height:81%;background:linear-gradient(180deg,#F97316,#FDBA74)"></div><div class="bar-label">57</div></div>
+            <div class="bar-col" onclick="showToast('Week of May 12 (current): 12.4km')"><div class="bar-fill" style="height:18%;background:linear-gradient(180deg,#FFD21E,#FEF08A)"></div><div class="bar-label" style="color:var(--yellow-dark)">12</div></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:14px;padding:10px 18px 14px;border-top:var(--border)">
+          <div style="font-size:12px;color:var(--gray-600)">8-week total: <strong style="color:var(--gray-900);font-family:var(--mono)">399.2 km</strong></div>
+          <div style="font-size:12px;color:var(--gray-600)">Average: <strong style="color:var(--gray-900);font-family:var(--mono)">49.9 km/wk</strong></div>
+          <div style="font-size:12px;color:var(--green)">↑ +12% vs prior 8 weeks</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:14px">
+
+      <!-- Streak calendar -->
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">🔥 Activity streak</span><span style="font-size:12px;font-family:var(--mono);color:var(--orange);font-weight:600">6 days</span></div>
+        <div class="cal-labels"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+        <div class="cal-grid" id="cal-grid"></div>
+        <div class="cal-legend">
+          <div class="cl-item"><div class="cl-dot" style="background:var(--gray-100)"></div>Rest</div>
+          <div class="cl-item"><div class="cl-dot" style="background:#D1FAE5"></div>Easy</div>
+          <div class="cl-item"><div class="cl-dot" style="background:#10B981"></div>Hard</div>
+          <div class="cl-item"><div class="cl-dot" style="background:var(--yellow)"></div>Race</div>
+        </div>
+      </div>
+
+      <!-- Sport breakdown -->
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">⚡ Sport breakdown</span><span style="font-size:11px;color:var(--gray-400)">last 90 days</span></div>
+        <div class="sport-breakdown">
+          <div class="sb-row"><span class="sb-sport-name">🏃 Running</span><div class="sb-track"><div class="sb-fill" style="width:74%;background:var(--orange)"></div></div><span class="sb-meta">74% · 296km</span></div>
+          <div class="sb-row"><span class="sb-sport-name">🚴 Cycling</span><div class="sb-track"><div class="sb-fill" style="width:19%;background:var(--blue)"></div></div><span class="sb-meta">19% · 76km</span></div>
+          <div class="sb-row"><span class="sb-sport-name">🧗 Climbing</span><div class="sb-track"><div class="sb-fill" style="width:7%;background:var(--purple)"></div></div><span class="sb-meta">7% · 12 sess</span></div>
+        </div>
+      </div>
+
+      <!-- Club leaderboard snippet -->
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">🏆 Hackney RC board</span><button class="btn btn-sm btn-ghost" onclick="showToast('Opening club leaderboard…')">Full →</button></div>
+        <div>
+          <div class="lb-snap-row"><span class="lsr-rank r1">1</span><div class="lsr-av" style="background:#FEF9C3;color:#854D0E">SL</div><span class="lsr-name">Sofia L.</span><span class="lsr-score">9,840</span></div>
+          <div class="lb-snap-row"><span class="lsr-rank r2">2</span><div class="lsr-av" style="background:#FCE7F3;color:#9D174D">YT</div><span class="lsr-name">Yuki T.</span><span class="lsr-score">7,610</span></div>
+          <div class="lb-snap-row"><span class="lsr-rank r3">3</span><div class="lsr-av" style="background:#E0F2FE;color:#0369A1">AL</div><span class="lsr-name">Alena L.</span><span class="lsr-score">7,220</span></div>
+          <div class="lb-snap-row is-you"><span class="lsr-rank">5</span><div class="lsr-av" style="background:var(--yellow);color:var(--gray-900)">JK</div><span class="lsr-name">You</span><span class="lsr-score">6,440</span><span class="you-tag" style="margin-left:6px">you</span></div>
+        </div>
+        <div style="padding:8px 18px 12px;border-top:var(--border);font-size:12px;color:var(--gray-500)">540 pts to overtake Priya R. for rank #4 — log one more run.</div>
+      </div>
+
+      <!-- Active challenges snippet -->
+      <div class="card">
+        <div class="card-hdr"><span class="card-title">⚡ Active challenges</span><button class="btn btn-sm btn-ghost" onclick="window.location.href='/html/challenges'">All →</button></div>
+        <div style="padding:14px 18px;display:flex;flex-direction:column;gap:10px">
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span style="font-weight:600;color:var(--gray-900)">100km May Run</span><span style="font-family:var(--mono);color:var(--gray-500)">62 / 100 km</span></div>
+            <div style="height:5px;background:var(--gray-100);border-radius:3px;overflow:hidden"><div style="width:62%;height:100%;background:var(--orange);border-radius:3px"></div></div>
+            <div style="font-size:11px;color:var(--gray-400);margin-top:3px">9 days left · rank #5 of 44</div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span style="font-weight:600;color:var(--gray-900)">7-day streak</span><span style="font-family:var(--mono);color:var(--gray-500)">6 / 7 days</span></div>
+            <div style="height:5px;background:var(--gray-100);border-radius:3px;overflow:hidden"><div style="width:86%;height:100%;background:var(--purple);border-radius:3px"></div></div>
+            <div style="font-size:11px;color:var(--orange);margin-top:3px;font-weight:600">Run today to complete this week! Don't break it now.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ ACTIVITIES TAB ═══ -->
+<div class="tab-content" id="tab-activities">
+  <div class="content-cols-full">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div><h2 style="font-size:17px;font-weight:700;color:var(--gray-900)">All activities</h2><p style="font-size:13px;color:var(--gray-500)">312 activities · 4,820 km total</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <select style="padding:7px 11px;border:var(--border);border-radius:7px;font-size:13px;background:white;outline:none;cursor:pointer" onchange="showToast('Filter updated')"><option>All sports</option><option>Running</option><option>Cycling</option><option>Climbing</option></select>
+        <select style="padding:7px 11px;border:var(--border);border-radius:7px;font-size:13px;background:white;outline:none;cursor:pointer" onchange="showToast('Sort updated')"><option>Newest first</option><option>Oldest first</option><option>Longest distance</option><option>Fastest pace</option></select>
+        <button class="btn btn-ghost" onclick="showToast('Downloading GPX files…')">📥 Export</button>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="activity-card">
+        <div class="ac-body">
+          <div class="ac-head">
+            <div style="width:32px;height:32px;border-radius:50%;background:var(--orange-light);color:#9A3412;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600">JK</div>
+            <div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Morning long run</div><div style="font-size:11px;color:var(--gray-400)">Today · 6:42 AM · London</div></div>
+            <div class="ac-sport-tag" style="background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74">🏃 Running</div>
+          </div>
+          <div class="ac-stats-row">
+            <div class="ac-stat"><div class="sv">12.4</div><div class="sl">km</div></div>
+            <div class="ac-stat"><div class="sv">54:22</div><div class="sl">time</div></div>
+            <div class="ac-stat"><div class="sv">4:23</div><div class="sl">/km</div></div>
+            <div class="ac-stat"><div class="sv">148</div><div class="sl">bpm</div></div>
+            <div class="ac-stat"><div class="sv">486</div><div class="sl">kcal</div></div>
+            <div class="ac-stat"><div class="sv">+320</div><div class="sl">elev m</div></div>
+          </div>
+          <div class="ac-ai"><div class="ai-icon">AI</div><div class="ac-ai-text"><strong>AI Coach:</strong> HR spiked 12 bpm in the final 3km — classic glycogen depletion. Keep tomorrow easy and you'll be fresh for Sunday's PB attempt.</div></div>
+        </div>
+        <div class="ac-footer"><button class="ac-action liked" onclick="toggleLike(this)">👍 6 kudos</button><button class="ac-action" onclick="openModal('comment')">💬 3</button><button class="ac-action" onclick="showToast('Activity link copied!')">🔗</button><button class="ac-action" onclick="showToast('Editing activity…')">✏️ Edit</button></div>
+      </div>
+      <div class="activity-card">
+        <div class="ac-body">
+          <div class="ac-head">
+            <div style="width:32px;height:32px;border-radius:50%;background:var(--blue-light);color:#1E40AF;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600">JK</div>
+            <div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Evening tempo ride</div><div style="font-size:11px;color:var(--gray-400)">Yesterday · 6:15 PM · London</div></div>
+            <div class="ac-sport-tag" style="background:var(--blue-light);color:#1E40AF;border:1px solid #93C5FD">🚴 Cycling</div>
+          </div>
+          <div class="ac-stats-row">
+            <div class="ac-stat"><div class="sv">34.8</div><div class="sl">km</div></div>
+            <div class="ac-stat"><div class="sv">1:12:04</div><div class="sl">time</div></div>
+            <div class="ac-stat"><div class="sv">29.1</div><div class="sl">km/h</div></div>
+            <div class="ac-stat"><div class="sv">218</div><div class="sl">avg W</div></div>
+            <div class="ac-stat"><div class="sv">162</div><div class="sl">bpm</div></div>
+          </div>
+          <div class="ac-ai"><div class="ai-icon">AI</div><div class="ac-ai-text"><strong>AI Coach:</strong> 230W for 3×8 blocks is excellent — your FTP is clearly higher than your tested number. Schedule a test next week while you're feeling strong.</div></div>
+        </div>
+        <div class="ac-footer"><button class="ac-action" onclick="toggleLike(this)">👍 11 kudos</button><button class="ac-action" onclick="openModal('comment')">💬 5</button><button class="ac-action" onclick="showToast('Activity link copied!')">🔗</button></div>
+      </div>
+      <div class="activity-card">
+        <div class="ac-body">
+          <div class="ac-head">
+            <div style="width:32px;height:32px;border-radius:50%;background:var(--purple-light);color:#5B21B6;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600">JK</div>
+            <div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Bouldering session — The Arch</div><div style="font-size:11px;color:var(--gray-400)">May 18 · 11:00 AM · Bermondsey</div></div>
+            <div class="ac-sport-tag" style="background:var(--purple-light);color:#5B21B6;border:1px solid #C4B5FD">🧗 Climbing</div>
+          </div>
+          <div class="ac-stats-row">
+            <div class="ac-stat"><div class="sv">V5</div><div class="sl">top grade</div></div>
+            <div class="ac-stat"><div class="sv">2h 10m</div><div class="sl">duration</div></div>
+            <div class="ac-stat"><div class="sv">12</div><div class="sl">problems</div></div>
+          </div>
+          <div class="ac-desc">Great session — sent the V5 crimp project from two weeks ago. Felt solid on slopers. Working a V6 compression problem next.</div>
+        </div>
+        <div class="ac-footer"><button class="ac-action" onclick="toggleLike(this)">👍 4 kudos</button><button class="ac-action" onclick="openModal('comment')">💬 2</button></div>
+      </div>
+    </div>
+    <div style="text-align:center;margin-top:16px"><button class="btn btn-ghost" onclick="showToast('Loading more activities…')">Load more activities</button></div>
+  </div>
+</div>
+
+<!-- ═══ STATS & PRs TAB ═══ -->
+<div class="tab-content" id="tab-stats">
+  <div class="content-cols-full">
+    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:start">
+      <div style="flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px">
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">🏃 Running personal bests</span></div>
+          <div class="pb-grid">
+            <div class="pb-card"><div class="pb-event">5 km</div><div class="pb-time">25:48</div><div class="pb-date">Apr 19, 2026 · Parkrun</div><div class="pb-delta">↑ −23s vs prev PB</div></div>
+            <div class="pb-card"><div class="pb-event">10 km</div><div class="pb-time">53:14</div><div class="pb-date">Mar 2, 2026</div><div class="pb-delta">↑ −1:12 vs prev PB</div></div>
+            <div class="pb-card"><div class="pb-event">Half marathon</div><div class="pb-time">1:54:22</div><div class="pb-date">Jan 12, 2026</div><div class="pb-delta">↑ −4:08 vs prev PB</div></div>
+            <div class="pb-card" style="border:1px dashed var(--gray-200);background:var(--gray-50)"><div class="pb-event">Marathon</div><div class="pb-time" style="color:var(--gray-400)">No result yet</div><div class="pb-date">Target: sub 3:30</div><div style="font-size:11px;color:var(--orange);margin-top:4px">London Marathon Oct '26</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">🚴 Cycling bests</span></div>
+          <div class="pb-grid">
+            <div class="pb-card"><div class="pb-event">FTP</div><div class="pb-time">241 W</div><div class="pb-date">Apr 28, 2026</div><div class="pb-delta">↑ +18W vs prev test</div></div>
+            <div class="pb-card"><div class="pb-event">W/kg</div><div class="pb-time">3.2</div><div class="pb-date">Based on 75.4kg</div><div class="pb-delta">↑ +0.2 vs prev</div></div>
+            <div class="pb-card"><div class="pb-event">Max power</div><div class="pb-time">842 W</div><div class="pb-date">Apr 14, 2026</div><div class="pb-delta">Peak sprint effort</div></div>
+            <div class="pb-card"><div class="pb-event">Longest ride</div><div class="pb-time">88 km</div><div class="pb-date">Mar 15, 2026</div><div style="font-size:11px;color:var(--gray-400);margin-top:3px">5:20 ride time</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">🧗 Climbing grades</span></div>
+          <div class="pb-grid">
+            <div class="pb-card"><div class="pb-event">Bouldering</div><div class="pb-time">V5</div><div class="pb-date">May 18, 2026</div><div class="pb-delta">Working V6 next</div></div>
+            <div class="pb-card"><div class="pb-event">Lead</div><div class="pb-time">6b+</div><div class="pb-date">Feb 4, 2026</div><div class="pb-delta">Projecting 6c</div></div>
+          </div>
+        </div>
+      </div>
+      <div style="width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:14px">
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">📊 All-time totals</span></div>
+          <div style="padding:14px 18px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:var(--border)"><span style="font-size:13px;color:var(--gray-600)">Total distance</span><span style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">4,820 km</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:var(--border)"><span style="font-size:13px;color:var(--gray-600)">Total time</span><span style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">412 hrs</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:var(--border)"><span style="font-size:13px;color:var(--gray-600)">Elevation gained</span><span style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">48,200 m</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:var(--border)"><span style="font-size:13px;color:var(--gray-600)">Calories burned</span><span style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">142,400</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0"><span style="font-size:13px;color:var(--gray-600)">Total activities</span><span style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">312</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">🎯 Goals</span><button class="btn btn-sm btn-ghost" onclick="openModal('goal')">+ Add</button></div>
+          <div style="padding:14px 18px;display:flex;flex-direction:column;gap:12px">
+            <div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span style="font-weight:600;color:var(--gray-900)">Sub-3:30 marathon</span><span style="color:var(--orange);font-family:var(--mono)">Oct 2026</span></div><div style="height:5px;background:var(--gray-100);border-radius:3px;overflow:hidden"><div style="width:62%;height:100%;background:var(--orange)"></div></div><div style="font-size:11px;color:var(--gray-500);margin-top:3px">Current PB: 1:54 HM → projected ~3:52 full</div></div>
+            <div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span style="font-weight:600;color:var(--gray-900)">FTP 260W</span><span style="color:var(--blue);font-family:var(--mono)">Aug 2026</span></div><div style="height:5px;background:var(--gray-100);border-radius:3px;overflow:hidden"><div style="width:93%;height:100%;background:var(--blue)"></div></div><div style="font-size:11px;color:var(--gray-500);margin-top:3px">Current: 241W · 19W to go</div></div>
+            <div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span style="font-weight:600;color:var(--gray-900)">V6 bouldering</span><span style="color:var(--purple);font-family:var(--mono)">Jul 2026</span></div><div style="height:5px;background:var(--gray-100);border-radius:3px;overflow:hidden"><div style="width:75%;height:100%;background:var(--purple)"></div></div><div style="font-size:11px;color:var(--gray-500);margin-top:3px">Projecting V6 compression problem</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ ACHIEVEMENTS TAB ═══ -->
+<div class="tab-content" id="tab-achievements">
+  <div class="content-cols-full">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px"><div><h2 style="font-size:17px;font-weight:700;color:var(--gray-900)">Achievements</h2><p style="font-size:13px;color:var(--gray-500)">18 earned · 14 locked · 6,440 points total</p></div></div>
+    <div class="achievement-grid">
+      <div class="ach-card gold"><span class="ach-icon">🏃</span><div class="ach-name">First 10km</div><div class="ach-desc">Complete your first 10km activity</div><div class="ach-date">Jan 4, 2026</div></div>
+      <div class="ach-card gold"><span class="ach-icon">🔥</span><div class="ach-name">7-day streak</div><div class="ach-desc">Log activities 7 days in a row</div><div class="ach-date">Feb 12, 2026</div></div>
+      <div class="ach-card gold"><span class="ach-icon">🚴</span><div class="ach-name">Century rider</div><div class="ach-desc">Log 100km of cycling in a week</div><div class="ach-date">Mar 15, 2026</div></div>
+      <div class="ach-card silver"><span class="ach-icon">🧗</span><div class="ach-name">V4 climber</div><div class="ach-desc">Send your first V4 boulder problem</div><div class="ach-date">Mar 28, 2026</div></div>
+      <div class="ach-card silver"><span class="ach-icon">⚡</span><div class="ach-name">Challenge finisher</div><div class="ach-desc">Complete your first club challenge</div><div class="ach-date">Apr 30, 2026</div></div>
+      <div class="ach-card bronze"><span class="ach-icon">🤝</span><div class="ach-name">Club member</div><div class="ach-desc">Join your first club on Arenas</div><div class="ach-date">Apr 2, 2026</div></div>
+      <div class="ach-card gold"><span class="ach-icon">📅</span><div class="ach-name">Event starter</div><div class="ach-desc">Register for your first event through Arenas</div><div class="ach-date">Apr 5, 2026</div></div>
+      <div class="ach-card silver"><span class="ach-icon">✦</span><div class="ach-name">AI coached ×50</div><div class="ach-desc">Receive 50 AI coach analyses</div><div class="ach-date">May 10, 2026</div></div>
+      <div class="ach-card gold"><span class="ach-icon">🏅</span><div class="ach-name">Podium finisher</div><div class="ach-desc">Reach the top 3 on a club leaderboard</div><div class="ach-date">Apr 28, 2026</div></div>
+      <div class="ach-card locked"><span class="ach-icon">🏃</span><div class="ach-name">Half marathon PB</div><div class="ach-desc">Beat your half marathon personal best</div><div class="ach-date" style="color:var(--orange)">In progress</div></div>
+      <div class="ach-card locked"><span class="ach-icon">🔥</span><div class="ach-name">30-day streak</div><div class="ach-desc">Log activities 30 days in a row</div><div class="ach-date">Best: 14 days</div></div>
+      <div class="ach-card locked"><span class="ach-icon">🏔️</span><div class="ach-name">Everest climber</div><div class="ach-desc">Accumulate 8,848m of elevation</div><div class="ach-date">48,200m total</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CLUBS TAB ═══ -->
+<div class="tab-content" id="tab-clubs">
+  <div class="content-cols-full">
+    <div style="margin-bottom:16px"><h2 style="font-size:17px;font-weight:700;color:var(--gray-900)">My clubs</h2><p style="font-size:13px;color:var(--gray-500)">1 active club · Find more in the Athletes directory</p></div>
+    <div style="display:flex;flex-direction:column;gap:10px;max-width:600px">
+      <div class="club-card">
+        <div class="club-icon" style="background:var(--orange-light)">🏃</div>
+        <div style="flex:1"><div class="club-name">Hackney Running Club</div><div class="club-meta">London · 48 members · Running · Club Pro</div><div style="display:flex;gap:5px;margin-top:6px"><span class="pill pill-run">Running</span><span class="club-role" style="background:var(--gray-100);color:var(--gray-600)">Member</span><span class="pill-new pill">Joined Apr 2026</span></div></div>
+        <button class="btn btn-ghost btn-sm" onclick="showToast('Opening club view…')">Open →</button>
+      </div>
+      <div style="border:2px dashed var(--gray-200);border-radius:var(--radius-lg);padding:24px;text-align:center;cursor:pointer;transition:border-color .15s;background:white" onclick="showToast('Opening club search…')">
+        <div style="font-size:28px;margin-bottom:10px">🔍</div>
+        <div style="font-size:14px;font-weight:600;color:var(--gray-700);margin-bottom:4px">Find clubs near you</div>
+        <div style="font-size:12px;color:var(--gray-500)">Search running clubs, cycling teams, climbing gyms and more in your area</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ FOLLOWING TAB ═══ -->
+<div class="tab-content" id="tab-following">
+  <div class="content-cols-full">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div><h2 style="font-size:17px;font-weight:700;color:var(--gray-900)">Following</h2><p style="font-size:13px;color:var(--gray-500)">89 following · 142 followers</p></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost btn-sm" style="background:var(--gray-100)" onclick="showToast('Showing following')">Following (89)</button>
+        <button class="btn btn-ghost btn-sm" onclick="showToast('Showing followers')">Followers (142)</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="following-grid">
+        <div class="follow-card"><div class="fc-av" style="background:#FEF9C3;color:#854D0E">SL</div><div><div class="fc-name">Sofia L.</div><div class="fc-sport">🏃 Running · Coach</div><div class="fc-streak">🔥 21d streak · 9,840pts</div></div><button class="btn btn-sm btn-ghost" onclick="showToast('Unfollowed Sofia')">Following</button></div>
+        <div class="follow-card"><div class="fc-av" style="background:#FCE7F3;color:#9D174D">YT</div><div><div class="fc-name">Yuki T.</div><div class="fc-sport">🏃 Running · Advanced</div><div class="fc-streak">🔥 14d streak · 7,610pts</div></div><button class="btn btn-sm btn-ghost" onclick="showToast('Unfollowed Yuki')">Following</button></div>
+        <div class="follow-card"><div class="fc-av" style="background:#E0F2FE;color:#0369A1">AL</div><div><div class="fc-name">Alena L.</div><div class="fc-sport">🏃 Running · Advanced</div><div class="fc-streak">🔥 6d streak · 7,220pts</div></div><button class="btn btn-sm btn-ghost" onclick="showToast('Unfollowed Alena')">Following</button></div>
+        <div class="follow-card"><div class="fc-av" style="background:#FBEAF0;color:#72243E">PR</div><div><div class="fc-name">Priya R.</div><div class="fc-sport">🏃 Running · Advanced</div><div class="fc-streak">🔥 6d streak · 6,980pts</div></div><button class="btn btn-sm btn-ghost" onclick="showToast('Unfollowed Priya')">Following</button></div>
+        <div class="follow-card"><div class="fc-av" style="background:#F5F3FF;color:#5B21B6">TR</div><div><div class="fc-name">Tom R.</div><div class="fc-sport">🏃 Running · Intermediate</div><div class="fc-streak">4d streak · 5,880pts</div></div><button class="btn btn-sm btn-ghost" onclick="showToast('Unfollowed Tom')">Following</button></div>
+        <div class="follow-card"><div class="fc-av" style="background:#FEF3C7;color:#92400E">MC</div><div><div class="fc-name">Marco C.</div><div class="fc-sport">🚴 Cycling · Advanced</div><div class="fc-streak">🔥 9d streak</div></div><button class="btn btn-sm btn-ghost" onclick="showToast('Unfollowed Marco')">Following</button></div>
+      </div>
+      <div style="padding:10px 18px;border-top:var(--border);text-align:center"><button class="btn btn-ghost btn-sm" onclick="showToast('Loading more…')">Load all 89</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SETTINGS TAB ═══ -->
+<div class="tab-content" id="tab-settings">
+  <div class="content-cols-full">
+    <div style="display:flex;gap:20px;align-items:start;flex-wrap:wrap">
+      <div style="flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px">
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">👤 Profile information</span><button class="btn btn-sm btn-yellow" onclick="showToast('✓ Profile saved!')">Save changes</button></div>
+          <div class="settings-section">
+            <div class="form-row">
+              <div class="form-field"><label class="form-label">First name</label><input class="form-input" type="text" value="Jamie"></div>
+              <div class="form-field"><label class="form-label">Last name</label><input class="form-input" type="text" value="King"></div>
+            </div>
+            <div class="form-field"><label class="form-label">Handle</label><input class="form-input" type="text" value="@jamiek"><div class="form-hint">arenas.io/athletes/jamiek</div></div>
+            <div class="form-field"><label class="form-label">Bio</label><textarea class="form-textarea">Marathon runner, weekend cyclist, occasional wall climber. Chasing a sub-3:30 marathon. Hackney RC member since 2024.</textarea></div>
+            <div class="form-row">
+              <div class="form-field"><label class="form-label">City</label><input class="form-input" type="text" value="London"></div>
+              <div class="form-field"><label class="form-label">Country</label><select class="form-select"><option>United Kingdom</option><option>United States</option><option>Germany</option></select></div>
+            </div>
+          </div>
+          <div class="settings-section">
+            <div class="ss-title">Sports & level</div>
+            <div class="form-field"><label class="form-label">Your sports</label>
+              <div class="sport-chip-grid">
+                <button class="sport-chip on" onclick="this.classList.toggle('on')">🏃 Running</button>
+                <button class="sport-chip on" onclick="this.classList.toggle('on')">🚴 Cycling</button>
+                <button class="sport-chip on" onclick="this.classList.toggle('on')">🧗 Climbing</button>
+                <button class="sport-chip" onclick="this.classList.toggle('on')">🏊 Swimming</button>
+                <button class="sport-chip" onclick="this.classList.toggle('on')">⚽ Football</button>
+                <button class="sport-chip" onclick="this.classList.toggle('on')">🏋️ Weightlifting</button>
+                <button class="sport-chip" onclick="this.classList.toggle('on')">🎾 Tennis</button>
+                <button class="sport-chip" onclick="this.classList.toggle('on')">🏄 Surfing</button>
+              </div>
+            </div>
+            <div class="form-field" style="margin-top:10px"><label class="form-label">Experience level</label><select class="form-select"><option>Beginner</option><option>Intermediate</option><option selected>Advanced</option><option>Elite / Professional</option></select></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">🔗 Connected accounts</span></div>
+          <div class="settings-section">
+            <div class="integration-row">
+              <div class="ir-left"><span class="ir-icon">🔶</span><div><div class="ir-name">Strava</div><div class="ir-status" style="color:var(--green)">✓ Connected · syncing automatically</div></div></div>
+              <button class="btn btn-sm btn-ghost" onclick="showToast('Disconnecting Strava…')">Disconnect</button>
+            </div>
+            <div class="integration-row">
+              <div class="ir-left"><span class="ir-icon">⌚</span><div><div class="ir-name">Garmin Connect</div><div class="ir-status" style="color:var(--gray-400)">Not connected</div></div></div>
+              <button class="btn btn-sm btn-primary" onclick="showToast('Connecting Garmin…')">Connect</button>
+            </div>
+            <div class="integration-row">
+              <div class="ir-left"><span class="ir-icon">🍎</span><div><div class="ir-name">Apple Health</div><div class="ir-status" style="color:var(--gray-400)">Not connected</div></div></div>
+              <button class="btn btn-sm btn-primary" onclick="showToast('Opening Apple Health…')">Connect</button>
+            </div>
+            <div class="integration-row" style="border-bottom:none">
+              <div class="ir-left"><span class="ir-icon">🌀</span><div><div class="ir-name">Wahoo</div><div class="ir-status" style="color:var(--gray-400)">Not connected</div></div></div>
+              <button class="btn btn-sm btn-primary" onclick="showToast('Connecting Wahoo…')">Connect</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:14px">
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">🔒 Privacy</span></div>
+          <div class="settings-section">
+            <div class="privacy-row"><div><div class="pr-text">Public profile</div><div class="pr-sub">Anyone can see your profile and activities</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
+            <div class="privacy-row"><div><div class="pr-text">Show on leaderboards</div><div class="pr-sub">Appear in public and club rankings</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
+            <div class="privacy-row"><div><div class="pr-text">Share GPS routes</div><div class="pr-sub">Show map and route on activities</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
+            <div class="privacy-row"><div><div class="pr-text">Activity feed visible</div><div class="pr-sub">Followers can see your activities</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
+            <div class="privacy-row" style="border-bottom:none"><div><div class="pr-text">Allow direct messages</div><div class="pr-sub">From athletes you don't follow</div></div><div class="toggle off" onclick="toggleIt(this)"></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">🔔 Notifications</span></div>
+          <div class="settings-section">
+            <div class="privacy-row"><div><div class="pr-text">Kudos on activities</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
+            <div class="privacy-row"><div><div class="pr-text">Comments</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
+            <div class="privacy-row"><div><div class="pr-text">New followers</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
+            <div class="privacy-row"><div><div class="pr-text">Challenge updates</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
+            <div class="privacy-row"><div><div class="pr-text">Club event invites</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
+            <div class="privacy-row" style="border-bottom:none"><div><div class="pr-text">Weekly AI training summary</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hdr"><span class="card-title">💳 Plan</span></div>
+          <div style="padding:14px 18px">
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--yellow-light);border:1px solid #fde68a;border-radius:var(--radius);margin-bottom:12px">
+              <div style="font-size:20px">✦</div>
+              <div><div style="font-size:13px;font-weight:700;color:var(--gray-900)">Arenas Pro</div><div style="font-size:11px;color:#7a5c00">Unlimited AI coaching · $9/month</div></div>
+            </div>
+            <div style="font-size:12px;color:var(--gray-500);margin-bottom:10px">Next billing: Jun 15, 2026 · $9.00</div>
+            <button class="btn btn-ghost btn-full" onclick="showToast('Opening billing portal…')">Manage billing</button>
+          </div>
+        </div>
+        <div class="danger-zone">
+          <div class="dz-title">Danger zone</div>
+          <div class="dz-sub">These actions are permanent and cannot be undone.</div>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <button class="btn btn-ghost btn-full btn-sm" onclick="showToast('Export started — you\'ll receive an email within 24h')">📥 Export my data</button>
+            <button class="btn btn-full btn-sm" style="background:var(--red-light);color:#A32D2D;border-color:#FECACA" onclick="showToast('Contact support to delete your account')">🗑 Delete account</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</main>
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="modal-edit-profile" onclick="closeModals(event)">
+  <div class="modal">
+    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Edit profile</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
+    <div class="modal-body">
+      <div style="display:flex;align-items:center;gap:14px;padding:12px;background:var(--gray-50);border-radius:var(--radius)">
+        <div style="width:56px;height:56px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--gray-900)">JK</div>
+        <button class="btn btn-ghost btn-sm" onclick="showToast('Photo upload coming soon')">Change photo</button>
+      </div>
+      <div class="form-row">
+        <div class="form-field"><label class="form-label">First name</label><input class="form-input" type="text" value="Jamie"></div>
+        <div class="form-field"><label class="form-label">Last name</label><input class="form-input" type="text" value="King"></div>
+      </div>
+      <div class="form-field"><label class="form-label">Bio</label><textarea class="form-textarea">Marathon runner, weekend cyclist, occasional wall climber. Chasing a sub-3:30 marathon. Hackney RC member since 2024.</textarea></div>
+      <div class="form-row">
+        <div class="form-field"><label class="form-label">City</label><input class="form-input" value="London"></div>
+        <div class="form-field"><label class="form-label">Level</label><select class="form-select"><option>Intermediate</option><option selected>Advanced</option><option>Elite</option></select></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-yellow" style="flex:1;justify-content:center" onclick="closeModals();showToast('✓ Profile updated!')">Save changes</button><button class="btn btn-ghost" onclick="closeModals()">Cancel</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-comment" onclick="closeModals(event)">
+  <div class="modal">
+    <div class="modal-header"><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Comments</div><button class="modal-close" onclick="closeModals()">✕</button></div>
+    <div class="modal-body">
+      <div style="display:flex;gap:9px"><div style="width:28px;height:28px;border-radius:50%;background:#FEF9C3;color:#854D0E;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0">SL</div><div style="background:var(--gray-50);border-radius:0 10px 10px 10px;padding:9px 12px;font-size:13px;color:var(--gray-700)">Great effort Jamie! What's your fuelling strategy on long runs?</div></div>
+      <div style="display:flex;gap:9px"><div style="width:28px;height:28px;border-radius:50%;background:#FFF7ED;color:#9A3412;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0">JK</div><div style="background:var(--yellow-light);border-radius:10px 10px 10px 0;padding:9px 12px;font-size:13px;color:var(--gray-700)">Thanks Sofia! Gel at km 8 and 16. Trying caffeine this Sunday.</div></div>
+      <div style="display:flex;gap:9px;margin-top:4px"><div style="width:28px;height:28px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:var(--gray-900);flex-shrink:0">JK</div><input type="text" placeholder="Add a comment…" style="flex:1;padding:8px 12px;border:var(--border);border-radius:20px;font-size:13px;outline:none"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-primary" style="flex:1;justify-content:center" onclick="closeModals();showToast('Comment posted!')">Post</button><button class="btn btn-ghost" onclick="closeModals()">Close</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-avatar" onclick="closeModals(event)">
+  <div class="modal">
+    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Profile photo</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
+    <div class="modal-body">
+      <div style="border:2px dashed var(--gray-200);border-radius:var(--radius-lg);padding:32px;text-align:center;cursor:pointer;background:var(--gray-50)" onclick="showToast('File picker opening…')">
+        <div style="font-size:36px;margin-bottom:10px">📸</div>
+        <div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:4px">Upload a photo</div>
+        <div style="font-size:12px;color:var(--gray-500)">PNG or JPG · Max 5MB · Square recommended</div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-yellow" style="flex:1;justify-content:center" onclick="closeModals();showToast('✓ Photo updated!')">Save photo</button><button class="btn btn-ghost" onclick="closeModals()">Cancel</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-goal" onclick="closeModals(event)">
+  <div class="modal">
+    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Add goal</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
+    <div class="modal-body">
+      <div class="form-field"><label class="form-label">Goal title</label><input class="form-input" type="text" placeholder="e.g. Sub-3:30 marathon"></div>
+      <div class="form-field"><label class="form-label">Sport</label><select class="form-select"><option>Running</option><option>Cycling</option><option>Climbing</option></select></div>
+      <div class="form-field"><label class="form-label">Target date</label><input class="form-input" type="date"></div>
+      <div class="form-field"><label class="form-label">Notes</label><textarea class="form-textarea" placeholder="What does hitting this goal mean to you?"></textarea></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-yellow" style="flex:1;justify-content:center" onclick="closeModals();showToast('✓ Goal added!')">Save goal</button><button class="btn btn-ghost" onclick="closeModals()">Cancel</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── TAB NAVIGATION ──
+function setTab(id) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.htab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const tc = document.getElementById('tab-' + id);
+  const ht = document.getElementById('htab-' + id);
+  if (tc) tc.classList.add('active');
+  if (ht) ht.classList.add('active');
+  if (id === 'settings' || id === 'overview') {
+    document.querySelectorAll('.nav-item').forEach(n => {
+      if (n.textContent.includes(id === 'settings' ? 'Settings' : 'profile')) n.classList.add('active');
+    });
+  }
+  window.scrollTo({ top: document.getElementById('profile-hero-section').offsetHeight + 56, behavior: 'smooth' });
+}
+
+// ── CALENDAR ──
+function buildCalendar() {
+  const grid = document.getElementById('cal-grid');
+  const types = ['cd-rest','cd-light','cd-hard','cd-hard','cd-med','cd-light','cd-rest',
+    'cd-hard','cd-light','cd-rest','cd-light','cd-hard','cd-med','cd-rest',
+    'cd-hard','cd-hard','cd-med','cd-light','cd-rest','cd-race','cd-light',
+    'cd-hard','cd-hard','cd-rest','cd-med','cd-light','cd-hard','cd-today'];
+  const labels = ['','','','','','','','M','T','W','T','F','S','S','M','T','W','T','F','S','S','M','T','W','T','F','S','↓'];
+  for (let i = 0; i < 28; i++) {
+    const d = document.createElement('div');
+    d.className = 'cal-day ' + (types[i] || 'cd-rest');
+    d.title = types[i] === 'cd-rest' ? 'Rest day' : types[i] === 'cd-race' ? 'Race day!' : types[i] === 'cd-today' ? 'Today' : 'Activity logged';
+    d.textContent = labels[i] || '';
+    if (types[i] === 'cd-today') d.style.outline = '2px solid var(--gray-900)';
+    grid.appendChild(d);
+  }
+}
+buildCalendar();
+
+// ── INTERACTIONS ──
+function toggleLike(btn) {
+  const liked = btn.classList.contains('liked');
+  btn.classList.toggle('liked', !liked);
+  const n = parseInt(btn.textContent.match(/\d+/)[0]);
+  btn.textContent = '👍 ' + (liked ? n - 1 : n + 1) + ' kudos';
+}
+function toggleIt(el) {
+  const on = el.classList.contains('on');
+  el.classList.toggle('on', !on);
+  el.classList.toggle('off', on);
+}
+function openModal(id) { document.getElementById('modal-' + id).classList.add('open'); }
+function closeModals(e) {
+  if (!e || e.target.classList.contains('modal-overlay'))
+    document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
+}
+function copyProfileLink() {
+  navigator.clipboard?.writeText('https://arenas.io/athletes/jamiek').catch(() => {});
+  showToast('✓ Profile link copied — arenas.io/athletes/jamiek');
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// Set initial active state
+document.getElementById('htab-overview').classList.add('active');
+</script>
+</body>
+</html>

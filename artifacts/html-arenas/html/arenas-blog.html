@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arenas Blog — Training insights, product news & community stories</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --yellow: #FFD21E; --yellow-dark: #E6B800; --yellow-light: #FFF9E0;
+  --gray-50: #F9FAFB; --gray-100: #F3F4F6; --gray-200: #E5E7EB;
+  --gray-300: #D1D5DB; --gray-400: #9CA3AF; --gray-500: #6B7280;
+  --gray-600: #4B5563; --gray-700: #374151; --gray-800: #1F2937; --gray-900: #111827;
+  --green: #10B981; --blue: #3B82F6; --purple: #8B5CF6; --orange: #F97316;
+  --font: 'Source Sans 3', sans-serif; --mono: 'IBM Plex Mono', monospace;
+  --border: 1px solid var(--gray-200); --radius: 8px; --radius-lg: 12px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+}
+body { font-family: var(--font); background: var(--gray-50); color: var(--gray-800); font-size: 15px; line-height: 1.5; min-height: 100vh; }
+
+/* ── TOPBAR ── */
+.topbar { background: white; border-bottom: var(--border); position: sticky; top: 0; z-index: 200; }
+.topbar-inner { max-width: 1280px; margin: 0 auto; padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 24px; }
+.logo { display: flex; align-items: center; gap: 8px; text-decoration: none; cursor: pointer; flex-shrink: 0; }
+.logo-icon { width: 30px; height: 30px; background: var(--yellow); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.logo-text { font-size: 17px; font-weight: 600; color: var(--gray-900); }
+.topnav { display: flex; align-items: center; gap: 2px; flex: 1; }
+.topnav a { padding: 6px 12px; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--gray-600); text-decoration: none; transition: background 0.1s; cursor: pointer; }
+.topnav a:hover { background: var(--gray-100); color: var(--gray-900); }
+.topnav a.active { background: var(--yellow-light); color: #7a5c00; }
+.topbar-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.btn { padding: 7px 14px; border-radius: 7px; font-size: 14px; font-weight: 500; cursor: pointer; border: var(--border); font-family: var(--font); transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.btn-ghost { background: transparent; color: var(--gray-700); }
+.btn-ghost:hover { background: var(--gray-100); }
+.btn-yellow { background: var(--yellow); color: var(--gray-900); border-color: var(--yellow-dark); font-weight: 600; }
+.btn-yellow:hover { background: var(--yellow-dark); }
+.btn-primary { background: var(--gray-900); color: white; border-color: var(--gray-900); }
+.btn-primary:hover { background: var(--gray-700); }
+.avatar-sm { width: 30px; height: 30px; border-radius: 50%; background: var(--yellow); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: var(--gray-900); cursor: pointer; }
+
+/* ── PAGE HEADER ── */
+.page-header { background: white; border-bottom: var(--border); }
+.page-header-inner { max-width: 1280px; margin: 0 auto; padding: 28px 24px 0; display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.page-header-left h1 { font-size: 26px; font-weight: 700; color: var(--gray-900); margin-bottom: 4px; letter-spacing: -0.01em; }
+.page-header-left p { font-size: 14px; color: var(--gray-500); margin-bottom: 20px; }
+
+/* ── CATEGORY TABS ── */
+.cat-tabs-bar { display: flex; align-items: center; gap: 0; }
+.cat-tab { padding: 12px 18px; font-size: 14px; font-weight: 500; color: var(--gray-500); border-bottom: 2px solid transparent; cursor: pointer; border: none; background: transparent; font-family: var(--font); transition: color 0.1s, border-color 0.1s; white-space: nowrap; display: flex; align-items: center; gap: 7px; }
+.cat-tab:hover { color: var(--gray-800); }
+.cat-tab.active { color: var(--gray-900); border-bottom-color: var(--gray-900); }
+.cat-tab .tab-count { font-size: 11px; font-family: var(--mono); background: var(--gray-100); color: var(--gray-500); padding: 1px 6px; border-radius: 10px; }
+.cat-tab.active .tab-count { background: var(--gray-200); color: var(--gray-700); }
+
+/* ── CATEGORY PILLS ── */
+.cat-pill { padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; border: 1px solid transparent; white-space: nowrap; display: inline-block; }
+.cat-product   { background: #EAF3DE; color: #27500A; border-color: #A3D977; }
+.cat-training  { background: #EFF6FF; color: #0C447C; border-color: #93C5FD; }
+.cat-community { background: #FAEEDA; color: #633806; border-color: #EF9F27; }
+.cat-events    { background: #F5F3FF; color: #3C3489; border-color: #C4B5FD; }
+
+/* ── MAIN LAYOUT ── */
+.main { max-width: 1280px; margin: 0 auto; padding: 28px 24px; display: grid; grid-template-columns: 1fr 300px; gap: 24px; align-items: start; }
+
+/* ── FEATURED ARTICLE ── */
+.featured-wrap { margin-bottom: 24px; }
+.featured-card {
+  background: white; border: var(--border); border-radius: var(--radius-lg);
+  overflow: hidden; display: grid; grid-template-columns: 1fr 1fr;
+  transition: border-color 0.15s; cursor: pointer;
+}
+.featured-card:hover { border-color: var(--gray-300); }
+.featured-visual {
+  background: var(--gray-50); border-right: var(--border);
+  display: flex; flex-direction: column; justify-content: center;
+  align-items: stretch; padding: 28px; gap: 12px; min-height: 280px;
+}
+.feat-activity-card {
+  background: white; border: var(--border); border-radius: var(--radius);
+  padding: 14px;
+}
+.fac-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+.fac-av { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.fac-user { font-size: 13px; font-weight: 600; color: var(--gray-900); }
+.fac-time { font-size: 11px; color: var(--gray-400); }
+.fac-sport-tag { margin-left: auto; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 20px; flex-shrink: 0; }
+.fac-stats { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
+.fac-stat { background: var(--gray-50); border: var(--border); border-radius: 5px; padding: 3px 8px; font-size: 11px; font-family: var(--mono); color: var(--gray-700); }
+.fac-desc { font-size: 12px; color: var(--gray-600); }
+.feat-ai-panel {
+  background: var(--yellow-light); border: 1px solid #fde68a;
+  border-radius: var(--radius); padding: 12px 14px;
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.feat-ai-icon { width: 22px; height: 22px; border-radius: 50%; background: var(--yellow); display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: var(--gray-900); flex-shrink: 0; margin-top: 1px; }
+.feat-ai-text { font-size: 12px; color: #7a5c00; line-height: 1.6; }
+.feat-ai-text strong { font-weight: 700; }
+.featured-content { padding: 32px 28px; display: flex; flex-direction: column; }
+.featured-badge { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.featured-badge .new-tag { display: inline-flex; align-items: center; gap: 4px; background: var(--yellow-light); border: 1px solid #fde68a; color: #7a5c00; font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 20px; }
+.featured-title { font-size: 22px; font-weight: 700; color: var(--gray-900); line-height: 1.3; letter-spacing: -0.01em; margin-bottom: 12px; }
+.featured-excerpt { font-size: 14px; color: var(--gray-600); line-height: 1.7; margin-bottom: 20px; flex: 1; }
+.featured-meta { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--gray-500); margin-bottom: 20px; }
+.meta-author { display: flex; align-items: center; gap: 7px; }
+.meta-av { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; flex-shrink: 0; }
+.meta-sep { color: var(--gray-300); }
+.read-time { font-family: var(--mono); font-size: 12px; }
+
+/* ── POSTS SECTION HEADER ── */
+.section-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.section-title { font-size: 15px; font-weight: 600; color: var(--gray-900); }
+.section-link { font-size: 13px; color: var(--gray-500); text-decoration: none; cursor: pointer; }
+.section-link:hover { color: var(--gray-700); }
+
+/* ── POST CARDS GRID ── */
+.posts-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+
+.post-card {
+  background: white; border: var(--border); border-radius: var(--radius-lg);
+  overflow: hidden; cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+  display: flex; flex-direction: column;
+}
+.post-card:hover { border-color: var(--gray-300); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+
+.post-thumb {
+  height: 96px; display: flex; align-items: center; justify-content: center;
+  font-size: 32px; border-bottom: var(--border); flex-shrink: 0;
+  position: relative;
+}
+.post-thumb-label {
+  position: absolute; bottom: 8px; right: 10px;
+  font-size: 10px; font-weight: 600; font-family: var(--mono);
+  color: var(--gray-500);
+}
+.post-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.post-title { font-size: 14px; font-weight: 600; color: var(--gray-900); line-height: 1.4; }
+.post-excerpt { font-size: 13px; color: var(--gray-500); line-height: 1.6; flex: 1; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.post-footer { padding: 10px 18px 14px; border-top: var(--border); display: flex; align-items: center; justify-content: space-between; }
+.post-author { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--gray-600); }
+.post-author-av { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 600; flex-shrink: 0; }
+.post-meta-right { display: flex; align-items: center; gap: 8px; }
+.post-date { font-size: 11px; color: var(--gray-400); }
+.post-read { font-size: 11px; font-family: var(--mono); color: var(--gray-400); }
+.post-reads-count { font-size: 11px; color: var(--gray-400); }
+
+/* ── LOAD MORE ── */
+.load-more { text-align: center; margin-top: 16px; }
+.load-more-btn { padding: 9px 24px; border: var(--border); border-radius: 8px; font-size: 14px; font-weight: 500; background: white; color: var(--gray-700); cursor: pointer; font-family: var(--font); transition: background 0.1s; }
+.load-more-btn:hover { background: var(--gray-50); }
+
+/* ── RIGHT SIDEBAR ── */
+.right-col { display: flex; flex-direction: column; gap: 16px; }
+.side-card { background: white; border: var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.side-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--gray-500); padding: 14px 16px 10px; }
+
+/* Subscribe */
+.subscribe-body { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+.subscribe-desc { font-size: 13px; color: var(--gray-600); line-height: 1.6; }
+.subscribe-input { width: 100%; padding: 8px 12px; border: var(--border); border-radius: 7px; font-size: 14px; font-family: var(--font); color: var(--gray-800); outline: none; transition: border-color 0.15s; }
+.subscribe-input:focus { border-color: var(--gray-400); }
+.subscribe-input::placeholder { color: var(--gray-400); }
+.subscribe-btn { width: 100%; padding: 9px; border-radius: 7px; font-size: 14px; font-weight: 600; background: var(--yellow); color: var(--gray-900); border: 1px solid var(--yellow-dark); cursor: pointer; font-family: var(--font); transition: background 0.15s; }
+.subscribe-btn:hover { background: var(--yellow-dark); }
+.subscribe-btn.done { background: #EAF3DE; color: #27500A; border-color: #A3D977; cursor: default; }
+.subscribe-note { font-size: 12px; color: var(--gray-400); text-align: center; }
+
+/* Popular posts */
+.popular-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 16px; border-bottom: var(--border); cursor: pointer; transition: background 0.1s; }
+.popular-item:last-child { border-bottom: none; }
+.popular-item:hover { background: var(--gray-50); }
+.pop-num { font-size: 16px; font-weight: 700; color: var(--gray-300); font-family: var(--mono); flex-shrink: 0; width: 20px; line-height: 1.4; }
+.pop-info { flex: 1; min-width: 0; }
+.pop-title { font-size: 13px; font-weight: 600; color: var(--gray-900); line-height: 1.35; margin-bottom: 3px; }
+.pop-meta { font-size: 11px; color: var(--gray-400); display: flex; align-items: center; gap: 5px; }
+
+/* Topic tags */
+.tag-cloud { padding: 0 14px 14px; display: flex; flex-wrap: wrap; gap: 6px; }
+.tag-item { padding: 4px 11px; border-radius: 20px; font-size: 12px; font-weight: 500; background: var(--gray-50); color: var(--gray-600); border: var(--border); cursor: pointer; transition: all 0.1s; }
+.tag-item:hover { background: var(--gray-100); border-color: var(--gray-300); color: var(--gray-800); }
+.tag-item.active { background: var(--yellow-light); color: #7a5c00; border-color: #fde68a; }
+
+/* Product updates */
+.update-item { display: flex; align-items: flex-start; gap: 12px; padding: 10px 16px; border-bottom: var(--border); }
+.update-item:last-child { border-bottom: none; }
+.update-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+.update-info { flex: 1; }
+.update-text { font-size: 13px; color: var(--gray-700); line-height: 1.4; }
+.update-text strong { color: var(--gray-900); font-weight: 600; }
+.update-date { font-size: 11px; color: var(--gray-400); margin-top: 2px; font-family: var(--mono); }
+
+/* About the blog */
+.about-body { padding: 0 16px 16px; }
+.about-text { font-size: 13px; color: var(--gray-600); line-height: 1.65; margin-bottom: 12px; }
+.about-authors { display: flex; flex-direction: column; gap: 10px; }
+.about-author { display: flex; align-items: center; gap: 9px; }
+.aa-av { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.aa-name { font-size: 13px; font-weight: 600; color: var(--gray-900); }
+.aa-role { font-size: 11px; color: var(--gray-500); }
+
+/* Article modal */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 500; display: none; align-items: flex-start; justify-content: center; padding: 40px 24px; backdrop-filter: blur(2px); overflow-y: auto; }
+.modal-overlay.open { display: flex; }
+.modal { background: white; border-radius: var(--radius-lg); width: 100%; max-width: 680px; box-shadow: 0 20px 60px rgba(0,0,0,0.2); animation: modal-in 0.2s ease; }
+@keyframes modal-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.modal-header { padding: 24px 28px 20px; border-bottom: var(--border); display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.modal-close { width: 30px; height: 30px; border-radius: 50%; border: var(--border); background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--gray-500); flex-shrink: 0; transition: background 0.1s; }
+.modal-close:hover { background: var(--gray-100); }
+.article-body { padding: 28px; }
+.article-body p { font-size: 15px; color: var(--gray-700); line-height: 1.8; margin-bottom: 18px; }
+.article-body h3 { font-size: 18px; font-weight: 700; color: var(--gray-900); margin: 24px 0 10px; letter-spacing: -0.01em; }
+.article-body .callout { background: var(--yellow-light); border-left: 3px solid var(--yellow-dark); border-radius: 0 var(--radius) var(--radius) 0; padding: 14px 16px; margin: 20px 0; font-size: 14px; color: #7a5c00; line-height: 1.6; }
+.article-cta { padding: 20px 28px; border-top: var(--border); background: var(--gray-50); border-radius: 0 0 var(--radius-lg) var(--radius-lg); display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.article-cta-text { font-size: 14px; color: var(--gray-600); }
+.article-cta-text strong { color: var(--gray-900); }
+
+/* Empty state */
+.empty-state { text-align: center; padding: 56px 24px; background: white; border: var(--border); border-radius: var(--radius-lg); grid-column: 1 / -1; }
+.empty-state .ei { font-size: 36px; margin-bottom: 12px; }
+.empty-state h3 { font-size: 17px; font-weight: 600; color: var(--gray-900); margin-bottom: 6px; }
+.empty-state p { font-size: 14px; color: var(--gray-500); }
+
+/* Toast */
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--gray-900); color: white; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; z-index: 999; transition: transform 0.3s ease; white-space: nowrap; box-shadow: var(--shadow-md); }
+.toast.show { transform: translateX(-50%) translateY(0); }
+
+/* Animations */
+@keyframes fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.fade-in { animation: fade-in 0.22s ease forwards; }
+
+/* Footer */
+.footer { background: white; border-top: var(--border); margin-top: 40px; padding: 24px; }
+.footer-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--gray-400); }
+.footer-links { display: flex; gap: 20px; }
+.footer-links a { color: var(--gray-500); text-decoration: none; }
+.footer-links a:hover { color: var(--gray-700); }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <a href="/html" class="logo"><div class="logo-icon">🏟</div><span class="logo-text">Arenas</span></a>
+    <nav class="topnav">
+      <a href="#">Features</a>
+      <a href="#">Pricing</a>
+      <a href="#">For clubs</a>
+      <a href="#" class="active">Blog</a>
+    </nav>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost">Log in</button>
+      <button class="btn btn-yellow">Sign up free</button>
+      <div class="avatar-sm">JK</div>
+    </div>
+  </div>
+</header>
+
+<!-- PAGE HEADER + TABS -->
+<div class="page-header">
+  <div class="page-header-inner">
+    <div class="page-header-left">
+      <h1>Arenas blog 📝</h1>
+      <p>Training insights, product news and community stories — updated every week.</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;padding-bottom:4px;flex-shrink:0">
+      <div style="font-size:13px;color:var(--gray-500)">
+        <span style="font-family:var(--mono);font-weight:600;color:var(--gray-900)">6,400</span> subscribers
+      </div>
+      <button class="btn btn-primary" style="font-size:13px" onclick="document.getElementById('subscribe-input').focus();document.getElementById('subscribe-input').scrollIntoView({behavior:'smooth',block:'center'})">Subscribe →</button>
+    </div>
+  </div>
+  <div style="max-width:1280px;margin:0 auto;padding:0 24px">
+    <div class="cat-tabs-bar">
+      <button class="cat-tab active" data-cat="all" onclick="setCategory('all',this)">All posts <span class="tab-count" id="count-all">24</span></button>
+      <button class="cat-tab" data-cat="product" onclick="setCategory('product',this)">Product <span class="tab-count" id="count-product">6</span></button>
+      <button class="cat-tab" data-cat="training" onclick="setCategory('training',this)">Training <span class="tab-count" id="count-training">10</span></button>
+      <button class="cat-tab" data-cat="community" onclick="setCategory('community',this)">Community <span class="tab-count" id="count-community">5</span></button>
+      <button class="cat-tab" data-cat="events" onclick="setCategory('events',this)">Events <span class="tab-count" id="count-events">3</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<main class="main">
+  <div id="main-content">
+
+    <!-- FEATURED ARTICLE -->
+    <div class="featured-wrap">
+      <div class="featured-card" onclick="openArticle('feat')">
+        <div class="featured-visual">
+          <div class="feat-activity-card">
+            <div class="fac-head">
+              <div class="fac-av" style="background:#FFF7ED;color:#9A3412">JK</div>
+              <div>
+                <div class="fac-user">Jamie K.</div>
+                <div class="fac-time">12 min ago · London</div>
+              </div>
+              <div class="fac-sport-tag" style="background:#FFF7ED;color:#9A3412;border:1px solid #FDBA74">🏃 Running</div>
+            </div>
+            <div class="fac-stats">
+              <div class="fac-stat">12.4 km</div>
+              <div class="fac-stat">54:22</div>
+              <div class="fac-stat">4:23/km</div>
+              <div class="fac-stat">148 bpm</div>
+            </div>
+            <div class="fac-desc">Morning long run done ✓ PB attempt Sunday — anyone want to pace?</div>
+          </div>
+          <div class="feat-ai-panel">
+            <div class="feat-ai-icon">AI</div>
+            <div class="feat-ai-text"><strong>AI Coach:</strong> HR spiked 12 bpm in the final 3km — classic glycogen depletion pattern. Keep tomorrow easy and you'll be fresh for Sunday's PB attempt.</div>
+          </div>
+        </div>
+        <div class="featured-content">
+          <div class="featured-badge">
+            <span class="cat-pill cat-product">Product</span>
+            <span class="new-tag">✦ New</span>
+          </div>
+          <div class="featured-title">Introducing AI Coach: personalised analysis on every workout you log</div>
+          <div class="featured-excerpt">Every activity you log on Arenas now gets a real-time AI coaching analysis — pace breakdown, heart rate zone commentary, recovery recommendations, and training suggestions grounded specifically in your own data. Here's how it works, what we built it for, and what's coming next.</div>
+          <div class="featured-meta">
+            <div class="meta-author">
+              <div class="meta-av" style="background:#E0F2FE;color:#0369A1">AT</div>
+              Arenas Team
+            </div>
+            <span class="meta-sep">·</span>
+            <span>May 21, 2026</span>
+            <span class="meta-sep">·</span>
+            <span class="read-time">6 min read</span>
+          </div>
+          <button class="btn btn-primary" onclick="event.stopPropagation();openArticle('feat')">Read article →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RECENT POSTS -->
+    <div class="section-row">
+      <div class="section-title" id="section-label">Recent posts</div>
+      <a class="section-link" href="#">RSS feed →</a>
+    </div>
+
+    <div class="posts-grid" id="posts-grid"></div>
+
+    <div class="load-more" style="margin-top:16px">
+      <button class="load-more-btn" onclick="showToast('All posts loaded')">Load more posts</button>
+    </div>
+  </div>
+
+  <!-- RIGHT SIDEBAR -->
+  <div class="right-col">
+
+    <!-- Subscribe -->
+    <div class="side-card">
+      <div class="side-title">Weekly training tips</div>
+      <div class="subscribe-body">
+        <div class="subscribe-desc">One email per week — sport-specific training insights, product updates, and community stories. No spam, ever.</div>
+        <input class="subscribe-input" id="subscribe-input" type="email" placeholder="your@email.com" onkeydown="if(event.key==='Enter')subscribe()">
+        <button class="subscribe-btn" id="subscribe-btn" onclick="subscribe()">Subscribe free</button>
+        <div class="subscribe-note">Join 6,400 athletes already subscribed</div>
+      </div>
+    </div>
+
+    <!-- Popular this month -->
+    <div class="side-card">
+      <div class="side-title">Popular this month</div>
+      <div class="popular-item" onclick="showToast('Opening article...')">
+        <div class="pop-num">1</div>
+        <div class="pop-info">
+          <div class="pop-title">What your cycling power data actually means</div>
+          <div class="pop-meta"><span class="cat-pill cat-training" style="font-size:9px;padding:1px 6px">Training</span> · 8 min · 2.4k reads</div>
+        </div>
+      </div>
+      <div class="popular-item" onclick="showToast('Opening article...')">
+        <div class="pop-num">2</div>
+        <div class="pop-info">
+          <div class="pop-title">Heart rate zones: why easy runs feel embarrassingly slow</div>
+          <div class="pop-meta"><span class="cat-pill cat-training" style="font-size:9px;padding:1px 6px">Training</span> · 7 min · 1.8k reads</div>
+        </div>
+      </div>
+      <div class="popular-item" onclick="openArticle('feat')">
+        <div class="pop-num">3</div>
+        <div class="pop-info">
+          <div class="pop-title">Introducing AI Coach: analysis on every workout</div>
+          <div class="pop-meta"><span class="cat-pill cat-product" style="font-size:9px;padding:1px 6px">Product</span> · 6 min · 1.2k reads</div>
+        </div>
+      </div>
+      <div class="popular-item" onclick="showToast('Opening article...')">
+        <div class="pop-num">4</div>
+        <div class="pop-info">
+          <div class="pop-title">How Sofia found her climbing partners through Arenas</div>
+          <div class="pop-meta"><span class="cat-pill cat-community" style="font-size:9px;padding:1px 6px">Community</span> · 5 min · 980 reads</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Topic tags -->
+    <div class="side-card">
+      <div class="side-title">Browse by topic</div>
+      <div class="tag-cloud" id="tag-cloud">
+        <div class="tag-item" onclick="filterTag(this,'running')">🏃 Running</div>
+        <div class="tag-item" onclick="filterTag(this,'cycling')">🚴 Cycling</div>
+        <div class="tag-item" onclick="filterTag(this,'climbing')">🧗 Climbing</div>
+        <div class="tag-item" onclick="filterTag(this,'swimming')">🏊 Swimming</div>
+        <div class="tag-item" onclick="filterTag(this,'ai')">✦ AI coaching</div>
+        <div class="tag-item" onclick="filterTag(this,'heartrate')">❤️ Heart rate</div>
+        <div class="tag-item" onclick="filterTag(this,'recovery')">💤 Recovery</div>
+        <div class="tag-item" onclick="filterTag(this,'events')">📅 Events</div>
+        <div class="tag-item" onclick="filterTag(this,'challenges')">🏆 Challenges</div>
+        <div class="tag-item" onclick="filterTag(this,'nutrition')">🥗 Nutrition</div>
+        <div class="tag-item" onclick="filterTag(this,'clubs')">🤝 Clubs</div>
+        <div class="tag-item" onclick="filterTag(this,'triathlon')">🔱 Triathlon</div>
+      </div>
+    </div>
+
+    <!-- Product updates -->
+    <div class="side-card">
+      <div class="side-title">Latest releases</div>
+      <div class="update-item">
+        <div class="update-dot" style="background:#10B981"></div>
+        <div class="update-info">
+          <div class="update-text"><strong>AI Coach</strong> launched — live for all users</div>
+          <div class="update-date">May 21, 2026</div>
+        </div>
+      </div>
+      <div class="update-item">
+        <div class="update-dot" style="background:#3B82F6"></div>
+        <div class="update-info">
+          <div class="update-text"><strong>Events</strong> — 2,100+ listings now live</div>
+          <div class="update-date">May 6, 2026</div>
+        </div>
+      </div>
+      <div class="update-item">
+        <div class="update-dot" style="background:#8B5CF6"></div>
+        <div class="update-info">
+          <div class="update-text"><strong>Challenges</strong> — head-to-head mode</div>
+          <div class="update-date">Apr 18, 2026</div>
+        </div>
+      </div>
+      <div class="update-item">
+        <div class="update-dot" style="background:#F59E0B"></div>
+        <div class="update-info">
+          <div class="update-text"><strong>Clubs</strong> — coach dashboard launched</div>
+          <div class="update-date">Apr 2, 2026</div>
+        </div>
+      </div>
+      <div class="update-item">
+        <div class="update-dot" style="background:#F97316"></div>
+        <div class="update-info">
+          <div class="update-text"><strong>Athletes</strong> — discovery & follow system</div>
+          <div class="update-date">Mar 14, 2026</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- About -->
+    <div class="side-card">
+      <div class="side-title">About this blog</div>
+      <div class="about-body">
+        <div class="about-text">Written by the Arenas team and community athletes. We cover training science, product updates, and stories from the people using Arenas to train smarter.</div>
+        <div class="about-authors">
+          <div class="about-author">
+            <div class="aa-av" style="background:#E0F2FE;color:#0369A1">AT</div>
+            <div><div class="aa-name">Arenas Team</div><div class="aa-role">Product & company news</div></div>
+          </div>
+          <div class="about-author">
+            <div class="aa-av" style="background:#FFF7ED;color:#9A3412">JK</div>
+            <div><div class="aa-name">Jamie K.</div><div class="aa-role">Running & endurance</div></div>
+          </div>
+          <div class="about-author">
+            <div class="aa-av" style="background:#FEF9C3;color:#854D0E">MC</div>
+            <div><div class="aa-name">Marco C.</div><div class="aa-role">Cycling & power training</div></div>
+          </div>
+          <div class="about-author">
+            <div class="aa-av" style="background:#F5F3FF;color:#5B21B6">SR</div>
+            <div><div class="aa-name">Sofia R.</div><div class="aa-role">Climbing & technique</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- ARTICLE MODAL -->
+<div class="modal-overlay" id="article-modal" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px" id="modal-badges"></div>
+        <div style="font-size:20px;font-weight:700;color:var(--gray-900);line-height:1.3;letter-spacing:-0.01em" id="modal-title"></div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:10px;font-size:13px;color:var(--gray-500)" id="modal-meta"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="article-body" id="modal-body"></div>
+    <div class="article-cta">
+      <div class="article-cta-text"><strong>Want AI coaching on your workouts?</strong> Join Arenas free — no credit card needed.</div>
+      <button class="btn btn-yellow">Get started free →</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="width:22px;height:22px;background:var(--yellow);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px">🏟</div>
+      <span>Arenas © 2026</span>
+    </div>
+    <div class="footer-links">
+      <a href="#">About</a><a href="#">Blog</a><a href="#">API</a><a href="#">Terms</a><a href="#">Privacy</a><a href="#">Contact</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+// ── DATA ──
+const posts = [
+  {
+    id: 'p1', cat: 'training', sport: 'cycling',
+    thumb: '🚴', thumbBg: '#EFF6FF',
+    title: 'What your cycling power data actually means — and what to do with it',
+    excerpt: 'FTP, W/kg, normalised power — the numbers in your ride data tell a clear story once you know how to read them. A plain-English guide for every rider, from commuter to gran fondo.',
+    author: 'Marco C.', authorInit: 'MC', authorBg: '#FEF9C3', authorC: '#854D0E',
+    date: 'May 18, 2026', read: '8 min', reads: '2.4k',
+    tags: ['cycling','heartrate'],
+    body: `<p>If you ride with a power meter — or even if you use estimated power from apps like Strava — you're sitting on a goldmine of data that most riders completely ignore.</p>
+<h3>What FTP actually tells you</h3>
+<p>Functional Threshold Power (FTP) is the maximum average power you can sustain for roughly 60 minutes. It's the single most useful number in cycling because it's the anchor for everything else — your training zones, your W/kg for climbs, and your pacing strategy for events.</p>
+<div class="callout">The AI Coach on Arenas now automatically detects when you're riding near your threshold and flags whether your power distribution was even or front-loaded — a key indicator of whether you went out too hard.</div>
+<h3>Normalised power vs average power</h3>
+<p>Average power understates how hard a ride actually was, because it treats every second equally. A 5-second sprint followed by coasting counts the same as steady riding at the same average. Normalised Power accounts for this by weighting harder efforts more heavily — it's a better proxy for the physiological cost of the ride.</p>
+<p>When you see a Normalised Power significantly higher than Average Power, it means the ride was punchy and variable. That costs more energy than a steady effort at the same average — something the AI Coach specifically calls out in its recovery recommendations.</p>`
+  },
+  {
+    id: 'p2', cat: 'community', sport: 'climbing',
+    thumb: '🧗', thumbBg: '#F5F3FF',
+    title: 'How Sofia found her climbing partners — and a coach — through Arenas',
+    excerpt: 'Moving to a new city with no climbing network is daunting. Sofia used Arenas to find session partners within a week, and a coach within a month. Here\'s her story.',
+    author: 'Sofia R.', authorInit: 'SR', authorBg: '#F5F3FF', authorC: '#5B21B6',
+    date: 'May 14, 2026', read: '5 min', reads: '980',
+    tags: ['climbing'],
+    body: `<p>Six months ago Sofia Ramos moved from Madrid to Barcelona for work. She'd been climbing for four years, was projecting V7, and had a regular crew back home she trained with twice a week. In Barcelona she knew exactly one person, and that person didn't climb.</p>
+<h3>The first week</h3>
+<p>"I tried going to the wall alone a couple of times. It's fine for projecting, but you miss the beta swaps, the motivation of watching someone else try your problem. I wanted to find people at my level."</p>
+<div class="callout">Sofia filtered the Athletes tab by Climbing, Advanced level, and Barcelona location. She found 34 climbers within 15km. Within 48 hours she had three session partners lined up.</div>
+<h3>Finding a coach</h3>
+<p>Through the community she met Alena M., who turned out to run guided climbing trips to Siurana and offered occasional coaching sessions. Three weeks later they were on the wall together working the same V7 project.</p>
+<p>"The thing that surprised me was how willing people were to just say yes. The Arenas profile shows your grade history and recent activity — so there's no awkward conversation about level. You already know if you'll be compatible session partners before you even DM."</p>`
+  },
+  {
+    id: 'p3', cat: 'training', sport: 'running',
+    thumb: '🏃', thumbBg: '#FFF7ED',
+    title: 'Heart rate zones explained: why easy runs should feel embarrassingly slow',
+    excerpt: 'Most runners train too hard most of the time. Understanding zones — and why zone 2 feels almost insultingly easy — is the single biggest unlock for long-term running improvement.',
+    author: 'Jamie K.', authorInit: 'JK', authorBg: '#FFF7ED', authorC: '#9A3412',
+    date: 'May 10, 2026', read: '7 min', reads: '1.8k',
+    tags: ['running','heartrate'],
+    body: `<p>The most common training mistake runners make isn't going too easy. It's going too hard on their easy days — and then not having enough left to push hard on their hard days. This is called the "grey zone", and it's where most recreational runners live.</p>
+<h3>What zone 2 actually feels like</h3>
+<p>Zone 2 is roughly 60–70% of your maximum heart rate. For most people this is a pace where you can hold a full conversation without gasping. It feels almost insultingly easy. You'll be overtaken by people who look like they're barely trying. You'll wonder if you're even getting a workout.</p>
+<div class="callout">The Arenas AI Coach now automatically identifies when your HR drifts above zone 2 during a "recovery" run and flags it in your post-run analysis — so you can see the pattern without having to watch your watch while you run.</div>
+<h3>Why it matters</h3>
+<p>Zone 2 is where your body builds its aerobic base — the mitochondrial density and fat oxidation capacity that make everything else easier. Elites spend roughly 80% of their training volume in zone 2. The other 20% is genuinely hard — intervals, tempo runs, race pace work. There's very little in between.</p>
+<p>The grey zone (zone 3, roughly 70–80% HR) is hard enough to accumulate fatigue but not hard enough to drive the adaptation you'd get from real zone 2 or real zone 4+ work. Most recreational runners spend most of their time here by accident.</p>`
+  },
+  {
+    id: 'p4', cat: 'events', sport: 'events',
+    thumb: '📅', thumbBg: '#F5F3FF',
+    title: 'Events are now live: 2,100+ races, meetups and group sessions in one place',
+    excerpt: 'You can now browse, filter, and RSVP to events across 47 sports — filtered to your location, fitness level, and the sports on your profile. Here\'s what we built and what\'s coming next.',
+    author: 'Arenas Team', authorInit: 'AT', authorBg: '#E0F2FE', authorC: '#0369A1',
+    date: 'May 6, 2026', read: '4 min', reads: '740',
+    tags: ['events'],
+    body: `<p>Today we're launching Events — the most complete multi-sport event discovery tool we know of. 2,100+ events across 47 sports, filterable by your location, sport, distance from you, date, and difficulty level.</p>
+<h3>How it's personalised</h3>
+<p>Unlike generic race calendars, Events on Arenas knows what sports you do and what level you're at from your profile. When you open the tab, you immediately see events that make sense for you — not a list of triathlons when you only run, not elite-only races when you're a beginner.</p>
+<div class="callout">The AI match score on each event card shows how well the event fits your current fitness based on your recent activity data — so you're not just browsing a list, you're seeing which events you could realistically target.</div>
+<h3>What's coming next</h3>
+<p>Over the next few weeks we're adding: team/club bulk registration so clubs can sign up their whole group in one step, training plan suggestions based on your event date, and post-event community threads where everyone who attended can share their experience and compare results.</p>`
+  },
+  {
+    id: 'p5', cat: 'training', sport: 'swimming',
+    thumb: '🏊', thumbBg: '#F0FDFA',
+    title: 'Open water vs pool: how your swim metrics change and what to track',
+    excerpt: 'Pace per 100m means something very different in open water. A guide to adjusting your benchmarks and what the AI coach looks for across both formats.',
+    author: 'Yuki T.', authorInit: 'YT', authorBg: '#FCE7F3', authorC: '#9D174D',
+    date: 'Apr 29, 2026', read: '6 min', reads: '610',
+    tags: ['swimming','triathlon'],
+    body: `<p>If you train in the pool and then race open water — or vice versa — you've probably noticed that your pace per 100m doesn't transfer directly. A 1:30/100m pool swimmer might find 1:45/100m a realistic open water target, and not because they're less fit.</p>
+<h3>Why the numbers don't transfer</h3>
+<p>Pool swimming has consistent turns, lane ropes that reduce chop, and no navigation overhead. Open water has all of these removed: you're sighting every 10 strokes, dealing with current, chop, and wetsuit buoyancy, and there are no walls to push off.</p>
+<div class="callout">Arenas AI Coach now distinguishes between pool and open water swims automatically from your activity tags, and applies different benchmarks when analysing your performance — so you're not compared unfairly across formats.</div>
+<h3>What to actually track</h3>
+<p>In the pool: pace per 100m, stroke rate, SWOLF (strokes per length + time per length), and rest intervals. In open water: overall pace, navigation efficiency (how direct your line was), sighting frequency, and heart rate in the first 400m — open water starts are almost always more chaotic than training suggests.</p>`
+  },
+  {
+    id: 'p6', cat: 'community', sport: 'running',
+    thumb: '🏆', thumbBg: '#EAF3DE',
+    title: 'The 100km May Run challenge: who\'s leading and how to catch up',
+    excerpt: '44 athletes are chasing 100 kilometres before May 31. A mid-month look at the leaderboard, the pacing strategies, and why the current leader from Tokyo is running more than anyone expected.',
+    author: 'Arenas Team', authorInit: 'AT', authorBg: '#E0F2FE', authorC: '#0369A1',
+    date: 'Apr 25, 2026', read: '3 min', reads: '480',
+    tags: ['running','challenges'],
+    body: `<p>With just over two weeks left in the 100km May Run challenge, the leaderboard is tighter than we expected. 44 athletes across 14 countries are competing, and the gap between first and fifth is less than 8km.</p>
+<h3>The current standings</h3>
+<p>Sofia L. from Prague leads with 94.2km logged — she's been running every single day without exception, averaging 6.7km per session. In second is Alena L. from London at 88.1km, who took two rest days early and has been making up ground with longer weekend runs.</p>
+<div class="callout">Jamie K. sits in 5th with 62.4km — well within reach of the top three with 9 days remaining. At the current pace of 4.2km/day needed to complete the challenge, a couple of longer weekend runs could move him up significantly.</div>
+<h3>Pacing strategies we've observed</h3>
+<p>The leaders have taken different approaches: consistent daily volume, weekend heavy loading, and one athlete who did almost nothing for the first two weeks and is now running doubles to catch up. The AI coach has been flagging overtraining risk for several athletes in the final stretch — a useful reminder that finishing healthy matters more than finishing first.</p>`
+  },
+  {
+    id: 'p7', cat: 'product', sport: 'product',
+    thumb: '⚙️', thumbBg: '#F3F4F6',
+    title: 'Leaderboards v2: local scope, multi-sport combined scores, and weekly resets',
+    excerpt: 'We\'ve rebuilt leaderboards from the ground up. Here\'s what\'s new — local vs national vs global scope, combined cross-sport scoring, and how weekly resets keep competition fresh.',
+    author: 'Arenas Team', authorInit: 'AT', authorBg: '#E0F2FE', authorC: '#0369A1',
+    date: 'Apr 18, 2026', read: '5 min', reads: '890',
+    tags: ['challenges'],
+    body: `<p>Leaderboards launched in March. After four weeks of feedback, we've rebuilt them significantly. Here's what changed and why.</p>
+<h3>Local scope by default</h3>
+<p>The original leaderboard was global by default. Feedback was clear: competing against 84,000 athletes worldwide felt overwhelming and demotivating for most users. Local first — your city, your area — makes competition feel achievable and meaningful.</p>
+<div class="callout">Arenas now shows you your local rank prominently, with national and global as optional zoom-outs. The "near you" sidebar shows the five athletes closest to you geographically — so you always have a direct rival to chase.</div>
+<h3>Combined cross-sport scoring</h3>
+<p>The "All my sports" tab now shows a genuinely combined score across every sport on your profile. A triathlete who swims, bikes, and runs all count together. A runner who also climbs gets credit for both. This is the leaderboard view no other platform offers — and it's the one most Arenas users check first.</p>`
+  },
+  {
+    id: 'p8', cat: 'training', sport: 'climbing',
+    thumb: '🧗', thumbBg: '#F5F3FF',
+    title: 'Projecting above your limit: how to train for grades you can\'t yet send',
+    excerpt: 'The most efficient way to improve your climbing grade isn\'t to climb at your limit — it\'s to train specifically for the moves that make your limit problems feel impossible.',
+    author: 'Sofia R.', authorInit: 'SR', authorBg: '#F5F3FF', authorC: '#5B21B6',
+    date: 'Apr 12, 2026', read: '9 min', reads: '720',
+    tags: ['climbing'],
+    body: `<p>There's a common trap in climbing training: spending most of your time on routes you can already do. It feels productive — you're climbing, you're moving, you're getting laps in. But you're not getting better at the specific demands of your project.</p>
+<h3>The specificity principle</h3>
+<p>If your V7 project crux is a two-finger crimp on a sloper compression sequence, the best training for it is... that exact type of hold and movement pattern. Hangboarding on jugs won't help much. Campus boarding won't help much. Specific weakness work will.</p>
+<div class="callout">Arenas now lets you tag your climbing sessions with the movement types you worked — crimp, sloper, undercling, dyno, compression — and the AI Coach tracks your progression on each over time. This makes it much easier to spot which weaknesses are actually limiting your grade.</div>
+<h3>The three-phase approach</h3>
+<p>For any given project: spend one session identifying the crux move type. Spend two to four sessions doing targeted weakness training for that move type (hangboard, system board, specific routes that force that pattern). Then return to the project. The improvement is often immediate and significant.</p>`
+  },
+];
+
+const catColors = { product: 'cat-product', training: 'cat-training', community: 'cat-community', events: 'cat-events' };
+const catLabels = { product: 'Product', training: 'Training', community: 'Community', events: 'Events' };
+
+let currentCat = 'all';
+let currentTag = null;
+
+// ── RENDER POSTS ──
+function renderPosts(data) {
+  const grid = document.getElementById('posts-grid');
+  if (!data.length) {
+    grid.innerHTML = `<div class="empty-state"><div class="ei">🔍</div><h3>No posts found</h3><p>Try a different category or topic tag.</p></div>`;
+    return;
+  }
+  grid.innerHTML = data.map(p => `
+    <div class="post-card fade-in" onclick="openArticle('${p.id}')">
+      <div class="post-thumb" style="background:${p.thumbBg}">
+        ${p.thumb}
+        <div class="post-thumb-label">${p.read} read</div>
+      </div>
+      <div class="post-body">
+        <div><span class="cat-pill ${catColors[p.cat]}">${catLabels[p.cat]}</span></div>
+        <div class="post-title">${p.title}</div>
+        <div class="post-excerpt">${p.excerpt}</div>
+      </div>
+      <div class="post-footer">
+        <div class="post-author">
+          <div class="post-author-av" style="background:${p.authorBg};color:${p.authorC}">${p.authorInit}</div>
+          ${p.author}
+        </div>
+        <div class="post-meta-right">
+          <span class="post-date">${p.date.split(',')[0]}</span>
+          <span class="post-reads-count">${p.reads} reads</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── CATEGORY FILTER ──
+function setCategory(cat, el) {
+  currentCat = cat;
+  currentTag = null;
+  document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.tag-item').forEach(t => t.classList.remove('active'));
+  const labels = { all: 'Recent posts', product: 'Product updates', training: 'Training guides', community: 'Community stories', events: 'Events coverage' };
+  document.getElementById('section-label').textContent = labels[cat] || 'Recent posts';
+  const filtered = cat === 'all' ? posts : posts.filter(p => p.cat === cat);
+  renderPosts(filtered);
+}
+
+// ── TAG FILTER ──
+function filterTag(el, tag) {
+  if (currentTag === tag) {
+    currentTag = null;
+    el.classList.remove('active');
+    renderPosts(currentCat === 'all' ? posts : posts.filter(p => p.cat === currentCat));
+    return;
+  }
+  currentTag = tag;
+  document.querySelectorAll('.tag-item').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.cat-tab').forEach(t => { t.classList.toggle('active', t.dataset.cat === 'all'); });
+  currentCat = 'all';
+  const filtered = posts.filter(p => p.tags && p.tags.includes(tag));
+  document.getElementById('section-label').textContent = 'Posts tagged: ' + el.textContent.trim();
+  renderPosts(filtered.length ? filtered : posts);
+}
+
+// ── ARTICLE MODAL ──
+const articles = { feat: {
+  cat: 'product', title: 'Introducing AI Coach: personalised analysis on every workout you log',
+  author: 'Arenas Team', authorInit: 'AT', authorBg: '#E0F2FE', authorC: '#0369A1',
+  date: 'May 21, 2026', read: '6 min',
+  body: `<p>Today we're launching AI Coach — a feature we've been building toward since we started Arenas. The idea is simple: every activity you log should come with a personalised coaching analysis, not just a list of numbers.</p>
+<h3>What AI Coach does</h3>
+<p>When you log a run, ride, climb, swim, or any other activity, the AI Coach analyses your performance data in the context of your recent training history. It identifies patterns you'd need a human coach to spot — like your pace consistently dropping after 8km, or your heart rate running higher than normal on what should have been a recovery run.</p>
+<div class="callout">The AI Coach is grounded specifically in your own data. It doesn't give generic advice about what runners should do — it tells you what you specifically should do based on what you specifically did today and over the past few weeks.</div>
+<h3>How to use it</h3>
+<p>After logging any activity, tap the "AI Coach" button on the activity card. The analysis appears immediately, with three sections: a performance summary, key insights from the session data, and training recommendations for the next 24–72 hours.</p>
+<p>You can also ask follow-up questions in the chat tab — "Was my heart rate too high for a recovery run?", "How does this compare to last week?", "What should I focus on before Sunday's race?" — and get answers grounded in your actual data.</p>
+<h3>What's coming next</h3>
+<p>Over the coming weeks we're adding: weekly training load summaries, injury risk flagging based on training spikes, and race-day readiness scores. The AI Coach is free to use 5 times per month on the free plan, and unlimited on Pro.</p>`
+}};
+posts.forEach(p => { articles[p.id] = p; });
+
+function openArticle(id) {
+  const a = articles[id] || posts.find(p => p.id === id);
+  if (!a) return;
+  document.getElementById('modal-badges').innerHTML = `<span class="cat-pill ${catColors[a.cat]||'cat-product'}">${catLabels[a.cat]||'Product'}</span>`;
+  document.getElementById('modal-title').textContent = a.title;
+  document.getElementById('modal-meta').innerHTML = `
+    <div style="display:flex;align-items:center;gap:7px">
+      <div class="meta-av" style="background:${a.authorBg};color:${a.authorC}">${a.authorInit}</div>
+      ${a.author}
+    </div>
+    <span style="color:var(--gray-300)">·</span>
+    <span>${a.date}</span>
+    <span style="color:var(--gray-300)">·</span>
+    <span style="font-family:var(--mono);font-size:12px">${a.read} read</span>`;
+  document.getElementById('modal-body').innerHTML = a.body || '';
+  document.getElementById('article-modal').classList.add('open');
+}
+
+function closeModal(e) {
+  if (!e || e.target === document.getElementById('article-modal')) {
+    document.getElementById('article-modal').classList.remove('open');
+  }
+}
+
+// ── SUBSCRIBE ──
+function subscribe() {
+  const input = document.getElementById('subscribe-input');
+  const btn = document.getElementById('subscribe-btn');
+  const val = input.value.trim();
+  if (!val || !val.includes('@')) { input.focus(); showToast('Please enter a valid email address'); return; }
+  btn.textContent = '✓ Subscribed — welcome!';
+  btn.classList.add('done');
+  input.disabled = true;
+  showToast('🎉 Subscribed! First issue arrives next Monday.');
+}
+
+// ── TOAST ──
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ── INIT ──
+renderPosts(posts);
+</script>
+</body>
+</html>

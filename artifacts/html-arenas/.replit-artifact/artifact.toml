@@ -1,0 +1,22 @@
+kind = "web"
+previewPath = "/html/"
+title = "Arenas HTML Prototype"
+version = "1.0.0"
+id = "artifacts/html-arenas"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = ["/html/", "/html"]
+localPort = 19758
+
+[services.development]
+run = "pnpm --filter @workspace/html-arenas run dev"
+
+[services.env]
+PORT = "19758"
+BASE_PATH = "/html"
