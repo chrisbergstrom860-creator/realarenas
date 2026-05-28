@@ -1,0 +1,28 @@
+In server.js, I'm getting a 404 when navigating to /clubs/dashboard. Please check the following and fix any issues:
+
+Open server.js and confirm these exact routes exist:
+
+javascriptconst express = require('express');
+const path = require('path');
+const app = express();
+
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'arenas-feed.html')));
+app.get('/profile', (req, res) => res.sendFile(path.join(__dirname, 'arenas-my-profile.html')));
+app.get('/events', (req, res) => res.sendFile(path.join(__dirname, 'arenas-events.html')));
+app.get('/leaderboards', (req, res) => res.sendFile(path.join(__dirname, 'arenas-leaderboards.html')));
+app.get('/challenges', (req, res) => res.sendFile(path.join(__dirname, 'arenas-challenges.html')));
+app.get('/athletes', (req, res) => res.sendFile(path.join(__dirname, 'arenas-athletes.html')));
+app.get('/notifications', (req, res) => res.sendFile(path.join(__dirname, 'arenas-notifications.html')));
+app.get('/blog', (req, res) => res.sendFile(path.join(__dirname, 'arenas-blog.html')));
+app.get('/for-clubs', (req, res) => res.sendFile(path.join(__dirname, 'arenas-for-clubs.html')));
+app.get('/clubs/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'arenas-club-dashboard.html')));
+app.get('/clubs/member', (req, res) => res.sendFile(path.join(__dirname, 'arenas-club-member.html')));
+app.get('/clubs/invite', (req, res) => res.sendFile(path.join(__dirname, 'arenas-club-invite.html')));
+app.get('/landing', (req, res) => res.sendFile(path.join(__dirname, 'arenas-landing-login.html')));
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Arenas running on port ${PORT}`));
+
+Make sure every HTML file listed above actually exists in the project root directory. List all HTML files currently in the project so I can see what's there.
+If any HTML files are missing from the project root, tell me which ones so I can provide them.
+After updating server.js, restart the server and confirm /clubs/dashboard loads correctly.
