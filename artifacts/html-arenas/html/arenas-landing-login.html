@@ -1164,12 +1164,10 @@ function checkPW(val) {
   label.style.color = score <= 1 ? '#EF4444' : score <= 2 ? '#F59E0B' : '#10B981';
 }
 function handleLogin() {
-  document.getElementById('form-login').style.display = 'none';
-  document.getElementById('form-success').style.display = 'block';
+  window.location.href = '/html/clubs/dashboard';
 }
 function handleSignup() {
-  document.getElementById('form-signup').style.display = 'none';
-  document.getElementById('form-success').style.display = 'block';
+  window.location.href = '/html/clubs/dashboard';
 }
 
 // ── SMOOTH SCROLL + NAV ACTIVE STATE ──
