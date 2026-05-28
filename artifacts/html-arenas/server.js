@@ -6,6 +6,16 @@ const PORT = process.env.PORT || 3000;
 const BASE = (process.env.BASE_PATH || '/html').replace(/\/$/, '');
 const HTML = path.join(__dirname, 'html');
 
+if (process.env.NODE_ENV !== 'production') {
+  app.use((req, res, next) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.set('Surrogate-Control', 'no-store');
+    next();
+  });
+}
+
 app.get(BASE === '' ? '/' : BASE, (req, res) => res.sendFile(path.join(HTML, 'arenas-feed.html')));
 app.get(BASE + '/athletes', (req, res) => res.sendFile(path.join(HTML, 'arenas-athletes.html')));
 app.get(BASE + '/events', (req, res) => res.sendFile(path.join(HTML, 'arenas-events.html')));
