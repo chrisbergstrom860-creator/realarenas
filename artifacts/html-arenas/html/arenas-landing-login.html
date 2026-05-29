@@ -977,6 +977,8 @@ html { scroll-behavior: smooth; }
     <div class="auth-right">
       <div class="auth-form-wrap">
 
+        <div id="auth-error" style="display:none;background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:14px"></div>
+
         <div class="auth-mode-toggle">
           <button class="auth-mode-btn" id="mode-login" onclick="setMode('login')">Log in</button>
           <button class="auth-mode-btn" id="mode-signup" onclick="setMode('signup')">Sign up</button>
@@ -997,22 +999,25 @@ html { scroll-behavior: smooth; }
             </button>
           </div>
           <div class="auth-divider"><span>or log in with email</span></div>
-          <div class="form-field">
-            <label class="form-label">Email</label>
-            <input class="form-input" type="email" placeholder="you@example.com">
-          </div>
-          <div class="form-field">
-            <label class="form-label">Password <a href="#" class="form-forgot" onclick="return false;">Forgot password?</a></label>
-            <input class="form-input" type="password" placeholder="••••••••">
-          </div>
-          <div class="form-submit">
-            <button class="btn btn-primary btn-full btn-lg" onclick="handleLogin()">Log in to Arenas</button>
-          </div>
+          <form action="/html/auth/login" method="POST">
+            <div class="form-field">
+              <label class="form-label">Email</label>
+              <input class="form-input" name="email" type="email" placeholder="you@example.com" required>
+            </div>
+            <div class="form-field">
+              <label class="form-label">Password <a href="#" class="form-forgot" onclick="return false;">Forgot password?</a></label>
+              <input class="form-input" name="password" type="password" placeholder="••••••••" required>
+            </div>
+            <div class="form-submit">
+              <button type="submit" class="btn btn-primary btn-full btn-lg">Log in to Arenas</button>
+            </div>
+          </form>
           <div class="form-terms" style="margin-top:16px">Don't have an account? <a href="#" onclick="setMode('signup'); return false;">Sign up free</a></div>
         </div>
 
         <!-- SIGNUP -->
         <div id="form-signup" style="display:none">
+          <form id="signupForm" action="/html/auth/signup" method="POST">
           <div class="onboard-step active" id="step-1">
             <div class="onboard-progress">
               <div class="onboard-dot active"></div>
@@ -1033,13 +1038,13 @@ html { scroll-behavior: smooth; }
             </div>
             <div class="auth-divider"><span>or sign up with email</span></div>
             <div class="form-row">
-              <div class="form-field"><label class="form-label">First name</label><input class="form-input" type="text" placeholder="Jamie"></div>
-              <div class="form-field"><label class="form-label">Last name</label><input class="form-input" type="text" placeholder="King"></div>
+              <div class="form-field"><label class="form-label">First name</label><input class="form-input" name="name" type="text" placeholder="Jamie"></div>
+              <div class="form-field"><label class="form-label">Last name</label><input class="form-input" name="lastName" type="text" placeholder="King"></div>
             </div>
-            <div class="form-field"><label class="form-label">Email</label><input class="form-input" type="email" placeholder="you@example.com"></div>
+            <div class="form-field"><label class="form-label">Email</label><input class="form-input" name="email" type="email" placeholder="you@example.com"></div>
             <div class="form-field">
               <label class="form-label">Password</label>
-              <input class="form-input" type="password" placeholder="Min 8 characters" oninput="checkPW(this.value)">
+              <input class="form-input" name="password" type="password" placeholder="Min 8 characters" oninput="checkPW(this.value)">
               <div class="pw-strength"><div class="pw-bar" id="pb1"></div><div class="pw-bar" id="pb2"></div><div class="pw-bar" id="pb3"></div><div class="pw-bar" id="pb4"></div></div>
               <div class="pw-label" id="pw-label">Choose a strong password</div>
             </div>
@@ -1108,10 +1113,18 @@ html { scroll-behavior: smooth; }
             </div>
             <div style="display:flex;gap:8px;margin-top:8px">
               <button class="btn btn-ghost" style="flex:1" onclick="goStep(2)">← Back</button>
-              <button class="btn btn-primary" style="flex:2" onclick="handleSignup()">Finish setup →</button>
+              <button type="submit" class="btn btn-primary" style="flex:2">Finish setup →</button>
             </div>
             <div style="text-align:center;margin-top:10px"><a href="#" style="font-size:12px;color:var(--gray-400);text-decoration:none" onclick="handleSignup(); return false;">Skip for now</a></div>
           </div>
+          </form>
+          <script>
+            (function(){
+              var f = document.getElementById('signupForm');
+              if(!f) return;
+              f.querySelectorAll('button').forEach(function(b){ if(!b.getAttribute('type')) b.setAttribute('type','button'); });
+            })();
+          </script>
         </div>
 
         <!-- Success -->
@@ -1251,6 +1264,21 @@ const strip = document.getElementById('sport-pills');
 });
 
 setMode('login');
+
+// ── AUTH ERROR BANNER (from ?error=) ──
+(function(){
+  var err = new URLSearchParams(location.search).get('error');
+  if(!err) return;
+  showPage('login');
+  setMode(err === 'signup' ? 'signup' : 'login');
+  var box = document.getElementById('auth-error');
+  if(box){
+    box.textContent = err === 'signup'
+      ? 'Could not create your account. Please try again.'
+      : 'Invalid email or password.';
+    box.style.display = 'block';
+  }
+})();
 </script>
 </body>
 </html>

@@ -196,7 +196,13 @@ button,select,input,textarea{font-family:var(--font)}
   </div>
   <div class="topbar-actions">
     <div class="notif-btn" onclick="window.location.href='/html/notifications'">🔔<div class="notif-dot"></div></div>
-    <div class="user-av">RH</div>
+    <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
+      <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">RH</div>
+      <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
+        <a href="/html/profile" style="display:block;padding:10px 14px;font-size:13px;color:#111827;text-decoration:none">My profile</a>
+        <a href="/html/auth/logout" style="display:block;padding:10px 14px;font-size:13px;color:#DC2626;text-decoration:none;border-top:1px solid #f3f4f6">Log out</a>
+      </div>
+    </div>
   </div>
 </header>
 
