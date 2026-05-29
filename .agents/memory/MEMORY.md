@@ -1,0 +1,1 @@
+- [html-arenas data architecture](html-arenas-data-architecture.md) — Supabase is single source of truth (not Replit Helium PG); anon-key-only server writes app data via SECURITY DEFINER RPC, RLS is SELECT-only.

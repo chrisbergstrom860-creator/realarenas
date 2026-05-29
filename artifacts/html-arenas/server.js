@@ -74,6 +74,49 @@ app.post(BASE + '/auth/signup', async (req, res) => {
   }
 });
 
+app.post(BASE + '/auth/signup-club', async (req, res) => {
+  const { email, password, name, club_name, handle, sport, city } = req.body;
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { name } }
+    });
+    if (error || !data || !data.user) {
+      return res.redirect(BASE + '/for-clubs?error=signup');
+    }
+    if (!data.session) {
+      // No session means email confirmation is required; we can't insert
+      // club rows under RLS without an authenticated session for this user.
+      return res.redirect(BASE + '/for-clubs?error=confirm');
+    }
+
+    // Per-request client authenticated as the new user so auth.uid() resolves
+    // inside the SECURITY DEFINER function below.
+    const userClient = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_ANON_KEY,
+      { global: { headers: { Authorization: 'Bearer ' + data.session.access_token } } }
+    );
+
+    // Atomically create the club + admin membership in one transaction.
+    const { data: clubId, error: rpcErr } = await userClient.rpc('create_club_with_admin', {
+      p_name: club_name,
+      p_handle: handle,
+      p_sport: sport,
+      p_city: city
+    });
+    if (rpcErr || !clubId) {
+      return res.redirect(BASE + '/for-clubs?error=club');
+    }
+
+    setSession(res, data.session);
+    return res.redirect(BASE + '/clubs/dashboard');
+  } catch (err) {
+    return res.redirect(BASE + '/for-clubs?error=signup');
+  }
+});
+
 app.get(BASE + '/auth/logout', async (req, res) => {
   try {
     await supabase.auth.signOut();

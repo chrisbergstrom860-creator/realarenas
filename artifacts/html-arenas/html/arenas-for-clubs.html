@@ -1268,9 +1268,36 @@ function populateReview() {
 }
 
 function launchClub() {
-  console.log('Launching club with data:', { admin: window.adminData, club: window.clubData, plan: window.planData });
-  closeSignup();
-  document.getElementById('success-overlay').classList.add('open');
+  const a = window.adminData || {};
+  const c = window.clubData || {};
+  if (!a.email || !a.password || !c.name || !c.handle || !c.sport) {
+    showToast('Please complete all required steps first');
+    return;
+  }
+  const nextBtn = document.getElementById('next-btn');
+  nextBtn.disabled = true;
+  nextBtn.textContent = 'Launching…';
+  const fields = {
+    email: a.email,
+    password: a.password,
+    name: a.name || '',
+    club_name: c.name,
+    handle: c.handle,
+    sport: c.sport,
+    city: c.city || ''
+  };
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '/html/auth/signup-club';
+  for (const [k, v] of Object.entries(fields)) {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = k;
+    input.value = v;
+    form.appendChild(input);
+  }
+  document.body.appendChild(form);
+  form.submit();
 }
 
 // ── SPORT STRIP ──
