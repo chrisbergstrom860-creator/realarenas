@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const cookieParser = require('cookie-parser');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -264,7 +265,14 @@ app.get(BASE + '/events', (req, res) => res.sendFile(path.join(HTML, 'arenas-eve
 app.get(BASE + '/leaderboards', (req, res) => res.sendFile(path.join(HTML, 'arenas-leaderboards.html')));
 app.get(BASE + '/challenges', (req, res) => res.sendFile(path.join(HTML, 'arenas-challenges.html')));
 app.get(BASE + '/profile', (req, res) => res.sendFile(path.join(HTML, 'arenas-my-profile.html')));
-app.get(BASE + '/blog', (req, res) => res.sendFile(path.join(HTML, 'arenas-blog.html')));
+app.get(BASE + '/blog', (req, res) => {
+  // Marketing page: only reveal the user avatar when actually logged in,
+  // otherwise show the guest "Log in / Sign up" CTAs (matches the landing page).
+  const loggedIn = !!(req.signedCookies && req.signedCookies.sb_access_token);
+  let html = fs.readFileSync(path.join(HTML, 'arenas-blog.html'), 'utf8');
+  if (loggedIn) html = html.replace('<body>', '<body class="logged-in">');
+  res.type('html').send(html);
+});
 app.get(BASE + '/for-clubs', (req, res) => res.sendFile(path.join(HTML, 'arenas-for-clubs.html')));
 app.get(BASE + '/clubs/dashboard', (req, res) => res.sendFile(path.join(HTML, 'arenas-club-dashboard.html')));
 app.get(BASE + '/clubs/member', (req, res) => res.sendFile(path.join(HTML, 'arenas-club-member.html')));
