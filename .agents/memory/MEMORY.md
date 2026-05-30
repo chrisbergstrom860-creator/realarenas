@@ -1,1 +1,2 @@
-- [html-arenas data architecture](html-arenas-data-architecture.md) — Supabase is single source of truth (not Replit Helium PG); anon-key-only server writes app data via SECURITY DEFINER RPC, RLS is SELECT-only.
+- [Data lives in Supabase, not DATABASE_URL](supabase-vs-database-url.md) — app tables are in the Supabase project via supabaseAdmin; DATABASE_URL is a different empty Replit Postgres. No profiles table exists.
+- [Artifact-local API routes must be BASE-prefixed](artifact-api-routing.md) — html-arenas owns /html, api-server owns /api; mount in-artifact routes at BASE+'/api/...' and fetch '/html/api/...'.

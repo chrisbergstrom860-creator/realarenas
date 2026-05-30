@@ -142,6 +142,121 @@ app.get(BASE + '/auth/logout', async (req, res) => {
   return res.redirect(BASE + '/landing');
 });
 
+// ── AUTH GUARD (validates the signed Supabase access-token cookie) ──
+async function requireAuth(req, res, next) {
+  const token = req.signedCookies && req.signedCookies.sb_access_token;
+  if (!token) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data || !data.user) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    req.user = data.user;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+}
+
+// ── POSTS API (training notes) ──
+// Mounted under BASE so the shared proxy routes them to this artifact
+// (the separate api-server owns the bare "/api" path).
+app.post(BASE + '/api/posts/create', requireAuth, async (req, res) => {
+  const { content, sport, feeling } = req.body;
+  if (!content || content.trim().length === 0) {
+    return res.json({ error: 'Content is required' });
+  }
+  if (content.length > 280) {
+    return res.json({ error: 'Post must be 280 characters or less' });
+  }
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for posting' });
+  const { data, error } = await supabaseAdmin
+    .from('posts')
+    .insert({
+      user_id: req.user.id,
+      content: content.trim(),
+      sport: sport || null,
+      feeling: feeling || null
+    })
+    .select()
+    .single();
+  if (error) return res.json({ error: error.message });
+  res.json({ success: true, post: data });
+});
+
+app.get(BASE + '/api/posts', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for posting' });
+  const { data: posts, error } = await supabaseAdmin
+    .from('posts')
+    .select('*, post_likes (count), post_comments (count)')
+    .order('created_at', { ascending: false })
+    .limit(20);
+  if (error) return res.json({ error: error.message });
+  // There is no `profiles` table in this project, so resolve author
+  // display info from the Supabase auth user metadata instead of a join.
+  const ids = [...new Set((posts || []).map(p => p.user_id).filter(Boolean))];
+  const profileMap = {};
+  await Promise.all(ids.map(async (id) => {
+    try {
+      const { data: u } = await supabaseAdmin.auth.admin.getUserById(id);
+      const user = u && u.user;
+      if (user) {
+        const meta = user.user_metadata || {};
+        const emailLocal = user.email ? user.email.split('@')[0] : null;
+        profileMap[id] = {
+          name: meta.name || emailLocal || 'Athlete',
+          handle: meta.handle || emailLocal || 'athlete'
+        };
+      }
+    } catch (err) {
+      // Ignore individual lookup failures; the card will fall back to defaults.
+    }
+  }));
+  const enriched = (posts || []).map(p => ({ ...p, profiles: profileMap[p.user_id] || null }));
+  res.json({ posts: enriched });
+});
+
+app.post(BASE + '/api/posts/:id/like', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for posting' });
+  const { data: existing } = await supabaseAdmin
+    .from('post_likes')
+    .select('post_id')
+    .eq('post_id', req.params.id)
+    .eq('user_id', req.user.id)
+    .maybeSingle();
+  if (existing) {
+    await supabaseAdmin.from('post_likes').delete()
+      .eq('post_id', req.params.id)
+      .eq('user_id', req.user.id);
+    return res.json({ liked: false });
+  }
+  const { error } = await supabaseAdmin.from('post_likes').insert({
+    post_id: req.params.id,
+    user_id: req.user.id
+  });
+  if (error) return res.json({ error: error.message });
+  res.json({ liked: true });
+});
+
+app.post(BASE + '/api/posts/:id/comment', requireAuth, async (req, res) => {
+  const { content } = req.body;
+  if (!content || content.trim().length === 0) {
+    return res.json({ error: 'Comment cannot be empty' });
+  }
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for posting' });
+  const { data, error } = await supabaseAdmin
+    .from('post_comments')
+    .insert({
+      post_id: req.params.id,
+      user_id: req.user.id,
+      content: content.trim()
+    })
+    .select()
+    .single();
+  if (error) return res.json({ error: error.message });
+  res.json({ success: true, comment: data });
+});
+
 app.get(BASE === '' ? '/' : BASE, (req, res) => res.sendFile(path.join(HTML, 'arenas-feed.html')));
 app.get(BASE + '/athletes', (req, res) => res.sendFile(path.join(HTML, 'arenas-athletes.html')));
 app.get(BASE + '/events', (req, res) => res.sendFile(path.join(HTML, 'arenas-events.html')));
