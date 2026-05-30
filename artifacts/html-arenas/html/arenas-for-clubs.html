@@ -350,9 +350,9 @@ button,select,input,textarea{font-family:var(--font)}
     <span class="nav-logo-text">Arenas</span>
   </a>
   <div class="nav-links">
-    <button class="nav-link" onclick="scrollTo('features')">Features</button>
-    <button class="nav-link" onclick="scrollTo('pricing')">Pricing</button>
-    <button class="nav-link" onclick="scrollTo('how-it-works')">How it works</button>
+    <button class="nav-link" onclick="document.getElementById('features').scrollIntoView({behavior:'smooth'})">Features</button>
+    <button class="nav-link" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">Pricing</button>
+    <button class="nav-link" onclick="document.getElementById('how-it-works').scrollIntoView({behavior:'smooth'})">How it works</button>
     <button class="nav-link" onclick="window.location.href='/html/blog'">Blog</button>
     <button class="nav-link" onclick="window.location.href='/html/landing'">Sign in</button>
     <button class="nav-cta yellow" onclick="openSignup()">Start your club →</button>
@@ -671,8 +671,8 @@ button,select,input,textarea{font-family:var(--font)}
     <span class="nav-logo-text">Arenas</span>
   </a>
   <div class="footer-links">
-    <span class="footer-link" onclick="scrollTo('features')">Features</span>
-    <span class="footer-link" onclick="scrollTo('pricing')">Pricing</span>
+    <span class="footer-link" onclick="document.getElementById('features').scrollIntoView({behavior:'smooth'})">Features</span>
+    <span class="footer-link" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">Pricing</span>
     <span class="footer-link" onclick="window.location.href='/html/blog'">Blog</span>
     <span class="footer-link" onclick="showToast('Opening privacy policy…')">Privacy</span>
     <span class="footer-link" onclick="showToast('Opening terms…')">Terms</span>
@@ -1037,11 +1037,6 @@ function closeSignup() {
 }
 function handleOverlayClick(e) {
   if (e.target === document.getElementById('signup-overlay')) closeSignup();
-}
-
-// ── NAV scroll ──
-function scrollTo(id) {
-  document.getElementById(id)?.scrollIntoView({behavior:'smooth'});
 }
 
 // ── PROGRESS ──
