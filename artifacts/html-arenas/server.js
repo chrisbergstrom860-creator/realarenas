@@ -14,6 +14,14 @@ const supabase = createClient(
   process.env.SUPABASE_ANON_KEY
 );
 
+// Server-only admin client (service role bypasses RLS). NEVER expose this key
+// to the browser — it is used exclusively for trusted server-side writes.
+const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
+  : null;
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser(process.env.SESSION_SECRET));
@@ -85,29 +93,35 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
     if (error || !data || !data.user) {
       return res.redirect(BASE + '/for-clubs?error=signup');
     }
+    if (!supabaseAdmin) {
+      return res.redirect(BASE + '/for-clubs?error=server');
+    }
     if (!data.session) {
-      // No session means email confirmation is required; we can't insert
-      // club rows under RLS without an authenticated session for this user.
+      // No session means email confirmation is required. We can't log the user
+      // in, so skip provisioning and route them back (no club is created here).
       return res.redirect(BASE + '/for-clubs?error=confirm');
     }
 
-    // Per-request client authenticated as the new user so auth.uid() resolves
-    // inside the SECURITY DEFINER function below.
-    const userClient = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_ANON_KEY,
-      { global: { headers: { Authorization: 'Bearer ' + data.session.access_token } } }
-    );
+    const userId = data.user.id;
 
-    // Atomically create the club + admin membership in one transaction.
-    const { data: clubId, error: rpcErr } = await userClient.rpc('create_club_with_admin', {
-      p_name: club_name,
-      p_handle: handle,
-      p_sport: sport,
-      p_city: city
-    });
-    if (rpcErr || !clubId) {
+    // Create the club with the service-role client (bypasses RLS).
+    const { data: club, error: clubErr } = await supabaseAdmin
+      .from('clubs')
+      .insert({ name: club_name, handle, sport, city, owner_id: userId })
+      .select('id')
+      .single();
+    if (clubErr || !club) {
       return res.redirect(BASE + '/for-clubs?error=club');
+    }
+
+    // Link the user to the club as admin.
+    const { error: memErr } = await supabaseAdmin
+      .from('memberships')
+      .insert({ user_id: userId, club_id: club.id, role: 'admin' });
+    if (memErr) {
+      // Compensating cleanup so we don't leave an orphaned club.
+      await supabaseAdmin.from('clubs').delete().eq('id', club.id);
+      return res.redirect(BASE + '/for-clubs?error=membership');
     }
 
     setSession(res, data.session);

@@ -12,7 +12,9 @@ description: Where app data lives and how the server writes it for the html-aren
 **Why:** chosen by the user for a single source of truth; the constraints (anon-key-only) dictate the patterns below.
 
 **How to apply — writing app data from the server:**
-- Do all multi-row provisioning through a `SECURITY DEFINER` Postgres function called via `userClient.rpc(...)`, not via multiple client-side `.insert()` calls.
-  - **Why:** (1) atomicity — two separate inserts can leave partial state; (2) security — a client-side `memberships` insert policy of just `user_id = auth.uid()` lets any authenticated user insert themselves as admin into ANY club_id (broken access control / role escalation). The definer function hardcodes the role and derives club_id internally.
-- Keep client-facing RLS to SELECT-only (owner-or-member for clubs, self for memberships). Do NOT add permissive client INSERT policies; route writes through definer functions instead.
+- A `SUPABASE_SERVICE_ROLE_KEY` is now configured. The server uses a module-level `supabaseAdmin` client (service role, `persistSession:false`) for trusted writes; it bypasses RLS. This key is server-only and must NEVER reach the browser.
+- Club/membership provisioning is done with `supabaseAdmin` direct inserts (clubs then memberships) with a compensating `delete` of the club if the membership insert fails (best-effort atomicity without a DB transaction). `auth.uid()` is NULL under service role, so the old `create_club_with_admin` RPC (which relies on `auth.uid()`) is NOT used on this path — pass the user id explicitly instead.
+- Account creation still uses the anon client's `supabase.auth.signUp()` (autoconfirm on → returns a session used for the login cookie). If `!data.session`, we can't log the user in, so we redirect to `?error=confirm`.
+- Keep client-facing RLS SELECT-only (owner-or-member for clubs, self for memberships). Do NOT add permissive client INSERT policies; all writes go through `supabaseAdmin`.
 - The clubs SELECT policy may subquery memberships safely (no recursion) as long as the memberships SELECT policy only references `auth.uid()` and never references clubs.
+- The `create_club_with_admin` SECURITY DEFINER function still exists in the DB (created earlier) but is unused by the current service-role write path; harmless to leave.
