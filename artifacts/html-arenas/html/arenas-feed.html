@@ -1130,6 +1130,11 @@ async function submitPost() {
       return;
     }
 
+    // Remove existing post note cards before adding the new one so notes
+    // replace rather than stack (loadPosts also renders the latest note).
+    document.querySelectorAll('.post-note-card').forEach(card => {
+      card.closest('.feed-item-wrap').remove();
+    });
     addPostToFeed(data.post);
     cancelPost();
     showToast('✓ Note posted — your followers can see it now!');
@@ -1209,7 +1214,7 @@ async function likePost(btn, postId) {
 
 async function loadPosts() {
   try {
-    const response = await fetch(POSTS_API);
+    const response = await fetch(POSTS_API + '?limit=1');
     const data = await response.json();
     if (data.error || !data.posts || data.posts.length === 0) return;
 

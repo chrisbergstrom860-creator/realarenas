@@ -186,11 +186,12 @@ app.post(BASE + '/api/posts/create', requireAuth, async (req, res) => {
 
 app.get(BASE + '/api/posts', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for posting' });
+  const limit = parseInt(req.query.limit) || 20;
   const { data: posts, error } = await supabaseAdmin
     .from('posts')
     .select('*, post_likes (count), post_comments (count)')
     .order('created_at', { ascending: false })
-    .limit(20);
+    .limit(limit);
   if (error) return res.json({ error: error.message });
   // There is no `profiles` table in this project, so resolve author
   // display info from the Supabase auth user metadata instead of a join.
