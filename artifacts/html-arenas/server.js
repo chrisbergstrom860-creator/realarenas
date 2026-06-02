@@ -53,21 +53,14 @@ function setSession(res, session) {
 
 app.post(BASE + '/auth/login', async (req, res) => {
   const { email, password } = req.body;
-  console.log('Login attempt for:', email);
   try {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    console.log('Login result - user:', data?.user?.id);
-    console.log('Login result - session:', !!data?.session);
-    console.log('Login result - error:', error?.message);
     if (error || !data || !data.session) {
-      console.log('Login failed - redirecting to landing');
       return res.redirect(BASE + '/landing?error=invalid');
     }
     setSession(res, data.session);
-    console.log('Login success - redirecting to feed');
     return res.redirect(BASE);
   } catch (err) {
-    console.log('Login exception - redirecting to landing:', err?.message);
     return res.redirect(BASE + '/landing?error=invalid');
   }
 });
@@ -92,10 +85,8 @@ app.post(BASE + '/auth/signup', async (req, res) => {
 
 app.post(BASE + '/auth/signup-club', async (req, res) => {
   const { email, password, name, club_name, handle, sport, city } = req.body;
-  console.log('Club signup attempt - body:', JSON.stringify(req.body));
   try {
     if (!supabaseAdmin) {
-      console.log('Redirecting to for-clubs because:', 'supabaseAdmin not configured (missing SUPABASE_SERVICE_ROLE_KEY)');
       return res.redirect(BASE + '/for-clubs?error=server');
     }
 
@@ -107,9 +98,7 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
       email_confirm: true,
       user_metadata: { name }
     });
-    console.log('Auth user:', data?.user?.id, '| createUser error:', error?.message);
     if (error || !data || !data.user) {
-      console.log('Redirecting to for-clubs because:', error?.message || 'createUser returned no user');
       return res.redirect(BASE + '/for-clubs?error=signup');
     }
 
@@ -120,9 +109,9 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
       email,
       password
     });
-    console.log('Sign-in session?', !!signInData?.session, '| signIn error:', signInErr?.message);
     if (signInErr || !signInData || !signInData.session) {
-      console.log('Redirecting to for-clubs because:', signInErr?.message || 'no session returned after sign-in');
+      // Roll back the just-created account so the email can be retried.
+      await supabaseAdmin.auth.admin.deleteUser(userId);
       return res.redirect(BASE + '/for-clubs?error=confirm');
     }
 
@@ -133,7 +122,8 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
       .select('id')
       .single();
     if (clubErr || !club) {
-      console.log('Redirecting to for-clubs because:', clubErr?.message || 'club insert returned no row');
+      // Roll back the just-created account so the email can be retried.
+      await supabaseAdmin.auth.admin.deleteUser(userId);
       return res.redirect(BASE + '/for-clubs?error=club');
     }
 
@@ -142,16 +132,15 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
       .from('memberships')
       .insert({ user_id: userId, club_id: club.id, role: 'admin' });
     if (memErr) {
-      // Compensating cleanup so we don't leave an orphaned club.
-      console.log('Redirecting to for-clubs because:', memErr?.message || 'membership insert failed');
+      // Compensating cleanup so we don't leave an orphaned club or account.
       await supabaseAdmin.from('clubs').delete().eq('id', club.id);
+      await supabaseAdmin.auth.admin.deleteUser(userId);
       return res.redirect(BASE + '/for-clubs?error=membership');
     }
 
     setSession(res, signInData.session);
     return res.redirect(BASE + '/clubs/dashboard');
   } catch (err) {
-    console.log('Redirecting to for-clubs because:', err?.message || 'unknown exception in catch');
     return res.redirect(BASE + '/for-clubs?error=signup');
   }
 });
