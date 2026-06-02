@@ -129,7 +129,7 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
     // Create the club with the service-role client (bypasses RLS).
     const { data: club, error: clubErr } = await supabaseAdmin
       .from('clubs')
-      .insert({ name: club_name, handle, sport: [sport], city, admin_user_id: userId, plan: 'pro' })
+      .insert({ name: club_name, handle, sport, city, owner_id: userId })
       .select('id')
       .single();
     if (clubErr || !club) {
