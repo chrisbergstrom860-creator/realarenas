@@ -148,7 +148,7 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
       return res.redirect(BASE + '/for-clubs?error=membership');
     }
 
-    setSession(res, data.session);
+    setSession(res, signInData.session);
     return res.redirect(BASE + '/clubs/dashboard');
   } catch (err) {
     console.log('Redirecting to for-clubs because:', err?.message || 'unknown exception in catch');
