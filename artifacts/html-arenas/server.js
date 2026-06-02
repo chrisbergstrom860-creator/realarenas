@@ -87,33 +87,42 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
   const { email, password, name, club_name, handle, sport, city } = req.body;
   console.log('Club signup attempt - body:', JSON.stringify(req.body));
   try {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { name } }
-    });
-    console.log('Auth user:', data?.user?.id, '| session?', !!data?.session, '| signUp error:', error?.message);
-    if (error || !data || !data.user) {
-      console.log('Redirecting to for-clubs because:', error?.message || 'signUp returned no user');
-      return res.redirect(BASE + '/for-clubs?error=signup');
-    }
     if (!supabaseAdmin) {
       console.log('Redirecting to for-clubs because:', 'supabaseAdmin not configured (missing SUPABASE_SERVICE_ROLE_KEY)');
       return res.redirect(BASE + '/for-clubs?error=server');
     }
-    if (!data.session) {
-      // No session means email confirmation is required. We can't log the user
-      // in, so skip provisioning and route them back (no club is created here).
-      console.log('Redirecting to for-clubs because:', 'no session returned — email confirmation is likely required');
-      return res.redirect(BASE + '/for-clubs?error=confirm');
+
+    // Create the user with the admin client so the email is auto-confirmed and
+    // no confirmation step is required.
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { name }
+    });
+    console.log('Auth user:', data?.user?.id, '| createUser error:', error?.message);
+    if (error || !data || !data.user) {
+      console.log('Redirecting to for-clubs because:', error?.message || 'createUser returned no user');
+      return res.redirect(BASE + '/for-clubs?error=signup');
     }
 
     const userId = data.user.id;
 
+    // Sign the new user in to obtain a session for the cookie.
+    const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
+    console.log('Sign-in session?', !!signInData?.session, '| signIn error:', signInErr?.message);
+    if (signInErr || !signInData || !signInData.session) {
+      console.log('Redirecting to for-clubs because:', signInErr?.message || 'no session returned after sign-in');
+      return res.redirect(BASE + '/for-clubs?error=confirm');
+    }
+
     // Create the club with the service-role client (bypasses RLS).
     const { data: club, error: clubErr } = await supabaseAdmin
       .from('clubs')
-      .insert({ name: club_name, handle, sport, city, owner_id: userId })
+      .insert({ name: club_name, handle, sport: [sport], city, admin_user_id: userId, plan: 'pro' })
       .select('id')
       .single();
     if (clubErr || !club) {
