@@ -85,21 +85,26 @@ app.post(BASE + '/auth/signup', async (req, res) => {
 
 app.post(BASE + '/auth/signup-club', async (req, res) => {
   const { email, password, name, club_name, handle, sport, city } = req.body;
+  console.log('Club signup attempt - body:', JSON.stringify(req.body));
   try {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { name } }
     });
+    console.log('Auth user:', data?.user?.id, '| session?', !!data?.session, '| signUp error:', error?.message);
     if (error || !data || !data.user) {
+      console.log('Redirecting to for-clubs because:', error?.message || 'signUp returned no user');
       return res.redirect(BASE + '/for-clubs?error=signup');
     }
     if (!supabaseAdmin) {
+      console.log('Redirecting to for-clubs because:', 'supabaseAdmin not configured (missing SUPABASE_SERVICE_ROLE_KEY)');
       return res.redirect(BASE + '/for-clubs?error=server');
     }
     if (!data.session) {
       // No session means email confirmation is required. We can't log the user
       // in, so skip provisioning and route them back (no club is created here).
+      console.log('Redirecting to for-clubs because:', 'no session returned — email confirmation is likely required');
       return res.redirect(BASE + '/for-clubs?error=confirm');
     }
 
@@ -112,6 +117,7 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
       .select('id')
       .single();
     if (clubErr || !club) {
+      console.log('Redirecting to for-clubs because:', clubErr?.message || 'club insert returned no row');
       return res.redirect(BASE + '/for-clubs?error=club');
     }
 
@@ -121,6 +127,7 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
       .insert({ user_id: userId, club_id: club.id, role: 'admin' });
     if (memErr) {
       // Compensating cleanup so we don't leave an orphaned club.
+      console.log('Redirecting to for-clubs because:', memErr?.message || 'membership insert failed');
       await supabaseAdmin.from('clubs').delete().eq('id', club.id);
       return res.redirect(BASE + '/for-clubs?error=membership');
     }
@@ -128,6 +135,7 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
     setSession(res, data.session);
     return res.redirect(BASE + '/clubs/dashboard');
   } catch (err) {
+    console.log('Redirecting to for-clubs because:', err?.message || 'unknown exception in catch');
     return res.redirect(BASE + '/for-clubs?error=signup');
   }
 });
