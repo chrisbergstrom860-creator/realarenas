@@ -53,14 +53,21 @@ function setSession(res, session) {
 
 app.post(BASE + '/auth/login', async (req, res) => {
   const { email, password } = req.body;
+  console.log('Login attempt for:', email);
   try {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    console.log('Login result - user:', data?.user?.id);
+    console.log('Login result - session:', !!data?.session);
+    console.log('Login result - error:', error?.message);
     if (error || !data || !data.session) {
+      console.log('Login failed - redirecting to landing');
       return res.redirect(BASE + '/landing?error=invalid');
     }
     setSession(res, data.session);
+    console.log('Login success - redirecting to feed');
     return res.redirect(BASE);
   } catch (err) {
+    console.log('Login exception - redirecting to landing:', err?.message);
     return res.redirect(BASE + '/landing?error=invalid');
   }
 });
