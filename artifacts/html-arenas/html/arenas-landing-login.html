@@ -9,6 +9,12 @@ document.addEventListener('DOMContentLoaded', function(){
     document.querySelectorAll('[href^="/html/"]').forEach(function(el){ el.setAttribute('href', el.getAttribute('href').slice(5)); });
     document.querySelectorAll('[action^="/html/"]').forEach(function(el){ el.setAttribute('action', el.getAttribute('action').slice(5)); });
   }
+  // Deep-link: /landing#login opens the login page directly (the login page is a
+  // hidden SPA panel, so activate it before the browser jumps to #login).
+  if (window.location.hash === '#login' && typeof showPage === 'function') {
+    showPage('login');
+    setMode('login');
+  }
 });
 </script>
 <meta charset="UTF-8">
@@ -985,7 +991,7 @@ html { scroll-behavior: smooth; }
 
     <!-- Right panel: form -->
     <div class="auth-right">
-      <div class="auth-form-wrap">
+      <div class="auth-form-wrap" id="login">
 
         <div id="auth-error" style="display:none;background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:14px"></div>
 
