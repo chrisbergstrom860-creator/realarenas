@@ -348,12 +348,66 @@ app.get(BASE === '' ? '/' : BASE, async (req, res) => {
   }
 });
 
+// Build an enriched, render-ready list of recent posts for server-side feed
+// injection. Author names come from auth user metadata (there is no `profiles`
+// table), and userLiked reflects whether the current viewer liked each post.
+async function buildFeedPosts(limit, currentUserId) {
+  if (!supabaseAdmin) return [];
+  const { data: posts, error } = await supabaseAdmin
+    .from('posts')
+    .select('id, content, sport, feeling, created_at, user_id, post_likes (count), post_comments (count)')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error || !posts) return [];
+  const ids = [...new Set(posts.map(p => p.user_id).filter(Boolean))];
+  const profileMap = {};
+  await Promise.all(ids.map(async (id) => {
+    try {
+      const { data: u } = await supabaseAdmin.auth.admin.getUserById(id);
+      const user = u && u.user;
+      if (user) {
+        const meta = user.user_metadata || {};
+        const emailLocal = user.email ? user.email.split('@')[0] : null;
+        profileMap[id] = {
+          name: meta.name || emailLocal || 'Athlete',
+          handle: meta.handle || emailLocal || 'athlete'
+        };
+      }
+    } catch (err) {
+      // Ignore individual lookup failures; the card falls back to defaults.
+    }
+  }));
+  let likedSet = new Set();
+  if (currentUserId && posts.length) {
+    const { data: myLikes } = await supabaseAdmin
+      .from('post_likes')
+      .select('post_id')
+      .eq('user_id', currentUserId)
+      .in('post_id', posts.map(p => p.id));
+    likedSet = new Set((myLikes || []).map(l => l.post_id));
+  }
+  return posts.map(p => ({
+    id: p.id,
+    content: p.content,
+    sport: p.sport,
+    feeling: p.feeling,
+    created_at: p.created_at,
+    user_id: p.user_id,
+    authorName: (profileMap[p.user_id] && profileMap[p.user_id].name) || 'Athlete',
+    authorHandle: (profileMap[p.user_id] && profileMap[p.user_id].handle) || 'athlete',
+    likeCount: (p.post_likes && p.post_likes[0] && p.post_likes[0].count) || 0,
+    commentCount: (p.post_comments && p.post_comments[0] && p.post_comments[0].count) || 0,
+    userLiked: likedSet.has(p.id)
+  }));
+}
+
 // Feed requires authentication; unauthenticated visitors are sent to landing.
-// Inject the logged-in user's real name/handle so the feed shows them instead
-// of the hardcoded "Jamie King" placeholder.
-app.get(BASE + '/feed', requirePageAuth, (req, res) => {
+// Inject the logged-in user's real name/handle plus recent posts so the feed
+// shows live data instead of the hardcoded "Jamie King" placeholder.
+app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
   try {
-    const userData = { profile: displayFromUser(req.user), userId: req.user.id };
+    const posts = await buildFeedPosts(20, req.user.id);
+    const userData = { profile: displayFromUser(req.user), userId: req.user.id, posts };
     const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), userData);
     res.type('html').send(html);
   } catch (err) {

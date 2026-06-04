@@ -1140,11 +1140,8 @@ async function submitPost() {
       return;
     }
 
-    // Remove existing post note cards before adding the new one so notes
-    // replace rather than stack (loadPosts also renders the latest note).
-    document.querySelectorAll('.post-note-card').forEach(card => {
-      card.closest('.feed-item-wrap').remove();
-    });
+    // Prepend the new note to the top of the feed (posts are server-injected
+    // now, so don't wipe the existing cards — just add this one).
     addPostToFeed(data.post);
     cancelPost();
     showToast('✓ Note posted — your followers can see it now!');
@@ -1188,7 +1185,7 @@ function postCardHtml(post, opts) {
       ${post.feeling ? `<div class="pn-feeling">${FEELING_LABELS[post.feeling] || ''}</div>` : ''}
       <div class="pn-content">${escapeHtml(post.content)}</div>
       <div class="pn-footer">
-        <button class="pn-action" onclick="likePost(this,'${post.id}')">👍 ${o.likes || 0} kudos</button>
+        <button class="pn-action${o.liked ? ' liked' : ''}" onclick="likePost(this,'${post.id}')">👍 ${o.likes || 0} kudos</button>
         <button class="pn-action" onclick="openModal('comment')">💬 Comment</button>
         <button class="pn-action" onclick="showToast('Note link copied!')">🔗 Share</button>
         <span style="margin-left:auto;font-size:11px;color:var(--gray-400)">Training note</span>
@@ -1226,35 +1223,41 @@ async function likePost(btn, postId) {
   }
 }
 
-async function loadPosts() {
-  try {
-    const response = await fetch(POSTS_API + '?limit=1');
-    const data = await response.json();
-    if (data.error || !data.posts || data.posts.length === 0) return;
-
-    const feedItems = document.getElementById('feed-items');
-    // Render oldest-first with insertBefore so the newest post ends up on top.
-    data.posts.slice().reverse().forEach(post => {
-      const card = document.createElement('div');
-      card.className = 'feed-item-wrap';
-      card.dataset.type = 'all';
-      const name = (post.profiles && post.profiles.name) || 'Athlete';
-      const handle = (post.profiles && post.profiles.handle) || 'athlete';
-      const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-      const likes = (post.post_likes && post.post_likes[0] && post.post_likes[0].count) || 0;
-      card.innerHTML = postCardHtml(post, {
-        name,
-        handle,
-        initials,
-        avStyle: 'background:var(--gray-200);color:var(--gray-700)',
-        meta: getTimeAgo(new Date(post.created_at)) + ' · @' + handle,
-        likes
-      });
-      feedItems.insertBefore(card, feedItems.firstChild);
+// Posts are now injected server-side via window.ARENAS_DATA.posts (see the
+// /feed route), so we render from that instead of a separate client fetch —
+// the old loadPosts() call was removed to avoid duplicate cards.
+function renderInjectedPosts() {
+  const data = window.ARENAS_DATA;
+  if (!data || !data.posts || data.posts.length === 0) return;
+  const feedItems = document.getElementById('feed-items');
+  if (!feedItems) return;
+  // Remove any prototype training-note cards so real posts replace them.
+  document.querySelectorAll('.post-note-card').forEach(card => {
+    const wrap = card.closest('.feed-item-wrap');
+    if (wrap) wrap.remove();
+  });
+  // Render oldest-first with insertBefore so the newest post ends up on top.
+  data.posts.slice().reverse().forEach(post => {
+    const card = document.createElement('div');
+    card.className = 'feed-item-wrap';
+    card.dataset.type = 'all';
+    const isOwn = post.user_id === data.userId;
+    const name = post.authorName || 'Athlete';
+    const handle = post.authorHandle || 'athlete';
+    const initials = name.split(/\s+/).map(n => n[0]).join('').slice(0, 2).toUpperCase();
+    card.innerHTML = postCardHtml(post, {
+      name,
+      handle,
+      initials,
+      avStyle: isOwn
+        ? 'background:var(--yellow);color:var(--gray-900)'
+        : 'background:var(--gray-200);color:var(--gray-700)',
+      meta: getTimeAgo(new Date(post.created_at)) + ' · @' + handle,
+      likes: post.likeCount || 0,
+      liked: !!post.userLiked
     });
-  } catch (err) {
-    showToast('Could not load notes');
-  }
+    feedItems.insertBefore(card, feedItems.firstChild);
+  });
 }
 
 function getTimeAgo(date) {
@@ -1265,7 +1268,7 @@ function getTimeAgo(date) {
   return Math.floor(seconds / 86400) + 'd ago';
 }
 
-loadPosts();
+renderInjectedPosts();
 </script>
 <script>
 // Wire the logged-in user's real identity into the feed (server injects
