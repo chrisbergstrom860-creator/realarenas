@@ -399,7 +399,7 @@ button,select,input,textarea{font-family:var(--font)}
           <span class="hero-tag" style="background:rgba(16,185,129,.15);color:#6EE7B7;border-color:rgba(16,185,129,.25)">Advanced</span>
           <span class="hero-tag">✦ Pro</span>
         </div>
-        <div class="hero-bio">Marathon runner, weekend cyclist, occasional wall climber. Chasing a sub-3:30 marathon. Hackney RC member since 2024. Always looking for Sunday long run partners in East London.</div>
+        <div class="hero-bio" id="profile-bio">Marathon runner, weekend cyclist, occasional wall climber. Chasing a sub-3:30 marathon. Hackney RC member since 2024. Always looking for Sunday long run partners in East London.</div>
       </div>
       <div class="hero-stats">
         <div class="hero-stat"><div class="hero-stat-val">312</div><div class="hero-stat-label">Activities</div></div>
@@ -787,16 +787,16 @@ button,select,input,textarea{font-family:var(--font)}
     <div style="display:flex;gap:20px;align-items:start;flex-wrap:wrap">
       <div style="flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px">
         <div class="card">
-          <div class="card-hdr"><span class="card-title">👤 Profile information</span><button class="btn btn-sm btn-yellow" onclick="showToast('✓ Profile saved!')">Save changes</button></div>
+          <div class="card-hdr"><span class="card-title">👤 Profile information</span><button id="save-settings-profile" class="btn btn-sm btn-yellow">Save changes</button></div>
           <div class="settings-section">
             <div class="form-row">
-              <div class="form-field"><label class="form-label">First name</label><input class="form-input" type="text" value="Jamie"></div>
-              <div class="form-field"><label class="form-label">Last name</label><input class="form-input" type="text" value="King"></div>
+              <div class="form-field"><label class="form-label">First name</label><input id="set-first-name" class="form-input" type="text" value="Jamie"></div>
+              <div class="form-field"><label class="form-label">Last name</label><input id="set-last-name" class="form-input" type="text" value="King"></div>
             </div>
-            <div class="form-field"><label class="form-label">Handle</label><input class="form-input" type="text" value="@jamiek"><div class="form-hint">arenas.io/athletes/jamiek</div></div>
-            <div class="form-field"><label class="form-label">Bio</label><textarea class="form-textarea">Marathon runner, weekend cyclist, occasional wall climber. Chasing a sub-3:30 marathon. Hackney RC member since 2024.</textarea></div>
+            <div class="form-field"><label class="form-label">Handle</label><input id="edit-handle" class="form-input" type="text" value="@jamiek"><div class="form-hint">arenas.io/athletes/jamiek</div></div>
+            <div class="form-field"><label class="form-label">Bio</label><textarea id="set-bio" class="form-textarea">Marathon runner, weekend cyclist, occasional wall climber. Chasing a sub-3:30 marathon. Hackney RC member since 2024.</textarea></div>
             <div class="form-row">
-              <div class="form-field"><label class="form-label">City</label><input class="form-input" type="text" value="London"></div>
+              <div class="form-field"><label class="form-label">City</label><input id="set-location" class="form-input" type="text" value="London"></div>
               <div class="form-field"><label class="form-label">Country</label><select class="form-select"><option>United Kingdom</option><option>United States</option><option>Germany</option></select></div>
             </div>
           </div>
@@ -814,7 +814,7 @@ button,select,input,textarea{font-family:var(--font)}
                 <button class="sport-chip" onclick="this.classList.toggle('on')">🏄 Surfing</button>
               </div>
             </div>
-            <div class="form-field" style="margin-top:10px"><label class="form-label">Experience level</label><select class="form-select"><option>Beginner</option><option>Intermediate</option><option selected>Advanced</option><option>Elite / Professional</option></select></div>
+            <div class="form-field" style="margin-top:10px"><label class="form-label">Experience level</label><select id="set-level" class="form-select"><option>Beginner</option><option>Intermediate</option><option selected>Advanced</option><option>Elite / Professional</option></select></div>
           </div>
         </div>
 
@@ -900,16 +900,16 @@ button,select,input,textarea{font-family:var(--font)}
         <button class="btn btn-ghost btn-sm" onclick="showToast('Photo upload coming soon')">Change photo</button>
       </div>
       <div class="form-row">
-        <div class="form-field"><label class="form-label">First name</label><input class="form-input" type="text" value="Jamie"></div>
-        <div class="form-field"><label class="form-label">Last name</label><input class="form-input" type="text" value="King"></div>
+        <div class="form-field"><label class="form-label">First name</label><input id="edit-first-name" class="form-input" type="text" value="Jamie"></div>
+        <div class="form-field"><label class="form-label">Last name</label><input id="edit-last-name" class="form-input" type="text" value="King"></div>
       </div>
-      <div class="form-field"><label class="form-label">Bio</label><textarea class="form-textarea">Marathon runner, weekend cyclist, occasional wall climber. Chasing a sub-3:30 marathon. Hackney RC member since 2024.</textarea></div>
+      <div class="form-field"><label class="form-label">Bio</label><textarea id="edit-bio" class="form-textarea">Marathon runner, weekend cyclist, occasional wall climber. Chasing a sub-3:30 marathon. Hackney RC member since 2024.</textarea></div>
       <div class="form-row">
-        <div class="form-field"><label class="form-label">City</label><input class="form-input" value="London"></div>
-        <div class="form-field"><label class="form-label">Level</label><select class="form-select"><option>Intermediate</option><option selected>Advanced</option><option>Elite</option></select></div>
+        <div class="form-field"><label class="form-label">City</label><input id="edit-location" class="form-input" value="London"></div>
+        <div class="form-field"><label class="form-label">Level</label><select id="edit-level" class="form-select"><option>Intermediate</option><option selected>Advanced</option><option>Elite</option></select></div>
       </div>
     </div>
-    <div class="modal-footer"><button class="btn btn-yellow" style="flex:1;justify-content:center" onclick="closeModals();showToast('✓ Profile updated!')">Save changes</button><button class="btn btn-ghost" onclick="closeModals()">Cancel</button></div>
+    <div class="modal-footer"><button id="save-edit-profile" class="btn btn-yellow" style="flex:1;justify-content:center">Save changes</button><button class="btn btn-ghost" onclick="closeModals()">Cancel</button></div>
   </div>
 </div>
 
@@ -1191,6 +1191,66 @@ document.getElementById('htab-overview').classList.add('active');
       }
     }
   }
+  // --- Populate edit forms with real values + persist to auth metadata ---
+  // The two-field name inputs are filled from the display name split into
+  // first/last; on save they are recombined into a single `name`.
+  var nameParts = name.trim().split(/\s+/);
+  var firstName = nameParts.shift() || '';
+  var lastName = nameParts.join(' ');
+
+  function setVal(id, val) { var el = document.getElementById(id); if (el) el.value = val; }
+  // Modal "Edit profile" form
+  setVal('edit-first-name', firstName);
+  setVal('edit-last-name', lastName);
+  setVal('edit-bio', p.bio || '');
+  setVal('edit-location', p.location || '');
+  // Settings "Profile information" form (handle lives here only)
+  setVal('set-first-name', firstName);
+  setVal('set-last-name', lastName);
+  setVal('edit-handle', '@' + handle);
+  setVal('set-bio', p.bio || '');
+  setVal('set-location', p.location || '');
+
+  function val(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+  function gather(scope) {
+    var fn = scope === 'modal' ? val('edit-first-name') : val('set-first-name');
+    var ln = scope === 'modal' ? val('edit-last-name') : val('set-last-name');
+    return {
+      name: (fn + ' ' + ln).trim(),
+      handle: String(val('edit-handle') || handle).replace(/^@+/, ''),
+      location: scope === 'modal' ? val('edit-location') : val('set-location'),
+      bio: scope === 'modal' ? val('edit-bio') : val('set-bio')
+    };
+  }
+  async function saveProfile(scope, btn) {
+    var payload = gather(scope);
+    if (!payload.name) { if (window.showToast) showToast('Name cannot be empty'); return; }
+    var orig = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    try {
+      var resp = await fetch(window.BASE + '/api/profile/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      var result = await resp.json().catch(function () { return {}; });
+      if (resp.ok && result.success) {
+        if (window.showToast) showToast('✓ Profile updated');
+        if (typeof closeModals === 'function') closeModals();
+        setTimeout(function () { location.reload(); }, 600);
+      } else {
+        if (btn) { btn.disabled = false; btn.textContent = orig; }
+        if (window.showToast) showToast('Could not save profile — please try again');
+      }
+    } catch (err) {
+      if (btn) { btn.disabled = false; btn.textContent = orig; }
+      if (window.showToast) showToast('Could not save profile — please try again');
+    }
+  }
+  var modalSave = document.getElementById('save-edit-profile');
+  if (modalSave) modalSave.onclick = function () { saveProfile('modal', modalSave); };
+  var settingsSave = document.getElementById('save-settings-profile');
+  if (settingsSave) settingsSave.onclick = function () { saveProfile('settings', settingsSave); };
 })();
 </script>
 </body>

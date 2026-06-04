@@ -533,6 +533,38 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
     servePlain();
   }
 });
+// Persist profile edits. There is no `profiles` table, so changes are written to
+// the user's auth metadata (name/handle/bio/location), merged over any existing
+// metadata so unrelated keys are preserved. Returns JSON for the edit form fetch.
+app.post(BASE + '/api/profile/update', requireAuth, async (req, res) => {
+  try {
+    if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+    const body = req.body || {};
+    const meta = Object.assign({}, req.user.user_metadata || {});
+    if (typeof body.name === 'string') {
+      const name = body.name.trim();
+      if (!name) return res.status(400).json({ error: 'Name cannot be empty' });
+      if (name.length > 80) return res.status(400).json({ error: 'Name is too long' });
+      meta.name = name;
+    }
+    if (typeof body.handle === 'string') {
+      const handle = body.handle.trim().replace(/^@+/, '');
+      if (handle.length > 40) return res.status(400).json({ error: 'Handle is too long' });
+      meta.handle = handle;
+    }
+    if (typeof body.location === 'string') meta.location = body.location.trim().slice(0, 120);
+    if (typeof body.bio === 'string') meta.bio = body.bio.trim().slice(0, 600);
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.user.id, { user_metadata: meta });
+    if (error) {
+      console.log('Profile update error:', error.message);
+      return res.status(500).json({ error: error.message });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.log('Profile update error:', err.message);
+    res.status(500).json({ error: 'Update failed' });
+  }
+});
 app.get(BASE + '/blog', (req, res) => {
   // Marketing page: only reveal the user avatar when actually logged in,
   // otherwise show the guest "Log in / Sign up" CTAs (matches the landing page).

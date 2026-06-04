@@ -1,0 +1,166 @@
+The profile page has two issues to fix:
+
+The bio section is not showing the real user's bio
+The edit profile form still shows hardcoded Jamie King details instead of real user data
+
+Please open arenas-my-profile.html and do the following:
+First — find the bio element and add the correct identifier. Look for where the bio text appears on the page and add id="profile-bio" to that element. It probably looks something like:
+html<p class="profile-bio-text">Long-distance runner and Hackney RC coach...</p>
+Add id="profile-bio" to it.
+Second — find the edit profile form or modal. It likely has input fields pre-filled with hardcoded values like "Jamie King", "jamiek", "London" etc. Add these IDs to the correct input fields:
+
+Name input → id="edit-name"
+Handle input → id="edit-handle"
+Location input → id="edit-location"
+Bio textarea → id="edit-bio"
+Level select → id="edit-level"
+
+Third — update the JavaScript data injection at the bottom of arenas-my-profile.html to also populate the bio and edit form with real values. Replace the existing profile data script with this updated version:
+javascript(function() {
+  const data = window.ARENAS_DATA;
+  if (!data) return;
+
+  const name = data.profile?.name || data.email?.split('@')[0] || 'Athlete';
+  const handle = data.profile?.handle || data.email?.split('@')[0] || 'athlete';
+  const initials = name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+  const location = data.profile?.location || '';
+  const bio = data.profile?.bio || '';
+  const level = data.profile?.level || '';
+  const sports = data.profile?.sports || [];
+
+  // Update name — replace any element containing Jamie or King
+  document.querySelectorAll('*').forEach(el => {
+    if (el.children.length === 0 && el.textContent.trim() === 'Jamie King') {
+      el.textContent = name;
+    }
+    if (el.children.length === 0 && el.textContent.trim() === '@jamiek') {
+      el.textContent = '@' + handle;
+    }
+  });
+
+  // Update all avatar initials showing JK
+  document.querySelectorAll('*').forEach(el => {
+    if (el.children.length === 0 && el.textContent.trim() === 'JK') {
+      el.textContent = initials;
+    }
+  });
+
+  // Update bio section
+  const bioEl = document.getElementById('profile-bio') ||
+    document.querySelector('.profile-bio-text') ||
+    document.querySelector('[class*="bio"]');
+  if (bioEl) {
+    bioEl.textContent = bio || 'No bio yet — edit your profile to add one.';
+  }
+
+  // Update location
+  document.querySelectorAll('*').forEach(el => {
+    if (el.children.length === 0 &&
+       (el.textContent.includes('London') || el.textContent.includes('East London')) &&
+       el.closest('.profile-header, .profile-meta, .profile-location')) {
+      el.textContent = location || 'Location not set';
+    }
+  });
+
+  // Update follower and following counts
+  document.querySelectorAll('.follower-count').forEach(el => el.textContent = data.followerCount);
+  document.querySelectorAll('.following-count').forEach(el => el.textContent = data.followingCount);
+  document.querySelectorAll('.post-count').forEach(el => el.textContent = data.postCount);
+
+  // Update page title
+  document.title = 'Arenas · ' + name + '\'s Profile';
+
+  // Populate the edit profile form with real values
+  const editName = document.getElementById('edit-name');
+  const editHandle = document.getElementById('edit-handle');
+  const editLocation = document.getElementById('edit-location');
+  const editBio = document.getElementById('edit-bio');
+  const editLevel = document.getElementById('edit-level');
+
+  if (editName) editName.value = name;
+  if (editHandle) editHandle.value = handle;
+  if (editLocation) editLocation.value = location;
+  if (editBio) editBio.value = bio;
+  if (editLevel) editLevel.value = level;
+
+  // Also populate any form inputs that still show hardcoded values
+  document.querySelectorAll('input[value="Jamie King"], input[placeholder="Jamie King"]').forEach(el => {
+    el.value = name;
+  });
+  document.querySelectorAll('input[value="jamiek"], input[placeholder="jamiek"]').forEach(el => {
+    el.value = handle;
+  });
+  document.querySelectorAll('input[value="London"], input[value="East London"]').forEach(el => {
+    el.value = location;
+  });
+  document.querySelectorAll('textarea').forEach(el => {
+    if (el.value.includes('distance runner') || el.value.includes('Hackney RC coach')) {
+      el.value = bio;
+    }
+  });
+
+  // Update sports tags if container exists
+  const sportsContainer = document.querySelector('.profile-sports, [class*="sport-tag"], .sports-list');
+  if (sportsContainer && sports.length > 0) {
+    sportsContainer.innerHTML = sports.map(s =>
+      `<span class="pill p-run">${s.charAt(0).toUpperCase() + s.slice(1)}</span>`
+    ).join('');
+  }
+
+  // Wire the save button to update Supabase
+  const saveBtn = document.querySelector('.save-profile-btn, #save-profile, button[onclick*="saveProfile"]');
+  if (saveBtn) {
+    saveBtn.onclick = async function() {
+      const updatedName = document.getElementById('edit-name')?.value || name;
+      const updatedHandle = document.getElementById('edit-handle')?.value || handle;
+      const updatedLocation = document.getElementById('edit-location')?.value || location;
+      const updatedBio = document.getElementById('edit-bio')?.value || bio;
+      try {
+        const response = await fetch('/api/profile/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: updatedName,
+            handle: updatedHandle,
+            location: updatedLocation,
+            bio: updatedBio
+          })
+        });
+        const result = await response.json();
+        if (result.success) {
+          showToast('✓ Profile updated successfully');
+          // Update displayed values immediately
+          document.querySelectorAll('*').forEach(el => {
+            if (el.children.length === 0 && el.textContent.trim() === name) el.textContent = updatedName;
+          });
+        } else {
+          showToast('Error saving profile — please try again');
+        }
+      } catch (err) {
+        showToast('Error saving profile — please try again');
+      }
+    };
+  }
+})();
+Fourth — add a /api/profile/update POST route to server.js so the save button actually writes to Supabase:
+javascriptapp.post('/api/profile/update', requireAuth, async (req, res) => {
+  const { name, handle, location, bio, sports, level } = req.body;
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const { error } = await supabaseAdmin
+    .from('profiles')
+    .upsert({
+      id: req.user.id,
+      name,
+      handle,
+      location,
+      bio,
+      sports,
+      level
+    });
+  if (error) return res.json({ error: error.message });
+  res.json({ success: true });
+});
+Wait for checkpoint then commit and push to GitHub main.
