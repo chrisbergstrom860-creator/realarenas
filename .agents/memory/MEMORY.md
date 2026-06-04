@@ -3,3 +3,4 @@
 - [html-arenas deploy + base path](html-arenas-deploy.md) — dual /html (Replit) vs root (Railway) base path; don't rename root pkg; railway.json points at subdir; push via Replit Git pane
 - [Arenas Supabase schema reality](html-arenas-supabase-schema.md) — profiles table exists but unused (names from auth user_metadata); memberships has no status/joined_at; clubs has no plan, sport is scalar.
 - [html-arenas notifications](html-arenas-notifications.md) — like/comment/follow notifs; actor names from auth metadata (not profiles); syncUnread + esc() rules.
+- [html-arenas auth forms](html-arenas-auth-forms.md) — signup landing on /landing w/ no error = form never submitted (stub nav); requestSubmit; first+last→hidden name; disabled btn swallows clicks; error-code/banner pairing.

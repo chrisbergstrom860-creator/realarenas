@@ -1196,7 +1196,8 @@ function handleLogin() {
   nav('/feed');
 }
 function handleSignup() {
-  nav('/feed');
+  var f = document.getElementById('signupForm');
+  if (f) f.requestSubmit(); else nav('/feed');
 }
 function markConnected(btn) {
   btn.textContent = 'Connected ✓';
@@ -1281,17 +1282,75 @@ const strip = document.getElementById('sport-pills');
 
 setMode('login');
 
+// ── SELF-CONTAINED TOAST (this page has no #toast element) ──
+function showToast(msg){
+  var t = document.getElementById('toast');
+  if(!t){
+    t = document.createElement('div');
+    t.id = 'toast';
+    t.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#111827;color:#fff;padding:11px 18px;border-radius:10px;font-size:14px;font-weight:500;box-shadow:0 8px 24px rgba(0,0,0,.18);opacity:0;transition:opacity .25s;z-index:9999;pointer-events:none;max-width:90vw;text-align:center';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._hideTimer);
+  t._hideTimer = setTimeout(function(){ t.style.opacity = '0'; }, 2800);
+}
+
+// ── DISABLE SOCIAL SIGN-IN (OAuth not wired yet) ──
+// Note: we use aria-disabled + preventDefault rather than the `disabled`
+// property, because a truly disabled <button> never fires click events and so
+// could not show the "coming soon" toast.
+document.querySelectorAll('.social-btn, .strava-btn').forEach(function(btn){
+  btn.setAttribute('aria-disabled', 'true');
+  btn.style.opacity = '0.4';
+  btn.style.cursor = 'not-allowed';
+  btn.title = 'Coming soon';
+  btn.onclick = function(e){
+    if(e) e.preventDefault();
+    showToast('Strava and Google sign up coming soon — please use email for now');
+  };
+});
+
+// ── COMBINE FIRST + LAST NAME INTO A SINGLE name FIELD ON SUBMIT ──
+(function(){
+  var form = document.getElementById('signupForm');
+  if(!form) return;
+  form.addEventListener('submit', function(){
+    if(form._nameCombined) return;
+    var firstEl = form.querySelector('input[name="name"]');
+    var lastEl = form.querySelector('input[name="lastName"]');
+    var first = ((firstEl && firstEl.value) || '').trim();
+    var last = ((lastEl && lastEl.value) || '').trim();
+    var full = (first + ' ' + last).trim() || first;
+    if(firstEl) firstEl.removeAttribute('name');
+    if(lastEl) lastEl.removeAttribute('name');
+    var hidden = document.createElement('input');
+    hidden.type = 'hidden';
+    hidden.name = 'name';
+    hidden.value = full;
+    form.appendChild(hidden);
+    form._nameCombined = true;
+  });
+})();
+
 // ── AUTH ERROR BANNER (from ?error=) ──
 (function(){
   var err = new URLSearchParams(location.search).get('error');
   if(!err) return;
   showPage('login');
-  setMode(err === 'signup' ? 'signup' : 'login');
+  var signupErrors = ['signup','signup_failed','missing_fields','confirm_email'];
+  setMode(signupErrors.indexOf(err) !== -1 ? 'signup' : 'login');
   var box = document.getElementById('auth-error');
   if(box){
-    box.textContent = err === 'signup'
-      ? 'Could not create your account. Please try again.'
-      : 'Invalid email or password.';
+    var msgs = {
+      missing_fields: 'Please enter your email and password.',
+      signup_failed: 'Could not create your account. Please try again.',
+      signup: 'Could not create your account. Please try again.',
+      confirm_email: 'Almost there — check your email to confirm your account, then log in.',
+      invalid: 'Invalid email or password.'
+    };
+    box.textContent = msgs[err] || 'Something went wrong. Please try again.';
     box.style.display = 'block';
   }
 })();

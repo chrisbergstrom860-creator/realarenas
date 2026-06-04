@@ -1,0 +1,86 @@
+Please apply the fix and also disable the social buttons for now since OAuth isn't wired yet. Here's exactly what to do:
+
+Replace the handleSignup() function with this:
+
+javascriptfunction handleSignup() {
+  var f = document.getElementById('signupForm');
+  if (f) f.requestSubmit(); else nav('/feed');
+}
+
+Disable the Strava and Google social buttons so they don't confuse users:
+
+javascript// Disable social buttons until OAuth is wired
+document.querySelectorAll('.strava-btn, .social-btn').forEach(function(btn) {
+  btn.disabled = true;
+  btn.style.opacity = '0.4';
+  btn.style.cursor = 'not-allowed';
+  btn.title = 'Coming soon';
+  btn.onclick = function(e) {
+    e.preventDefault();
+    showToast('Strava and Google sign up coming soon — please use email for now');
+  };
+});
+
+Also make sure the form collects the full name correctly by combining first and last name before submitting. Add this to the form submit handler:
+
+javascriptdocument.getElementById('signupForm').addEventListener('submit', function(e) {
+  var firstName = this.querySelector('input[name="name"]')?.value?.trim() || '';
+  var lastName = this.querySelector('input[name="lastName"]')?.value?.trim() || '';
+  var fullName = (firstName + ' ' + lastName).trim();
+  // Add a hidden full name field
+  var existing = this.querySelector('input[name="fullName"]');
+  if (existing) existing.remove();
+  var hidden = document.createElement('input');
+  hidden.type = 'hidden';
+  hidden.name = 'name';
+  hidden.value = fullName || firstName;
+  this.appendChild(hidden);
+  // Remove the original name fields from submission to avoid confusion
+  this.querySelector('input[name="name"]')?.removeAttribute('name');
+  this.querySelector('input[name="lastName"]')?.removeAttribute('name');
+});
+
+Update the /auth/signup route in server.js to handle the form body correctly — the name field comes from the combined first and last name:
+
+javascriptapp.post('/auth/signup', async (req, res) => {
+  const email = req.body.email?.trim();
+  const password = req.body.password;
+  const name = req.body.name?.trim() ||
+    ((req.body.firstName || '') + ' ' + (req.body.lastName || '')).trim() ||
+    email?.split('@')[0];
+  console.log('Signup attempt:', email, '| name:', name);
+  if (!email || !password) {
+    return res.redirect('/landing?error=missing_fields');
+  }
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { name } }
+    });
+    console.log('Signup result - user:', data?.user?.id);
+    console.log('Signup result - session:', !!data?.session);
+    console.log('Signup result - error:', error?.message);
+    if (error || !data?.user) {
+      console.log('Signup failed:', error?.message);
+      return res.redirect('/landing?error=signup_failed');
+    }
+    if (!data.session) {
+      console.log('No session - email confirmation may be on');
+      return res.redirect('/landing?error=confirm_email');
+    }
+    res.cookie('sb-access-token', data.session.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+    console.log('Signup success for:', email);
+    res.redirect('/feed');
+  } catch (err) {
+    console.log('Signup exception:', err.message);
+    res.redirect('/landing?error=signup_failed');
+  }
+});
+
+Wait for checkpoint then commit and push to GitHub main immediately.

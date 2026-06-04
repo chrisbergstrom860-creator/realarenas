@@ -73,8 +73,19 @@ app.post(BASE + '/auth/login', async (req, res) => {
 });
 
 app.post(BASE + '/auth/signup', async (req, res) => {
-  const { email, password, name } = req.body;
+  const email = (req.body.email || '').trim();
+  const password = req.body.password;
+  // The signup form combines first + last name into a single `name` field, but
+  // fall back to first/last parts or the email local-part just in case.
+  const name =
+    (req.body.name || '').trim() ||
+    ((req.body.firstName || '') + ' ' + (req.body.lastName || '')).trim() ||
+    (email ? email.split('@')[0] : '');
   console.log('Signup attempt:', email, '| name:', name);
+  if (!email || !password) {
+    console.log('Signup missing email or password');
+    return res.redirect(BASE + '/landing?error=missing_fields');
+  }
   try {
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -85,8 +96,8 @@ app.post(BASE + '/auth/signup', async (req, res) => {
     console.log('Signup result - session:', !!(data && data.session));
     console.log('Signup result - error:', error && error.message);
     if (error || !data || !data.user) {
-      console.log('Signup failed - redirecting to landing');
-      return res.redirect(BASE + '/landing?error=signup');
+      console.log('Signup failed:', error && error.message);
+      return res.redirect(BASE + '/landing?error=signup_failed');
     }
     if (!data.session) {
       // No session means Supabase requires email confirmation before sign-in,
@@ -95,11 +106,11 @@ app.post(BASE + '/auth/signup', async (req, res) => {
       return res.redirect(BASE + '/landing?error=confirm_email');
     }
     setSession(res, data.session);
-    console.log('Signup success - redirecting to feed');
+    console.log('Signup success for:', email);
     return res.redirect(BASE + '/feed');
   } catch (err) {
     console.log('Signup exception:', err.message);
-    return res.redirect(BASE + '/landing?error=signup');
+    return res.redirect(BASE + '/landing?error=signup_failed');
   }
 });
 
