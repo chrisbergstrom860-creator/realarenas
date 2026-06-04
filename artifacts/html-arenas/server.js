@@ -193,6 +193,26 @@ async function requirePageAuth(req, res, next) {
   }
 }
 
+// There is no `profiles` table in this project, so resolve a user's display
+// name/handle from the Supabase auth user metadata (falling back to the email
+// local part) — the same source the posts API uses.
+function displayFromUser(user) {
+  const meta = (user && user.user_metadata) || {};
+  const emailLocal = user && user.email ? user.email.split('@')[0] : null;
+  return {
+    name: meta.name || emailLocal || 'Athlete',
+    handle: meta.handle || emailLocal || 'athlete'
+  };
+}
+
+// Safely inject a server-built data object into an HTML page as
+// window.ARENAS_DATA, escaping `<` so club/member names can't break out of the
+// <script> tag.
+function injectArenasData(html, dataObj) {
+  const json = JSON.stringify(dataObj).replace(/</g, '\\u003c');
+  return html.replace('</head>', `<script>window.ARENAS_DATA = ${json};</script></head>`);
+}
+
 // ── POSTS API (training notes) ──
 // Mounted under BASE so the shared proxy routes them to this artifact
 // (the separate api-server owns the bare "/api" path).
@@ -301,7 +321,18 @@ app.get(BASE === '' ? '/' : BASE, (req, res) => {
 });
 
 // Feed requires authentication; unauthenticated visitors are sent to landing.
-app.get(BASE + '/feed', requirePageAuth, (req, res) => res.sendFile(path.join(HTML, 'arenas-feed.html')));
+// Inject the logged-in user's real name/handle so the feed shows them instead
+// of the hardcoded "Jamie King" placeholder.
+app.get(BASE + '/feed', requirePageAuth, (req, res) => {
+  try {
+    const userData = { profile: displayFromUser(req.user), userId: req.user.id };
+    const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), userData);
+    res.type('html').send(html);
+  } catch (err) {
+    console.log('Feed data error:', err.message);
+    res.sendFile(path.join(HTML, 'arenas-feed.html'));
+  }
+});
 app.get(BASE + '/athletes', (req, res) => res.sendFile(path.join(HTML, 'arenas-athletes.html')));
 app.get(BASE + '/events', (req, res) => res.sendFile(path.join(HTML, 'arenas-events.html')));
 app.get(BASE + '/leaderboards', (req, res) => res.sendFile(path.join(HTML, 'arenas-leaderboards.html')));
@@ -316,7 +347,71 @@ app.get(BASE + '/blog', (req, res) => {
   res.type('html').send(html);
 });
 app.get(BASE + '/for-clubs', (req, res) => res.sendFile(path.join(HTML, 'arenas-for-clubs.html')));
-app.get(BASE + '/clubs/dashboard', (req, res) => res.sendFile(path.join(HTML, 'arenas-club-dashboard.html')));
+// Club dashboard requires authentication. Inject the coach's real club, member
+// count, and recent members so the page shows live data instead of the
+// hardcoded "Hackney Running Club" / "Rachel" placeholders.
+app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
+  const servePlain = () => res.sendFile(path.join(HTML, 'arenas-club-dashboard.html'));
+  try {
+    if (!supabaseAdmin) return servePlain();
+
+    // The club this user administers (most recent admin/coach membership wins).
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('club_id, role, clubs (id, name, handle, sport, city)')
+      .eq('user_id', req.user.id)
+      .in('role', ['admin', 'coach'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const clubId = membership && membership.club_id;
+    let memberCount = 0;
+    let members = [];
+
+    if (clubId) {
+      const { count } = await supabaseAdmin
+        .from('memberships')
+        .select('*', { count: 'exact', head: true })
+        .eq('club_id', clubId);
+      memberCount = count || 0;
+
+      // `memberships` has no `joined_at`/`status` columns, so order by the real
+      // `created_at` column and treat every membership row as active.
+      const { data: rows } = await supabaseAdmin
+        .from('memberships')
+        .select('user_id, role, created_at')
+        .eq('club_id', clubId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      members = await Promise.all((rows || []).map(async (m) => {
+        let display = { name: 'Member', handle: 'member' };
+        try {
+          const { data: u } = await supabaseAdmin.auth.admin.getUserById(m.user_id);
+          if (u && u.user) display = displayFromUser(u.user);
+        } catch (err) {
+          // Ignore individual lookup failures; fall back to defaults.
+        }
+        return { user_id: m.user_id, role: m.role, joined_at: m.created_at, name: display.name, handle: display.handle };
+      }));
+    }
+
+    const clubData = {
+      club: (membership && membership.clubs) || null,
+      profile: displayFromUser(req.user),
+      memberCount,
+      members,
+      userEmail: req.user.email
+    };
+
+    const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-club-dashboard.html'), 'utf8'), clubData);
+    res.type('html').send(html);
+  } catch (err) {
+    console.log('Dashboard data error:', err.message);
+    servePlain();
+  }
+});
 app.get(BASE + '/clubs/member', (req, res) => res.sendFile(path.join(HTML, 'arenas-club-member.html')));
 app.get(BASE + '/clubs/invite', (req, res) => res.sendFile(path.join(HTML, 'arenas-club-invite.html')));
 app.get(BASE + '/landing', (req, res) => res.sendFile(path.join(HTML, 'arenas-landing-login.html')));

@@ -299,13 +299,13 @@ button, select, input { font-family: var(--font); }
       <span style="color:var(--gray-400);font-size:13px">🔍</span>
       <input type="text" placeholder="Search members, events, challenges…">
     </div>
-    <span class="topbar-club-name">Hackney Running Club</span>
+    <span class="topbar-club-name club-name">Hackney Running Club</span>
     <span class="topbar-role">Coach · Admin</span>
   </div>
   <div class="topbar-actions">
     <div class="notif-btn" onclick="nav('/notifications')">🔔<div class="notif-dot"></div></div>
     <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
-      <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">RH</div>
+      <div class="user-av coach-initials" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">RH</div>
       <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
         <a href="/html/profile" style="display:block;padding:10px 14px;font-size:13px;color:#111827;text-decoration:none">My profile</a>
         <a href="/html/auth/logout" style="display:block;padding:10px 14px;font-size:13px;color:#DC2626;text-decoration:none;border-top:1px solid #f3f4f6">Log out</a>
@@ -318,7 +318,7 @@ button, select, input { font-family: var(--font); }
 <aside class="sidebar">
   <div class="nav-section-label">Club management</div>
   <div class="nav-item active" onclick="setTab('overview',this)"><span class="nav-icon">📊</span> Overview</div>
-  <div class="nav-item" onclick="setTab('members',this)"><span class="nav-icon">👥</span> Members <span class="nav-badge">48</span></div>
+  <div class="nav-item" onclick="setTab('members',this)"><span class="nav-icon">👥</span> Members <span class="nav-badge member-count">48</span></div>
   <div class="nav-item" onclick="setTab('training',this)"><span class="nav-icon">📈</span> Training load <span class="nav-badge alert">3</span></div>
   <div class="nav-item" onclick="setTab('leaderboard',this)"><span class="nav-icon">🏆</span> Leaderboard</div>
   <div class="nav-item" onclick="setTab('challenges',this)"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">4</span></div>
@@ -332,7 +332,7 @@ button, select, input { font-family: var(--font); }
   <div class="sidebar-footer">
     <div class="club-info">
       <div class="club-icon">🏃</div>
-      <div><div class="club-name-small">Hackney RC</div><div class="club-plan">Club Pro · 48 / 100 members</div></div>
+      <div><div class="club-name-small club-name">Hackney RC</div><div class="club-plan">Club Pro · <span class="member-count">48</span> / 100 members</div></div>
     </div>
   </div>
 </aside>
@@ -344,8 +344,8 @@ button, select, input { font-family: var(--font); }
   <div class="tab-content active" id="tab-overview">
     <div class="page-hdr">
       <div class="page-hdr-left">
-        <h1>Good morning, Rachel 👋</h1>
-        <p>Hackney Running Club · Week of May 15–22, 2026 · 48 members</p>
+        <h1>Good morning, <span class="coach-name">Rachel</span> 👋</h1>
+        <p><span class="club-name">Hackney Running Club</span> · Week of May 15–22, 2026 · <span class="member-count">48</span> members</p>
       </div>
       <div class="page-hdr-right">
         <button class="btn btn-ghost" onclick="showToast('Generating weekly report PDF…')">📋 Export report</button>
@@ -497,7 +497,7 @@ button, select, input { font-family: var(--font); }
   <!-- ═══ MEMBERS TAB ═══ -->
   <div class="tab-content" id="tab-members">
     <div class="page-hdr">
-      <div class="page-hdr-left"><h1>Members</h1><p>48 members · 39 active this week · 3 flagged for review</p></div>
+      <div class="page-hdr-left"><h1>Members</h1><p><span class="member-count">48</span> members · 39 active this week · 3 flagged for review</p></div>
       <div class="page-hdr-right">
         <button class="btn btn-ghost" onclick="showToast('Importing CSV…')">📥 Import CSV</button>
         <button class="btn btn-yellow" onclick="openModal('invite')">+ Invite members</button>
@@ -523,7 +523,7 @@ button, select, input { font-family: var(--font); }
         </tbody>
       </table>
       <div style="padding:10px 14px;border-top:var(--border);background:var(--gray-50);font-size:12px;color:var(--gray-500);display:flex;justify-content:space-between">
-        <span>Showing 6 of 48 members</span>
+        <span>Showing 6 of <span class="member-count">48</span> members</span>
         <button class="btn btn-sm btn-ghost" onclick="showToast('Loading more members…')">Load more</button>
       </div>
     </div>
@@ -1013,6 +1013,26 @@ function showToast(msg) {
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2800);
 }
+</script>
+<script>
+// Wire the coach's real club, member count and name into the dashboard (server
+// injects window.ARENAS_DATA). Replaces the hardcoded "Hackney Running Club" /
+// "Rachel" placeholders.
+(function () {
+  var data = window.ARENAS_DATA;
+  if (!data) return;
+  var clubName = (data.club && data.club.name) || 'Your Club';
+  var coachName = (data.profile && data.profile.name) || 'Coach';
+  var initials = coachName.split(/\s+/).map(function (n) { return n[0]; }).join('').slice(0, 2).toUpperCase();
+  document.querySelectorAll('.club-name').forEach(function (el) { el.textContent = clubName; });
+  document.querySelectorAll('.coach-name').forEach(function (el) { el.textContent = coachName; });
+  document.querySelectorAll('.coach-initials').forEach(function (el) { el.textContent = initials; });
+  document.querySelectorAll('.member-count').forEach(function (el) { el.textContent = data.memberCount; });
+  document.title = 'Arenas · ' + clubName + ' Dashboard';
+  if (data.club && data.club.sport) {
+    document.querySelectorAll('.club-sport').forEach(function (el) { el.textContent = data.club.sport; });
+  }
+})();
 </script>
 </body>
 </html>
