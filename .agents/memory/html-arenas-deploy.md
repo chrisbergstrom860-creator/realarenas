@@ -14,7 +14,11 @@ description: How the html-arenas Express prototype serves dual base paths and de
 ## Deploy topology (monorepo)
 - App lives in `artifacts/html-arenas/`; repo root is the **pnpm workspace** (`package.json` name `workspace`).
 - **Do NOT rename/replace the root `package.json`** (e.g. to "realarenas") — it breaks the pnpm workspace and every other artifact.
-- `railway.json` at repo root: NIXPACKS, `buildCommand` is a no-op (avoids the heavy root `pnpm build` across all artifacts), `startCommand = node artifacts/html-arenas/server.js`. Nixpacks installs via pnpm (lockfile at root).
+- **Two Railway layouts exist (pick ONE via Railway's Root Directory setting):**
+  - **Repo-root layout:** Root Directory = repo root; uses root `railway.json` (`startCommand = node artifacts/html-arenas/server.js`). Nixpacks installs via pnpm (lockfile at root).
+  - **Subfolder layout:** Root Directory = `artifacts/html-arenas`; uses `artifacts/html-arenas/railway.json` (`startCommand = node server.js`). Works standalone because `artifacts/html-arenas/package.json` deps use concrete semver (^), not `catalog:` refs, so npm install in the subfolder resolves them. The subfolder `package.json` has `start`/`build` scripts + `engines.node >=18`.
+  - **Why the subfolder error happened:** root `railway.json`'s repo-root-relative start path + Railway Root Directory pointed at the subfolder → doubled path `/app/artifacts/html-arenas/server.js` not found.
+- **Do NOT rename `@workspace/html-arenas`** in `artifacts/html-arenas/package.json` — the Replit dev workflow uses `pnpm --filter @workspace/html-arenas`; package name is irrelevant to Railway. **Do NOT strip its dependencies** (express, @supabase/supabase-js, cookie-parser, dotenv) — needed by both Replit dev and the subfolder Railway build.
 - Railway env vars required: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `SESSION_SECRET`. `PORT` is provided by Railway.
 
 ## Git / GitHub
