@@ -1,0 +1,424 @@
+The notifications table is now created in Supabase. Please wire real notifications into the app by doing the following:
+1. Add notification helper function to server.js — add this near the top after the Supabase client is created:
+javascriptasync function createNotification(supabaseAdmin, {
+  userId,
+  type,
+  title,
+  body,
+  link,
+  actorId,
+  entityId
+}) {
+  try {
+    await supabaseAdmin.from('notifications').insert({
+      user_id: userId,
+      type,
+      title,
+      body,
+      link,
+      actor_id: actorId,
+      entity_id: entityId,
+      read: false
+    });
+  } catch (err) {
+    console.log('Notification creation error:', err.message);
+  }
+}
+2. Trigger a notification when someone likes a post — update the /api/posts/:id/like route to create a notification for the post author when someone likes their post:
+javascriptapp.post('/api/posts/:id/like', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const { data: existing } = await supabaseAdmin
+    .from('post_likes')
+    .select()
+    .eq('post_id', req.params.id)
+    .eq('user_id', req.user.id)
+    .single();
+  if (existing) {
+    await supabaseAdmin.from('post_likes').delete()
+      .eq('post_id', req.params.id)
+      .eq('user_id', req.user.id);
+    return res.json({ liked: false });
+  }
+  await supabaseAdmin.from('post_likes').insert({
+    post_id: req.params.id,
+    user_id: req.user.id
+  });
+  // Get the post to find the author
+  const { data: post } = await supabaseAdmin
+    .from('posts')
+    .select('user_id, content')
+    .eq('id', req.params.id)
+    .single();
+  // Get the liker's profile
+  const { data: likerProfile } = await supabaseAdmin
+    .from('profiles')
+    .select('name, handle')
+    .eq('id', req.user.id)
+    .single();
+  // Only notify if someone else liked it — not yourself
+  if (post && post.user_id !== req.user.id) {
+    await createNotification(supabaseAdmin, {
+      userId: post.user_id,
+      type: 'like',
+      title: 'New kudos',
+      body: `${likerProfile?.name || 'Someone'} gave kudos on your training note: "${post.content.slice(0, 60)}${post.content.length > 60 ? '...' : ''}"`,
+      link: '/feed',
+      actorId: req.user.id,
+      entityId: req.params.id
+    });
+  }
+  res.json({ liked: true });
+});
+3. Trigger a notification when someone follows a user — update the /api/follow/:userId route:
+javascriptapp.post('/api/follow/:userId', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const { error } = await supabaseAdmin
+    .from('follows')
+    .insert({
+      follower_id: req.user.id,
+      following_id: req.params.userId
+    });
+  if (error) return res.json({ error: error.message });
+  // Get the follower's profile
+  const { data: followerProfile } = await supabaseAdmin
+    .from('profiles')
+    .select('name, handle')
+    .eq('id', req.user.id)
+    .single();
+  // Notify the person being followed
+  await createNotification(supabaseAdmin, {
+    userId: req.params.userId,
+    type: 'follow',
+    title: 'New follower',
+    body: `${followerProfile?.name || 'Someone'} started following you`,
+    link: '/athletes',
+    actorId: req.user.id,
+    entityId: req.user.id
+  });
+  res.json({ success: true, following: true });
+});
+4. Trigger a notification when someone comments on a post — update the /api/posts/:id/comment route:
+javascriptapp.post('/api/posts/:id/comment', requireAuth, async (req, res) => {
+  const { content } = req.body;
+  if (!content?.trim()) return res.json({ error: 'Comment cannot be empty' });
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const { data, error } = await supabaseAdmin
+    .from('post_comments')
+    .insert({
+      post_id: req.params.id,
+      user_id: req.user.id,
+      content: content.trim()
+    })
+    .select()
+    .single();
+  if (error) return res.json({ error: error.message });
+  // Get the post author
+  const { data: post } = await supabaseAdmin
+    .from('posts')
+    .select('user_id, content')
+    .eq('id', req.params.id)
+    .single();
+  // Get commenter profile
+  const { data: commenterProfile } = await supabaseAdmin
+    .from('profiles')
+    .select('name, handle')
+    .eq('id', req.user.id)
+    .single();
+  // Notify post author if someone else commented
+  if (post && post.user_id !== req.user.id) {
+    await createNotification(supabaseAdmin, {
+      userId: post.user_id,
+      type: 'comment',
+      title: 'New comment',
+      body: `${commenterProfile?.name || 'Someone'} commented: "${content.slice(0, 60)}${content.length > 60 ? '...' : ''}"`,
+      link: '/feed',
+      actorId: req.user.id,
+      entityId: req.params.id
+    });
+  }
+  res.json({ success: true, comment: data });
+});
+5. Add API routes to fetch and manage notifications:
+javascript// Get notifications for logged in user
+app.get('/api/notifications', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const { data, error } = await supabaseAdmin
+    .from('notifications')
+    .select('*, actor:actor_id(name, handle)')
+    .eq('user_id', req.user.id)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) return res.json({ error: error.message });
+  const unreadCount = (data || []).filter(n => !n.read).length;
+  res.json({ notifications: data || [], unreadCount });
+});
+
+// Mark a notification as read
+app.post('/api/notifications/:id/read', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  await supabaseAdmin
+    .from('notifications')
+    .update({ read: true })
+    .eq('id', req.params.id)
+    .eq('user_id', req.user.id);
+  res.json({ success: true });
+});
+
+// Mark all notifications as read
+app.post('/api/notifications/read-all', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  await supabaseAdmin
+    .from('notifications')
+    .update({ read: true })
+    .eq('user_id', req.user.id)
+    .eq('read', false);
+  res.json({ success: true });
+});
+
+// Delete a notification
+app.delete('/api/notifications/:id', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  await supabaseAdmin
+    .from('notifications')
+    .delete()
+    .eq('id', req.params.id)
+    .eq('user_id', req.user.id);
+  res.json({ success: true });
+});
+6. Update the /notifications route to inject real notifications:
+javascriptapp.get('/notifications', requireAuth, async (req, res) => {
+  try {
+    const supabaseAdmin = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+    const { data: notifications } = await supabaseAdmin
+      .from('notifications')
+      .select('*, actor:actor_id(name, handle)')
+      .eq('user_id', req.user.id)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('name, handle')
+      .eq('id', req.user.id)
+      .single();
+    const notifData = {
+      notifications: notifications || [],
+      unreadCount: (notifications || []).filter(n => !n.read).length,
+      profile: profile || { name: req.user.email, handle: 'athlete' }
+    };
+    const fs = require('fs');
+    let html = fs.readFileSync(path.join(HTML, 'arenas-notifications.html'), 'utf8');
+    const dataScript = `<script>window.ARENAS_DATA = ${JSON.stringify(notifData)};</script>`;
+    html = html.replace('</head>', dataScript + '</head>');
+    res.send(html);
+  } catch (err) {
+    console.log('Notifications error:', err.message);
+    res.sendFile(path.join(HTML, 'arenas-notifications.html'));
+  }
+});
+7. Add this JavaScript to arenas-notifications.html before </body> to render real notifications:
+javascript(function() {
+  const data = window.ARENAS_DATA;
+  if (!data || !data.notifications) return;
+
+  // Update user name and initials
+  const name = data.profile?.name || 'Athlete';
+  const initials = name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+  document.querySelectorAll('.user-av').forEach(el => {
+    if (el.textContent.trim() === 'JK') el.textContent = initials;
+  });
+
+  // Update unread count in header and sidebar
+  document.getElementById('nav-unread-badge').textContent = data.unreadCount || '';
+  document.getElementById('stat-unread').textContent = data.unreadCount || '0';
+  document.getElementById('badge-all').textContent = data.unreadCount || '';
+  document.getElementById('badge-all').className = data.unreadCount > 0 ? 'badge unread' : 'badge';
+  document.getElementById('header-subtitle').textContent =
+    data.unreadCount > 0 ? data.unreadCount + ' unread · Last updated just now' : 'All caught up · Last updated just now';
+
+  if (data.notifications.length === 0) {
+    const col = document.getElementById('notif-col');
+    if (col) {
+      col.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🔔</div>
+          <div class="empty-title">No notifications yet</div>
+          <div class="empty-sub">When someone likes your posts, follows you, or comments on your activities, you'll see it here.</div>
+        </div>`;
+    }
+    return;
+  }
+
+  // Render real notifications
+  const col = document.getElementById('notif-col');
+  if (!col) return;
+
+  function timeAgo(dateStr) {
+    const seconds = Math.floor((new Date() - new Date(dateStr)) / 1000);
+    if (seconds < 60) return 'Just now';
+    if (seconds < 3600) return Math.floor(seconds/60) + 'm ago';
+    if (seconds < 86400) return Math.floor(seconds/3600) + 'h ago';
+    if (seconds < 604800) return Math.floor(seconds/86400) + 'd ago';
+    return new Date(dateStr).toLocaleDateString();
+  }
+
+  const typeConfig = {
+    like: { icon: '👍', bg: 'var(--yellow-light)', label: 'Kudos' },
+    follow: { icon: '👤', bg: 'var(--blue-light)', label: 'New follower' },
+    comment: { icon: '💬', bg: 'var(--purple-light)', label: 'Comment' },
+    club: { icon: '🏃', bg: 'var(--orange-light)', label: 'Club update' },
+    challenge: { icon: '⚡', bg: 'var(--purple-light)', label: 'Challenge' },
+    system: { icon: '✦', bg: 'var(--yellow-light)', label: 'System' }
+  };
+
+  const today = [];
+  const earlier = [];
+  const now = new Date();
+
+  data.notifications.forEach(n => {
+    const created = new Date(n.created_at);
+    const hoursAgo = (now - created) / (1000 * 60 * 60);
+    if (hoursAgo < 24) today.push(n);
+    else earlier.push(n);
+  });
+
+  let html = '';
+
+  if (today.length > 0) {
+    html += `<div class="group-label" data-group="today">Today</div>`;
+    today.forEach((n, i) => {
+      const config = typeConfig[n.type] || typeConfig.system;
+      const actorInitials = (n.actor?.name || 'A').split(' ').map(x => x[0]).join('').slice(0,2).toUpperCase();
+      html += `
+        <div class="notif-item ${n.read ? '' : 'unread'}" data-type="${n.type}" data-id="${n.id}"
+             style="animation-delay:${i * 0.05}s" onclick="markRead('${n.id}')">
+          ${!n.read ? '<div class="unread-bar"></div>' : ''}
+          <div class="notif-av" style="background:${config.bg}">
+            ${actorInitials}
+            <div class="notif-av-badge" style="background:${config.bg}">${config.icon}</div>
+          </div>
+          <div class="notif-content">
+            <div class="notif-text">${n.body}</div>
+            <div class="notif-meta">
+              <span class="notif-time">${timeAgo(n.created_at)}</span>
+              <span class="notif-source">${config.label}</span>
+            </div>
+          </div>
+          ${!n.read ? '<div class="unread-dot"></div>' : ''}
+          <button class="notif-dismiss" onclick="event.stopPropagation();dismissNotif(this,'${n.id}')" title="Dismiss">✕</button>
+        </div>`;
+    });
+  }
+
+  if (earlier.length > 0) {
+    html += `<div class="group-label" data-group="earlier">Earlier</div>`;
+    earlier.forEach((n, i) => {
+      const config = typeConfig[n.type] || typeConfig.system;
+      const actorInitials = (n.actor?.name || 'A').split(' ').map(x => x[0]).join('').slice(0,2).toUpperCase();
+      html += `
+        <div class="notif-item ${n.read ? '' : 'unread'}" data-type="${n.type}" data-id="${n.id}"
+             style="animation-delay:${i * 0.05}s" onclick="markRead('${n.id}')">
+          ${!n.read ? '<div class="unread-bar"></div>' : ''}
+          <div class="notif-av" style="background:${config.bg}">
+            ${actorInitials}
+            <div class="notif-av-badge" style="background:${config.bg}">${config.icon}</div>
+          </div>
+          <div class="notif-content">
+            <div class="notif-text">${n.body}</div>
+            <div class="notif-meta">
+              <span class="notif-time">${timeAgo(n.created_at)}</span>
+              <span class="notif-source">${config.label}</span>
+            </div>
+          </div>
+          ${!n.read ? '<div class="unread-dot"></div>' : ''}
+          <button class="notif-dismiss" onclick="event.stopPropagation();dismissNotif(this,'${n.id}')" title="Dismiss">✕</button>
+        </div>`;
+    });
+  }
+
+  html += `<div class="load-more" id="load-more"><p style="font-size:13px;color:var(--gray-400);padding:16px;text-align:center">All notifications loaded</p></div>`;
+  col.innerHTML = html;
+
+  // Mark as read when clicked
+  window.markRead = async function(id) {
+    await fetch('/api/notifications/' + id + '/read', { method: 'POST' });
+    const item = document.querySelector(`[data-id="${id}"]`);
+    if (item) {
+      item.classList.remove('unread');
+      item.querySelector('.unread-bar')?.remove();
+      item.querySelector('.unread-dot')?.remove();
+    }
+  };
+
+  // Dismiss notification
+  window.dismissNotif = async function(btn, id) {
+    await fetch('/api/notifications/' + id, { method: 'DELETE' });
+    const item = btn.closest('.notif-item');
+    if (item) {
+      item.style.transition = 'opacity .25s, transform .25s';
+      item.style.opacity = '0';
+      item.style.transform = 'translateX(12px)';
+      setTimeout(() => item.remove(), 250);
+    }
+  };
+
+  // Mark all read button
+  const markAllBtn = document.querySelector('button[onclick*="markAllRead"]');
+  if (markAllBtn) {
+    markAllBtn.onclick = async function() {
+      await fetch('/api/notifications/read-all', { method: 'POST' });
+      document.querySelectorAll('.notif-item.unread').forEach(item => {
+        item.classList.remove('unread');
+        item.querySelector('.unread-bar')?.remove();
+        item.querySelector('.unread-dot')?.remove();
+      });
+      document.getElementById('nav-unread-badge').textContent = '';
+      document.getElementById('stat-unread').textContent = '0';
+      document.getElementById('badge-all').textContent = '';
+      document.getElementById('header-subtitle').textContent = 'All caught up · Last updated just now';
+      showToast('✓ All notifications marked as read');
+    };
+  }
+})();
+8. Update the unread badge in the topbar bell icon across all pages
+Add this small script to the bottom of every HTML page that has the bell icon so it shows the real unread count:
+javascript// Load real notification count for bell icon
+async function loadNotifCount() {
+  try {
+    const res = await fetch('/api/notifications');
+    const data = await res.json();
+    if (data.unreadCount > 0) {
+      const badge = document.querySelector('.notif-dot');
+      if (badge) badge.style.display = 'block';
+      const navBadge = document.getElementById('nav-unread-badge');
+      if (navBadge) navBadge.textContent = data.unreadCount;
+    }
+  } catch (err) {
+    console.log('Could not load notif count');
+  }
+}
+loadNotifCount();
+Wait for checkpoint then commit and push to GitHub main.

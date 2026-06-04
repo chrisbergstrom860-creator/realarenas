@@ -234,6 +234,47 @@ function injectArenasData(html, dataObj) {
   return html.replace('</head>', `<script>window.ARENAS_DATA = ${json};</script></head>`);
 }
 
+// ── NOTIFICATIONS ──
+// Insert a notification row for a recipient. Best-effort: failures are logged
+// but never bubble up, so the triggering action (like/comment/follow) still
+// succeeds. Uses the shared supabaseAdmin singleton.
+async function createNotification({ userId, type, title, body, link, actorId, entityId }) {
+  if (!supabaseAdmin || !userId) return;
+  try {
+    const { error } = await supabaseAdmin.from('notifications').insert({
+      user_id: userId,
+      type,
+      title,
+      body,
+      link,
+      actor_id: actorId,
+      entity_id: entityId,
+      read: false
+    });
+    if (error) console.log('Notification creation error:', error.message);
+  } catch (err) {
+    console.log('Notification creation error:', err.message);
+  }
+}
+
+// Attach actor display info to notifications. There is no `profiles` table, so
+// resolve each distinct actor's name/handle from auth metadata (one lookup per
+// unique actor) instead of an FK embed.
+async function enrichNotifications(notifications) {
+  const list = notifications || [];
+  const ids = [...new Set(list.map(n => n.actor_id).filter(Boolean))];
+  const actorMap = {};
+  await Promise.all(ids.map(async (id) => {
+    try {
+      const { data: u } = await supabaseAdmin.auth.admin.getUserById(id);
+      if (u && u.user) actorMap[id] = displayFromUser(u.user);
+    } catch (err) {
+      // Ignore individual lookup failures; the card falls back to defaults.
+    }
+  }));
+  return list.map(n => ({ ...n, actor: actorMap[n.actor_id] || null }));
+}
+
 // ── POSTS API (training notes) ──
 // Mounted under BASE so the shared proxy routes them to this artifact
 // (the separate api-server owns the bare "/api" path).
@@ -312,6 +353,29 @@ app.post(BASE + '/api/posts/:id/like', requireAuth, async (req, res) => {
     user_id: req.user.id
   });
   if (error) return res.json({ error: error.message });
+  // Notify the post author that someone gave them kudos (skip self-likes).
+  try {
+    const { data: post } = await supabaseAdmin
+      .from('posts')
+      .select('user_id, content')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (post && post.user_id !== req.user.id) {
+      const liker = displayFromUser(req.user);
+      const text = post.content || '';
+      await createNotification({
+        userId: post.user_id,
+        type: 'like',
+        title: 'New kudos',
+        body: `${liker.name} gave kudos on your training note: "${text.slice(0, 60)}${text.length > 60 ? '...' : ''}"`,
+        link: '/feed',
+        actorId: req.user.id,
+        entityId: req.params.id
+      });
+    }
+  } catch (err) {
+    console.log('Like notification error:', err.message);
+  }
   res.json({ liked: true });
 });
 
@@ -331,6 +395,29 @@ app.post(BASE + '/api/posts/:id/comment', requireAuth, async (req, res) => {
     .select()
     .single();
   if (error) return res.json({ error: error.message });
+  // Notify the post author that someone commented (skip self-comments).
+  try {
+    const { data: post } = await supabaseAdmin
+      .from('posts')
+      .select('user_id, content')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (post && post.user_id !== req.user.id) {
+      const commenter = displayFromUser(req.user);
+      const text = content.trim();
+      await createNotification({
+        userId: post.user_id,
+        type: 'comment',
+        title: 'New comment',
+        body: `${commenter.name} commented: "${text.slice(0, 60)}${text.length > 60 ? '...' : ''}"`,
+        link: '/feed',
+        actorId: req.user.id,
+        entityId: req.params.id
+      });
+    }
+  } catch (err) {
+    console.log('Comment notification error:', err.message);
+  }
   res.json({ success: true, comment: data });
 });
 
@@ -347,6 +434,23 @@ app.post(BASE + '/api/follow/:userId', requireAuth, async (req, res) => {
     .from('follows')
     .insert({ follower_id: req.user.id, following_id: targetId });
   if (error && error.code !== '23505') return res.json({ error: error.message });
+  // Notify the followed user (skip on duplicate follow so we don't double-notify).
+  if (!error) {
+    try {
+      const follower = displayFromUser(req.user);
+      await createNotification({
+        userId: targetId,
+        type: 'follow',
+        title: 'New follower',
+        body: `${follower.name} started following you`,
+        link: '/athletes',
+        actorId: req.user.id,
+        entityId: req.user.id
+      });
+    } catch (err) {
+      console.log('Follow notification error:', err.message);
+    }
+  }
   res.json({ success: true, following: true });
 });
 
