@@ -398,41 +398,17 @@ button, select, input { font-family: var(--font); }
 
     <!-- Bottom grid: top members + upcoming events + activity -->
     <div class="grid-3">
-      <!-- Top performers -->
+      <!-- Recent members -->
       <div class="card">
         <div class="card-header">
-          <div class="card-header-left"><span>🏆</span><span class="card-title">Top performers this week</span></div>
-          <button class="btn btn-sm btn-ghost" onclick="setTab('leaderboard',null)">Full board →</button>
+          <div class="card-header-left"><span>👥</span><span class="card-title">Recent members</span></div>
+          <button class="btn btn-sm btn-ghost" onclick="setTab('members',null)">All members →</button>
         </div>
-        <div style="padding:6px 0">
-          <div class="lb-table-row">
-            <div class="lb-rank r1">1</div>
-            <div class="lb-athlete"><div class="lb-av" style="background:#FEF9C3;color:#854D0E">SL</div><div><div class="lb-name">Sofia L.</div><div class="lb-detail">88.2 km this week</div></div></div>
-            <div class="lb-score-cell"><div class="lb-score">9,840</div><div class="lb-score-sub">pts</div></div>
-            <div><span class="lb-trend lt-up">↑+1</span></div>
-            <div></div>
-          </div>
-          <div class="lb-table-row">
-            <div class="lb-rank r2">2</div>
-            <div class="lb-athlete"><div class="lb-av" style="background:#FCE7F3;color:#9D174D">YT</div><div><div class="lb-name">Yuki T.</div><div class="lb-detail">68.0 km this week</div></div></div>
-            <div class="lb-score-cell"><div class="lb-score">7,610</div><div class="lb-score-sub">pts</div></div>
-            <div><span class="lb-trend lt-up">↑+2</span></div>
-            <div><span class="pill pill-risk">⚠ Risk</span></div>
-          </div>
-          <div class="lb-table-row">
-            <div class="lb-rank r3">3</div>
-            <div class="lb-athlete"><div class="lb-av" style="background:#E0F2FE;color:#0369A1">AL</div><div><div class="lb-name">Alena L.</div><div class="lb-detail">71.4 km this week</div></div></div>
-            <div class="lb-score-cell"><div class="lb-score">7,220</div><div class="lb-score-sub">pts</div></div>
-            <div><span class="lb-trend lt-eq">—</span></div>
-            <div></div>
-          </div>
-          <div class="lb-table-row is-you">
-            <div class="lb-rank">5</div>
-            <div class="lb-athlete"><div class="lb-av" style="background:#FFF7ED;color:#9A3412">JK</div><div><div class="lb-name">Jamie K.</div><div class="lb-detail">12.4 km this week</div></div></div>
-            <div class="lb-score-cell"><div class="lb-score">6,440</div><div class="lb-score-sub">pts</div></div>
-            <div><span class="lb-trend lt-up">↑+3</span></div>
-            <div><span class="you-tag">you</span></div>
-          </div>
+        <div style="padding:6px 0" id="recent-members">
+          <!-- Populated from window.ARENAS_DATA.members -->
+        </div>
+        <div id="recent-members-empty" style="display:none;padding:20px 14px;text-align:center;color:var(--gray-500);font-size:13px">
+          No members yet — invite people to your club to get started.
         </div>
       </div>
 
@@ -497,7 +473,7 @@ button, select, input { font-family: var(--font); }
   <!-- ═══ MEMBERS TAB ═══ -->
   <div class="tab-content" id="tab-members">
     <div class="page-hdr">
-      <div class="page-hdr-left"><h1>Members</h1><p><span class="member-count">48</span> members · 39 active this week · 3 flagged for review</p></div>
+      <div class="page-hdr-left"><h1>Members</h1><p><span class="member-count">48</span> members</p></div>
       <div class="page-hdr-right">
         <button class="btn btn-ghost" onclick="showToast('Importing CSV…')">📥 Import CSV</button>
         <button class="btn btn-yellow" onclick="openModal('invite')">+ Invite members</button>
@@ -505,26 +481,22 @@ button, select, input { font-family: var(--font); }
     </div>
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
       <input type="text" placeholder="Search members…" style="padding:7px 12px;border:var(--border);border-radius:7px;font-size:13px;outline:none;width:220px">
-      <select style="padding:7px 12px;border:var(--border);border-radius:7px;font-size:13px;background:white;outline:none;cursor:pointer"><option>All statuses</option><option>Active</option><option>At risk</option><option>Rest week</option><option>Inactive</option></select>
       <select style="padding:7px 12px;border:var(--border);border-radius:7px;font-size:13px;background:white;outline:none;cursor:pointer"><option>All roles</option><option>Member</option><option>Coach</option><option>Admin</option></select>
     </div>
     <div class="card">
       <table class="member-table">
         <thead><tr>
-          <th>Member</th><th>Status</th><th>This week</th><th>Training load</th><th>Streak</th><th>Points</th><th>Role</th><th></th>
+          <th>Member</th><th>Role</th><th>Joined</th>
         </tr></thead>
-        <tbody>
-          <tr><td><div class="member-name-cell"><div class="member-av" style="background:#FEF9C3;color:#854D0E">SL</div><div><div class="member-name">Sofia L.</div><div class="member-handle">@sofialopes</div></div></div></td><td><span class="pill pill-active">Active</span></td><td style="font-family:var(--mono);font-size:12px">88.2 km</td><td><div class="load-bar-wrap"><div class="load-bar"><div class="load-fill" style="width:95%;background:var(--orange)"></div></div><div class="load-val">High · 95%</div></div></td><td><div class="streak-dots"><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-today"></div></div></td><td style="font-family:var(--mono);font-weight:600">9,840</td><td><span class="pill pill-active" style="font-size:10px">Coach</span></td><td><div class="actions-cell"><button class="btn btn-sm btn-ghost" onclick="showToast('Opening Sofia\'s profile…')">View</button><button class="btn btn-sm btn-ghost" onclick="showToast('Message sent')">💬</button></div></td></tr>
-          <tr class="at-risk"><td><div class="member-name-cell"><div class="member-av" style="background:#FCE7F3;color:#9D174D">YT</div><div><div class="member-name">Yuki T.</div><div class="member-handle">@yukitri</div></div></div></td><td><span class="pill pill-risk">⚠ At risk</span></td><td style="font-family:var(--mono);font-size:12px">68.0 km</td><td><div class="load-bar-wrap"><div class="load-bar"><div class="load-fill" style="width:100%;background:var(--red)"></div></div><div class="load-val">Overload · 142%</div></div></td><td><div class="streak-dots"><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-today"></div></div></td><td style="font-family:var(--mono);font-weight:600">7,610</td><td><span class="pill pill-rest" style="font-size:10px">Member</span></td><td><div class="actions-cell"><button class="btn btn-sm btn-ghost" onclick="showToast('Opening Yuki\'s profile…')">View</button><button class="btn btn-sm btn-danger" onclick="showToast('Rest day recommendation sent to Yuki')">⚠ Alert</button></div></td></tr>
-          <tr><td><div class="member-name-cell"><div class="member-av" style="background:#E0F2FE;color:#0369A1">AL</div><div><div class="member-name">Alena L.</div><div class="member-handle">@alenaprague</div></div></div></td><td><span class="pill pill-active">Active</span></td><td style="font-family:var(--mono);font-size:12px">71.4 km</td><td><div class="load-bar-wrap"><div class="load-bar"><div class="load-fill" style="width:82%;background:var(--orange)"></div></div><div class="load-val">Good · 82%</div></div></td><td><div class="streak-dots"><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-miss"></div><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-today"></div></div></td><td style="font-family:var(--mono);font-weight:600">7,220</td><td><span class="pill pill-rest" style="font-size:10px">Member</span></td><td><div class="actions-cell"><button class="btn btn-sm btn-ghost" onclick="showToast('Opening Alena\'s profile…')">View</button><button class="btn btn-sm btn-ghost" onclick="showToast('Message sent')">💬</button></div></td></tr>
-          <tr><td><div class="member-name-cell"><div class="member-av" style="background:#FFF7ED;color:#9A3412">JK</div><div><div class="member-name">Jamie K.</div><div class="member-handle">@jamiek</div></div></div></td><td><span class="pill pill-active">Active</span></td><td style="font-family:var(--mono);font-size:12px">12.4 km</td><td><div class="load-bar-wrap"><div class="load-bar"><div class="load-fill" style="width:35%;background:var(--blue)"></div></div><div class="load-val">Low · 35%</div></div></td><td><div class="streak-dots"><div class="s-dot s-miss"></div><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-today"></div></div></td><td style="font-family:var(--mono);font-weight:600">6,440</td><td><span class="pill pill-rest" style="font-size:10px">Member</span></td><td><div class="actions-cell"><button class="btn btn-sm btn-ghost" onclick="showToast('Opening Jamie\'s profile…')">View</button><button class="btn btn-sm btn-ghost" onclick="showToast('Message sent')">💬</button></div></td></tr>
-          <tr><td><div class="member-name-cell"><div class="member-av" style="background:#F5F3FF;color:#5B21B6">TR</div><div><div class="member-name">Tom R.</div><div class="member-handle">@tomruns</div></div></div></td><td><span class="pill pill-active">Active</span></td><td style="font-family:var(--mono);font-size:12px">21.3 km</td><td><div class="load-bar-wrap"><div class="load-bar"><div class="load-fill" style="width:48%;background:var(--blue)"></div></div><div class="load-val">Normal · 48%</div></div></td><td><div class="streak-dots"><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-miss"></div><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-today"></div></div></td><td style="font-family:var(--mono);font-weight:600">5,880</td><td><span class="pill pill-rest" style="font-size:10px">Member</span></td><td><div class="actions-cell"><button class="btn btn-sm btn-ghost" onclick="showToast('Opening Tom\'s profile…')">View</button><button class="btn btn-sm btn-ghost" onclick="showToast('Message sent')">💬</button></div></td></tr>
-          <tr><td><div class="member-name-cell"><div class="member-av" style="background:#F0FDF4;color:#166534">OB</div><div><div class="member-name">Omar B.</div><div class="member-handle">@omarbikes</div></div></div></td><td><span class="pill pill-rest">Rest week</span></td><td style="font-family:var(--mono);font-size:12px">0 km</td><td><div class="load-bar-wrap"><div class="load-bar"><div class="load-fill" style="width:0%;background:var(--gray-300)"></div></div><div class="load-val">Rest · 0%</div></div></td><td><div class="streak-dots"><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-done"></div><div class="s-dot s-miss"></div><div class="s-dot s-miss"></div><div class="s-dot s-miss"></div></div></td><td style="font-family:var(--mono);font-weight:600">4,100</td><td><span class="pill pill-rest" style="font-size:10px">Member</span></td><td><div class="actions-cell"><button class="btn btn-sm btn-ghost" onclick="showToast('Opening Omar\'s profile…')">View</button><button class="btn btn-sm btn-ghost" onclick="showToast('Message sent')">💬</button></div></td></tr>
+        <tbody id="members-tbody">
+          <!-- Populated from window.ARENAS_DATA.members -->
         </tbody>
       </table>
-      <div style="padding:10px 14px;border-top:var(--border);background:var(--gray-50);font-size:12px;color:var(--gray-500);display:flex;justify-content:space-between">
-        <span>Showing 6 of <span class="member-count">48</span> members</span>
-        <button class="btn btn-sm btn-ghost" onclick="showToast('Loading more members…')">Load more</button>
+      <div id="members-empty" style="display:none;padding:28px 14px;text-align:center;color:var(--gray-500);font-size:13px">
+        No members yet — invite people to your club and they'll appear here once they join.
+      </div>
+      <div class="members-foot" style="padding:10px 14px;border-top:var(--border);background:var(--gray-50);font-size:12px;color:var(--gray-500)">
+        Showing <span id="members-shown">0</span> most recent of <span class="member-count">0</span> members
       </div>
     </div>
   </div>
@@ -1031,6 +1003,130 @@ function showToast(msg) {
   document.title = 'Arenas · ' + clubName + ' Dashboard';
   if (data.club && data.club.sport) {
     document.querySelectorAll('.club-sport').forEach(function (el) { el.textContent = data.club.sport; });
+  }
+
+  // ── Render the coach's real members (name, handle, role, join date). The
+  // Supabase schema has no training-load/streak/points data, so those columns
+  // were removed rather than faked.
+  var members = Array.isArray(data.members) ? data.members : [];
+  var avPalette = [
+    ['#FEF9C3', '#854D0E'], ['#FCE7F3', '#9D174D'], ['#E0F2FE', '#0369A1'],
+    ['#FFF7ED', '#9A3412'], ['#F5F3FF', '#5B21B6'], ['#F0FDF4', '#166534'],
+    ['#EFF6FF', '#1D4ED8'], ['#FEF2F2', '#B91C1C']
+  ];
+  function initialsOf(name) {
+    return String(name || '?').trim().split(/\s+/).map(function (n) { return n[0] || ''; }).join('').slice(0, 2).toUpperCase() || '?';
+  }
+  function roleLabel(role) {
+    var r = String(role || 'member').toLowerCase();
+    return r.charAt(0).toUpperCase() + r.slice(1);
+  }
+  function formatJoined(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  function avatarEl(name, idx) {
+    var c = avPalette[idx % avPalette.length];
+    var el = document.createElement('div');
+    el.className = 'member-av';
+    el.style.background = c[0];
+    el.style.color = c[1];
+    el.textContent = initialsOf(name);
+    return el;
+  }
+
+  // Members tab table.
+  var tbody = document.getElementById('members-tbody');
+  var emptyEl = document.getElementById('members-empty');
+  var shownEl = document.getElementById('members-shown');
+  if (tbody) {
+    tbody.innerHTML = '';
+    if (members.length === 0) {
+      if (emptyEl) emptyEl.style.display = 'block';
+    } else {
+      members.forEach(function (m, i) {
+        var tr = document.createElement('tr');
+
+        var tdMember = document.createElement('td');
+        var cell = document.createElement('div');
+        cell.className = 'member-name-cell';
+        cell.appendChild(avatarEl(m.name, i));
+        var info = document.createElement('div');
+        var nameEl = document.createElement('div');
+        nameEl.className = 'member-name';
+        nameEl.textContent = m.name || 'Member';
+        var handleEl = document.createElement('div');
+        handleEl.className = 'member-handle';
+        handleEl.textContent = '@' + (m.handle || 'member');
+        info.appendChild(nameEl);
+        info.appendChild(handleEl);
+        cell.appendChild(info);
+        tdMember.appendChild(cell);
+
+        var tdRole = document.createElement('td');
+        var pill = document.createElement('span');
+        var role = String(m.role || 'member').toLowerCase();
+        pill.className = 'pill ' + (role === 'member' ? 'pill-rest' : 'pill-active');
+        pill.style.fontSize = '10px';
+        pill.textContent = roleLabel(role);
+        tdRole.appendChild(pill);
+
+        var tdJoined = document.createElement('td');
+        tdJoined.style.fontFamily = 'var(--mono)';
+        tdJoined.style.fontSize = '12px';
+        tdJoined.textContent = formatJoined(m.joined_at);
+
+        tr.appendChild(tdMember);
+        tr.appendChild(tdRole);
+        tr.appendChild(tdJoined);
+        tbody.appendChild(tr);
+      });
+    }
+  }
+  if (shownEl) shownEl.textContent = members.length;
+
+  // Overview "Recent members" card.
+  var recent = document.getElementById('recent-members');
+  var recentEmpty = document.getElementById('recent-members-empty');
+  if (recent) {
+    recent.innerHTML = '';
+    if (members.length === 0) {
+      if (recentEmpty) recentEmpty.style.display = 'block';
+    } else {
+      members.slice(0, 5).forEach(function (m, i) {
+        var row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.gap = '10px';
+        row.style.padding = '8px 14px';
+
+        row.appendChild(avatarEl(m.name, i));
+
+        var info = document.createElement('div');
+        info.style.flex = '1';
+        info.style.minWidth = '0';
+        var nameEl = document.createElement('div');
+        nameEl.className = 'lb-name';
+        nameEl.textContent = m.name || 'Member';
+        var detail = document.createElement('div');
+        detail.className = 'lb-detail';
+        detail.textContent = '@' + (m.handle || 'member') + ' · joined ' + formatJoined(m.joined_at);
+        info.appendChild(nameEl);
+        info.appendChild(detail);
+        row.appendChild(info);
+
+        var pill = document.createElement('span');
+        var role = String(m.role || 'member').toLowerCase();
+        pill.className = 'pill ' + (role === 'member' ? 'pill-rest' : 'pill-active');
+        pill.style.fontSize = '10px';
+        pill.textContent = roleLabel(role);
+        row.appendChild(pill);
+
+        recent.appendChild(row);
+      });
+    }
   }
 })();
 </script>
