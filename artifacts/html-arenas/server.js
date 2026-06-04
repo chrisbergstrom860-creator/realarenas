@@ -334,6 +334,47 @@ app.post(BASE + '/api/posts/:id/comment', requireAuth, async (req, res) => {
   res.json({ success: true, comment: data });
 });
 
+// ── FOLLOWS API ──
+// Follow a user. Idempotent — a duplicate follow (unique-constraint 23505) is
+// treated as success so the button stays consistent.
+app.post(BASE + '/api/follow/:userId', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for following' });
+  const targetId = req.params.userId;
+  if (!targetId || targetId === req.user.id) {
+    return res.json({ error: 'You cannot follow yourself' });
+  }
+  const { error } = await supabaseAdmin
+    .from('follows')
+    .insert({ follower_id: req.user.id, following_id: targetId });
+  if (error && error.code !== '23505') return res.json({ error: error.message });
+  res.json({ success: true, following: true });
+});
+
+// Unfollow a user.
+app.delete(BASE + '/api/follow/:userId', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for following' });
+  const { error } = await supabaseAdmin
+    .from('follows')
+    .delete()
+    .eq('follower_id', req.user.id)
+    .eq('following_id', req.params.userId);
+  if (error) return res.json({ error: error.message });
+  res.json({ success: true, following: false });
+});
+
+// Check whether the viewer follows a user.
+app.get(BASE + '/api/follow/:userId', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ following: false });
+  const { data, error } = await supabaseAdmin
+    .from('follows')
+    .select('follower_id')
+    .eq('follower_id', req.user.id)
+    .eq('following_id', req.params.userId)
+    .maybeSingle();
+  if (error) return res.json({ following: false });
+  res.json({ following: !!data });
+});
+
 // Root: send new visitors to the landing page, logged-in users to their feed.
 app.get(BASE === '' ? '/' : BASE, async (req, res) => {
   const token = req.signedCookies && req.signedCookies.sb_access_token;
@@ -352,13 +393,31 @@ app.get(BASE === '' ? '/' : BASE, async (req, res) => {
 // injection. Author names come from auth user metadata (there is no `profiles`
 // table), and userLiked reflects whether the current viewer liked each post.
 async function buildFeedPosts(limit, currentUserId) {
-  if (!supabaseAdmin) return [];
+  if (!supabaseAdmin) return { posts: [], followsNobody: false };
+
+  // Only show posts from people the viewer follows, plus their own posts. If
+  // the follows lookup fails, fall back to a self-only feed rather than 500.
+  let followingIds = [];
+  if (currentUserId) {
+    const { data: following, error: followErr } = await supabaseAdmin
+      .from('follows')
+      .select('following_id')
+      .eq('follower_id', currentUserId);
+    if (!followErr && Array.isArray(following)) {
+      followingIds = following.map(f => f.following_id).filter(Boolean);
+    }
+  }
+  const followsNobody = followingIds.length === 0;
+  const feedUserIds = [...new Set([...followingIds, currentUserId].filter(Boolean))];
+  if (!feedUserIds.length) return { posts: [], followsNobody };
+
   const { data: posts, error } = await supabaseAdmin
     .from('posts')
     .select('id, content, sport, feeling, created_at, user_id, post_likes (count), post_comments (count)')
+    .in('user_id', feedUserIds)
     .order('created_at', { ascending: false })
     .limit(limit);
-  if (error || !posts) return [];
+  if (error || !posts) return { posts: [], followsNobody };
   const ids = [...new Set(posts.map(p => p.user_id).filter(Boolean))];
   const profileMap = {};
   await Promise.all(ids.map(async (id) => {
@@ -386,7 +445,7 @@ async function buildFeedPosts(limit, currentUserId) {
       .in('post_id', posts.map(p => p.id));
     likedSet = new Set((myLikes || []).map(l => l.post_id));
   }
-  return posts.map(p => ({
+  const enriched = posts.map(p => ({
     id: p.id,
     content: p.content,
     sport: p.sport,
@@ -399,6 +458,7 @@ async function buildFeedPosts(limit, currentUserId) {
     commentCount: (p.post_comments && p.post_comments[0] && p.post_comments[0].count) || 0,
     userLiked: likedSet.has(p.id)
   }));
+  return { posts: enriched, followsNobody };
 }
 
 // Feed requires authentication; unauthenticated visitors are sent to landing.
@@ -406,8 +466,8 @@ async function buildFeedPosts(limit, currentUserId) {
 // shows live data instead of the hardcoded "Jamie King" placeholder.
 app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
   try {
-    const posts = await buildFeedPosts(20, req.user.id);
-    const userData = { profile: displayFromUser(req.user), userId: req.user.id, posts };
+    const { posts, followsNobody } = await buildFeedPosts(20, req.user.id);
+    const userData = { profile: displayFromUser(req.user), userId: req.user.id, posts, followsNobody };
     const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), userData);
     res.type('html').send(html);
   } catch (err) {

@@ -1228,7 +1228,7 @@ async function likePost(btn, postId) {
 // the old loadPosts() call was removed to avoid duplicate cards.
 function renderInjectedPosts() {
   const data = window.ARENAS_DATA;
-  if (!data || !data.posts || data.posts.length === 0) return;
+  if (!data) return;
   const feedItems = document.getElementById('feed-items');
   if (!feedItems) return;
   // Remove any prototype training-note cards so real posts replace them.
@@ -1236,6 +1236,21 @@ function renderInjectedPosts() {
     const wrap = card.closest('.feed-item-wrap');
     if (wrap) wrap.remove();
   });
+  // Not following anyone yet: nudge the user to discover other athletes. Their
+  // own posts (if any) still render below this banner.
+  if (data.followsNobody) {
+    const banner = document.createElement('div');
+    banner.className = 'feed-item-wrap';
+    banner.dataset.type = 'all';
+    banner.innerHTML = '<div class="post-note-card" style="text-align:center;padding:28px 20px;">'
+      + '<div style="font-size:28px;margin-bottom:8px;">👋</div>'
+      + '<div style="font-weight:600;font-size:15px;color:var(--gray-900);margin-bottom:4px;">Your feed is just getting started</div>'
+      + '<div style="font-size:13px;color:var(--gray-600);line-height:1.6;margin-bottom:14px;">Follow other athletes to see their training notes here.</div>'
+      + '<a href="' + (window.BASE || '') + '/athletes" class="btn btn-yellow btn-sm" style="display:inline-flex;text-decoration:none;">Discover athletes</a>'
+      + '</div>';
+    feedItems.appendChild(banner);
+  }
+  if (!data.posts || data.posts.length === 0) return;
   // Render oldest-first with insertBefore so the newest post ends up on top.
   data.posts.slice().reverse().forEach(post => {
     const card = document.createElement('div');
