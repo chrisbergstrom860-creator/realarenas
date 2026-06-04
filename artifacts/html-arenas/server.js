@@ -64,7 +64,7 @@ app.post(BASE + '/auth/login', async (req, res) => {
       return res.redirect(BASE + '/landing?error=invalid');
     }
     setSession(res, data.session);
-    return res.redirect(BASE);
+    return res.redirect(BASE + '/feed');
   } catch (err) {
     return res.redirect(BASE + '/landing?error=invalid');
   }
@@ -82,7 +82,7 @@ app.post(BASE + '/auth/signup', async (req, res) => {
       return res.redirect(BASE + '/landing?error=signup');
     }
     if (data && data.session) setSession(res, data.session);
-    return res.redirect(BASE);
+    return res.redirect(BASE + '/feed');
   } catch (err) {
     return res.redirect(BASE + '/landing?error=signup');
   }
@@ -174,6 +174,22 @@ async function requireAuth(req, res, next) {
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Not authenticated' });
+  }
+}
+
+// ── PAGE AUTH GUARD (redirects browsers to landing instead of a JSON 401) ──
+async function requirePageAuth(req, res, next) {
+  const token = req.signedCookies && req.signedCookies.sb_access_token;
+  if (!token) return res.redirect(BASE + '/landing');
+  try {
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data || !data.user) {
+      return res.redirect(BASE + '/landing');
+    }
+    req.user = data.user;
+    next();
+  } catch (err) {
+    return res.redirect(BASE + '/landing');
   }
 }
 
@@ -277,7 +293,15 @@ app.post(BASE + '/api/posts/:id/comment', requireAuth, async (req, res) => {
   res.json({ success: true, comment: data });
 });
 
-app.get(BASE === '' ? '/' : BASE, (req, res) => res.sendFile(path.join(HTML, 'arenas-feed.html')));
+// Root: send new visitors to the landing page, logged-in users to their feed.
+app.get(BASE === '' ? '/' : BASE, (req, res) => {
+  const token = req.signedCookies && req.signedCookies.sb_access_token;
+  if (token) return res.redirect(BASE + '/feed');
+  return res.redirect(BASE + '/landing');
+});
+
+// Feed requires authentication; unauthenticated visitors are sent to landing.
+app.get(BASE + '/feed', requirePageAuth, (req, res) => res.sendFile(path.join(HTML, 'arenas-feed.html')));
 app.get(BASE + '/athletes', (req, res) => res.sendFile(path.join(HTML, 'arenas-athletes.html')));
 app.get(BASE + '/events', (req, res) => res.sendFile(path.join(HTML, 'arenas-events.html')));
 app.get(BASE + '/leaderboards', (req, res) => res.sendFile(path.join(HTML, 'arenas-leaderboards.html')));
