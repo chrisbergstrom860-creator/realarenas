@@ -1,6 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+window.BASE = window.location.pathname.startsWith('/html') ? '/html' : '';
+window.nav = function(path){ window.location.href = window.BASE + path; };
+document.addEventListener('DOMContentLoaded', function(){
+  if (window.BASE === '') {
+    document.querySelectorAll('[href^="/html/"]').forEach(function(el){ el.setAttribute('href', el.getAttribute('href').slice(5)); });
+    document.querySelectorAll('[action^="/html/"]').forEach(function(el){ el.setAttribute('action', el.getAttribute('action').slice(5)); });
+  }
+});
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Arenas — Hackney Running Club</title>
@@ -296,7 +306,7 @@ button,select,input,textarea{font-family:var(--font)}
 
 <!-- TOPBAR -->
 <header class="topbar">
-  <div class="topbar-logo" onclick="window.location.href='/html'" style="cursor:pointer">
+  <div class="topbar-logo" onclick="nav('/')" style="cursor:pointer">
     <div class="logo-icon">🏟</div>
     <span class="logo-text">Arenas</span>
   </div>
@@ -311,7 +321,7 @@ button,select,input,textarea{font-family:var(--font)}
     </div>
   </div>
   <div class="topbar-actions">
-    <div class="notif-btn" onclick="window.location.href='/html/notifications'">🔔<div class="notif-dot"></div></div>
+    <div class="notif-btn" onclick="nav('/notifications')">🔔<div class="notif-dot"></div></div>
     <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
       <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">JK</div>
       <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
@@ -325,9 +335,9 @@ button,select,input,textarea{font-family:var(--font)}
 <!-- SIDEBAR -->
 <aside class="sidebar">
   <div class="nav-section-label">My Arenas</div>
-  <div class="nav-item" onclick="window.location.href='/html'"><span class="nav-icon">🏠</span> My feed</div>
-  <div class="nav-item" onclick="window.location.href='/html/profile'"><span class="nav-icon">👤</span> My profile</div>
-  <div class="nav-item" onclick="window.location.href='/html/events'"><span class="nav-icon">📅</span> Events</div>
+  <div class="nav-item" onclick="nav('/')"><span class="nav-icon">🏠</span> My feed</div>
+  <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">👤</span> My profile</div>
+  <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">📅</span> Events</div>
 
   <div class="nav-section-label" style="margin-top:4px">Hackney Running Club</div>
   <div class="club-sidebar-header">
@@ -343,7 +353,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="nav-item" id="nav-challenges" onclick="setTab('challenges',this)"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">3</span></div>
   <div class="nav-item" id="nav-events" onclick="setTab('events',this)"><span class="nav-icon">📅</span> Club events <span class="nav-badge red">2</span></div>
   <div class="nav-item" id="nav-members" onclick="setTab('members',this)"><span class="nav-icon">👥</span> Members</div>
-  <div class="nav-item" id="nav-notifications" onclick="window.location.href='/html/notifications'"><span class="nav-icon">🔔</span> Notifications <span class="nav-badge red">3</span></div>
+  <div class="nav-item" id="nav-notifications" onclick="nav('/notifications')"><span class="nav-icon">🔔</span> Notifications <span class="nav-badge red">3</span></div>
 
   <div class="sidebar-footer">
     <div class="sf-row">

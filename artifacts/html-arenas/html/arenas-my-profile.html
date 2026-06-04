@@ -1,6 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+window.BASE = window.location.pathname.startsWith('/html') ? '/html' : '';
+window.nav = function(path){ window.location.href = window.BASE + path; };
+document.addEventListener('DOMContentLoaded', function(){
+  if (window.BASE === '') {
+    document.querySelectorAll('[href^="/html/"]').forEach(function(el){ el.setAttribute('href', el.getAttribute('href').slice(5)); });
+    document.querySelectorAll('[action^="/html/"]').forEach(function(el){ el.setAttribute('action', el.getAttribute('action').slice(5)); });
+  }
+});
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Arenas — Jamie King · Profile</title>
@@ -321,7 +331,7 @@ button,select,input,textarea{font-family:var(--font)}
 
 <!-- TOPBAR -->
 <header class="topbar">
-  <div class="topbar-logo" onclick="window.location.href='/html'" style="cursor:pointer">
+  <div class="topbar-logo" onclick="nav('/')" style="cursor:pointer">
     <div class="logo-icon">🏟</div>
     <span class="logo-text">Arenas</span>
   </div>
@@ -332,7 +342,7 @@ button,select,input,textarea{font-family:var(--font)}
     </div>
   </div>
   <div class="topbar-actions">
-    <div class="notif-btn" onclick="window.location.href='/html/notifications'">🔔<div class="notif-dot"></div></div>
+    <div class="notif-btn" onclick="nav('/notifications')">🔔<div class="notif-dot"></div></div>
     <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
       <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">JK</div>
       <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
@@ -346,17 +356,17 @@ button,select,input,textarea{font-family:var(--font)}
 <!-- SIDEBAR -->
 <aside class="sidebar">
   <div class="nav-section-label">My Arenas</div>
-  <div class="nav-item" onclick="window.location.href='/html'"><span class="nav-icon">🏠</span> Feed</div>
+  <div class="nav-item" onclick="nav('/')"><span class="nav-icon">🏠</span> Feed</div>
   <div class="nav-item active" onclick="setTab('overview')"><span class="nav-icon">👤</span> My profile</div>
-  <div class="nav-item" onclick="window.location.href='/html/events'"><span class="nav-icon">📅</span> Events</div>
-  <div class="nav-item" onclick="window.location.href='/html/leaderboards'"><span class="nav-icon">🏆</span> Leaderboards</div>
-  <div class="nav-item" onclick="window.location.href='/html/challenges'"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">3</span></div>
-  <div class="nav-item" onclick="window.location.href='/html/athletes'"><span class="nav-icon">👥</span> Athletes</div>
+  <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">📅</span> Events</div>
+  <div class="nav-item" onclick="nav('/leaderboards')"><span class="nav-icon">🏆</span> Leaderboards</div>
+  <div class="nav-item" onclick="nav('/challenges')"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">3</span></div>
+  <div class="nav-item" onclick="nav('/athletes')"><span class="nav-icon">👥</span> Athletes</div>
   <div class="nav-section-label">Clubs</div>
-  <div class="nav-item" onclick="window.location.href='/html/clubs/member'"><span class="nav-icon">🏃</span> Hackney RC <span class="nav-badge red">2</span></div>
+  <div class="nav-item" onclick="nav('/clubs/member')"><span class="nav-icon">🏃</span> Hackney RC <span class="nav-badge red">2</span></div>
   <div class="nav-section-label">Account</div>
   <div class="nav-item" onclick="setTab('settings')"><span class="nav-icon">⚙️</span> Settings</div>
-  <div class="nav-item" onclick="window.location.href='/html/profile'"><span class="nav-icon">💳</span> Pro plan</div>
+  <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">💳</span> Pro plan</div>
   <div class="sidebar-footer">
     <div class="sf-row">
       <div style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">JK</div>
@@ -564,7 +574,7 @@ button,select,input,textarea{font-family:var(--font)}
 
       <!-- Active challenges snippet -->
       <div class="card">
-        <div class="card-hdr"><span class="card-title">⚡ Active challenges</span><button class="btn btn-sm btn-ghost" onclick="window.location.href='/html/challenges'">All →</button></div>
+        <div class="card-hdr"><span class="card-title">⚡ Active challenges</span><button class="btn btn-sm btn-ghost" onclick="nav('/challenges')">All →</button></div>
         <div style="padding:14px 18px;display:flex;flex-direction:column;gap:10px">
           <div>
             <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span style="font-weight:600;color:var(--gray-900)">100km May Run</span><span style="font-family:var(--mono);color:var(--gray-500)">62 / 100 km</span></div>

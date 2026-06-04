@@ -7,7 +7,7 @@ const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const BASE = (process.env.BASE_PATH || '/html').replace(/\/$/, '');
+const BASE = (process.env.BASE_PATH || '').replace(/\/$/, '');
 const HTML = path.join(__dirname, 'html');
 
 const supabase = createClient(

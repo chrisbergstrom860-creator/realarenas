@@ -1,6 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+window.BASE = window.location.pathname.startsWith('/html') ? '/html' : '';
+window.nav = function(path){ window.location.href = window.BASE + path; };
+document.addEventListener('DOMContentLoaded', function(){
+  if (window.BASE === '') {
+    document.querySelectorAll('[href^="/html/"]').forEach(function(el){ el.setAttribute('href', el.getAttribute('href').slice(5)); });
+    document.querySelectorAll('[action^="/html/"]').forEach(function(el){ el.setAttribute('action', el.getAttribute('action').slice(5)); });
+  }
+});
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Arenas Blog — Training insights, product news & community stories</title>
@@ -257,8 +267,8 @@ body.logged-in .topbar-user { display: block; }
     </nav>
     <div class="topbar-actions">
       <span class="topbar-guest">
-        <button class="btn btn-ghost" onclick="window.location.href='/html/landing'">Log in</button>
-        <button class="btn btn-yellow" onclick="window.location.href='/html/landing'">Sign up free</button>
+        <button class="btn btn-ghost" onclick="nav('/landing')">Log in</button>
+        <button class="btn btn-yellow" onclick="nav('/landing')">Sign up free</button>
       </span>
       <div class="topbar-user" style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
         <div class="avatar-sm" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')">JK</div>

@@ -1,2 +1,3 @@
 - [Data lives in Supabase, not DATABASE_URL](supabase-vs-database-url.md) — app tables are in the Supabase project via supabaseAdmin; DATABASE_URL is a different empty Replit Postgres. No profiles table exists.
 - [Artifact-local API routes must be BASE-prefixed](artifact-api-routing.md) — html-arenas owns /html, api-server owns /api; mount in-artifact routes at BASE+'/api/...' and fetch '/html/api/...'.
+- [html-arenas deploy + base path](html-arenas-deploy.md) — dual /html (Replit) vs root (Railway) base path; don't rename root pkg; railway.json points at subdir; push via Replit Git pane

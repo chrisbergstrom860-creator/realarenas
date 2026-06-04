@@ -52,3 +52,8 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Railway / deploy
+.replit
+replit.nix
+*.log

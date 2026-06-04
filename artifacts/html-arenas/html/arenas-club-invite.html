@@ -1,6 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+window.BASE = window.location.pathname.startsWith('/html') ? '/html' : '';
+window.nav = function(path){ window.location.href = window.BASE + path; };
+document.addEventListener('DOMContentLoaded', function(){
+  if (window.BASE === '') {
+    document.querySelectorAll('[href^="/html/"]').forEach(function(el){ el.setAttribute('href', el.getAttribute('href').slice(5)); });
+    document.querySelectorAll('[action^="/html/"]').forEach(function(el){ el.setAttribute('action', el.getAttribute('action').slice(5)); });
+  }
+});
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Arenas — Club Invites · Hackney Running Club</title>
@@ -185,7 +195,7 @@ button,select,input,textarea{font-family:var(--font)}
 <div class="app">
 
 <header class="topbar">
-  <div class="topbar-logo" onclick="window.location.href='/html'" style="cursor:pointer">
+  <div class="topbar-logo" onclick="nav('/')" style="cursor:pointer">
     <div class="logo-icon">🏟</div>
     <span class="logo-text">Arenas</span>
     <span class="club-badge">Club Pro</span>
@@ -195,7 +205,7 @@ button,select,input,textarea{font-family:var(--font)}
     <span style="font-size:11px;color:var(--gray-500);background:var(--gray-100);padding:2px 8px;border-radius:10px">Coach · Admin</span>
   </div>
   <div class="topbar-actions">
-    <div class="notif-btn" onclick="window.location.href='/html/notifications'">🔔<div class="notif-dot"></div></div>
+    <div class="notif-btn" onclick="nav('/notifications')">🔔<div class="notif-dot"></div></div>
     <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
       <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">RH</div>
       <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
@@ -212,15 +222,15 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="nav-item active" id="nav-invites" onclick="setTab('invites',this)"><span class="nav-icon">✉️</span> Invite members <span class="nav-badge alert" id="pending-badge">8</span></div>
   <div class="nav-item" onclick="showToast('Members tab')"><span class="nav-icon">👥</span> Members <span class="nav-badge">48</span></div>
   <div class="nav-item" onclick="showToast('Training load')"><span class="nav-icon">📈</span> Training load <span class="nav-badge alert">3</span></div>
-  <div class="nav-item" onclick="window.location.href='/html/leaderboards'"><span class="nav-icon">🏆</span> Leaderboard</div>
-  <div class="nav-item" onclick="window.location.href='/html/challenges'"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">4</span></div>
-  <div class="nav-item" onclick="window.location.href='/html/events'"><span class="nav-icon">📅</span> Events <span class="nav-badge">3</span></div>
+  <div class="nav-item" onclick="nav('/leaderboards')"><span class="nav-icon">🏆</span> Leaderboard</div>
+  <div class="nav-item" onclick="nav('/challenges')"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">4</span></div>
+  <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">📅</span> Events <span class="nav-badge">3</span></div>
   <div class="nav-section-label">Analytics</div>
   <div class="nav-item" onclick="showToast('Club feed')"><span class="nav-icon">🏃</span> Club feed</div>
   <div class="nav-item" onclick="setTab('history',this)"><span class="nav-icon">📋</span> Invite history</div>
   <div class="nav-section-label">Settings</div>
-  <div class="nav-item" onclick="window.location.href='/html/profile'"><span class="nav-icon">⚙️</span> Club settings</div>
-  <div class="nav-item" onclick="window.location.href='/html/profile'"><span class="nav-icon">💳</span> Billing</div>
+  <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">⚙️</span> Club settings</div>
+  <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">💳</span> Billing</div>
   <div class="sidebar-footer">
     <div class="sf-row">
       <div class="sf-av">RH</div>

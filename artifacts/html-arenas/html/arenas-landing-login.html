@@ -1,6 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+window.BASE = window.location.pathname.startsWith('/html') ? '/html' : '';
+window.nav = function(path){ window.location.href = window.BASE + path; };
+document.addEventListener('DOMContentLoaded', function(){
+  if (window.BASE === '') {
+    document.querySelectorAll('[href^="/html/"]').forEach(function(el){ el.setAttribute('href', el.getAttribute('href').slice(5)); });
+    document.querySelectorAll('[action^="/html/"]').forEach(function(el){ el.setAttribute('action', el.getAttribute('action').slice(5)); });
+  }
+});
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Arenas — Sports Community</title>
@@ -473,7 +483,7 @@ html { scroll-behavior: smooth; }
 <!-- TOPBAR -->
 <header class="topbar">
   <div class="topbar-inner">
-    <div class="logo" onclick="window.location.href='/html/landing'">
+    <div class="logo" onclick="nav('/landing')">
       <div class="logo-icon">🏟</div>
       <span class="logo-text">Arenas</span>
     </div>
@@ -1133,7 +1143,7 @@ html { scroll-behavior: smooth; }
             <div class="success-icon">🎉</div>
             <h3>You're in!</h3>
             <p>Welcome to Arenas. Your account is ready — let's take you to your personalised feed.</p>
-            <button class="btn btn-yellow btn-full btn-lg" onclick="window.location.href='/html'">Go to my feed →</button>
+            <button class="btn btn-yellow btn-full btn-lg" onclick="nav('/')">Go to my feed →</button>
           </div>
         </div>
 
@@ -1177,10 +1187,10 @@ function checkPW(val) {
   label.style.color = score <= 1 ? '#EF4444' : score <= 2 ? '#F59E0B' : '#10B981';
 }
 function handleLogin() {
-  window.location.href = '/html';
+  nav('/');
 }
 function handleSignup() {
-  window.location.href = '/html';
+  nav('/');
 }
 function markConnected(btn) {
   btn.textContent = 'Connected ✓';
