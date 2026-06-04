@@ -22,7 +22,7 @@ be run from this repo — there is no Supabase DB password here, only the REST
 service-role JWT, so create tables/constraints in the Supabase dashboard.
 
 Schema gotchas verified against the live Supabase project:
-- **No `profiles` table exists.** PostgREST embeds like
+- **A `profiles` table now exists but the app does not use it for names (resolved from auth user_metadata instead).** PostgREST embeds like
   `posts.select('*, profiles(...)')` fail (no FK, no table). Resolve author
   display name/handle from Supabase **auth user_metadata** via
   `supabaseAdmin.auth.admin.getUserById(user_id)` instead (fallback to email

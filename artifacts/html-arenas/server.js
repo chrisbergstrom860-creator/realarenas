@@ -746,7 +746,84 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
 app.get(BASE + '/clubs/member', (req, res) => res.sendFile(path.join(HTML, 'arenas-club-member.html')));
 app.get(BASE + '/clubs/invite', (req, res) => res.sendFile(path.join(HTML, 'arenas-club-invite.html')));
 app.get(BASE + '/landing', (req, res) => res.sendFile(path.join(HTML, 'arenas-landing-login.html')));
-app.get(BASE + '/notifications', (req, res) => res.sendFile(path.join(HTML, 'arenas-notifications.html')));
+// ── NOTIFICATIONS API ──
+// List the viewer's 50 most recent notifications with actor display info and an
+// unread count. Mounted under BASE so the shared proxy routes here.
+app.get(BASE + '/api/notifications', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ notifications: [], unreadCount: 0 });
+  const { data, error } = await supabaseAdmin
+    .from('notifications')
+    .select('*')
+    .eq('user_id', req.user.id)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) return res.json({ error: error.message });
+  const notifications = await enrichNotifications(data);
+  const unreadCount = notifications.filter(n => !n.read).length;
+  res.json({ notifications, unreadCount });
+});
+
+// Mark a single notification as read (scoped to the owner).
+app.post(BASE + '/api/notifications/:id/read', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Service unavailable' });
+  const { error } = await supabaseAdmin
+    .from('notifications')
+    .update({ read: true })
+    .eq('id', req.params.id)
+    .eq('user_id', req.user.id);
+  if (error) return res.json({ error: error.message });
+  res.json({ success: true });
+});
+
+// Mark all of the viewer's unread notifications as read.
+app.post(BASE + '/api/notifications/read-all', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Service unavailable' });
+  const { error } = await supabaseAdmin
+    .from('notifications')
+    .update({ read: true })
+    .eq('user_id', req.user.id)
+    .eq('read', false);
+  if (error) return res.json({ error: error.message });
+  res.json({ success: true });
+});
+
+// Dismiss (delete) a single notification (scoped to the owner).
+app.delete(BASE + '/api/notifications/:id', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Service unavailable' });
+  const { error } = await supabaseAdmin
+    .from('notifications')
+    .delete()
+    .eq('id', req.params.id)
+    .eq('user_id', req.user.id);
+  if (error) return res.json({ error: error.message });
+  res.json({ success: true });
+});
+
+// Notifications page requires auth. Inject the viewer's real notifications and
+// identity so the page renders live data instead of the hardcoded placeholders.
+app.get(BASE + '/notifications', requirePageAuth, async (req, res) => {
+  const servePlain = () => res.sendFile(path.join(HTML, 'arenas-notifications.html'));
+  try {
+    if (!supabaseAdmin) return servePlain();
+    const { data } = await supabaseAdmin
+      .from('notifications')
+      .select('*')
+      .eq('user_id', req.user.id)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    const notifications = await enrichNotifications(data);
+    const notifData = {
+      notifications,
+      unreadCount: notifications.filter(n => !n.read).length,
+      profile: displayFromUser(req.user)
+    };
+    const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-notifications.html'), 'utf8'), notifData);
+    res.type('html').send(html);
+  } catch (err) {
+    console.log('Notifications error:', err.message);
+    servePlain();
+  }
+});
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server listening on 0.0.0.0:${PORT}`);

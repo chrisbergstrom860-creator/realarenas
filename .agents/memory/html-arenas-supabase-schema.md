@@ -8,10 +8,14 @@ description: Real Supabase schema for the Arenas HTML prototype and how display 
 The live Supabase schema for this project does NOT match the "obvious" assumptions
 people write into snippets. Verified against the live DB.
 
-- **No `profiles` table exists.** A user's display name/handle comes from Supabase
+- **Display names come from auth user_metadata, not `profiles`.** A `profiles`
+  table now exists (added later, populated with existing users), but the app does
+  NOT use it to resolve names — a user's display name/handle comes from Supabase
   **auth user_metadata** (`user_metadata.name`) with the email local-part as
-  fallback. The posts API already does this; reuse the same `displayFromUser`
-  helper rather than joining a `profiles` table.
+  fallback, via the `displayFromUser` helper. **Why:** profile edits write to auth
+  metadata (`/api/profile/update`), so metadata is the editable source of truth;
+  reading from `profiles` would show stale names after an edit. If you ever switch
+  to `profiles`, also change `/api/profile/update` to write there.
 - **`memberships`** columns: `id, user_id, club_id, role, created_at`. There is
   **no `status`** and **no `joined_at`** column. Order by `created_at`; treat every
   row as active (no active/inactive concept).

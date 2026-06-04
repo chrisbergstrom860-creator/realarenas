@@ -1219,5 +1219,18 @@ function showToast(msg) {
 renderDiscover();
 </script>
 </div>
+<script>
+// Reflect the real unread notification count on the bell icon.
+(function(){
+  var B = window.BASE || (location.pathname.indexOf("/html") === 0 ? "/html" : "");
+  fetch(B + "/api/notifications").then(function(r){ return r.json(); }).then(function(data){
+    var unread = (data && data.unreadCount) || 0;
+    var dot = document.querySelector(".notif-dot");
+    if (dot) dot.style.display = unread > 0 ? "block" : "none";
+    var navBadge = document.getElementById("nav-unread-badge");
+    if (navBadge) navBadge.textContent = unread > 0 ? unread : "";
+  }).catch(function(){});
+})();
+</script>
 </body>
 </html>

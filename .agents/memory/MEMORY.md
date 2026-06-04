@@ -1,4 +1,5 @@
-- [Data lives in Supabase, not DATABASE_URL](supabase-vs-database-url.md) — app tables are in the Supabase project via supabaseAdmin; DATABASE_URL is a different empty Replit Postgres. No profiles table exists.
+- [Data lives in Supabase, not DATABASE_URL](supabase-vs-database-url.md) — app tables are in the Supabase project via supabaseAdmin; DATABASE_URL is a different empty Replit Postgres. A profiles table exists but is unused at runtime (names from auth metadata).
 - [Artifact-local API routes must be BASE-prefixed](artifact-api-routing.md) — html-arenas owns /html, api-server owns /api; mount in-artifact routes at BASE+'/api/...' and fetch '/html/api/...'.
 - [html-arenas deploy + base path](html-arenas-deploy.md) — dual /html (Replit) vs root (Railway) base path; don't rename root pkg; railway.json points at subdir; push via Replit Git pane
-- [Arenas Supabase schema reality](html-arenas-supabase-schema.md) — no profiles table (names from auth user_metadata); memberships has no status/joined_at; clubs has no plan, sport is scalar.
+- [Arenas Supabase schema reality](html-arenas-supabase-schema.md) — profiles table exists but unused (names from auth user_metadata); memberships has no status/joined_at; clubs has no plan, sport is scalar.
+- [html-arenas notifications](html-arenas-notifications.md) — like/comment/follow notifs; actor names from auth metadata (not profiles); syncUnread + esc() rules.

@@ -910,5 +910,162 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2800);
 }
 </script>
+<script>
+// ── REAL NOTIFICATIONS (server-injected) ──
+(function() {
+  const data = window.ARENAS_DATA;
+  if (!data || !data.notifications) return;
+
+  // Escape user-supplied text before inserting it via innerHTML (bodies contain
+  // post content and display names, so this prevents stored XSS).
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  // Update user name and initials in the topbar avatar.
+  const name = data.profile?.name || 'Athlete';
+  const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+  document.querySelectorAll('.user-av').forEach(el => {
+    if (el.textContent.trim() === 'JK') el.textContent = initials;
+  });
+
+  let unreadCount = data.unreadCount || 0;
+  const navBadge = document.getElementById('nav-unread-badge');
+  const statUnread = document.getElementById('stat-unread');
+  const badgeAll = document.getElementById('badge-all');
+  const subtitle = document.getElementById('header-subtitle');
+
+  // Single source of truth for the unread counters so markRead/dismiss/markAllRead
+  // all keep the header subtitle, sidebar stat, nav badge, and tab badge in sync.
+  function syncUnread() {
+    if (unreadCount < 0) unreadCount = 0;
+    if (navBadge) navBadge.textContent = unreadCount || '';
+    if (statUnread) statUnread.textContent = unreadCount || '0';
+    if (badgeAll) {
+      badgeAll.textContent = unreadCount || '';
+      badgeAll.className = unreadCount > 0 ? 'badge unread' : 'badge';
+    }
+    if (subtitle) subtitle.textContent = unreadCount > 0
+      ? unreadCount + ' unread · Last updated just now'
+      : 'All caught up · Last updated just now';
+  }
+  syncUnread();
+
+  const col = document.getElementById('notif-col');
+  if (!col) return;
+
+  if (data.notifications.length === 0) {
+    col.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">🔔</div>
+        <div class="empty-title">No notifications yet</div>
+        <div class="empty-sub">When someone likes your posts, follows you, or comments on your activities, you'll see it here.</div>
+      </div>`;
+    return;
+  }
+
+  function timeAgo(dateStr) {
+    const seconds = Math.floor((new Date() - new Date(dateStr)) / 1000);
+    if (seconds < 60) return 'Just now';
+    if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
+    if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
+    if (seconds < 604800) return Math.floor(seconds / 86400) + 'd ago';
+    return new Date(dateStr).toLocaleDateString();
+  }
+
+  const typeConfig = {
+    like: { icon: '👍', bg: 'var(--yellow-light)', label: 'Kudos' },
+    follow: { icon: '👤', bg: 'var(--blue-light)', label: 'New follower' },
+    comment: { icon: '💬', bg: 'var(--purple-light)', label: 'Comment' },
+    club: { icon: '🏃', bg: 'var(--orange-light)', label: 'Club update' },
+    challenge: { icon: '⚡', bg: 'var(--purple-light)', label: 'Challenge' },
+    system: { icon: '✦', bg: 'var(--yellow-light)', label: 'System' }
+  };
+
+  function renderItem(n, i) {
+    const config = typeConfig[n.type] || typeConfig.system;
+    const actorName = (n.actor && n.actor.name) || 'A';
+    const actorInitials = esc(actorName.split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase());
+    return `
+      <div class="notif-item ${n.read ? '' : 'unread'}" data-type="${esc(n.type)}" data-id="${esc(n.id)}"
+           style="animation-delay:${i * 0.05}s" onclick="markRead('${esc(n.id)}')">
+        ${!n.read ? '<div class="unread-bar"></div>' : ''}
+        <div class="notif-av" style="background:${config.bg}">
+          ${actorInitials}
+          <div class="notif-av-badge" style="background:${config.bg}">${config.icon}</div>
+        </div>
+        <div class="notif-content">
+          <div class="notif-text">${esc(n.body)}</div>
+          <div class="notif-meta">
+            <span class="notif-time">${esc(timeAgo(n.created_at))}</span>
+            <span class="notif-source">${config.label}</span>
+          </div>
+        </div>
+        ${!n.read ? '<div class="unread-dot"></div>' : ''}
+        <button class="notif-dismiss" onclick="event.stopPropagation();dismissNotif(this,'${esc(n.id)}')" title="Dismiss">✕</button>
+      </div>`;
+  }
+
+  const today = [];
+  const earlier = [];
+  const now = new Date();
+  data.notifications.forEach(n => {
+    const hoursAgo = (now - new Date(n.created_at)) / (1000 * 60 * 60);
+    (hoursAgo < 24 ? today : earlier).push(n);
+  });
+
+  let html = '';
+  if (today.length > 0) {
+    html += `<div class="group-label" data-group="today">Today</div>`;
+    today.forEach((n, i) => { html += renderItem(n, i); });
+  }
+  if (earlier.length > 0) {
+    html += `<div class="group-label" data-group="earlier">Earlier</div>`;
+    earlier.forEach((n, i) => { html += renderItem(n, i); });
+  }
+  html += `<div class="load-more" id="load-more"><p style="font-size:13px;color:var(--gray-400);padding:16px;text-align:center">All notifications loaded</p></div>`;
+  col.innerHTML = html;
+
+  window.markRead = async function(id) {
+    try { await fetch(window.BASE + '/api/notifications/' + id + '/read', { method: 'POST' }); } catch (e) {}
+    const item = document.querySelector(`[data-id="${id}"]`);
+    if (item) {
+      if (item.classList.contains('unread')) { unreadCount--; syncUnread(); }
+      item.classList.remove('unread');
+      item.querySelector('.unread-bar')?.remove();
+      item.querySelector('.unread-dot')?.remove();
+    }
+  };
+
+  window.dismissNotif = async function(btn, id) {
+    try { await fetch(window.BASE + '/api/notifications/' + id, { method: 'DELETE' }); } catch (e) {}
+    const item = btn.closest('.notif-item');
+    if (item) {
+      if (item.classList.contains('unread')) { unreadCount--; syncUnread(); }
+      item.style.transition = 'opacity .25s, transform .25s';
+      item.style.opacity = '0';
+      item.style.transform = 'translateX(12px)';
+      setTimeout(() => item.remove(), 250);
+    }
+  };
+
+  const markAllBtn = document.querySelector('button[onclick*="markAllRead"]');
+  if (markAllBtn) {
+    markAllBtn.onclick = async function() {
+      try { await fetch(window.BASE + '/api/notifications/read-all', { method: 'POST' }); } catch (e) {}
+      document.querySelectorAll('.notif-item.unread').forEach(item => {
+        item.classList.remove('unread');
+        item.querySelector('.unread-bar')?.remove();
+        item.querySelector('.unread-dot')?.remove();
+      });
+      unreadCount = 0;
+      syncUnread();
+      showToast('✓ All notifications marked as read');
+    };
+  }
+})();
+</script>
 </body>
 </html>
