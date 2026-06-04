@@ -1,4 +1,9 @@
 require('dotenv').config();
+
+console.log('Starting server...');
+console.log('PORT env var:', process.env.PORT);
+console.log('All env vars:', Object.keys(process.env).filter(k => !k.includes('KEY') && !k.includes('SECRET')));
+
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
@@ -294,5 +299,5 @@ app.get(BASE + '/landing', (req, res) => res.sendFile(path.join(HTML, 'arenas-la
 app.get(BASE + '/notifications', (req, res) => res.sendFile(path.join(HTML, 'arenas-notifications.html')));
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log('Arenas running on port ' + PORT + ' base ' + (BASE || '/'));
+  console.log(`Server listening on 0.0.0.0:${PORT}`);
 });
