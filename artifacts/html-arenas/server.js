@@ -64,7 +64,9 @@ app.post(BASE + '/auth/login', async (req, res) => {
       return res.redirect(BASE + '/landing?error=invalid');
     }
     setSession(res, data.session);
-    return res.redirect(BASE + '/feed');
+    // Club admins/coaches land on the dashboard; everyone else on the feed.
+    const dest = (await isClubManager(data.user && data.user.id)) ? '/clubs/dashboard' : '/feed';
+    return res.redirect(BASE + dest);
   } catch (err) {
     return res.redirect(BASE + '/landing?error=invalid');
   }
@@ -193,6 +195,25 @@ async function requirePageAuth(req, res, next) {
   }
 }
 
+// Returns true if the user holds an admin/coach membership in any club, so we
+// can route club managers to the dashboard instead of the athlete feed. Safe to
+// call without the service role key (returns false rather than throwing).
+async function isClubManager(userId) {
+  if (!userId || !supabaseAdmin) return false;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('memberships')
+      .select('role')
+      .eq('user_id', userId)
+      .in('role', ['admin', 'coach'])
+      .limit(1);
+    if (error) return false;
+    return Array.isArray(data) && data.length > 0;
+  } catch (err) {
+    return false;
+  }
+}
+
 // There is no `profiles` table in this project, so resolve a user's display
 // name/handle from the Supabase auth user metadata (falling back to the email
 // local part) — the same source the posts API uses.
@@ -314,10 +335,17 @@ app.post(BASE + '/api/posts/:id/comment', requireAuth, async (req, res) => {
 });
 
 // Root: send new visitors to the landing page, logged-in users to their feed.
-app.get(BASE === '' ? '/' : BASE, (req, res) => {
+app.get(BASE === '' ? '/' : BASE, async (req, res) => {
   const token = req.signedCookies && req.signedCookies.sb_access_token;
-  if (token) return res.redirect(BASE + '/feed');
-  return res.redirect(BASE + '/landing');
+  if (!token) return res.redirect(BASE + '/landing');
+  try {
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data || !data.user) return res.redirect(BASE + '/landing');
+    const dest = (await isClubManager(data.user.id)) ? '/clubs/dashboard' : '/feed';
+    return res.redirect(BASE + dest);
+  } catch (err) {
+    return res.redirect(BASE + '/landing');
+  }
 });
 
 // Feed requires authentication; unauthenticated visitors are sent to landing.
