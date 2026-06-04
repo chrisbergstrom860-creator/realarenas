@@ -293,6 +293,6 @@ app.get(BASE + '/clubs/invite', (req, res) => res.sendFile(path.join(HTML, 'aren
 app.get(BASE + '/landing', (req, res) => res.sendFile(path.join(HTML, 'arenas-landing-login.html')));
 app.get(BASE + '/notifications', (req, res) => res.sendFile(path.join(HTML, 'arenas-notifications.html')));
 
-app.listen(PORT, () => {
-  console.log('Arenas HTML prototype on port ' + PORT + ' base ' + (BASE || '/'));
+app.listen(PORT, '0.0.0.0', () => {
+  console.log('Arenas running on port ' + PORT + ' base ' + (BASE || '/'));
 });
