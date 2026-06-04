@@ -398,16 +398,22 @@ async function buildFeedPosts(limit, currentUserId) {
   // Only show posts from people the viewer follows, plus their own posts. If
   // the follows lookup fails, fall back to a self-only feed rather than 500.
   let followingIds = [];
+  let followLookupOk = false;
   if (currentUserId) {
     const { data: following, error: followErr } = await supabaseAdmin
       .from('follows')
       .select('following_id')
       .eq('follower_id', currentUserId);
-    if (!followErr && Array.isArray(following)) {
+    if (followErr) {
+      console.log('Follows lookup error:', followErr.message);
+    } else if (Array.isArray(following)) {
+      followLookupOk = true;
       followingIds = following.map(f => f.following_id).filter(Boolean);
     }
   }
-  const followsNobody = followingIds.length === 0;
+  // Only show the empty-state nudge when we actually confirmed zero follows —
+  // not when the lookup failed and we fell back to a self-only feed.
+  const followsNobody = followLookupOk && followingIds.length === 0;
   const feedUserIds = [...new Set([...followingIds, currentUserId].filter(Boolean))];
   if (!feedUserIds.length) return { posts: [], followsNobody };
 

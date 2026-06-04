@@ -20,6 +20,12 @@ people write into snippets. Verified against the live DB.
   There is **no `plan`** column (the "Club Pro" badge is purely cosmetic).
 - Other tables present: `posts (id,user_id,content,sport,feeling,created_at)`,
   `post_likes (post_id,user_id,created_at)`, `post_comments`.
+- **`follows`** table exists with `follower_id` / `following_id` (both auth user
+  UUIDs). The feed only shows posts from followed users + self. There are no
+  real user rows behind the **Athletes page** — those cards are hardcoded
+  prototype data (`athleteData` keyed by slugs like `'sofia-l'`), so the Follow
+  buttons there are visual-only and cannot write real `follows` rows until the
+  page is backed by real Supabase users.
 
 **Why:** A user-provided spec assumed a `profiles` table, `memberships.status`/
 `joined_at`, `clubs.plan`, and `sport` as an array — all of which would return
