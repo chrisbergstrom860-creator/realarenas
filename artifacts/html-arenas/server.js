@@ -74,18 +74,31 @@ app.post(BASE + '/auth/login', async (req, res) => {
 
 app.post(BASE + '/auth/signup', async (req, res) => {
   const { email, password, name } = req.body;
+  console.log('Signup attempt:', email, '| name:', name);
   try {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { name } }
     });
-    if (error) {
+    console.log('Signup result - user:', data && data.user && data.user.id);
+    console.log('Signup result - session:', !!(data && data.session));
+    console.log('Signup result - error:', error && error.message);
+    if (error || !data || !data.user) {
+      console.log('Signup failed - redirecting to landing');
       return res.redirect(BASE + '/landing?error=signup');
     }
-    if (data && data.session) setSession(res, data.session);
+    if (!data.session) {
+      // No session means Supabase requires email confirmation before sign-in,
+      // so there is no cookie to set and /feed would just bounce to /landing.
+      console.log('No session - email confirmation may be required');
+      return res.redirect(BASE + '/landing?error=confirm_email');
+    }
+    setSession(res, data.session);
+    console.log('Signup success - redirecting to feed');
     return res.redirect(BASE + '/feed');
   } catch (err) {
+    console.log('Signup exception:', err.message);
     return res.redirect(BASE + '/landing?error=signup');
   }
 });
