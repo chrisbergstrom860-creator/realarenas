@@ -485,7 +485,54 @@ app.get(BASE + '/athletes', (req, res) => res.sendFile(path.join(HTML, 'arenas-a
 app.get(BASE + '/events', (req, res) => res.sendFile(path.join(HTML, 'arenas-events.html')));
 app.get(BASE + '/leaderboards', (req, res) => res.sendFile(path.join(HTML, 'arenas-leaderboards.html')));
 app.get(BASE + '/challenges', (req, res) => res.sendFile(path.join(HTML, 'arenas-challenges.html')));
-app.get(BASE + '/profile', (req, res) => res.sendFile(path.join(HTML, 'arenas-my-profile.html')));
+// My profile requires authentication. Inject the user's real identity, post/
+// follower/following counts, recent posts, and club membership so the page shows
+// live data instead of the hardcoded "Jamie King" placeholders. There is no
+// `profiles` table, so name/handle/bio/location come from auth user metadata.
+app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
+  const servePlain = () => res.sendFile(path.join(HTML, 'arenas-my-profile.html'));
+  try {
+    if (!supabaseAdmin) return servePlain();
+    const meta = req.user.user_metadata || {};
+    const display = displayFromUser(req.user);
+
+    const [postCountRes, followerRes, followingRes, postsRes, membershipRes] = await Promise.all([
+      supabaseAdmin.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', req.user.id),
+      supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', req.user.id),
+      supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', req.user.id),
+      supabaseAdmin.from('posts').select('id, content, sport, feeling, created_at').eq('user_id', req.user.id).order('created_at', { ascending: false }).limit(10),
+      supabaseAdmin.from('memberships').select('role, clubs (name, handle)').eq('user_id', req.user.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+    ]);
+
+    const membership = membershipRes.data || null;
+    const club = membership && membership.clubs
+      ? (Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs)
+      : null;
+
+    const profileData = {
+      profile: {
+        name: display.name,
+        handle: display.handle,
+        bio: meta.bio || '',
+        location: meta.location || ''
+      },
+      userId: req.user.id,
+      email: req.user.email,
+      memberSince: req.user.created_at || null,
+      postCount: postCountRes.count || 0,
+      followerCount: followerRes.count || 0,
+      followingCount: followingRes.count || 0,
+      posts: postsRes.data || [],
+      membership: membership ? { role: membership.role, club } : null
+    };
+
+    const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-my-profile.html'), 'utf8'), profileData);
+    res.type('html').send(html);
+  } catch (err) {
+    console.log('Profile data error:', err.message);
+    servePlain();
+  }
+});
 app.get(BASE + '/blog', (req, res) => {
   // Marketing page: only reveal the user avatar when actually logged in,
   // otherwise show the guest "Log in / Sign up" CTAs (matches the landing page).

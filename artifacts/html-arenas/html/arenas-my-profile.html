@@ -1022,5 +1022,176 @@ function showToast(msg) {
 // Set initial active state
 document.getElementById('htab-overview').classList.add('active');
 </script>
+<script>
+// Wire the logged-in user's real profile data into the page. The /profile route
+// injects window.ARENAS_DATA. This replaces the hardcoded "Jamie King" /
+// "@jamiek" / "JK" placeholders with live identity, counts, sports, and posts.
+// There is no profiles table, so name/handle/bio/location come from auth
+// metadata; counts and posts are queried from the database.
+(function () {
+  var data = window.ARENAS_DATA;
+  if (!data) return;
+  var p = data.profile || {};
+  var emailLocal = data.email ? data.email.split('@')[0] : '';
+  var name = p.name || emailLocal || 'Athlete';
+  var handle = (p.handle || emailLocal || 'athlete').replace(/^@+/, '');
+  var initials = (name.trim().split(/\s+/).map(function (w) { return w[0]; }).join('').slice(0, 2) || 'A').toUpperCase();
+
+  function setText(sel, val) {
+    document.querySelectorAll(sel).forEach(function (el) { el.textContent = val; });
+  }
+
+  // Name + avatar initials (hero, topbar)
+  setText('.hero-name', name);
+  setText('.hero-av', initials);
+  setText('.user-av', initials);
+
+  // Sidebar footer (avatar + name + handle)
+  var sf = document.querySelector('.sf-row');
+  if (sf) {
+    if (sf.children[0]) sf.children[0].textContent = initials;
+    var sfWrap = sf.children[1];
+    if (sfWrap) {
+      if (sfWrap.children[0]) sfWrap.children[0].textContent = name;
+      if (sfWrap.children[1]) sfWrap.children[1].textContent = '@' + handle;
+    }
+  }
+
+  // Handle line: "@handle · Location · Member since Mon YYYY"
+  var parts = ['@' + handle];
+  if (p.location) parts.push(p.location);
+  if (data.memberSince) {
+    var d = new Date(data.memberSince);
+    if (!isNaN(d.getTime())) {
+      parts.push('Member since ' + d.toLocaleString('en-GB', { month: 'short', year: 'numeric' }));
+    }
+  }
+  setText('.hero-handle', parts.join(' · '));
+
+  // Bio
+  setText('.hero-bio', p.bio || 'No bio yet — add one from Edit profile.');
+
+  // Page title
+  document.title = 'Arenas — ' + name + ' · Profile';
+
+  // Hero stats, matched by their label
+  document.querySelectorAll('.hero-stat').forEach(function (stat) {
+    var label = (stat.querySelector('.hero-stat-label') || {}).textContent || '';
+    var valEl = stat.querySelector('.hero-stat-val');
+    if (!valEl) return;
+    if (/Followers/i.test(label)) valEl.textContent = data.followerCount;
+    else if (/Following/i.test(label)) valEl.textContent = data.followingCount;
+    else if (/Activities/i.test(label)) valEl.textContent = data.postCount;
+  });
+
+  // Tab counts
+  var actTab = document.querySelector('#htab-activities .tab-count');
+  if (actTab) actTab.textContent = data.postCount;
+  var folTab = document.querySelector('#htab-following .tab-count');
+  if (folTab) folTab.textContent = data.followingCount;
+
+  // Sports tags derived from the user's real posts (fall back to a neutral tag)
+  var SPORTS = {
+    running: { emoji: '🏃', cls: 'sport-run', label: 'Running' },
+    cycling: { emoji: '🚴', cls: 'sport-cyc', label: 'Cycling' },
+    climbing: { emoji: '🧗', cls: 'sport-clm', label: 'Climbing' },
+    swimming: { emoji: '🏊', cls: 'sport-swm', label: 'Swimming' }
+  };
+  var tagsWrap = document.querySelector('.hero-tags');
+  if (tagsWrap) {
+    var seen = [];
+    (data.posts || []).forEach(function (post) {
+      if (post.sport && seen.indexOf(post.sport) === -1) seen.push(post.sport);
+    });
+    tagsWrap.innerHTML = '';
+    if (seen.length) {
+      seen.forEach(function (s) {
+        var meta = SPORTS[s];
+        var span = document.createElement('span');
+        span.className = 'hero-tag' + (meta ? ' ' + meta.cls : '');
+        span.textContent = meta ? (meta.emoji + ' ' + meta.label) : (s.charAt(0).toUpperCase() + s.slice(1));
+        tagsWrap.appendChild(span);
+      });
+    } else {
+      var neutral = document.createElement('span');
+      neutral.className = 'hero-tag';
+      neutral.textContent = '✦ New athlete';
+      tagsWrap.appendChild(neutral);
+    }
+  }
+
+  // Club membership: replace the hardcoded "Hackney RC" sidebar nav + rank badge
+  var clubName = data.membership && data.membership.club && data.membership.club.name;
+  var clubNav = document.querySelector('.sidebar .nav-item[onclick*="clubs/member"]');
+  if (clubName) {
+    if (clubNav) {
+      clubNav.innerHTML = '';
+      var icon = document.createElement('span');
+      icon.className = 'nav-icon';
+      icon.textContent = '🏃';
+      clubNav.appendChild(icon);
+      clubNav.appendChild(document.createTextNode(' ' + clubName));
+    }
+    var badge = document.querySelector('.hero-rank-badge');
+    if (badge) badge.textContent = '🏆 ' + clubName;
+  } else if (clubNav) {
+    clubNav.style.display = 'none';
+  }
+
+  // Render the user's real posts into the overview "Recent activities" card
+  function timeAgo(dateStr) {
+    var secs = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+    if (isNaN(secs)) return '';
+    if (secs < 60) return 'Just now';
+    if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
+    if (secs < 86400) return Math.floor(secs / 3600) + 'h ago';
+    return Math.floor(secs / 86400) + 'd ago';
+  }
+  var recentCard = null;
+  document.querySelectorAll('.card').forEach(function (card) {
+    var title = card.querySelector('.card-title');
+    if (title && /Recent activities/i.test(title.textContent)) recentCard = card;
+  });
+  if (recentCard) {
+    var hdr = recentCard.querySelector('.card-hdr');
+    var allBtn = hdr && hdr.querySelector('button');
+    if (allBtn) allBtn.textContent = 'All ' + data.postCount + ' →';
+    var list = hdr ? hdr.nextElementSibling : null;
+    if (list) {
+      list.innerHTML = '';
+      var posts = data.posts || [];
+      if (!posts.length) {
+        var empty = document.createElement('div');
+        empty.style.cssText = 'padding:20px 14px;font-size:13px;color:var(--gray-500);text-align:center';
+        empty.textContent = 'No activities yet — share your first training note from the feed.';
+        list.appendChild(empty);
+      } else {
+        posts.forEach(function (post) {
+          var row = document.createElement('div');
+          row.style.cssText = 'padding:14px;border-bottom:var(--border)';
+          var body = document.createElement('div');
+          body.style.cssText = 'font-size:13px;color:var(--gray-800);margin-bottom:8px;line-height:1.6';
+          body.textContent = post.content || '';
+          row.appendChild(body);
+          var foot = document.createElement('div');
+          foot.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:11px;color:var(--gray-400)';
+          var when = document.createElement('span');
+          when.textContent = timeAgo(post.created_at);
+          foot.appendChild(when);
+          if (post.sport) {
+            var meta = SPORTS[post.sport];
+            var tag = document.createElement('span');
+            tag.style.cssText = 'background:var(--orange-light);color:#9A3412;padding:1px 7px;border-radius:10px;font-size:10px';
+            tag.textContent = meta ? (meta.emoji + ' ' + meta.label) : post.sport;
+            foot.appendChild(tag);
+          }
+          row.appendChild(foot);
+          list.appendChild(row);
+        });
+      }
+    }
+  }
+})();
+</script>
 </body>
 </html>

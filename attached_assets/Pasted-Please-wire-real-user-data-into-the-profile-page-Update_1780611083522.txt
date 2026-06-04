@@ -1,0 +1,178 @@
+Please wire real user data into the profile page. Update the /profile route in server.js to fetch the logged in user's real profile data and inject it into the page:
+javascriptapp.get('/profile', requireAuth, async (req, res) => {
+  try {
+    const supabaseAdmin = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+
+    // Get the user's profile
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('name, handle, sports, level, location, bio')
+      .eq('id', req.user.id)
+      .single();
+
+    // Get the user's post count
+    const { count: postCount } = await supabaseAdmin
+      .from('posts')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', req.user.id);
+
+    // Get follower count
+    const { count: followerCount } = await supabaseAdmin
+      .from('follows')
+      .select('*', { count: 'exact', head: true })
+      .eq('following_id', req.user.id);
+
+    // Get following count
+    const { count: followingCount } = await supabaseAdmin
+      .from('follows')
+      .select('*', { count: 'exact', head: true })
+      .eq('follower_id', req.user.id);
+
+    // Get the user's recent posts
+    const { data: posts } = await supabaseAdmin
+      .from('posts')
+      .select('id, content, sport, feeling, created_at')
+      .eq('user_id', req.user.id)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    // Check if user is a club member
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('role, clubs(name, handle)')
+      .eq('user_id', req.user.id)
+      .single();
+
+    const profileData = {
+      profile: profile || {
+        name: req.user.email.split('@')[0],
+        handle: req.user.email.split('@')[0],
+        sports: [],
+        level: 'beginner',
+        location: '',
+        bio: ''
+      },
+      userId: req.user.id,
+      email: req.user.email,
+      postCount: postCount || 0,
+      followerCount: followerCount || 0,
+      followingCount: followingCount || 0,
+      posts: posts || [],
+      membership: membership || null
+    };
+
+    const fs = require('fs');
+    let html = fs.readFileSync(path.join(HTML, 'arenas-my-profile.html'), 'utf8');
+    const dataScript = `<script>window.ARENAS_DATA = ${JSON.stringify(profileData)};</script>`;
+    html = html.replace('</head>', dataScript + '</head>');
+    res.send(html);
+  } catch (err) {
+    console.log('Profile error:', err.message);
+    res.sendFile(path.join(HTML, 'arenas-my-profile.html'));
+  }
+});
+Then add this JavaScript at the bottom of arenas-my-profile.html before the closing </body> tag:
+javascript(function() {
+  const data = window.ARENAS_DATA;
+  if (!data) return;
+
+  const name = data.profile?.name || data.email?.split('@')[0] || 'Athlete';
+  const handle = data.profile?.handle || data.email?.split('@')[0] || 'athlete';
+  const initials = name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+  const location = data.profile?.location || 'Location not set';
+  const bio = data.profile?.bio || '';
+  const level = data.profile?.level || '';
+  const sports = data.profile?.sports || [];
+
+  // Update name everywhere it appears
+  document.querySelectorAll('.profile-name, .user-name').forEach(el => {
+    if (el.textContent.includes('Jamie') || el.textContent.includes('King')) {
+      el.textContent = name;
+    }
+  });
+
+  // Update handle everywhere
+  document.querySelectorAll('.profile-handle, .user-handle').forEach(el => {
+    if (el.textContent.includes('jamiek') || el.textContent.includes('@jamie')) {
+      el.textContent = '@' + handle;
+    }
+  });
+
+  // Update avatar initials
+  document.querySelectorAll('.profile-av, .user-av').forEach(el => {
+    if (el.textContent.trim() === 'JK') {
+      el.textContent = initials;
+    }
+  });
+
+  // Update location
+  document.querySelectorAll('.profile-location').forEach(el => {
+    el.textContent = location;
+  });
+
+  // Update bio
+  document.querySelectorAll('.profile-bio').forEach(el => {
+    if (bio) el.textContent = bio;
+  });
+
+  // Update follower and following counts
+  document.querySelectorAll('.follower-count').forEach(el => {
+    el.textContent = data.followerCount;
+  });
+  document.querySelectorAll('.following-count').forEach(el => {
+    el.textContent = data.followingCount;
+  });
+  document.querySelectorAll('.post-count').forEach(el => {
+    el.textContent = data.postCount;
+  });
+
+  // Update page title
+  document.title = 'Arenas · ' + name + '\'s Profile';
+
+  // Update club membership if exists
+  if (data.membership?.clubs) {
+    document.querySelectorAll('.profile-club').forEach(el => {
+      el.textContent = data.membership.clubs.name;
+    });
+  }
+
+  // Update sports tags
+  if (sports.length > 0) {
+    document.querySelectorAll('.profile-sports').forEach(el => {
+      el.innerHTML = sports.map(s =>
+        `<span class="pill p-run">${s.charAt(0).toUpperCase() + s.slice(1)}</span>`
+      ).join('');
+    });
+  }
+
+  // Render real posts in the activity tab if it exists
+  const activityContainer = document.querySelector('.profile-posts, .activity-list, #profile-posts');
+  if (activityContainer && data.posts.length > 0) {
+    const sportEmojis = {
+      running: '🏃 Running',
+      cycling: '🚴 Cycling',
+      climbing: '🧗 Climbing',
+      swimming: '🏊 Swimming'
+    };
+    function timeAgo(dateStr) {
+      const seconds = Math.floor((new Date() - new Date(dateStr)) / 1000);
+      if (seconds < 60) return 'Just now';
+      if (seconds < 3600) return Math.floor(seconds/60) + 'm ago';
+      if (seconds < 86400) return Math.floor(seconds/3600) + 'h ago';
+      return Math.floor(seconds/86400) + 'd ago';
+    }
+    activityContainer.innerHTML = data.posts.map(post => `
+      <div class="post-note-card" style="padding:14px;border-bottom:var(--border)">
+        <div style="font-size:13px;color:var(--gray-800);margin-bottom:8px;line-height:1.6">${post.content}</div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--gray-400)">
+          <span>${timeAgo(post.created_at)}</span>
+          ${post.sport ? `<span style="background:var(--orange-light);color:#9A3412;padding:1px 7px;border-radius:10px;font-size:10px">${sportEmojis[post.sport] || post.sport}</span>` : ''}
+        </div>
+      </div>
+    `).join('');
+  }
+})();
+Wait for the checkpoint then commit and push to GitHub main. Confirm when done.
