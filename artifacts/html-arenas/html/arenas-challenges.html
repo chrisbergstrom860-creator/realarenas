@@ -1298,12 +1298,13 @@ renderDiscover();
   let lastResult = { myChallenges: [], clubChallenges: [], publicChallenges: [], myJoinedIds: [] };
 
   function buildChallengeCard(c) {
-    const target = Number(c.goal_target) || 0;
-    const pct = target ? Math.min(100, Math.round((c.progress / target) * 100)) : 0;
+    // Server computes a safe pct (never divides by a zero/null target) and a
+    // guarded isComplete flag — use those instead of recalculating here.
+    const pct = c.pct || 0;
     const color = progressColor(c.sport);
     const sColor = sportColor(c.sport);
     const icon = sportIcon(c.sport);
-    const isCompleted = c.isExpired || pct >= 100;
+    const isCompleted = c.isExpired || c.isComplete;
     const sportLabel = c.sport === 'any' ? 'Any sport' : cap(c.sport);
     const byLine = c.isOwner
       ? '<span>· You created this</span>'
@@ -1367,7 +1368,9 @@ renderDiscover();
     </div>`;
   }
 
-  const isDone = c => c.isExpired || c.progress >= (Number(c.goal_target) || 0);
+  // A challenge is done only if it expired or its (positive) goal was reached.
+  // Uses the server's guarded isComplete so a 0/null goal_target never counts.
+  const isDone = c => c.isExpired || c.isComplete;
 
   function renderMine(challenges) {
     const container = document.getElementById('tab-mine');

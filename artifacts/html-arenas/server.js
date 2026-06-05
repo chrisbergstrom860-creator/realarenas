@@ -845,13 +845,21 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
     const now = Date.now();
     const enrich = (list) => (list || []).map((c) => {
       const end = new Date(c.end_date).getTime();
+      const goalTarget = parseFloat(c.goal_target) || 0;
+      const progress = parseFloat(progressMap[c.id]) || 0;
+      // Safe percentage — never divide by zero/null goal_target.
+      const pct = goalTarget > 0 ? Math.min(100, Math.round((progress / goalTarget) * 100)) : 0;
       return {
         ...c,
+        goal_target: goalTarget,
         participantCount: (allParticipants || []).filter((p) => p.challenge_id === c.id).length,
         isJoined: myIds.includes(c.id) || c.created_by === userId,
-        progress: progressMap[c.id] || 0,
+        progress,
+        pct,
         daysLeft: Math.max(0, Math.ceil((end - now) / (1000 * 60 * 60 * 24))),
         isExpired: end < now,
+        // Only complete when there's a real positive target that's been reached.
+        isComplete: goalTarget > 0 && progress >= goalTarget,
         isOwner: c.created_by === userId,
         creator: creatorMap[c.created_by] || null,
         clubName: c.club_id ? (clubNameMap[c.club_id] || null) : null
@@ -878,6 +886,11 @@ app.post(BASE + '/api/challenges/create', requireAuth, async (req, res) => {
   if (!title || !goal_type || !goal_target || !start_date || !end_date) {
     return res.json({ error: 'Missing required fields' });
   }
+  console.log('Creating challenge with goal_target:', goal_target, typeof goal_target);
+  const goalTargetNum = parseFloat(goal_target) || 0;
+  // Reject malformed/non-positive targets so we never store 0/NaN (which would
+  // otherwise feed the divide-by-zero / false-completion path).
+  if (!(goalTargetNum > 0)) return res.json({ error: 'Goal target must be a positive number' });
   const { data: challenge, error } = await supabaseAdmin
     .from('challenges').insert({
       created_by: req.user.id,
@@ -886,7 +899,7 @@ app.post(BASE + '/api/challenges/create', requireAuth, async (req, res) => {
       description: description || null,
       sport: sport || 'any',
       goal_type,
-      goal_target,
+      goal_target: goalTargetNum,
       goal_unit: goal_unit || null,
       start_date,
       end_date,

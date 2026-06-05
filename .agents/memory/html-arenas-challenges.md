@@ -20,6 +20,13 @@ helper (mirrors notification enrichment) — there is no usable `profiles` table
 - **`duration` goal_type progress is not computed (reports 0)** — spec parity.
   `distance` sums numeric distance, `sessions` counts, `streak` counts distinct
   days; everything else is 0.
+- **Completion must be guarded by `goal_target > 0`.** Never use
+  `progress >= goal_target` alone: with a 0/null target, `0 >= 0` falsely marks
+  the challenge complete. The server enrich() is the single source of truth —
+  it emits `pct` (safe, never /0) and `isComplete = goalTarget>0 && progress>=goalTarget`;
+  the client must consume `c.pct`/`c.isComplete`, not recompute from raw values.
+  Create route also rejects non-positive/NaN `goal_target`. **Why:** a private
+  challenge showed "goal achieved" with no activities due to this exact bug.
 - **Invitees are validated server-side** in `POST /api/challenges/create`:
   filtered to users the caller actually follows and capped (50). **Why:** without
   this, the endpoint could spam notifications to arbitrary known user IDs.
