@@ -306,6 +306,16 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 .sidebar-footer { margin-top: auto; padding: 12px 16px; border-top: var(--border); }
 .main { overflow-y: auto; }
 </style>
+<style>
+/* Real-data challenges: create-modal form controls + sport chips */
+:root { --shadow-lg: 0 12px 32px rgba(0,0,0,.16); }
+.form-input, .form-textarea, .form-select { width:100%; padding:9px 12px; border:var(--border); border-radius:var(--radius); font-size:14px; font-family:var(--font); outline:none; color:var(--gray-800); background:white; box-sizing:border-box; }
+.form-input:focus, .form-textarea:focus, .form-select:focus { border-color:var(--yellow-dark); }
+.form-textarea { resize:vertical; }
+.ch-sport-chip { padding:5px 12px; border-radius:20px; font-size:12px; font-weight:500; border:var(--border); background:white; color:var(--gray-600); cursor:pointer; transition:all .12s; }
+.ch-sport-chip:hover { border-color:var(--gray-400); }
+.ch-sport-chip.selected { background:var(--yellow-light); border-color:#fde68a; color:#7a5c00; }
+</style>
 </head>
 <body>
 <div class="app">
@@ -1231,6 +1241,468 @@ renderDiscover();
     var navBadge = document.getElementById("nav-unread-badge");
     if (navBadge) navBadge.textContent = unread > 0 ? unread : "";
   }).catch(function(){});
+})();
+</script>
+<script>
+// ── REAL CHALLENGES DATA (Supabase-backed) ──
+// Overrides the static prototype renderers with live data from the challenge
+// API. All user-supplied strings (titles, names, units) are escaped before
+// insertion to prevent XSS.
+(function () {
+  const data = window.ARENAS_DATA;
+  const B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
+  if (!data) return;
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
+  function initialsOf(name) {
+    return String(name || '').split(' ').map(n => n[0]).filter(Boolean).join('').slice(0, 2).toUpperCase() || 'A';
+  }
+
+  // Personalise identity across the page.
+  const name = (data.profile && data.profile.name) || 'Athlete';
+  const handle = (data.profile && data.profile.handle) || 'athlete';
+  const initials = initialsOf(name);
+  document.querySelectorAll('.user-av').forEach(el => { if (el.textContent.trim() === 'JK') el.textContent = initials; });
+  document.querySelectorAll('div').forEach(el => {
+    if (el.childElementCount !== 0) return;
+    const t = el.textContent.trim();
+    if (t === 'Jamie King') el.textContent = name;
+    else if (t === '@jamiek · Pro') el.textContent = '@' + handle + ' · Pro';
+  });
+
+  const SPORT_ICONS = { running:'🏃', cycling:'🚴', climbing:'🧗', swimming:'🏊', football:'⚽', weightlifting:'🏋️', hiking:'🥾', yoga:'🧘', any:'⚡' };
+  const SPORT_COLORS = {
+    running:'background:#FFF7ED;color:#9A3412', cycling:'background:#EFF6FF;color:#1E40AF',
+    climbing:'background:#F5F3FF;color:#5B21B6', swimming:'background:#F0FDFA;color:#134E4A',
+    football:'background:#ECFDF5;color:#166534', weightlifting:'background:#FEF9C3;color:#854D0E',
+    hiking:'background:#FAEEDA;color:#633806', yoga:'background:#FBEAF0;color:#72243E',
+    any:'background:var(--gray-100);color:var(--gray-600)'
+  };
+  const PROGRESS_COLORS = { running:'#F97316', cycling:'#3B82F6', climbing:'#8B5CF6', swimming:'#14B8A6', football:'#10B981', weightlifting:'#EAB308', hiking:'#F59E0B', yoga:'#EC4899', any:'#6B7280' };
+  const sportIcon = s => SPORT_ICONS[s] || '⚡';
+  const sportColor = s => SPORT_COLORS[s] || SPORT_COLORS.any;
+  const progressColor = s => PROGRESS_COLORS[s] || '#6B7280';
+
+  function daysLeftLabel(endDate) {
+    const days = Math.max(0, Math.ceil((new Date(endDate) - new Date()) / (1000 * 60 * 60 * 24)));
+    if (days === 0) return 'Ends today';
+    if (days === 1) return '1 day left';
+    return days + ' days left';
+  }
+
+  let lastResult = { myChallenges: [], clubChallenges: [], publicChallenges: [], myJoinedIds: [] };
+
+  function buildChallengeCard(c) {
+    const target = Number(c.goal_target) || 0;
+    const pct = target ? Math.min(100, Math.round((c.progress / target) * 100)) : 0;
+    const color = progressColor(c.sport);
+    const sColor = sportColor(c.sport);
+    const icon = sportIcon(c.sport);
+    const isCompleted = c.isExpired || pct >= 100;
+    const sportLabel = c.sport === 'any' ? 'Any sport' : cap(c.sport);
+    const byLine = c.isOwner
+      ? '<span>· You created this</span>'
+      : (c.creator && c.creator.name ? '<span>· by ' + esc(c.creator.name) + '</span>' : '');
+    const unit = esc(c.goal_unit || '');
+    return `
+      <div class="challenge-card" id="challenge-${esc(c.id)}" style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:10px;${isCompleted ? 'opacity:.75' : ''}">
+        <div style="padding:14px 16px;display:flex;align-items:flex-start;gap:10px">
+          <div style="width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;${sColor}">${icon}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:3px">${esc(c.title)}</div>
+            <div style="font-size:11px;color:var(--gray-500);display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span style="padding:1px 7px;border-radius:10px;font-size:10px;font-weight:500;${sColor}">${icon} ${esc(sportLabel)}</span>
+              <span>·</span>
+              <span>${esc(cap(c.goal_type))} · ${esc(c.goal_target)} ${unit}</span>
+              ${byLine}
+              ${c.clubName ? '<span>· ' + esc(c.clubName) + '</span>' : ''}
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
+            <div style="font-size:11px;font-family:var(--mono);color:var(--gray-400)">${isCompleted ? 'Ended' : esc(daysLeftLabel(c.end_date))}</div>
+          </div>
+        </div>
+        ${c.isJoined ? `
+        <div style="padding:0 16px 14px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+            <span style="font-size:12px;color:var(--gray-500)">Your progress</span>
+            <span style="font-size:13px;font-weight:600;font-family:var(--mono);color:var(--gray-900)">${esc(c.progress)} / ${esc(c.goal_target)} ${unit}</span>
+          </div>
+          <div style="height:6px;background:var(--gray-100);border-radius:3px;overflow:hidden;margin-bottom:6px">
+            <div style="width:${pct}%;height:100%;background:${color};border-radius:3px;transition:width .3s"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-400)">
+            <span>${pct >= 100 ? '🎉 Goal achieved!' : pct + '% complete'}</span>
+            <span>${c.participantCount} participant${c.participantCount !== 1 ? 's' : ''}</span>
+          </div>
+        </div>` : `
+        <div style="padding:0 16px 14px">
+          <div style="background:var(--gray-50);border:var(--border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--gray-500);text-align:center">
+            Join this challenge to track your progress alongside ${c.participantCount} participant${c.participantCount !== 1 ? 's' : ''}
+          </div>
+        </div>`}
+        <div style="padding:10px 16px;border-top:var(--border);display:flex;align-items:center;gap:6px">
+          ${c.isJoined ? `
+            <button onclick="viewLeaderboard('${esc(c.id)}')" style="padding:5px 12px;border-radius:7px;font-size:12px;font-weight:500;border:none;background:var(--gray-900);color:white;cursor:pointer">View leaderboard</button>
+            <button onclick="window.location.href=window.BASE + '/profile'" style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Log activity →</button>
+            ${!c.isOwner ? `<button onclick="leaveChallenge('${esc(c.id)}',this)" style="padding:5px 12px;border-radius:7px;font-size:12px;border:1px solid #FECACA;background:var(--red-light);color:#A32D2D;cursor:pointer;margin-left:auto">Leave</button>` : ''}
+          ` : `
+            <button onclick="joinChallenge('${esc(c.id)}',this)" style="padding:5px 14px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">Join challenge →</button>
+            <button onclick="viewLeaderboard('${esc(c.id)}')" style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">View leaderboard</button>
+          `}
+        </div>
+      </div>`;
+  }
+
+  function emptyState(icon, title, body) {
+    return `<div style="text-align:center;padding:48px 24px;background:white;border:var(--border);border-radius:var(--radius-lg)">
+      <div style="font-size:36px;margin-bottom:12px">${icon}</div>
+      <div style="font-size:15px;font-weight:600;color:var(--gray-900);margin-bottom:6px">${esc(title)}</div>
+      <div style="font-size:13px;color:var(--gray-500);line-height:1.6">${esc(body)}</div>
+    </div>`;
+  }
+
+  const isDone = c => c.isExpired || c.progress >= (Number(c.goal_target) || 0);
+
+  function renderMine(challenges) {
+    const container = document.getElementById('tab-mine');
+    if (!container) return;
+    const active = challenges.filter(c => !isDone(c));
+    if (active.length === 0) {
+      container.innerHTML = emptyState('⚡', 'No active challenges yet', 'Create your first challenge or join one from the Discover tab.');
+      return;
+    }
+    let html = `<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-400);padding:6px 2px 8px">Active · ${active.length} challenge${active.length !== 1 ? 's' : ''}</div>`;
+    html += active.map(buildChallengeCard).join('');
+    container.innerHTML = html;
+  }
+
+  function renderCompleted(challenges) {
+    const container = document.getElementById('completed-list');
+    if (!container) return;
+    const completed = challenges.filter(isDone);
+    container.innerHTML = completed.length
+      ? completed.map(buildChallengeCard).join('')
+      : emptyState('🏁', 'No completed challenges yet', 'Finished challenges will appear here with your final standing.');
+  }
+
+  function renderFriends(challenges) {
+    const container = document.getElementById('tab-friends');
+    if (!container) return;
+    container.innerHTML = challenges.length
+      ? challenges.map(buildChallengeCard).join('')
+      : emptyState('🤝', 'No club challenges yet', 'Challenges from clubs you belong to will appear here.');
+  }
+
+  // Real discover renderer — replaces the static prototype version while keeping
+  // the (sportFilter, typeFilter) signature that setTab/setFilter call with.
+  window.renderDiscover = function (filter = 'all') {
+    const grid = document.getElementById('discover-grid');
+    if (!grid) return;
+    let items = lastResult.publicChallenges || [];
+    if (filter && filter !== 'all') items = items.filter(c => c.sport === filter);
+    grid.innerHTML = items.length
+      ? items.map(buildChallengeCard).join('')
+      : `<div style="grid-column:1/-1">${emptyState('🔍', 'No public challenges found', 'Try a different sport filter, or create your own challenge.')}</div>`;
+  };
+
+  function updateCounts(result) {
+    const setCount = (btnId, n) => { const el = document.querySelector('#' + btnId + ' .tab-count'); if (el) el.textContent = n; };
+    const mineActive = (result.myChallenges || []).filter(c => !isDone(c)).length;
+    const completed = (result.myChallenges || []).filter(isDone).length;
+    setCount('tab-btn-mine', mineActive);
+    setCount('tab-btn-discover', (result.publicChallenges || []).length);
+    setCount('tab-btn-friends', (result.clubChallenges || []).length);
+    setCount('tab-btn-completed', completed);
+    const ac = document.getElementById('active-count'); if (ac) ac.textContent = mineActive;
+  }
+
+  window.loadChallenges = async function () {
+    try {
+      const res = await fetch(B + '/api/challenges');
+      const result = await res.json();
+      if (result.error) { console.log('Challenges load error:', result.error); return; }
+      lastResult = result;
+      renderMine(result.myChallenges || []);
+      renderCompleted(result.myChallenges || []);
+      renderFriends(result.clubChallenges || []);
+      window.renderDiscover('all');
+      updateCounts(result);
+    } catch (err) { console.log('Could not load challenges:', err); }
+  };
+
+  // ── JOIN / LEAVE / LEADERBOARD ──
+  window.joinChallenge = async function (id, btn) {
+    if (typeof id !== 'string') return;
+    if (btn) { btn.textContent = 'Joining…'; btn.disabled = true; }
+    try {
+      const res = await fetch(B + '/api/challenges/' + id + '/join', { method: 'POST' });
+      const result = await res.json();
+      if (result.error) { showToast('Error: ' + result.error); if (btn) { btn.textContent = 'Join challenge →'; btn.disabled = false; } return; }
+      showToast('✓ Joined! Your progress updates as you log activities.');
+      setTimeout(loadChallenges, 400);
+    } catch (err) { showToast('Something went wrong — please try again'); if (btn) { btn.textContent = 'Join challenge →'; btn.disabled = false; } }
+  };
+
+  window.leaveChallenge = async function (id, btn) {
+    // Guard against the prototype's leaveChallenge(this) signature.
+    if (typeof id !== 'string') return;
+    if (!confirm('Leave this challenge? Your progress will be lost.')) return;
+    try {
+      await fetch(B + '/api/challenges/' + id + '/leave', { method: 'DELETE' });
+      showToast('Left challenge');
+      setTimeout(loadChallenges, 400);
+    } catch (err) { showToast('Something went wrong — please try again'); }
+  };
+
+  window.viewLeaderboard = async function (id) {
+    try {
+      const res = await fetch(B + '/api/challenges/' + id + '/leaderboard');
+      const result = await res.json();
+      if (result.error) { showToast('Could not load leaderboard'); return; }
+      const leaderboard = result.leaderboard || [];
+      const challenge = result.challenge || {};
+      const avColors = ['#FEF9C3','#FCE7F3','#E0F2FE','#F5F3FF','#ECFDF5','#FAEEDA'];
+      const avText = ['#854D0E','#9D174D','#0369A1','#5B21B6','#065F46','#633806'];
+      const target = Number(challenge.goal_target) || 0;
+      const rows = leaderboard.map((entry, i) => {
+        const av = avColors[i % avColors.length], avt = avText[i % avText.length];
+        const isMe = entry.userId === data.userId;
+        const pct = target ? Math.min(100, Math.round((entry.progress / target) * 100)) : 0;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:var(--border);${isMe ? 'background:var(--yellow-light)' : ''}">
+            <div style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--gray-500);width:24px;flex-shrink:0">${entry.rank}</div>
+            <div style="width:32px;height:32px;border-radius:50%;background:${av};color:${avt};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0">${esc(initialsOf(entry.name))}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:${isMe ? '700' : '500'};color:var(--gray-900)">${esc(entry.name)}${isMe ? ' (you)' : ''}</div>
+              <div style="height:4px;background:var(--gray-100);border-radius:2px;margin-top:4px;overflow:hidden">
+                <div style="width:${pct}%;height:100%;background:${entry.rank === 1 ? '#FFD21E' : '#6B7280'};border-radius:2px"></div>
+              </div>
+            </div>
+            <div style="font-size:13px;font-weight:600;font-family:var(--mono);color:var(--gray-900);flex-shrink:0">${esc(entry.progress)} ${esc(challenge.goal_unit || '')}</div>
+          </div>`;
+      }).join('');
+      const days = Math.max(0, Math.ceil((new Date(challenge.end_date) - new Date()) / (1000 * 60 * 60 * 24)));
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px';
+      overlay.innerHTML = `<div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:480px;max-height:80vh;overflow-y:auto;box-shadow:var(--shadow-lg)">
+          <div style="padding:16px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <div style="font-size:15px;font-weight:700;color:var(--gray-900)">${esc(challenge.title)}</div>
+              <div style="font-size:12px;color:var(--gray-500);margin-top:2px">${leaderboard.length} participant${leaderboard.length !== 1 ? 's' : ''} · ${days} days left</div>
+            </div>
+            <button onclick="this.closest('[style*=fixed]').remove()" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>
+          </div>
+          ${rows || '<div style="padding:24px;text-align:center;color:var(--gray-500)">No participants yet</div>'}
+        </div>`;
+      overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+      document.body.appendChild(overlay);
+    } catch (err) { showToast('Could not load leaderboard'); }
+  };
+
+  // ── CREATE CHALLENGE MODAL (replaces the static prototype modal) ──
+  window.openCreateModal = function () { openCreateChallenge(); };
+  window.openCreateChallenge = function () {
+    const existing = document.getElementById('create-challenge-overlay');
+    if (existing) existing.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'create-challenge-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto';
+    overlay.innerHTML = buildCreateModal();
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+    const today = new Date().toISOString().split('T')[0];
+    const end = new Date(); end.setDate(end.getDate() + 30);
+    document.getElementById('ch-start').value = today;
+    document.getElementById('ch-end').value = end.toISOString().split('T')[0];
+  };
+
+  function buildCreateModal() {
+    const followingOptions = (data.following || []).map(f =>
+      `<option value="${esc(f.id)}">${esc(f.name)} (@${esc(f.handle)})</option>`).join('');
+    return `
+      <div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:560px;overflow:hidden;box-shadow:var(--shadow-lg);margin:auto">
+        <div style="padding:16px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700;color:var(--gray-900)">Create a challenge</div>
+          <button onclick="document.getElementById('create-challenge-overlay').remove()" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>
+        </div>
+        <div style="padding:18px;max-height:70vh;overflow-y:auto">
+          <div id="ch-error" style="display:none;background:var(--red-light);border:1px solid #FECACA;border-radius:8px;padding:10px 14px;font-size:13px;color:#A32D2D;margin-bottom:12px"></div>
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Challenge title *</div>
+            <input class="form-input" type="text" id="ch-title" placeholder="e.g. June 100km Running Challenge…">
+          </div>
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Description <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div>
+            <textarea class="form-textarea" id="ch-desc" placeholder="What's this challenge about? Any rules or tips…" style="min-height:60px"></textarea>
+          </div>
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:8px">Sport</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap" id="ch-sport-chips">
+              <button type="button" class="ch-sport-chip selected" data-sport="any" onclick="selectChSport(this)">⚡ Any sport</button>
+              <button type="button" class="ch-sport-chip" data-sport="running" onclick="selectChSport(this)">🏃 Running</button>
+              <button type="button" class="ch-sport-chip" data-sport="cycling" onclick="selectChSport(this)">🚴 Cycling</button>
+              <button type="button" class="ch-sport-chip" data-sport="climbing" onclick="selectChSport(this)">🧗 Climbing</button>
+              <button type="button" class="ch-sport-chip" data-sport="swimming" onclick="selectChSport(this)">🏊 Swimming</button>
+              <button type="button" class="ch-sport-chip" data-sport="football" onclick="selectChSport(this)">⚽ Football</button>
+              <button type="button" class="ch-sport-chip" data-sport="weightlifting" onclick="selectChSport(this)">🏋️ Weights</button>
+              <button type="button" class="ch-sport-chip" data-sport="hiking" onclick="selectChSport(this)">🥾 Hiking</button>
+              <button type="button" class="ch-sport-chip" data-sport="yoga" onclick="selectChSport(this)">🧘 Yoga</button>
+            </div>
+          </div>
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:8px">Goal type *</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px" id="ch-goal-types">
+              <div class="ch-goal-type selected" data-type="distance" onclick="selectGoalType(this)" style="border:var(--border);border-radius:8px;padding:10px;text-align:center;cursor:pointer">
+                <div style="font-size:18px;margin-bottom:4px">📍</div>
+                <div style="font-size:11px;color:var(--gray-600)">Distance</div>
+              </div>
+              <div class="ch-goal-type" data-type="streak" onclick="selectGoalType(this)" style="border:var(--border);border-radius:8px;padding:10px;text-align:center;cursor:pointer">
+                <div style="font-size:18px;margin-bottom:4px">🔥</div>
+                <div style="font-size:11px;color:var(--gray-600)">Streak</div>
+              </div>
+              <div class="ch-goal-type" data-type="sessions" onclick="selectGoalType(this)" style="border:var(--border);border-radius:8px;padding:10px;text-align:center;cursor:pointer">
+                <div style="font-size:18px;margin-bottom:4px">📋</div>
+                <div style="font-size:11px;color:var(--gray-600)">Sessions</div>
+              </div>
+            </div>
+          </div>
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Target *</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <input class="form-input" type="number" id="ch-target" placeholder="e.g. 100" min="1">
+              <select class="form-select" id="ch-unit">
+                <option value="km">km</option>
+                <option value="miles">miles</option>
+                <option value="sessions">sessions</option>
+                <option value="days">days</option>
+              </select>
+            </div>
+          </div>
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Challenge period *</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div>
+                <div style="font-size:10px;color:var(--gray-400);margin-bottom:3px">Start date</div>
+                <input class="form-input" type="date" id="ch-start">
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--gray-400);margin-bottom:3px">End date</div>
+                <input class="form-input" type="date" id="ch-end">
+              </div>
+            </div>
+          </div>
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:8px">Visibility *</div>
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px" id="ch-visibility">
+              <div class="ch-vis-opt selected" data-vis="public" onclick="selectVis(this)" style="border:1px solid var(--yellow-dark);background:var(--yellow-light);border-radius:8px;padding:10px;cursor:pointer;text-align:center">
+                <div style="font-size:16px;margin-bottom:4px">🌍</div>
+                <div style="font-size:12px;font-weight:500;color:#7a5c00">Public</div>
+                <div style="font-size:10px;color:#7a5c00">Anyone can join</div>
+              </div>
+              <div class="ch-vis-opt" data-vis="private" onclick="selectVis(this)" style="border:var(--border);border-radius:8px;padding:10px;cursor:pointer;text-align:center">
+                <div style="font-size:16px;margin-bottom:4px">🔒</div>
+                <div style="font-size:12px;font-weight:500;color:var(--gray-900)">Private</div>
+                <div style="font-size:10px;color:var(--gray-400)">Invite only</div>
+              </div>
+            </div>
+          </div>
+          ${data.following && data.following.length > 0 ? `
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Invite followers <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div>
+            <select class="form-select" id="ch-invite-select" multiple style="min-height:80px">
+              ${followingOptions}
+            </select>
+            <div style="font-size:10px;color:var(--gray-400);margin-top:3px">Hold Ctrl/Cmd to select multiple</div>
+          </div>` : ''}
+        </div>
+        <div style="padding:14px 18px;border-top:var(--border);background:var(--gray-50);display:flex;gap:8px;align-items:center">
+          <button onclick="document.getElementById('create-challenge-overlay').remove()" style="padding:8px 14px;border:var(--border);border-radius:7px;font-size:13px;background:white;color:var(--gray-600);cursor:pointer">Cancel</button>
+          <div style="font-size:11px;color:var(--gray-400);margin-left:4px">Progress auto-tracks from logged activities</div>
+          <button onclick="submitCreateChallenge()" style="padding:8px 18px;border:none;border-radius:7px;font-size:13px;font-weight:600;background:var(--gray-900);color:white;cursor:pointer;margin-left:auto">Create challenge →</button>
+        </div>
+      </div>`;
+  }
+
+  window.selectChSport = function (btn) {
+    document.querySelectorAll('.ch-sport-chip').forEach(c => c.classList.remove('selected'));
+    btn.classList.add('selected');
+  };
+  window.selectGoalType = function (el) {
+    document.querySelectorAll('.ch-goal-type').forEach(g => {
+      g.classList.remove('selected');
+      g.style.background = 'white';
+      g.style.borderColor = 'var(--gray-200)';
+    });
+    el.classList.add('selected');
+    el.style.background = 'var(--yellow-light)';
+    el.style.borderColor = 'var(--yellow-dark)';
+  };
+  window.selectVis = function (el) {
+    document.querySelectorAll('.ch-vis-opt').forEach(v => {
+      v.classList.remove('selected');
+      v.style.background = 'white';
+      v.style.borderColor = 'var(--gray-200)';
+    });
+    el.classList.add('selected');
+    el.style.background = 'var(--yellow-light)';
+    el.style.borderColor = 'var(--yellow-dark)';
+  };
+
+  window.submitCreateChallenge = async function () {
+    const title = (document.getElementById('ch-title')?.value || '').trim();
+    const desc = (document.getElementById('ch-desc')?.value || '').trim();
+    const sport = document.querySelector('.ch-sport-chip.selected')?.dataset?.sport || 'any';
+    const goalType = document.querySelector('.ch-goal-type.selected')?.dataset?.type || 'distance';
+    const goalTarget = document.getElementById('ch-target')?.value;
+    const goalUnit = document.getElementById('ch-unit')?.value;
+    const startDate = document.getElementById('ch-start')?.value;
+    const endDate = document.getElementById('ch-end')?.value;
+    const visibility = document.querySelector('.ch-vis-opt.selected')?.dataset?.vis || 'public';
+    const inviteSelect = document.getElementById('ch-invite-select');
+    const invitees = inviteSelect ? [...inviteSelect.selectedOptions].map(o => o.value) : [];
+    const errorEl = document.getElementById('ch-error');
+    const fail = (msg) => { if (errorEl) { errorEl.textContent = msg; errorEl.style.display = 'block'; } };
+
+    if (!title) return fail('Please enter a challenge title.');
+    if (!goalTarget || parseFloat(goalTarget) < 1) return fail('Please enter a valid target.');
+    if (!startDate || !endDate) return fail('Please set a start and end date.');
+    if (new Date(endDate) <= new Date(startDate)) return fail('End date must be after start date.');
+
+    const submitBtn = document.querySelector('#create-challenge-overlay button:last-child');
+    if (submitBtn) { submitBtn.textContent = 'Creating…'; submitBtn.disabled = true; }
+    try {
+      const res = await fetch(B + '/api/challenges/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title, description: desc, sport,
+          goal_type: goalType, goal_target: parseFloat(goalTarget), goal_unit: goalUnit,
+          start_date: new Date(startDate).toISOString(),
+          end_date: new Date(endDate).toISOString(),
+          visibility, invitees
+        })
+      });
+      const result = await res.json();
+      if (result.error) {
+        fail('Error: ' + result.error);
+        if (submitBtn) { submitBtn.textContent = 'Create challenge →'; submitBtn.disabled = false; }
+        return;
+      }
+      document.getElementById('create-challenge-overlay')?.remove();
+      showToast('✓ Challenge created! Invites sent to your followers.');
+      setTimeout(loadChallenges, 400);
+    } catch (err) {
+      fail('Something went wrong — please try again.');
+      if (submitBtn) { submitBtn.textContent = 'Create challenge →'; submitBtn.disabled = false; }
+    }
+  };
+
+  loadChallenges();
 })();
 </script>
 </body>

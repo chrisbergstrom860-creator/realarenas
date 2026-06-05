@@ -299,6 +299,24 @@ async function enrichNotifications(notifications) {
   return list.map(n => ({ ...n, actor: actorMap[n.actor_id] || null }));
 }
 
+// Resolve a set of user IDs to their display info (name/handle) from auth
+// metadata. There is no `profiles` table, so this mirrors enrichNotifications:
+// one getUserById lookup per unique ID. Returns a map keyed by user ID.
+async function buildUserDisplayMap(ids) {
+  const map = {};
+  if (!supabaseAdmin) return map;
+  const unique = [...new Set((ids || []).filter(Boolean))];
+  await Promise.all(unique.map(async (id) => {
+    try {
+      const { data: u } = await supabaseAdmin.auth.admin.getUserById(id);
+      if (u && u.user) map[id] = displayFromUser(u.user);
+    } catch (err) {
+      // Ignore individual lookup failures; callers fall back to defaults.
+    }
+  }));
+  return map;
+}
+
 // ── POSTS API (training notes) ──
 // Mounted under BASE so the shared proxy routes them to this artifact
 // (the separate api-server owns the bare "/api" path).
@@ -712,6 +730,233 @@ app.get(BASE + '/api/feed/activities', requireAuth, async (req, res) => {
   res.json({ activities });
 });
 
+// ── CHALLENGES API ──
+// Compute a participant's progress toward a challenge goal from their logged
+// activities. `distance` sums numeric distance values; `sessions` counts
+// matching activities; `streak` counts distinct active days. Other goal types
+// report 0 (no logged-activity signal to derive them from yet).
+function computeChallengeProgress(challenge, activities) {
+  const acts = activities || [];
+  const matches = (a) => challenge.sport === 'any' || a.sport === challenge.sport;
+  let progress = 0;
+  if (challenge.goal_type === 'distance') {
+    acts.forEach((a) => {
+      if (!matches(a)) return;
+      const dist = parseFloat((a.distance || '0').replace(/[^0-9.]/g, ''));
+      if (!isNaN(dist)) progress += dist;
+    });
+  } else if (challenge.goal_type === 'sessions') {
+    progress = acts.filter(matches).length;
+  } else if (challenge.goal_type === 'streak') {
+    const dates = [...new Set(acts.filter(matches).map((a) => new Date(a.date).toDateString()))];
+    progress = dates.length;
+  }
+  return Math.round(progress * 10) / 10;
+}
+
+// All challenges relevant to the logged-in user: ones they created or joined,
+// challenges from clubs they belong to, and public challenges to discover.
+// Creator/club names are resolved from auth metadata + the clubs table (no
+// `profiles` table, no FK embeds).
+app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.json({ myChallenges: [], clubChallenges: [], publicChallenges: [], myJoinedIds: [] });
+  }
+  const userId = req.user.id;
+  const PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
+  try {
+    const { data: myParticipations } = await supabaseAdmin
+      .from('challenge_participants').select('challenge_id').eq('user_id', userId);
+    const myIds = [...new Set((myParticipations || []).map((p) => p.challenge_id).filter(Boolean))];
+
+    const { data: memberships } = await supabaseAdmin
+      .from('memberships').select('club_id').eq('user_id', userId);
+    const clubIds = [...new Set((memberships || []).map((m) => m.club_id).filter(Boolean))];
+
+    let orFilter = `created_by.eq.${userId}`;
+    if (myIds.length) orFilter += `,id.in.(${myIds.join(',')})`;
+    const { data: myChallenges } = await supabaseAdmin
+      .from('challenges').select('*').or(orFilter)
+      .order('created_at', { ascending: false });
+
+    const { data: clubChallenges } = await supabaseAdmin
+      .from('challenges').select('*')
+      .in('club_id', clubIds.length ? clubIds : [PLACEHOLDER])
+      .order('created_at', { ascending: false });
+
+    const { data: publicChallenges } = await supabaseAdmin
+      .from('challenges').select('*')
+      .eq('visibility', 'public')
+      .gt('end_date', new Date().toISOString())
+      .order('created_at', { ascending: false }).limit(20);
+
+    // De-duplicate the full set so we only look up each challenge once.
+    const allChallenges = [];
+    const seen = new Set();
+    [myChallenges || [], clubChallenges || [], publicChallenges || []].forEach((list) => {
+      list.forEach((c) => { if (!seen.has(c.id)) { seen.add(c.id); allChallenges.push(c); } });
+    });
+    const allIds = allChallenges.map((c) => c.id);
+
+    const { data: allParticipants } = await supabaseAdmin
+      .from('challenge_participants').select('challenge_id, user_id')
+      .in('challenge_id', allIds.length ? allIds : [PLACEHOLDER]);
+
+    // Progress for each challenge the user has joined.
+    const progressMap = {};
+    for (const challengeId of myIds) {
+      const challenge = allChallenges.find((c) => c.id === challengeId);
+      if (!challenge) continue;
+      const { data: activities } = await supabaseAdmin
+        .from('activities').select('distance, duration, sport, date')
+        .eq('user_id', userId)
+        .gte('date', challenge.start_date).lte('date', challenge.end_date);
+      progressMap[challengeId] = computeChallengeProgress(challenge, activities);
+    }
+
+    // Creator display names (auth metadata) and club names (clubs table).
+    const creatorMap = await buildUserDisplayMap(allChallenges.map((c) => c.created_by));
+    const challengeClubIds = [...new Set(allChallenges.map((c) => c.club_id).filter(Boolean))];
+    const clubNameMap = {};
+    if (challengeClubIds.length) {
+      const { data: clubs } = await supabaseAdmin.from('clubs').select('id, name').in('id', challengeClubIds);
+      (clubs || []).forEach((c) => { clubNameMap[c.id] = c.name; });
+    }
+
+    const now = Date.now();
+    const enrich = (list) => (list || []).map((c) => {
+      const end = new Date(c.end_date).getTime();
+      return {
+        ...c,
+        participantCount: (allParticipants || []).filter((p) => p.challenge_id === c.id).length,
+        isJoined: myIds.includes(c.id) || c.created_by === userId,
+        progress: progressMap[c.id] || 0,
+        daysLeft: Math.max(0, Math.ceil((end - now) / (1000 * 60 * 60 * 24))),
+        isExpired: end < now,
+        isOwner: c.created_by === userId,
+        creator: creatorMap[c.created_by] || null,
+        clubName: c.club_id ? (clubNameMap[c.club_id] || null) : null
+      };
+    });
+
+    res.json({
+      myChallenges: enrich(myChallenges),
+      clubChallenges: enrich(clubChallenges),
+      publicChallenges: enrich(publicChallenges),
+      myJoinedIds: myIds
+    });
+  } catch (err) {
+    console.log('Challenges list error:', err.message);
+    res.json({ error: err.message });
+  }
+});
+
+// Create a challenge, auto-join the creator, and notify invited followers.
+app.post(BASE + '/api/challenges/create', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
+  const b = req.body || {};
+  const { title, description, sport, goal_type, goal_target, goal_unit, start_date, end_date, visibility, invitees, club_id } = b;
+  if (!title || !goal_type || !goal_target || !start_date || !end_date) {
+    return res.json({ error: 'Missing required fields' });
+  }
+  const { data: challenge, error } = await supabaseAdmin
+    .from('challenges').insert({
+      created_by: req.user.id,
+      club_id: club_id || null,
+      title: String(title).trim(),
+      description: description || null,
+      sport: sport || 'any',
+      goal_type,
+      goal_target,
+      goal_unit: goal_unit || null,
+      start_date,
+      end_date,
+      visibility: visibility || 'public'
+    }).select().single();
+  if (error) return res.json({ error: error.message });
+  // Auto-join the creator (best-effort).
+  await supabaseAdmin.from('challenge_participants').insert({ challenge_id: challenge.id, user_id: req.user.id });
+  // Restrict invites to users the caller actually follows (the modal only offers
+  // those) and cap the count, so the endpoint can't be used to spam arbitrary
+  // user IDs with notifications.
+  let validInvitees = [];
+  if (Array.isArray(invitees) && invitees.length) {
+    const { data: follows } = await supabaseAdmin
+      .from('follows').select('following_id').eq('follower_id', req.user.id);
+    const followingSet = new Set((follows || []).map((f) => f.following_id));
+    validInvitees = [...new Set(invitees)].filter((id) => followingSet.has(id)).slice(0, 50);
+  }
+  // Invite selected followers. Actor name from auth metadata (no profiles table).
+  const actor = displayFromUser(req.user);
+  for (const inviteeId of validInvitees) {
+    await createNotification({
+      userId: inviteeId,
+      type: 'challenge',
+      title: 'Challenge invite',
+      body: `${actor.name} invited you to join "${challenge.title}" — ${goal_target} ${goal_unit || ''} ${goal_type} challenge`.replace(/\s+/g, ' ').trim(),
+      link: '/challenges',
+      actorId: req.user.id,
+      entityId: challenge.id
+    });
+  }
+  res.json({ success: true, challenge });
+});
+
+// Join a challenge (adds the viewer as a participant).
+app.post(BASE + '/api/challenges/:id/join', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
+  const { error } = await supabaseAdmin
+    .from('challenge_participants').insert({ challenge_id: req.params.id, user_id: req.user.id });
+  if (error) return res.json({ error: error.message });
+  res.json({ success: true });
+});
+
+// Leave a challenge. The user_id filter enforces self-only removal even though
+// the service role bypasses RLS.
+app.delete(BASE + '/api/challenges/:id/leave', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
+  await supabaseAdmin.from('challenge_participants').delete()
+    .eq('challenge_id', req.params.id).eq('user_id', req.user.id);
+  res.json({ success: true });
+});
+
+// Leaderboard for a challenge: each participant's progress, ranked. Participant
+// names come from auth metadata (no profiles join).
+app.get(BASE + '/api/challenges/:id/leaderboard', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
+  try {
+    const { data: challenge } = await supabaseAdmin
+      .from('challenges').select('*').eq('id', req.params.id).single();
+    if (!challenge) return res.json({ error: 'Challenge not found' });
+    const { data: participants } = await supabaseAdmin
+      .from('challenge_participants').select('user_id').eq('challenge_id', req.params.id);
+    const nameMap = await buildUserDisplayMap((participants || []).map((p) => p.user_id));
+    const target = Number(challenge.goal_target) || 0;
+    const leaderboard = [];
+    for (const participant of (participants || [])) {
+      const { data: activities } = await supabaseAdmin
+        .from('activities').select('distance, duration, sport, date')
+        .eq('user_id', participant.user_id)
+        .gte('date', challenge.start_date).lte('date', challenge.end_date);
+      const progress = computeChallengeProgress(challenge, activities);
+      const disp = nameMap[participant.user_id] || {};
+      leaderboard.push({
+        userId: participant.user_id,
+        name: disp.name || 'Athlete',
+        handle: disp.handle || 'athlete',
+        progress,
+        percentage: target ? Math.min(100, Math.round((progress / target) * 100)) : 0
+      });
+    }
+    leaderboard.sort((a, b) => b.progress - a.progress);
+    leaderboard.forEach((entry, i) => { entry.rank = i + 1; });
+    res.json({ leaderboard, challenge });
+  } catch (err) {
+    console.log('Leaderboard error:', err.message);
+    res.json({ error: err.message });
+  }
+});
+
 // Root: send new visitors to the landing page, logged-in users to their feed.
 app.get(BASE === '' ? '/' : BASE, async (req, res) => {
   const token = req.signedCookies && req.signedCookies.sb_access_token;
@@ -898,7 +1143,29 @@ app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
 });
 app.get(BASE + '/events', (req, res) => res.sendFile(path.join(HTML, 'arenas-events.html')));
 app.get(BASE + '/leaderboards', (req, res) => res.sendFile(path.join(HTML, 'arenas-leaderboards.html')));
-app.get(BASE + '/challenges', (req, res) => res.sendFile(path.join(HTML, 'arenas-challenges.html')));
+app.get(BASE + '/challenges', requirePageAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    let following = [];
+    if (supabaseAdmin) {
+      const { data: follows } = await supabaseAdmin
+        .from('follows').select('following_id').eq('follower_id', userId);
+      const ids = [...new Set((follows || []).map((f) => f.following_id).filter(Boolean))];
+      const map = await buildUserDisplayMap(ids);
+      following = ids.map((id) => ({
+        id,
+        name: (map[id] && map[id].name) || 'Athlete',
+        handle: (map[id] && map[id].handle) || 'athlete'
+      }));
+    }
+    const challengeData = { userId, profile: displayFromUser(req.user), following };
+    const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-challenges.html'), 'utf8'), challengeData);
+    res.send(html);
+  } catch (err) {
+    console.log('Challenges page error:', err.message);
+    res.sendFile(path.join(HTML, 'arenas-challenges.html'));
+  }
+});
 // My profile requires authentication. Inject the user's real identity, post/
 // follower/following counts, recent posts, and club membership so the page shows
 // live data instead of the hardcoded "Jamie King" placeholders. There is no
