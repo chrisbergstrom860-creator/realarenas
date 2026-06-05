@@ -358,6 +358,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">📅</span> Events</div>
   <div class="nav-item" onclick="nav('/leaderboards')"><span class="nav-icon">🏆</span> Leaderboards</div>
   <div class="nav-item" onclick="nav('/challenges')"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">3</span></div>
+  <div class="nav-item" onclick="nav('/profile#activities')"><span class="nav-icon">➕</span> Log activity</div>
   <div class="nav-item" onclick="nav('/athletes')"><span class="nav-icon">👥</span> Athletes</div>
   <div class="nav-section-label">My clubs</div>
   <div class="nav-item" onclick="nav('/clubs/member')"><span class="nav-icon">🏃</span> Hackney RC <span class="nav-badge red">2</span></div>
@@ -1283,7 +1284,75 @@ function getTimeAgo(date) {
   return Math.floor(seconds / 86400) + 'd ago';
 }
 
+function escFeedAct(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+// Render activities from followed athletes above the posts. Server injects
+// window.ARENAS_DATA.feedActivities (already enriched with author display info).
+function renderInjectedActivities() {
+  const data = window.ARENAS_DATA;
+  if (!data || !data.feedActivities || !data.feedActivities.length) return;
+  const feedItems = document.getElementById('feed-items');
+  if (!feedItems) return;
+
+  const sportIcons = { running:'🏃', cycling:'🚴', climbing:'🧗', swimming:'🏊',
+    football:'⚽', weightlifting:'🏋️', hiking:'🥾', yoga:'🧘' };
+  const sportColors = {
+    running:'background:#FFF7ED;color:#9A3412;border-color:#FDBA74',
+    cycling:'background:#EFF6FF;color:#1E40AF;border-color:#93C5FD',
+    climbing:'background:#F5F3FF;color:#5B21B6;border-color:#C4B5FD',
+    swimming:'background:#F0FDFA;color:#134E4A;border-color:#5EEAD4',
+    football:'background:#ECFDF5;color:#166534;border-color:#86EFAC',
+    weightlifting:'background:#FEF9C3;color:#854D0E;border-color:#FDE047',
+    hiking:'background:#FAEEDA;color:#633806;border-color:#EF9F27',
+    yoga:'background:#FBEAF0;color:#72243E;border-color:#F4C0D1'
+  };
+
+  function buildStats(a) {
+    const stats = [];
+    if (a.duration) stats.push('<span style="font-size:11px;color:var(--gray-600)">⏱ ' + escFeedAct(a.duration) + '</span>');
+    if (a.distance) stats.push('<span style="font-size:11px;color:var(--gray-600)">📍 ' + escFeedAct(a.distance) + '</span>');
+    if (a.pace) stats.push('<span style="font-size:11px;color:var(--gray-600)">⚡ ' + escFeedAct(a.pace) + '</span>');
+    if (a.avg_power) stats.push('<span style="font-size:11px;color:var(--gray-600)">⚡ ' + escFeedAct(a.avg_power) + '</span>');
+    if (a.avg_hr) stats.push('<span style="font-size:11px;color:var(--gray-600)">❤️ ' + escFeedAct(a.avg_hr) + '</span>');
+    if (a.top_grade) stats.push('<span style="font-size:11px;color:var(--gray-600)">✓ ' + escFeedAct(a.top_grade) + '</span>');
+    return stats.join('<span style="color:var(--gray-300)">·</span>');
+  }
+
+  // Render oldest-first with insertBefore so the newest activity ends up on top.
+  data.feedActivities.slice().reverse().forEach(function(a) {
+    const author = a.author || { name: 'Athlete', handle: 'athlete' };
+    const name = author.name || 'Athlete';
+    const handle = author.handle || 'athlete';
+    const initials = name.split(/\s+/).map(function(n){ return n[0]; }).join('').slice(0, 2).toUpperCase();
+    const icon = sportIcons[a.sport] || '🏃';
+    const colorStyle = sportColors[a.sport] || '';
+    const sportLabel = a.sport ? (a.sport.charAt(0).toUpperCase() + a.sport.slice(1)) : 'Activity';
+    const stats = buildStats(a);
+
+    const wrap = document.createElement('div');
+    wrap.className = 'feed-item-wrap';
+    wrap.dataset.type = 'all';
+    wrap.innerHTML = '' +
+      '<div class="post-note-card" style="padding:16px 18px">' +
+        '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">' +
+          '<div style="width:36px;height:36px;border-radius:50%;background:var(--gray-200);color:var(--gray-700);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">' + escFeedAct(initials) + '</div>' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-size:13px;font-weight:600;color:var(--gray-900)">' + escFeedAct(name) + ' <span style="font-weight:400;color:var(--gray-400)">logged an activity</span></div>' +
+            '<div style="font-size:11px;color:var(--gray-400)">' + getTimeAgo(new Date(a.date || a.created_at)) + ' · @' + escFeedAct(handle) + '</div>' +
+          '</div>' +
+          '<span style="font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;border:1px solid;' + colorStyle + '">' + icon + ' ' + escFeedAct(sportLabel) + '</span>' +
+        '</div>' +
+        '<div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:6px">' + escFeedAct(a.title) + '</div>' +
+        (stats ? '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">' + stats + '</div>' : '') +
+        (a.ai_insight ? '<div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:6px;padding:8px 11px;font-size:12px;color:#7a5c00;display:flex;gap:8px;align-items:flex-start"><div style="width:18px;height:18px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:var(--gray-900);flex-shrink:0;margin-top:1px">AI</div><span>' + escFeedAct(a.ai_insight) + '</span></div>' : '') +
+      '</div>';
+    feedItems.insertBefore(wrap, feedItems.firstChild);
+  });
+}
+
 renderInjectedPosts();
+renderInjectedActivities();
 </script>
 <script>
 // Wire the logged-in user's real identity into the feed (server injects

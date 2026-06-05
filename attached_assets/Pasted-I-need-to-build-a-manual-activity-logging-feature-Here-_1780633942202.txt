@@ -1,0 +1,819 @@
+I need to build a manual activity logging feature. Here is everything to do:
+1. First create the activities table in Supabase SQL Editor:
+sqlcreate table activities (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete cascade,
+  sport text not null,
+  title text not null,
+  date timestamp with time zone default now(),
+  duration text,
+  notes text,
+  feeling text,
+  -- Running fields
+  distance text,
+  pace text,
+  avg_hr text,
+  elevation text,
+  cadence text,
+  run_type text,
+  -- Cycling fields
+  avg_power text,
+  avg_speed text,
+  ride_type text,
+  -- Climbing fields
+  top_grade text,
+  project_grade text,
+  problems_count text,
+  climbing_style text,
+  climb_location text,
+  -- Swimming fields
+  swim_pace text,
+  pool_type text,
+  stroke text,
+  -- Football fields
+  session_type text,
+  position text,
+  -- Weightlifting fields
+  session_focus text,
+  total_volume text,
+  top_lift text,
+  sets_completed text,
+  rpe text,
+  -- Hiking fields
+  trail text,
+  terrain text,
+  pack_weight text,
+  -- Yoga fields
+  yoga_style text,
+  yoga_format text,
+  focus_area text,
+  instructor text,
+  -- AI coaching
+  ai_insight text,
+  created_at timestamp with time zone default now()
+);
+
+alter table activities enable row level security;
+
+create policy "Activities are publicly readable"
+  on activities for select using (true);
+
+create policy "Users can insert own activities"
+  on activities for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update own activities"
+  on activities for update
+  using (auth.uid() = user_id);
+
+create policy "Users can delete own activities"
+  on activities for delete
+  using (auth.uid() = user_id);
+2. Add these API routes to server.js:
+javascript// Create a new activity
+app.post('/api/activities/create', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const activityData = {
+    user_id: req.user.id,
+    sport: req.body.sport,
+    title: req.body.title,
+    date: req.body.date || new Date().toISOString(),
+    duration: req.body.duration,
+    notes: req.body.notes,
+    feeling: req.body.feeling,
+    distance: req.body.distance,
+    pace: req.body.pace,
+    avg_hr: req.body.avg_hr,
+    elevation: req.body.elevation,
+    cadence: req.body.cadence,
+    run_type: req.body.run_type,
+    avg_power: req.body.avg_power,
+    avg_speed: req.body.avg_speed,
+    ride_type: req.body.ride_type,
+    top_grade: req.body.top_grade,
+    project_grade: req.body.project_grade,
+    problems_count: req.body.problems_count,
+    climbing_style: req.body.climbing_style,
+    climb_location: req.body.climb_location,
+    swim_pace: req.body.swim_pace,
+    pool_type: req.body.pool_type,
+    stroke: req.body.stroke,
+    session_type: req.body.session_type,
+    position: req.body.position,
+    session_focus: req.body.session_focus,
+    total_volume: req.body.total_volume,
+    top_lift: req.body.top_lift,
+    sets_completed: req.body.sets_completed,
+    rpe: req.body.rpe,
+    trail: req.body.trail,
+    terrain: req.body.terrain,
+    pack_weight: req.body.pack_weight,
+    yoga_style: req.body.yoga_style,
+    yoga_format: req.body.yoga_format,
+    focus_area: req.body.focus_area,
+    instructor: req.body.instructor
+  };
+  // Generate AI insight
+  const aiInsight = generateAIInsight(activityData);
+  activityData.ai_insight = aiInsight;
+  const { data, error } = await supabaseAdmin
+    .from('activities')
+    .insert(activityData)
+    .select()
+    .single();
+  if (error) return res.json({ error: error.message });
+  // Create notification for followers
+  const { data: followers } = await supabaseAdmin
+    .from('follows')
+    .select('follower_id')
+    .eq('following_id', req.user.id);
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('name')
+    .eq('id', req.user.id)
+    .single();
+  for (const follower of (followers || [])) {
+    await createNotification(supabaseAdmin, {
+      userId: follower.follower_id,
+      type: 'activity',
+      title: 'New activity',
+      body: `${profile?.name || 'Someone'} logged a new ${req.body.sport} activity: "${req.body.title}"`,
+      link: '/profile',
+      actorId: req.user.id,
+      entityId: data.id
+    });
+  }
+  res.json({ success: true, activity: data });
+});
+
+// Get activities for a user
+app.get('/api/activities/:userId', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const { data, error } = await supabaseAdmin
+    .from('activities')
+    .select('*')
+    .eq('user_id', req.params.userId)
+    .order('date', { ascending: false })
+    .limit(50);
+  if (error) return res.json({ error: error.message });
+  res.json({ activities: data || [] });
+});
+
+// Delete an activity
+app.delete('/api/activities/:id', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const { error } = await supabaseAdmin
+    .from('activities')
+    .delete()
+    .eq('id', req.params.id)
+    .eq('user_id', req.user.id);
+  if (error) return res.json({ error: error.message });
+  res.json({ success: true });
+});
+
+// Get activities for the feed (from followed users)
+app.get('/api/feed/activities', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const { data: following } = await supabaseAdmin
+    .from('follows')
+    .select('following_id')
+    .eq('follower_id', req.user.id);
+  const followingIds = [...(following || []).map(f => f.following_id), req.user.id];
+  const { data, error } = await supabaseAdmin
+    .from('activities')
+    .select('*, profiles:user_id(name, handle)')
+    .in('user_id', followingIds)
+    .order('date', { ascending: false })
+    .limit(20);
+  if (error) return res.json({ error: error.message });
+  res.json({ activities: data || [] });
+});
+3. Add this AI insight generator function to server.js — add it before the routes:
+javascriptfunction generateAIInsight(activity) {
+  const insights = {
+    running: [
+      activity.run_type === 'Tempo' ?
+        `Tempo work at ${activity.pace || 'your target pace'} builds lactate threshold — one of the highest ROI sessions you can do. ${activity.avg_hr ? 'HR of ' + activity.avg_hr + ' suggests ' + (parseInt(activity.avg_hr) > 165 ? 'you pushed hard today — make sure tomorrow is easy.' : 'good effort control.') : ''}` :
+      activity.run_type === 'Interval / Track' ?
+        `Interval sessions drive VO2 max improvements. ${activity.distance ? 'Covering ' + activity.distance + ' of quality work' : 'This session'} builds the top-end fitness that makes all your other runs feel easier.` :
+      activity.run_type === 'Long run' ?
+        `Long runs build aerobic base and fat adaptation. ${activity.distance ? activity.distance + ' is solid long run volume.' : ''} Keep the pace easy — the benefit comes from time on feet, not speed.` :
+        `${activity.distance ? activity.distance + ' logged.' : 'Session logged.'} Consistency is the most important training variable — showing up regularly matters more than any single workout.`
+    ],
+    cycling: [
+      activity.avg_power ?
+        `${activity.avg_power} average power over ${activity.duration || 'this session'} — ${parseInt(activity.avg_power) > 200 ? 'solid output. Your aerobic engine is clearly developing.' : 'good Zone 2 work. This type of riding builds your aerobic base more than people realise.'}` :
+        `${activity.distance ? activity.distance + ' covered.' : 'Ride logged.'} Every kilometre on the bike builds aerobic capacity and pedalling efficiency.`
+    ],
+    climbing: [
+      activity.top_grade ?
+        `Sending at ${activity.top_grade} shows your current capability. ${activity.project_grade ? 'Projecting ' + activity.project_grade + ' is the right approach — spending time at your limit drives the most adaptation.' : ''} ${activity.notes?.includes('foot') ? 'Footwork issues you noted are very common at this grade — deliberate footwork drills in warm-up will pay off fast.' : ''}` :
+        `${activity.problems_count ? activity.problems_count + ' problems completed.' : 'Session logged.'} Volume at the wall builds finger strength and movement pattern recognition simultaneously.`
+    ],
+    swimming: [
+      activity.swim_pace ?
+        `${activity.swim_pace} per 100m is ${activity.pool_type === 'Open water' ? 'strong for open water where conditions add difficulty.' : 'solid pool pace.'} ${activity.distance ? 'Covering ' + activity.distance + ' in one session builds excellent aerobic base.' : ''}` :
+        `Swimming is one of the best cross-training activities for any athlete — low impact, high cardiovascular demand. Consistency here will transfer to all your other sports.`
+    ],
+    football: [
+      `${activity.session_type === 'Match' ? 'Match day effort is high intensity and high reward — make sure the next 48 hours include recovery-focused activity.' : 'Training sessions build the technical and physical foundation that shows up on match day.'} ${activity.distance ? 'Covering ' + activity.distance + ' shows strong work rate.' : ''}`
+    ],
+    weightlifting: [
+      `${activity.session_focus ? activity.session_focus + ' session logged.' : 'Strength session logged.'} ${activity.rpe ? 'RPE ' + activity.rpe + '/10 — ' + (parseInt(activity.rpe) >= 9 ? 'very high intensity. Prioritise sleep and protein today.' : parseInt(activity.rpe) <= 6 ? 'well within your capacity. Good for technique-focused work.' : 'solid working intensity.') : ''} ${activity.total_volume ? 'Total volume of ' + activity.total_volume + ' is trackable — progressive overload over weeks drives hypertrophy and strength gains.' : ''}`
+    ],
+    hiking: [
+      `${activity.distance ? activity.distance : 'This hike'} ${activity.elevation ? 'with ' + activity.elevation + ' of elevation gain' : ''} is excellent low-impact aerobic work. ${activity.pack_weight ? 'Carrying ' + activity.pack_weight + ' adds resistance training benefit on top of the cardiovascular load.' : ''} Hiking builds the aerobic base and mental resilience that transfers to all other sports.`
+    ],
+    yoga: [
+      `${activity.yoga_style ? activity.yoga_style : 'Yoga'} builds the mobility, body awareness, and breathing control that directly improves performance in every other sport you do. ${activity.yoga_style === 'Yin' || activity.yoga_style === 'Restorative' ? 'Restorative practice like this accelerates recovery from harder training sessions.' : ''} Consistency here matters more than duration.`
+    ]
+  };
+  const sportInsights = insights[activity.sport];
+  if (!sportInsights) return 'Activity logged. Keep up the consistent training.';
+  return sportInsights[0] || 'Activity logged. Keep up the consistent training.';
+}
+4. Add a Log Activity link to the sidebar in every HTML file between Challenges and Athletes:
+Find the Challenges nav item in every HTML file and add this immediately after it:
+html<div class="nav-item" onclick="window.location.href='/profile#activities'">
+  <span class="nav-icon">➕</span> Log activity
+</div>
+5. Add the activity entry form to arenas-my-profile.html in the Activities tab.
+First find the Activities tab content section. It probably has a container with an ID like tab-activities or profile-activities. Replace its contents with this complete HTML:
+html<div id="activities-tab-content">
+  <!-- Header -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:var(--border);background:white">
+    <div>
+      <div style="font-size:15px;font-weight:600;color:var(--gray-900)">Your activities</div>
+      <div style="font-size:12px;color:var(--gray-500);margin-top:2px">Log training manually · Strava sync coming soon</div>
+    </div>
+    <button onclick="toggleActivityForm()" id="log-activity-btn"
+      style="display:flex;align-items:center;gap:6px;padding:8px 16px;background:var(--yellow);color:var(--gray-900);border:1px solid var(--yellow-dark);border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">
+      + Log activity
+    </button>
+  </div>
+
+  <!-- Entry Form -->
+  <div id="activity-form" style="display:none;background:var(--gray-50);border-bottom:var(--border);padding:20px">
+    <div style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden;max-width:680px;margin:0 auto">
+      <div style="padding:14px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:14px;font-weight:600;color:var(--gray-900)">Log a new activity</span>
+        <span style="font-size:11px;color:var(--gray-400)">Fields marked * are required</span>
+      </div>
+      <div style="padding:18px">
+        <!-- Sport selector -->
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--gray-500);margin-bottom:8px">Sport *</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px" id="act-sport-chips">
+          <button type="button" class="act-sport-chip" data-sport="running" onclick="selectActivitySport(this,'running')">🏃 Running</button>
+          <button type="button" class="act-sport-chip" data-sport="cycling" onclick="selectActivitySport(this,'cycling')">🚴 Cycling</button>
+          <button type="button" class="act-sport-chip" data-sport="climbing" onclick="selectActivitySport(this,'climbing')">🧗 Climbing</button>
+          <button type="button" class="act-sport-chip" data-sport="swimming" onclick="selectActivitySport(this,'swimming')">🏊 Swimming</button>
+          <button type="button" class="act-sport-chip" data-sport="football" onclick="selectActivitySport(this,'football')">⚽ Football</button>
+          <button type="button" class="act-sport-chip" data-sport="weightlifting" onclick="selectActivitySport(this,'weightlifting')">🏋️ Weightlifting</button>
+          <button type="button" class="act-sport-chip" data-sport="hiking" onclick="selectActivitySport(this,'hiking')">🥾 Hiking</button>
+          <button type="button" class="act-sport-chip" data-sport="yoga" onclick="selectActivitySport(this,'yoga')">🧘 Yoga</button>
+        </div>
+
+        <!-- Core fields -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div style="grid-column:1/-1">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Activity title *</div>
+            <input class="form-input" type="text" id="act-title" placeholder="e.g. Morning tempo run, Evening bouldering session…">
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Date *</div>
+            <input class="form-input" type="date" id="act-date">
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Duration *</div>
+            <input class="form-input" type="text" id="act-duration" placeholder="e.g. 45:00 or 1h 20m">
+          </div>
+        </div>
+
+        <!-- Sport specific fields -->
+        <div id="act-sport-fields" style="display:none;background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-400);margin-bottom:10px" id="act-sport-fields-label">Additional fields</div>
+          <div id="act-sport-fields-body"></div>
+        </div>
+
+        <!-- Notes -->
+        <div style="margin-bottom:12px">
+          <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Notes <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div>
+          <textarea class="form-textarea" id="act-notes" placeholder="How did it feel? Any highlights or things to remember…" style="min-height:72px"></textarea>
+        </div>
+
+        <!-- Feeling -->
+        <div style="margin-bottom:14px">
+          <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:8px">How did you feel? <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap" id="act-feeling-chips">
+            <button type="button" class="act-feeling-chip" onclick="selectFeeling(this,'strong')">💪 Strong</button>
+            <button type="button" class="act-feeling-chip" onclick="selectFeeling(this,'tired')">😴 Tired</button>
+            <button type="button" class="act-feeling-chip" onclick="selectFeeling(this,'motivated')">🔥 Motivated</button>
+            <button type="button" class="act-feeling-chip" onclick="selectFeeling(this,'struggled')">😤 Struggled</button>
+            <button type="button" class="act-feeling-chip" onclick="selectFeeling(this,'sore')">🤕 Sore</button>
+            <button type="button" class="act-feeling-chip" onclick="selectFeeling(this,'easy')">😊 Easy day</button>
+          </div>
+        </div>
+
+        <!-- Visibility note -->
+        <div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:var(--radius);padding:8px 12px;font-size:12px;color:#7a5c00;display:flex;align-items:center;gap:7px;margin-bottom:14px">
+          <span>👁</span>
+          This activity will appear in your followers' feeds and on your club coach's dashboard
+        </div>
+
+        <!-- Error banner -->
+        <div id="act-error" style="display:none;background:var(--red-light);border:1px solid #FECACA;border-radius:var(--radius);padding:10px 14px;font-size:13px;color:#A32D2D;margin-bottom:12px"></div>
+      </div>
+
+      <!-- Form footer -->
+      <div style="padding:14px 18px;border-top:var(--border);background:var(--gray-50);display:flex;align-items:center;gap:8px">
+        <button onclick="toggleActivityForm()"
+          style="padding:8px 16px;border:var(--border);border-radius:7px;font-size:13px;background:white;color:var(--gray-600);cursor:pointer">
+          Cancel
+        </button>
+        <button onclick="saveActivity()"
+          id="save-activity-btn"
+          style="padding:8px 20px;border:none;border-radius:7px;font-size:13px;font-weight:600;background:var(--gray-900);color:white;cursor:pointer;margin-left:auto">
+          Save activity →
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Activities list -->
+  <div id="activities-list" style="background:white">
+    <div style="text-align:center;padding:48px 24px" id="activities-empty">
+      <div style="font-size:36px;margin-bottom:12px">🏃</div>
+      <div style="font-size:15px;font-weight:600;color:var(--gray-900);margin-bottom:6px">No activities yet</div>
+      <div style="font-size:13px;color:var(--gray-500);line-height:1.6">Log your first training session above.<br>Activities appear in your followers' feeds and your coach's dashboard.</div>
+    </div>
+  </div>
+</div>
+6. Add these CSS styles to arenas-my-profile.html:
+css.act-sport-chip {
+  padding: 6px 13px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  border: var(--border);
+  background: white;
+  color: var(--gray-600);
+  cursor: pointer;
+  transition: all .12s;
+}
+.act-sport-chip:hover { border-color: var(--gray-400); }
+.act-sport-chip.selected {
+  background: var(--yellow-light);
+  border-color: #fde68a;
+  color: #7a5c00;
+}
+.act-feeling-chip {
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  border: var(--border);
+  background: white;
+  color: var(--gray-600);
+  cursor: pointer;
+  transition: all .12s;
+}
+.act-feeling-chip.selected {
+  background: var(--yellow-light);
+  border-color: #fde68a;
+  color: #7a5c00;
+}
+.activity-card-item {
+  border-bottom: var(--border);
+  padding: 16px 20px;
+  background: white;
+}
+.activity-card-item:last-child { border-bottom: none; }
+7. Add this JavaScript to arenas-my-profile.html before </body>:
+javascript// ── ACTIVITY LOGGING ──
+let selectedActivitySport = null;
+let selectedActivityFeeling = null;
+
+const activitySportFields = {
+  running: {
+    label: 'Running details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Distance</div><input class="form-input" type="text" id="sf-distance" placeholder="e.g. 10.5 km"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg pace</div><input class="form-input" type="text" id="sf-pace" placeholder="e.g. 4:45/km"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg HR <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-hr" placeholder="e.g. 158 bpm"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Elevation gain <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-elev" placeholder="e.g. 120m"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Cadence <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-cad" placeholder="e.g. 178 spm"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Run type</div><select class="form-select" id="sf-runtype"><option value="">Select…</option><option>Easy / Zone 2</option><option>Tempo</option><option>Interval / Track</option><option>Long run</option><option>Race</option><option>Recovery</option></select></div>
+    </div>`
+  },
+  cycling: {
+    label: 'Cycling details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Distance</div><input class="form-input" type="text" id="sf-distance" placeholder="e.g. 45 km"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg power <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-power" placeholder="e.g. 220W"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg speed</div><input class="form-input" type="text" id="sf-speed" placeholder="e.g. 28 km/h"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Elevation gain <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-elev" placeholder="e.g. 600m"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg HR <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-hr" placeholder="e.g. 145 bpm"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Ride type</div><select class="form-select" id="sf-ridetype"><option value="">Select…</option><option>Zone 2 / Endurance</option><option>Tempo</option><option>Intervals</option><option>Hill climb</option><option>Group ride</option><option>Race</option><option>Recovery</option></select></div>
+    </div>`
+  },
+  climbing: {
+    label: 'Climbing details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Top grade sent</div><select class="form-select" id="sf-grade"><option value="">Select…</option><option>V0-V1</option><option>V2-V3</option><option>V4</option><option>V5</option><option>V6</option><option>V7</option><option>V8+</option><option>5.10</option><option>5.11</option><option>5.12</option><option>5.13+</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Project grade <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><select class="form-select" id="sf-project"><option value="">Select…</option><option>V0-V1</option><option>V2-V3</option><option>V4</option><option>V5</option><option>V6</option><option>V7</option><option>V8+</option><option>5.10</option><option>5.11</option><option>5.12</option><option>5.13+</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Problems completed</div><input class="form-input" type="number" id="sf-problems" placeholder="e.g. 8" min="0"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Style</div><select class="form-select" id="sf-style"><option value="">Select…</option><option>Bouldering</option><option>Sport climbing</option><option>Trad climbing</option><option>Top rope</option><option>Hangboard</option><option>Campus board</option></select></div>
+      <div style="grid-column:span 2"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Location <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-location" placeholder="e.g. The Climbing Hangar, Fontainebleau…"></div>
+    </div>`
+  },
+  swimming: {
+    label: 'Swimming details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Distance</div><input class="form-input" type="text" id="sf-distance" placeholder="e.g. 2,000m"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg pace</div><input class="form-input" type="text" id="sf-pace" placeholder="e.g. 1:45/100m"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Pool / open water</div><select class="form-select" id="sf-pooltype"><option value="">Select…</option><option>Pool (25m)</option><option>Pool (50m)</option><option>Open water</option><option>Lake</option><option>Sea / ocean</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Stroke <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><select class="form-select" id="sf-stroke"><option value="">Select…</option><option>Freestyle</option><option>Breaststroke</option><option>Backstroke</option><option>Butterfly</option><option>Mixed</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg HR <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-hr" placeholder="e.g. 148 bpm"></div>
+    </div>`
+  },
+  football: {
+    label: 'Football details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Session type</div><select class="form-select" id="sf-sessiontype"><option value="">Select…</option><option>Match</option><option>Training session</option><option>5-a-side</option><option>Skills drills</option><option>Fitness training</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Distance covered <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-distance" placeholder="e.g. 9.2 km"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Position <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-position" placeholder="e.g. Centre midfield"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg HR <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-hr" placeholder="e.g. 155 bpm"></div>
+    </div>`
+  },
+  weightlifting: {
+    label: 'Weightlifting details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Session focus</div><select class="form-select" id="sf-focus"><option value="">Select…</option><option>Upper body</option><option>Lower body</option><option>Full body</option><option>Push</option><option>Pull</option><option>Legs</option><option>Olympic lifts</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Total volume <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-volume" placeholder="e.g. 4,200 kg"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Top lift <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-toplift" placeholder="e.g. 120kg squat"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Sets completed <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="number" id="sf-sets" placeholder="e.g. 16" min="0"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">RPE 1–10 <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="number" id="sf-rpe" placeholder="e.g. 8" min="1" max="10"></div>
+    </div>`
+  },
+  hiking: {
+    label: 'Hiking details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Distance</div><input class="form-input" type="text" id="sf-distance" placeholder="e.g. 14 km"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Elevation gain</div><input class="form-input" type="text" id="sf-elev" placeholder="e.g. 650m"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Trail / location <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-trail" placeholder="e.g. Peak District"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Terrain</div><select class="form-select" id="sf-terrain"><option value="">Select…</option><option>Mountain trail</option><option>Forest path</option><option>Coastal path</option><option>Urban walk</option><option>Mixed</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Pack weight <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-pack" placeholder="e.g. 8 kg"></div>
+    </div>`
+  },
+  yoga: {
+    label: 'Yoga details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Style</div><select class="form-select" id="sf-style"><option value="">Select…</option><option>Vinyasa</option><option>Hatha</option><option>Yin</option><option>Ashtanga</option><option>Restorative</option><option>Hot yoga</option><option>Power yoga</option><option>Breathwork</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Format</div><select class="form-select" id="sf-format"><option value="">Select…</option><option>In-person class</option><option>Online class</option><option>Self-practice</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Focus area <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-focus" placeholder="e.g. Hip openers, backbends…"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Instructor <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-instructor" placeholder="e.g. Adriene"></div>
+    </div>`
+  }
+};
+
+function toggleActivityForm() {
+  const form = document.getElementById('activity-form');
+  const isVisible = form.style.display !== 'none';
+  form.style.display = isVisible ? 'none' : 'block';
+  if (!isVisible) {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('act-date').value = today;
+    document.getElementById('act-title').value = '';
+    document.getElementById('act-duration').value = '';
+    document.getElementById('act-notes').value = '';
+    document.querySelectorAll('.act-sport-chip, .act-feeling-chip').forEach(c => c.classList.remove('selected'));
+    document.getElementById('act-sport-fields').style.display = 'none';
+    document.getElementById('act-error').style.display = 'none';
+    selectedActivitySport = null;
+    selectedActivityFeeling = null;
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function selectActivitySport(btn, sport) {
+  document.querySelectorAll('.act-sport-chip').forEach(c => c.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedActivitySport = sport;
+  const config = activitySportFields[sport];
+  if (config) {
+    document.getElementById('act-sport-fields-label').textContent = config.label;
+    document.getElementById('act-sport-fields-body').innerHTML = config.html;
+    document.getElementById('act-sport-fields').style.display = 'block';
+  }
+}
+
+function selectFeeling(btn, feeling) {
+  document.querySelectorAll('.act-feeling-chip').forEach(c => c.classList.remove('selected'));
+  if (selectedActivityFeeling === feeling) {
+    selectedActivityFeeling = null;
+  } else {
+    btn.classList.add('selected');
+    selectedActivityFeeling = feeling;
+  }
+}
+
+function showActError(msg) {
+  const el = document.getElementById('act-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  setTimeout(() => el.style.display = 'none', 4000);
+}
+
+async function saveActivity() {
+  const sport = selectedActivitySport;
+  const title = document.getElementById('act-title')?.value?.trim();
+  const date = document.getElementById('act-date')?.value;
+  const duration = document.getElementById('act-duration')?.value?.trim();
+  const notes = document.getElementById('act-notes')?.value?.trim();
+
+  if (!sport) { showActError('Please select a sport.'); return; }
+  if (!title) { showActError('Please enter an activity title.'); return; }
+  if (!duration) { showActError('Please enter the duration.'); return; }
+
+  const btn = document.getElementById('save-activity-btn');
+  btn.textContent = 'Saving…';
+  btn.disabled = true;
+
+  const body = {
+    sport, title, duration, notes,
+    date: date ? new Date(date).toISOString() : new Date().toISOString(),
+    feeling: selectedActivityFeeling,
+    // Core optional fields
+    distance: document.getElementById('sf-distance')?.value || null,
+    pace: document.getElementById('sf-pace')?.value || null,
+    avg_hr: document.getElementById('sf-hr')?.value || null,
+    elevation: document.getElementById('sf-elev')?.value || null,
+    cadence: document.getElementById('sf-cad')?.value || null,
+    run_type: document.getElementById('sf-runtype')?.value || null,
+    avg_power: document.getElementById('sf-power')?.value || null,
+    avg_speed: document.getElementById('sf-speed')?.value || null,
+    ride_type: document.getElementById('sf-ridetype')?.value || null,
+    top_grade: document.getElementById('sf-grade')?.value || null,
+    project_grade: document.getElementById('sf-project')?.value || null,
+    problems_count: document.getElementById('sf-problems')?.value || null,
+    climbing_style: document.getElementById('sf-style')?.value || null,
+    climb_location: document.getElementById('sf-location')?.value || null,
+    swim_pace: document.getElementById('sf-pace')?.value || null,
+    pool_type: document.getElementById('sf-pooltype')?.value || null,
+    stroke: document.getElementById('sf-stroke')?.value || null,
+    session_type: document.getElementById('sf-sessiontype')?.value || null,
+    position: document.getElementById('sf-position')?.value || null,
+    session_focus: document.getElementById('sf-focus')?.value || null,
+    total_volume: document.getElementById('sf-volume')?.value || null,
+    top_lift: document.getElementById('sf-toplift')?.value || null,
+    sets_completed: document.getElementById('sf-sets')?.value || null,
+    rpe: document.getElementById('sf-rpe')?.value || null,
+    trail: document.getElementById('sf-trail')?.value || null,
+    terrain: document.getElementById('sf-terrain')?.value || null,
+    pack_weight: document.getElementById('sf-pack')?.value || null,
+    yoga_style: document.getElementById('sf-style')?.value || null,
+    yoga_format: document.getElementById('sf-format')?.value || null,
+    focus_area: document.getElementById('sf-focus')?.value || null,
+    instructor: document.getElementById('sf-instructor')?.value || null
+  };
+
+  try {
+    const response = await fetch('/api/activities/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const result = await response.json();
+    if (result.error) {
+      showActError('Error saving: ' + result.error);
+      btn.textContent = 'Save activity →';
+      btn.disabled = false;
+      return;
+    }
+    showToast('✓ Activity logged! Your followers can see it now.');
+    toggleActivityForm();
+    loadActivities();
+  } catch (err) {
+    showActError('Something went wrong — please try again.');
+    btn.textContent = 'Save activity →';
+    btn.disabled = false;
+  }
+}
+
+async function loadActivities() {
+  if (!window.ARENAS_DATA?.userId) return;
+  try {
+    const response = await fetch('/api/activities/' + window.ARENAS_DATA.userId);
+    const data = await response.json();
+    if (data.error || !data.activities) return;
+    renderActivities(data.activities);
+  } catch (err) {
+    console.log('Could not load activities:', err);
+  }
+}
+
+async function deleteActivity(id, card) {
+  if (!confirm('Delete this activity? This cannot be undone.')) return;
+  try {
+    const response = await fetch('/api/activities/' + id, { method: 'DELETE' });
+    const result = await response.json();
+    if (result.success) {
+      card.style.transition = 'opacity .25s, max-height .3s .1s';
+      card.style.opacity = '0';
+      setTimeout(() => card.remove(), 350);
+      showToast('Activity deleted');
+    }
+  } catch (err) {
+    showToast('Could not delete — please try again');
+  }
+}
+
+function renderActivities(activities) {
+  const list = document.getElementById('activities-list');
+  const empty = document.getElementById('activities-empty');
+  if (!list) return;
+  if (!activities || activities.length === 0) {
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  const sportIcons = {
+    running: '🏃', cycling: '🚴', climbing: '🧗',
+    swimming: '🏊', football: '⚽', weightlifting: '🏋️',
+    hiking: '🥾', yoga: '🧘'
+  };
+  const sportColors = {
+    running: 'background:#FFF7ED;color:#9A3412;border-color:#FDBA74',
+    cycling: 'background:#EFF6FF;color:#1E40AF;border-color:#93C5FD',
+    climbing: 'background:#F5F3FF;color:#5B21B6;border-color:#C4B5FD',
+    swimming: 'background:#F0FDFA;color:#134E4A;border-color:#5EEAD4',
+    football: 'background:#ECFDF5;color:#166534;border-color:#86EFAC',
+    weightlifting: 'background:#FEF9C3;color:#854D0E;border-color:#FDE047',
+    hiking: 'background:#FAEEDA;color:#633806;border-color:#EF9F27',
+    yoga: 'background:#FBEAF0;color:#72243E;border-color:#F4C0D1'
+  };
+
+  function timeAgo(dateStr) {
+    const seconds = Math.floor((new Date() - new Date(dateStr)) / 1000);
+    if (seconds < 60) return 'Just now';
+    if (seconds < 3600) return Math.floor(seconds/60) + 'm ago';
+    if (seconds < 86400) return Math.floor(seconds/3600) + 'h ago';
+    if (seconds < 604800) return Math.floor(seconds/86400) + 'd ago';
+    return new Date(dateStr).toLocaleDateString();
+  }
+
+  function buildStats(activity) {
+    const stats = [];
+    if (activity.duration) stats.push(`<div class="ac-stat-item">⏱ <strong>${activity.duration}</strong></div>`);
+    if (activity.distance) stats.push(`<div class="ac-stat-item">📍 <strong>${activity.distance}</strong></div>`);
+    if (activity.pace) stats.push(`<div class="ac-stat-item">⚡ <strong>${activity.pace}</strong> pace</div>`);
+    if (activity.avg_power) stats.push(`<div class="ac-stat-item">⚡ <strong>${activity.avg_power}</strong></div>`);
+    if (activity.avg_hr) stats.push(`<div class="ac-stat-item">❤️ <strong>${activity.avg_hr}</strong></div>`);
+    if (activity.elevation) stats.push(`<div class="ac-stat-item">⛰ <strong>${activity.elevation}</strong> elev</div>`);
+    if (activity.top_grade) stats.push(`<div class="ac-stat-item">✓ <strong>${activity.top_grade}</strong> sent</div>`);
+    if (activity.problems_count) stats.push(`<div class="ac-stat-item">🧗 <strong>${activity.problems_count}</strong> problems</div>`);
+    if (activity.rpe) stats.push(`<div class="ac-stat-item">💪 <strong>RPE ${activity.rpe}</strong></div>`);
+    return stats.join('');
+  }
+
+  const html = activities.map(activity => {
+    const icon = sportIcons[activity.sport] || '🏃';
+    const colorStyle = sportColors[activity.sport] || '';
+    const stats = buildStats(activity);
+    return `
+      <div class="activity-card-item" id="act-card-${activity.id}">
+        <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">
+          <div style="width:38px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;${colorStyle.split(';')[0]}">${icon}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:2px">${activity.title}</div>
+            <div style="font-size:11px;color:var(--gray-400)">${timeAgo(activity.date || activity.created_at)}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;border:1px solid;${colorStyle}">${activity.sport.charAt(0).toUpperCase() + activity.sport.slice(1)}</span>
+            <button onclick="deleteActivity('${activity.id}', document.getElementById('act-card-${activity.id}'))"
+              style="width:26px;height:26px;border-radius:6px;border:var(--border);background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--gray-400);font-size:12px"
+              title="Delete activity">✕</button>
+          </div>
+        </div>
+        ${stats ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${stats}</div>` : ''}
+        ${activity.notes ? `<div style="font-size:12px;color:var(--gray-600);line-height:1.6;padding:8px 10px;background:var(--gray-50);border-radius:6px;margin-bottom:8px">${activity.notes}</div>` : ''}
+        ${activity.ai_insight ? `
+          <div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:6px;padding:8px 11px;font-size:12px;color:#7a5c00;display:flex;gap:8px;align-items:flex-start;margin-bottom:8px">
+            <div style="width:18px;height:18px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:var(--gray-900);flex-shrink:0;margin-top:1px">AI</div>
+            <span>${activity.ai_insight}</span>
+          </div>` : ''}
+        ${activity.feeling ? `<div style="font-size:11px;color:var(--gray-500);margin-top:4px">Feeling: ${activity.feeling}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  list.innerHTML = html;
+}
+
+// Load activities when profile page opens
+document.addEventListener('DOMContentLoaded', function() {
+  loadActivities();
+});
+
+// Also load when Activities tab is clicked
+document.querySelectorAll('[data-tab]').forEach(tab => {
+  tab.addEventListener('click', function() {
+    if (this.dataset.tab === 'activities' || this.textContent.includes('Activit')) {
+      loadActivities();
+    }
+  });
+});
+
+// Handle direct link to activities tab via hash
+if (window.location.hash === '#activities') {
+  const actTab = [...document.querySelectorAll('[data-tab], .tab-btn, .profile-tab')]
+    .find(el => el.textContent.includes('Activit') || el.dataset.tab === 'activities');
+  if (actTab) actTab.click();
+  document.getElementById('activity-form') && toggleActivityForm();
+}
+8. Update the feed route to also include activities from followed users alongside posts. In the /feed route in server.js, after fetching posts add this:
+javascript// Get recent activities from followed users
+const { data: feedActivities } = await supabaseAdmin
+  .from('activities')
+  .select('*, profiles:user_id(name, handle)')
+  .in('user_id', feedUserIds)
+  .order('date', { ascending: false })
+  .limit(10);
+
+// Add to userData
+userData.feedActivities = feedActivities || [];
+Then in arenas-feed.html add this to the feed rendering script to show activity cards from followed users:
+javascript// Render activity cards from followed users
+if (data.feedActivities && data.feedActivities.length > 0) {
+  const sportIcons = {
+    running:'🏃',cycling:'🚴',climbing:'🧗',swimming:'🏊',
+    football:'⚽',weightlifting:'🏋️',hiking:'🥾',yoga:'🧘'
+  };
+  const sportColors = {
+    running:'background:#FFF7ED;color:#9A3412;border:1px solid #FDBA74',
+    cycling:'background:#EFF6FF;color:#1E40AF;border:1px solid #93C5FD',
+    climbing:'background:#F5F3FF;color:#5B21B6;border:1px solid #C4B5FD',
+    swimming:'background:#F0FDFA;color:#134E4A;border:1px solid #5EEAD4',
+    football:'background:#ECFDF5;color:#166534;border:1px solid #86EFAC',
+    weightlifting:'background:#FEF9C3;color:#854D0E;border:1px solid #FDE047',
+    hiking:'background:#FAEEDA;color:#633806;border:1px solid #EF9F27',
+    yoga:'background:#FBEAF0;color:#72243E;border:1px solid #F4C0D1'
+  };
+  const activityCardsHTML = data.feedActivities.map(activity => {
+    const initials = (activity.profiles?.name || 'A').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+    const icon = sportIcons[activity.sport] || '🏃';
+    const colorStyle = sportColors[activity.sport] || '';
+    const isOwn = activity.user_id === data.userId;
+    const stats = [];
+    if (activity.duration) stats.push(`<span style="background:var(--gray-50);border:var(--border);border-radius:5px;padding:3px 8px;font-size:11px;font-family:var(--mono)">⏱ ${activity.duration}</span>`);
+    if (activity.distance) stats.push(`<span style="background:var(--gray-50);border:var(--border);border-radius:5px;padding:3px 8px;font-size:11px;font-family:var(--mono)">📍 ${activity.distance}</span>`);
+    if (activity.pace) stats.push(`<span style="background:var(--gray-50);border:var(--border);border-radius:5px;padding:3px 8px;font-size:11px;font-family:var(--mono)">⚡ ${activity.pace}</span>`);
+    if (activity.avg_power) stats.push(`<span style="background:var(--gray-50);border:var(--border);border-radius:5px;padding:3px 8px;font-size:11px;font-family:var(--mono)">⚡ ${activity.avg_power}</span>`);
+    if (activity.top_grade) stats.push(`<span style="background:var(--gray-50);border:var(--border);border-radius:5px;padding:3px 8px;font-size:11px;font-family:var(--mono)">✓ ${activity.top_grade}</span>`);
+    return `
+      <div class="feed-item-wrap">
+        <div class="post-note-card">
+          <div class="pn-head">
+            <div class="pn-av" style="background:${isOwn ? '#FFD21E' : '#F3F4F6'};color:${isOwn ? '#111827' : '#374151'}">${initials}</div>
+            <div>
+              <div class="pn-name">${activity.profiles?.name || 'Athlete'}${isOwn ? ' <span style="font-size:11px;color:#9CA3AF;font-weight:400">(you)</span>' : ''}</div>
+              <div class="pn-meta">${timeAgo(activity.date || activity.created_at)} · @${activity.profiles?.handle || 'athlete'}</div>
+            </div>
+            <div style="font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;border:1px solid;${colorStyle};margin-left:auto">${icon} ${activity.sport.charAt(0).toUpperCase() + activity.sport.slice(1)}</div>
+          </div>
+          <div class="pn-content" style="font-weight:600;margin-bottom:6px">${activity.title}</div>
+          ${stats.length > 0 ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">${stats.join('')}</div>` : ''}
+          ${activity.notes ? `<div class="pn-content" style="font-size:13px;color:var(--gray-600)">${activity.notes}</div>` : ''}
+          ${activity.ai_insight ? `
+            <div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:6px;padding:8px 11px;font-size:12px;color:#7a5c00;display:flex;gap:8px;align-items:flex-start;margin-bottom:8px">
+              <div style="width:18px;height:18px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:var(--gray-900);flex-shrink:0;margin-top:1px">AI</div>
+              <span>${activity.ai_insight}</span>
+            </div>` : ''}
+          <div class="pn-footer">
+            <button class="pn-action">👍 Kudos</button>
+            <button class="pn-action">💬 Comment</button>
+            <span style="margin-left:auto;font-size:11px;color:#9CA3AF">Activity</span>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+  if (feedContainer) feedContainer.insertAdjacentHTML('afterbegin', activityCardsHTML);
+}
+9. Add the sidebar nav item for Log Activity in every HTML file. Find the Challenges nav item and add this immediately after it:
+html<div class="nav-item" onclick="window.location.href='/profile#activities'">
+  <span class="nav-icon">➕</span> Log activity
+</div>
+10. Run this SQL in Supabase before pushing — paste and run the activities table creation SQL at the top of these instructions first, then come back and push.
+Wait for checkpoint then commit and push to GitHub main immediately.

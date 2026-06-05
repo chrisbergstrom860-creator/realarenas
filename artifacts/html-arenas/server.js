@@ -503,6 +503,215 @@ app.get(BASE + '/api/follow/:userId', requireAuth, async (req, res) => {
   res.json({ following: !!data });
 });
 
+// ── ACTIVITIES API (manual training log) ──
+// Generates a short, deterministic "AI coach" insight from the logged activity.
+// Pure string logic (no external call) so it works offline and never blocks a
+// save. Values it interpolates are user-supplied, so anything rendered from
+// ai_insight on the client must still be HTML-escaped there.
+function generateAIInsight(activity) {
+  const insights = {
+    running: [
+      activity.run_type === 'Tempo' ?
+        `Tempo work at ${activity.pace || 'your target pace'} builds lactate threshold — one of the highest ROI sessions you can do. ${activity.avg_hr ? 'HR of ' + activity.avg_hr + ' suggests ' + (parseInt(activity.avg_hr) > 165 ? 'you pushed hard today — make sure tomorrow is easy.' : 'good effort control.') : ''}` :
+      activity.run_type === 'Interval / Track' ?
+        `Interval sessions drive VO2 max improvements. ${activity.distance ? 'Covering ' + activity.distance + ' of quality work' : 'This session'} builds the top-end fitness that makes all your other runs feel easier.` :
+      activity.run_type === 'Long run' ?
+        `Long runs build aerobic base and fat adaptation. ${activity.distance ? activity.distance + ' is solid long run volume.' : ''} Keep the pace easy — the benefit comes from time on feet, not speed.` :
+        `${activity.distance ? activity.distance + ' logged.' : 'Session logged.'} Consistency is the most important training variable — showing up regularly matters more than any single workout.`
+    ],
+    cycling: [
+      activity.avg_power ?
+        `${activity.avg_power} average power over ${activity.duration || 'this session'} — ${parseInt(activity.avg_power) > 200 ? 'solid output. Your aerobic engine is clearly developing.' : 'good Zone 2 work. This type of riding builds your aerobic base more than people realise.'}` :
+        `${activity.distance ? activity.distance + ' covered.' : 'Ride logged.'} Every kilometre on the bike builds aerobic capacity and pedalling efficiency.`
+    ],
+    climbing: [
+      activity.top_grade ?
+        `Sending at ${activity.top_grade} shows your current capability. ${activity.project_grade ? 'Projecting ' + activity.project_grade + ' is the right approach — spending time at your limit drives the most adaptation.' : ''} ${activity.notes && activity.notes.includes('foot') ? 'Footwork issues you noted are very common at this grade — deliberate footwork drills in warm-up will pay off fast.' : ''}` :
+        `${activity.problems_count ? activity.problems_count + ' problems completed.' : 'Session logged.'} Volume at the wall builds finger strength and movement pattern recognition simultaneously.`
+    ],
+    swimming: [
+      activity.swim_pace ?
+        `${activity.swim_pace} per 100m is ${activity.pool_type === 'Open water' ? 'strong for open water where conditions add difficulty.' : 'solid pool pace.'} ${activity.distance ? 'Covering ' + activity.distance + ' in one session builds excellent aerobic base.' : ''}` :
+        `Swimming is one of the best cross-training activities for any athlete — low impact, high cardiovascular demand. Consistency here will transfer to all your other sports.`
+    ],
+    football: [
+      `${activity.session_type === 'Match' ? 'Match day effort is high intensity and high reward — make sure the next 48 hours include recovery-focused activity.' : 'Training sessions build the technical and physical foundation that shows up on match day.'} ${activity.distance ? 'Covering ' + activity.distance + ' shows strong work rate.' : ''}`
+    ],
+    weightlifting: [
+      `${activity.session_focus ? activity.session_focus + ' session logged.' : 'Strength session logged.'} ${activity.rpe ? 'RPE ' + activity.rpe + '/10 — ' + (parseInt(activity.rpe) >= 9 ? 'very high intensity. Prioritise sleep and protein today.' : parseInt(activity.rpe) <= 6 ? 'well within your capacity. Good for technique-focused work.' : 'solid working intensity.') : ''} ${activity.total_volume ? 'Total volume of ' + activity.total_volume + ' is trackable — progressive overload over weeks is what drives strength gains.' : ''}`
+    ],
+    hiking: [
+      `${activity.distance ? activity.distance : 'This hike'} ${activity.elevation ? 'with ' + activity.elevation + ' of elevation gain' : ''} is excellent low-impact aerobic work. ${activity.pack_weight ? 'Carrying ' + activity.pack_weight + ' adds resistance training benefit on top of the cardiovascular load.' : ''} Hiking builds the aerobic base and mental resilience that transfers to all other sports.`
+    ],
+    yoga: [
+      `${activity.yoga_style ? activity.yoga_style : 'Yoga'} builds the mobility, body awareness, and breathing control that directly improves performance in every other sport you do. ${activity.yoga_style === 'Yin' || activity.yoga_style === 'Restorative' ? 'Restorative practice like this accelerates recovery from harder training sessions.' : ''} Consistency here matters more than duration.`
+    ]
+  };
+  const sportInsights = insights[activity.sport];
+  if (!sportInsights) return 'Activity logged. Keep up the consistent training.';
+  return (sportInsights[0] || 'Activity logged. Keep up the consistent training.').replace(/\s+/g, ' ').trim();
+}
+
+// Attach author display info (name/handle) to a list of activities. There is no
+// `profiles` table, so resolve each distinct user's identity from auth metadata
+// (one lookup per unique user, same approach as buildFeedPosts/enrichNotifications).
+async function enrichActivities(activities) {
+  const list = activities || [];
+  if (!supabaseAdmin || !list.length) return list.map(a => ({ ...a, author: { name: 'Athlete', handle: 'athlete' } }));
+  const ids = [...new Set(list.map(a => a.user_id).filter(Boolean))];
+  const map = {};
+  await Promise.all(ids.map(async (id) => {
+    try {
+      const { data: u } = await supabaseAdmin.auth.admin.getUserById(id);
+      if (u && u.user) map[id] = displayFromUser(u.user);
+    } catch (err) {
+      // Ignore individual lookup failures; the card falls back to defaults.
+    }
+  }));
+  return list.map(a => ({ ...a, author: map[a.user_id] || { name: 'Athlete', handle: 'athlete' } }));
+}
+
+// Recent activities from people the viewer follows (plus their own), enriched
+// with author display info, for the feed. Mirrors buildFeedPosts' follow logic.
+async function buildFeedActivities(limit, currentUserId) {
+  if (!supabaseAdmin) return [];
+  let followingIds = [];
+  if (currentUserId) {
+    const { data: following } = await supabaseAdmin
+      .from('follows')
+      .select('following_id')
+      .eq('follower_id', currentUserId);
+    followingIds = (following || []).map(f => f.following_id).filter(Boolean);
+  }
+  const feedUserIds = [...new Set([...followingIds, currentUserId].filter(Boolean))];
+  if (!feedUserIds.length) return [];
+  const { data, error } = await supabaseAdmin
+    .from('activities')
+    .select('*')
+    .in('user_id', feedUserIds)
+    .order('date', { ascending: false })
+    .limit(limit);
+  if (error || !data) return [];
+  return enrichActivities(data);
+}
+
+// Create an activity for the logged-in user, generate an AI insight, and notify
+// the user's followers (best-effort). The full activities schema must exist in
+// Supabase (applied via the SQL editor) — until then inserts return an error.
+app.post(BASE + '/api/activities/create', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for logging activities' });
+  const b = req.body || {};
+  if (!b.sport) return res.json({ error: 'Please select a sport' });
+  if (!b.title || !b.title.trim()) return res.json({ error: 'Please enter an activity title' });
+  const activityData = {
+    user_id: req.user.id,
+    sport: b.sport,
+    title: b.title.trim(),
+    date: b.date || new Date().toISOString(),
+    duration: b.duration || null,
+    notes: b.notes || null,
+    feeling: b.feeling || null,
+    distance: b.distance || null,
+    pace: b.pace || null,
+    avg_hr: b.avg_hr || null,
+    elevation: b.elevation || null,
+    cadence: b.cadence || null,
+    run_type: b.run_type || null,
+    avg_power: b.avg_power || null,
+    avg_speed: b.avg_speed || null,
+    ride_type: b.ride_type || null,
+    top_grade: b.top_grade || null,
+    project_grade: b.project_grade || null,
+    problems_count: b.problems_count || null,
+    climbing_style: b.climbing_style || null,
+    climb_location: b.climb_location || null,
+    swim_pace: b.swim_pace || null,
+    pool_type: b.pool_type || null,
+    stroke: b.stroke || null,
+    session_type: b.session_type || null,
+    position: b.position || null,
+    session_focus: b.session_focus || null,
+    total_volume: b.total_volume || null,
+    top_lift: b.top_lift || null,
+    sets_completed: b.sets_completed || null,
+    rpe: b.rpe || null,
+    trail: b.trail || null,
+    terrain: b.terrain || null,
+    pack_weight: b.pack_weight || null,
+    yoga_style: b.yoga_style || null,
+    yoga_format: b.yoga_format || null,
+    focus_area: b.focus_area || null,
+    instructor: b.instructor || null
+  };
+  activityData.ai_insight = generateAIInsight(activityData);
+  const { data, error } = await supabaseAdmin
+    .from('activities')
+    .insert(activityData)
+    .select()
+    .single();
+  if (error) return res.json({ error: error.message });
+  // Notify followers (best-effort). The actor name comes from auth metadata
+  // (no `profiles` table), not a DB join.
+  try {
+    const { data: followers } = await supabaseAdmin
+      .from('follows')
+      .select('follower_id')
+      .eq('following_id', req.user.id);
+    const actor = displayFromUser(req.user);
+    for (const f of (followers || [])) {
+      await createNotification({
+        userId: f.follower_id,
+        type: 'activity',
+        title: 'New activity',
+        body: `${actor.name} logged a new ${data.sport} activity: "${data.title}"`,
+        link: '/profile',
+        actorId: req.user.id,
+        entityId: data.id
+      });
+    }
+  } catch (err) {
+    console.log('Activity notification error:', err.message);
+  }
+  res.json({ success: true, activity: data });
+});
+
+// Recent activities for a given user (used by the profile Activities tab).
+// Self-only: the Activities tab only ever requests the logged-in user's own
+// list, and activities are surfaced to followers via the feed endpoint instead.
+// Scoping to self here prevents reading another user's history by guessing IDs.
+app.get(BASE + '/api/activities/:userId', requireAuth, async (req, res) => {
+  if (req.params.userId !== req.user.id) return res.status(403).json({ error: 'Not allowed' });
+  if (!supabaseAdmin) return res.json({ activities: [] });
+  const { data, error } = await supabaseAdmin
+    .from('activities')
+    .select('*')
+    .eq('user_id', req.params.userId)
+    .order('date', { ascending: false })
+    .limit(50);
+  if (error) return res.json({ error: error.message });
+  res.json({ activities: data || [] });
+});
+
+// Delete one of the viewer's own activities (the user_id filter enforces
+// ownership even though service role bypasses RLS).
+app.delete(BASE + '/api/activities/:id', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured' });
+  const { error } = await supabaseAdmin
+    .from('activities')
+    .delete()
+    .eq('id', req.params.id)
+    .eq('user_id', req.user.id);
+  if (error) return res.json({ error: error.message });
+  res.json({ success: true });
+});
+
+// Activities from followed users for the feed (JSON variant; the /feed page also
+// injects these server-side via window.ARENAS_DATA.feedActivities).
+app.get(BASE + '/api/feed/activities', requireAuth, async (req, res) => {
+  const activities = await buildFeedActivities(20, req.user.id);
+  res.json({ activities });
+});
+
 // Root: send new visitors to the landing page, logged-in users to their feed.
 app.get(BASE === '' ? '/' : BASE, async (req, res) => {
   const token = req.signedCookies && req.signedCookies.sb_access_token;
@@ -601,7 +810,8 @@ async function buildFeedPosts(limit, currentUserId) {
 app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
   try {
     const { posts, followsNobody } = await buildFeedPosts(20, req.user.id);
-    const userData = { profile: displayFromUser(req.user), userId: req.user.id, posts, followsNobody };
+    const feedActivities = await buildFeedActivities(10, req.user.id);
+    const userData = { profile: displayFromUser(req.user), userId: req.user.id, posts, followsNobody, feedActivities };
     const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), userData);
     res.type('html').send(html);
   } catch (err) {

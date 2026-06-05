@@ -324,6 +324,16 @@ button,select,input,textarea{font-family:var(--font)}
 /* ── TOAST ── */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--gray-900);color:white;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:500;z-index:999;transition:transform .3s ease;white-space:nowrap;box-shadow:var(--shadow-md)}
 .toast.show{transform:translateX(-50%) translateY(0)}
+
+/* ── ACTIVITY LOGGING ── */
+.act-sport-chip{padding:6px 13px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer;transition:all .12s}
+.act-sport-chip:hover{border-color:var(--gray-400)}
+.act-sport-chip.selected{background:var(--yellow-light);border-color:#fde68a;color:#7a5c00}
+.act-feeling-chip{padding:5px 12px;border-radius:20px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer;transition:all .12s}
+.act-feeling-chip.selected{background:var(--yellow-light);border-color:#fde68a;color:#7a5c00}
+.activity-card-item{border-bottom:var(--border);padding:16px 20px;background:white}
+.activity-card-item:last-child{border-bottom:none}
+.ac-stat-item{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--gray-600);background:var(--gray-50);border:var(--border);border-radius:5px;padding:3px 9px;font-family:var(--mono)}
 </style>
 </head>
 <body>
@@ -361,6 +371,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">📅</span> Events</div>
   <div class="nav-item" onclick="nav('/leaderboards')"><span class="nav-icon">🏆</span> Leaderboards</div>
   <div class="nav-item" onclick="nav('/challenges')"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">3</span></div>
+  <div class="nav-item" onclick="nav('/profile#activities')"><span class="nav-icon">➕</span> Log activity</div>
   <div class="nav-item" onclick="nav('/athletes')"><span class="nav-icon">👥</span> Athletes</div>
   <div class="nav-section-label">Clubs</div>
   <div class="nav-item" onclick="nav('/clubs/member')"><span class="nav-icon">🏃</span> Hackney RC <span class="nav-badge red">2</span></div>
@@ -594,71 +605,114 @@ button,select,input,textarea{font-family:var(--font)}
 
 <!-- ═══ ACTIVITIES TAB ═══ -->
 <div class="tab-content" id="tab-activities">
-  <div class="content-cols-full">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-      <div><h2 style="font-size:17px;font-weight:700;color:var(--gray-900)">All activities</h2><p style="font-size:13px;color:var(--gray-500)">312 activities · 4,820 km total</p></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <select style="padding:7px 11px;border:var(--border);border-radius:7px;font-size:13px;background:white;outline:none;cursor:pointer" onchange="showToast('Filter updated')"><option>All sports</option><option>Running</option><option>Cycling</option><option>Climbing</option></select>
-        <select style="padding:7px 11px;border:var(--border);border-radius:7px;font-size:13px;background:white;outline:none;cursor:pointer" onchange="showToast('Sort updated')"><option>Newest first</option><option>Oldest first</option><option>Longest distance</option><option>Fastest pace</option></select>
-        <button class="btn btn-ghost" onclick="showToast('Downloading GPX files…')">📥 Export</button>
+  <div id="activities-tab-content">
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:var(--border);background:white">
+      <div>
+        <div style="font-size:15px;font-weight:600;color:var(--gray-900)">Your activities</div>
+        <div style="font-size:12px;color:var(--gray-500);margin-top:2px">Log training manually · Strava sync coming soon</div>
+      </div>
+      <button onclick="toggleActivityForm()" id="log-activity-btn"
+        style="display:flex;align-items:center;gap:6px;padding:8px 16px;background:var(--yellow);color:var(--gray-900);border:1px solid var(--yellow-dark);border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">
+        + Log activity
+      </button>
+    </div>
+
+    <!-- Entry Form -->
+    <div id="activity-form" style="display:none;background:var(--gray-50);border-bottom:var(--border);padding:20px">
+      <div style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden;max-width:680px;margin:0 auto">
+        <div style="padding:14px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:14px;font-weight:600;color:var(--gray-900)">Log a new activity</span>
+          <span style="font-size:11px;color:var(--gray-400)">Fields marked * are required</span>
+        </div>
+        <div style="padding:18px">
+          <!-- Sport selector -->
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--gray-500);margin-bottom:8px">Sport *</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px" id="act-sport-chips">
+            <button type="button" class="act-sport-chip" data-sport="running" onclick="selectActivitySport(this,'running')">🏃 Running</button>
+            <button type="button" class="act-sport-chip" data-sport="cycling" onclick="selectActivitySport(this,'cycling')">🚴 Cycling</button>
+            <button type="button" class="act-sport-chip" data-sport="climbing" onclick="selectActivitySport(this,'climbing')">🧗 Climbing</button>
+            <button type="button" class="act-sport-chip" data-sport="swimming" onclick="selectActivitySport(this,'swimming')">🏊 Swimming</button>
+            <button type="button" class="act-sport-chip" data-sport="football" onclick="selectActivitySport(this,'football')">⚽ Football</button>
+            <button type="button" class="act-sport-chip" data-sport="weightlifting" onclick="selectActivitySport(this,'weightlifting')">🏋️ Weightlifting</button>
+            <button type="button" class="act-sport-chip" data-sport="hiking" onclick="selectActivitySport(this,'hiking')">🥾 Hiking</button>
+            <button type="button" class="act-sport-chip" data-sport="yoga" onclick="selectActivitySport(this,'yoga')">🧘 Yoga</button>
+          </div>
+
+          <!-- Core fields -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+            <div style="grid-column:1/-1">
+              <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Activity title *</div>
+              <input class="form-input" type="text" id="act-title" placeholder="e.g. Morning tempo run, Evening bouldering session…">
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Date *</div>
+              <input class="form-input" type="date" id="act-date">
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Duration *</div>
+              <input class="form-input" type="text" id="act-duration" placeholder="e.g. 45:00 or 1h 20m">
+            </div>
+          </div>
+
+          <!-- Sport specific fields -->
+          <div id="act-sport-fields" style="display:none;background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-400);margin-bottom:10px" id="act-sport-fields-label">Additional fields</div>
+            <div id="act-sport-fields-body"></div>
+          </div>
+
+          <!-- Notes -->
+          <div style="margin-bottom:12px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Notes <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div>
+            <textarea class="form-textarea" id="act-notes" placeholder="How did it feel? Any highlights or things to remember…" style="min-height:72px"></textarea>
+          </div>
+
+          <!-- Feeling -->
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:8px">How did you feel? <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap" id="act-feeling-chips">
+              <button type="button" class="act-feeling-chip" onclick="selectFeeling(this,'strong')">💪 Strong</button>
+              <button type="button" class="act-feeling-chip" onclick="selectFeeling(this,'tired')">😴 Tired</button>
+              <button type="button" class="act-feeling-chip" onclick="selectFeeling(this,'motivated')">🔥 Motivated</button>
+              <button type="button" class="act-feeling-chip" onclick="selectFeeling(this,'struggled')">😤 Struggled</button>
+              <button type="button" class="act-feeling-chip" onclick="selectFeeling(this,'sore')">🤕 Sore</button>
+              <button type="button" class="act-feeling-chip" onclick="selectFeeling(this,'easy')">😊 Easy day</button>
+            </div>
+          </div>
+
+          <!-- Visibility note -->
+          <div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:var(--radius);padding:8px 12px;font-size:12px;color:#7a5c00;display:flex;align-items:center;gap:7px;margin-bottom:14px">
+            <span>👁</span>
+            This activity will appear in your followers' feeds and on your club coach's dashboard
+          </div>
+
+          <!-- Error banner -->
+          <div id="act-error" style="display:none;background:var(--red-light);border:1px solid #FECACA;border-radius:var(--radius);padding:10px 14px;font-size:13px;color:#A32D2D;margin-bottom:12px"></div>
+        </div>
+
+        <!-- Form footer -->
+        <div style="padding:14px 18px;border-top:var(--border);background:var(--gray-50);display:flex;align-items:center;gap:8px">
+          <button onclick="toggleActivityForm()"
+            style="padding:8px 16px;border:var(--border);border-radius:7px;font-size:13px;background:white;color:var(--gray-600);cursor:pointer">
+            Cancel
+          </button>
+          <button onclick="saveActivity()"
+            id="save-activity-btn"
+            style="padding:8px 20px;border:none;border-radius:7px;font-size:13px;font-weight:600;background:var(--gray-900);color:white;cursor:pointer;margin-left:auto">
+            Save activity →
+          </button>
+        </div>
       </div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:12px">
-      <div class="activity-card">
-        <div class="ac-body">
-          <div class="ac-head">
-            <div style="width:32px;height:32px;border-radius:50%;background:var(--orange-light);color:#9A3412;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600">JK</div>
-            <div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Morning long run</div><div style="font-size:11px;color:var(--gray-400)">Today · 6:42 AM · London</div></div>
-            <div class="ac-sport-tag" style="background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74">🏃 Running</div>
-          </div>
-          <div class="ac-stats-row">
-            <div class="ac-stat"><div class="sv">12.4</div><div class="sl">km</div></div>
-            <div class="ac-stat"><div class="sv">54:22</div><div class="sl">time</div></div>
-            <div class="ac-stat"><div class="sv">4:23</div><div class="sl">/km</div></div>
-            <div class="ac-stat"><div class="sv">148</div><div class="sl">bpm</div></div>
-            <div class="ac-stat"><div class="sv">486</div><div class="sl">kcal</div></div>
-            <div class="ac-stat"><div class="sv">+320</div><div class="sl">elev m</div></div>
-          </div>
-          <div class="ac-ai"><div class="ai-icon">AI</div><div class="ac-ai-text"><strong>AI Coach:</strong> HR spiked 12 bpm in the final 3km — classic glycogen depletion. Keep tomorrow easy and you'll be fresh for Sunday's PB attempt.</div></div>
-        </div>
-        <div class="ac-footer"><button class="ac-action liked" onclick="toggleLike(this)">👍 6 kudos</button><button class="ac-action" onclick="openModal('comment')">💬 3</button><button class="ac-action" onclick="showToast('Activity link copied!')">🔗</button><button class="ac-action" onclick="showToast('Editing activity…')">✏️ Edit</button></div>
-      </div>
-      <div class="activity-card">
-        <div class="ac-body">
-          <div class="ac-head">
-            <div style="width:32px;height:32px;border-radius:50%;background:var(--blue-light);color:#1E40AF;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600">JK</div>
-            <div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Evening tempo ride</div><div style="font-size:11px;color:var(--gray-400)">Yesterday · 6:15 PM · London</div></div>
-            <div class="ac-sport-tag" style="background:var(--blue-light);color:#1E40AF;border:1px solid #93C5FD">🚴 Cycling</div>
-          </div>
-          <div class="ac-stats-row">
-            <div class="ac-stat"><div class="sv">34.8</div><div class="sl">km</div></div>
-            <div class="ac-stat"><div class="sv">1:12:04</div><div class="sl">time</div></div>
-            <div class="ac-stat"><div class="sv">29.1</div><div class="sl">km/h</div></div>
-            <div class="ac-stat"><div class="sv">218</div><div class="sl">avg W</div></div>
-            <div class="ac-stat"><div class="sv">162</div><div class="sl">bpm</div></div>
-          </div>
-          <div class="ac-ai"><div class="ai-icon">AI</div><div class="ac-ai-text"><strong>AI Coach:</strong> 230W for 3×8 blocks is excellent — your FTP is clearly higher than your tested number. Schedule a test next week while you're feeling strong.</div></div>
-        </div>
-        <div class="ac-footer"><button class="ac-action" onclick="toggleLike(this)">👍 11 kudos</button><button class="ac-action" onclick="openModal('comment')">💬 5</button><button class="ac-action" onclick="showToast('Activity link copied!')">🔗</button></div>
-      </div>
-      <div class="activity-card">
-        <div class="ac-body">
-          <div class="ac-head">
-            <div style="width:32px;height:32px;border-radius:50%;background:var(--purple-light);color:#5B21B6;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600">JK</div>
-            <div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Bouldering session — The Arch</div><div style="font-size:11px;color:var(--gray-400)">May 18 · 11:00 AM · Bermondsey</div></div>
-            <div class="ac-sport-tag" style="background:var(--purple-light);color:#5B21B6;border:1px solid #C4B5FD">🧗 Climbing</div>
-          </div>
-          <div class="ac-stats-row">
-            <div class="ac-stat"><div class="sv">V5</div><div class="sl">top grade</div></div>
-            <div class="ac-stat"><div class="sv">2h 10m</div><div class="sl">duration</div></div>
-            <div class="ac-stat"><div class="sv">12</div><div class="sl">problems</div></div>
-          </div>
-          <div class="ac-desc">Great session — sent the V5 crimp project from two weeks ago. Felt solid on slopers. Working a V6 compression problem next.</div>
-        </div>
-        <div class="ac-footer"><button class="ac-action" onclick="toggleLike(this)">👍 4 kudos</button><button class="ac-action" onclick="openModal('comment')">💬 2</button></div>
+
+    <!-- Activities list -->
+    <div id="activities-list" style="background:white">
+      <div style="text-align:center;padding:48px 24px" id="activities-empty">
+        <div style="font-size:36px;margin-bottom:12px">🏃</div>
+        <div style="font-size:15px;font-weight:600;color:var(--gray-900);margin-bottom:6px">No activities yet</div>
+        <div style="font-size:13px;color:var(--gray-500);line-height:1.6">Log your first training session above.<br>Activities appear in your followers' feeds and your coach's dashboard.</div>
       </div>
     </div>
-    <div style="text-align:center;margin-top:16px"><button class="btn btn-ghost" onclick="showToast('Loading more activities…')">Load more activities</button></div>
   </div>
 </div>
 
@@ -1383,6 +1437,364 @@ document.getElementById('htab-overview').classList.add('active');
   refreshHeader();
   showFollowList('following');
 })();
+</script>
+<script>
+// ── ACTIVITY LOGGING ──
+// Functions are global because the form markup calls them via inline onclick.
+// All values rendered into the DOM are HTML-escaped (escAct) since they come
+// from user input, and all fetches are window.BASE-prefixed for the /html vs
+// root base-path split.
+var selectedActivitySport = null;
+var selectedActivityFeeling = null;
+var ACT_BASE = window.BASE || '';
+
+function escAct(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+var activitySportFields = {
+  running: {
+    label: 'Running details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Distance</div><input class="form-input" type="text" id="sf-distance" placeholder="e.g. 10.5 km"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg pace</div><input class="form-input" type="text" id="sf-pace" placeholder="e.g. 4:45/km"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg HR <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-hr" placeholder="e.g. 158 bpm"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Elevation gain <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-elev" placeholder="e.g. 120m"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Cadence <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-cad" placeholder="e.g. 178 spm"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Run type</div><select class="form-select" id="sf-runtype"><option value="">Select…</option><option>Easy / Zone 2</option><option>Tempo</option><option>Interval / Track</option><option>Long run</option><option>Race</option><option>Recovery</option></select></div>
+    </div>`
+  },
+  cycling: {
+    label: 'Cycling details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Distance</div><input class="form-input" type="text" id="sf-distance" placeholder="e.g. 45 km"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg power <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-power" placeholder="e.g. 220W"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg speed</div><input class="form-input" type="text" id="sf-speed" placeholder="e.g. 28 km/h"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Elevation gain <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-elev" placeholder="e.g. 600m"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg HR <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-hr" placeholder="e.g. 145 bpm"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Ride type</div><select class="form-select" id="sf-ridetype"><option value="">Select…</option><option>Zone 2 / Endurance</option><option>Tempo</option><option>Intervals</option><option>Hill climb</option><option>Group ride</option><option>Race</option><option>Recovery</option></select></div>
+    </div>`
+  },
+  climbing: {
+    label: 'Climbing details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Top grade sent</div><select class="form-select" id="sf-grade"><option value="">Select…</option><option>V0-V1</option><option>V2-V3</option><option>V4</option><option>V5</option><option>V6</option><option>V7</option><option>V8+</option><option>5.10</option><option>5.11</option><option>5.12</option><option>5.13+</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Project grade <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><select class="form-select" id="sf-project"><option value="">Select…</option><option>V0-V1</option><option>V2-V3</option><option>V4</option><option>V5</option><option>V6</option><option>V7</option><option>V8+</option><option>5.10</option><option>5.11</option><option>5.12</option><option>5.13+</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Problems completed</div><input class="form-input" type="number" id="sf-problems" placeholder="e.g. 8" min="0"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Style</div><select class="form-select" id="sf-style"><option value="">Select…</option><option>Bouldering</option><option>Sport climbing</option><option>Trad climbing</option><option>Top rope</option><option>Hangboard</option><option>Campus board</option></select></div>
+      <div style="grid-column:span 2"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Location <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-location" placeholder="e.g. The Climbing Hangar, Fontainebleau…"></div>
+    </div>`
+  },
+  swimming: {
+    label: 'Swimming details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Distance</div><input class="form-input" type="text" id="sf-distance" placeholder="e.g. 2,000m"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg pace</div><input class="form-input" type="text" id="sf-pace" placeholder="e.g. 1:45/100m"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Pool / open water</div><select class="form-select" id="sf-pooltype"><option value="">Select…</option><option>Pool (25m)</option><option>Pool (50m)</option><option>Open water</option><option>Lake</option><option>Sea / ocean</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Stroke <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><select class="form-select" id="sf-stroke"><option value="">Select…</option><option>Freestyle</option><option>Breaststroke</option><option>Backstroke</option><option>Butterfly</option><option>Mixed</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg HR <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-hr" placeholder="e.g. 148 bpm"></div>
+    </div>`
+  },
+  football: {
+    label: 'Football details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Session type</div><select class="form-select" id="sf-sessiontype"><option value="">Select…</option><option>Match</option><option>Training session</option><option>5-a-side</option><option>Skills drills</option><option>Fitness training</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Distance covered <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-distance" placeholder="e.g. 9.2 km"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Position <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-position" placeholder="e.g. Centre midfield"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg HR <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-hr" placeholder="e.g. 155 bpm"></div>
+    </div>`
+  },
+  weightlifting: {
+    label: 'Weightlifting details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Session focus</div><select class="form-select" id="sf-focus"><option value="">Select…</option><option>Upper body</option><option>Lower body</option><option>Full body</option><option>Push</option><option>Pull</option><option>Legs</option><option>Olympic lifts</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Total volume <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-volume" placeholder="e.g. 4,200 kg"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Top lift <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-toplift" placeholder="e.g. 120kg squat"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Sets completed <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="number" id="sf-sets" placeholder="e.g. 16" min="0"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">RPE 1–10 <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="number" id="sf-rpe" placeholder="e.g. 8" min="1" max="10"></div>
+    </div>`
+  },
+  hiking: {
+    label: 'Hiking details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Distance</div><input class="form-input" type="text" id="sf-distance" placeholder="e.g. 14 km"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Elevation gain</div><input class="form-input" type="text" id="sf-elev" placeholder="e.g. 650m"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Trail / location <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-trail" placeholder="e.g. Peak District"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Terrain</div><select class="form-select" id="sf-terrain"><option value="">Select…</option><option>Mountain trail</option><option>Forest path</option><option>Coastal path</option><option>Urban walk</option><option>Mixed</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Pack weight <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-pack" placeholder="e.g. 8 kg"></div>
+    </div>`
+  },
+  yoga: {
+    label: 'Yoga details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Style</div><select class="form-select" id="sf-ystyle"><option value="">Select…</option><option>Vinyasa</option><option>Hatha</option><option>Yin</option><option>Ashtanga</option><option>Restorative</option><option>Hot yoga</option><option>Power yoga</option><option>Breathwork</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Format</div><select class="form-select" id="sf-format"><option value="">Select…</option><option>In-person class</option><option>Online class</option><option>Self-practice</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Focus area <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-yfocus" placeholder="e.g. Hip openers, backbends…"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Instructor <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-instructor" placeholder="e.g. Adriene"></div>
+    </div>`
+  }
+};
+
+function toggleActivityForm() {
+  var form = document.getElementById('activity-form');
+  if (!form) return;
+  var isVisible = form.style.display !== 'none';
+  form.style.display = isVisible ? 'none' : 'block';
+  if (!isVisible) {
+    var today = new Date().toISOString().split('T')[0];
+    document.getElementById('act-date').value = today;
+    document.getElementById('act-title').value = '';
+    document.getElementById('act-duration').value = '';
+    document.getElementById('act-notes').value = '';
+    document.querySelectorAll('.act-sport-chip, .act-feeling-chip').forEach(function(c){ c.classList.remove('selected'); });
+    document.getElementById('act-sport-fields').style.display = 'none';
+    document.getElementById('act-error').style.display = 'none';
+    selectedActivitySport = null;
+    selectedActivityFeeling = null;
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function selectActivitySport(btn, sport) {
+  document.querySelectorAll('.act-sport-chip').forEach(function(c){ c.classList.remove('selected'); });
+  btn.classList.add('selected');
+  selectedActivitySport = sport;
+  var config = activitySportFields[sport];
+  if (config) {
+    document.getElementById('act-sport-fields-label').textContent = config.label;
+    document.getElementById('act-sport-fields-body').innerHTML = config.html;
+    document.getElementById('act-sport-fields').style.display = 'block';
+  }
+}
+
+function selectFeeling(btn, feeling) {
+  document.querySelectorAll('.act-feeling-chip').forEach(function(c){ c.classList.remove('selected'); });
+  if (selectedActivityFeeling === feeling) {
+    selectedActivityFeeling = null;
+  } else {
+    btn.classList.add('selected');
+    selectedActivityFeeling = feeling;
+  }
+}
+
+function showActError(msg) {
+  var el = document.getElementById('act-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  setTimeout(function(){ el.style.display = 'none'; }, 4000);
+}
+
+function actVal(id){ var el = document.getElementById(id); return (el && el.value) || null; }
+
+async function saveActivity() {
+  var sport = selectedActivitySport;
+  var title = (actVal('act-title') || '').trim();
+  var date = actVal('act-date');
+  var duration = (actVal('act-duration') || '').trim();
+  var notes = (actVal('act-notes') || '').trim();
+
+  if (!sport) { showActError('Please select a sport.'); return; }
+  if (!title) { showActError('Please enter an activity title.'); return; }
+  if (!duration) { showActError('Please enter the duration.'); return; }
+
+  var btn = document.getElementById('save-activity-btn');
+  btn.textContent = 'Saving…';
+  btn.disabled = true;
+
+  var body = {
+    sport: sport, title: title, duration: duration, notes: notes,
+    date: date ? new Date(date).toISOString() : new Date().toISOString(),
+    feeling: selectedActivityFeeling,
+    distance: actVal('sf-distance'),
+    pace: actVal('sf-pace'),
+    avg_hr: actVal('sf-hr'),
+    elevation: actVal('sf-elev'),
+    cadence: actVal('sf-cad'),
+    run_type: actVal('sf-runtype'),
+    avg_power: actVal('sf-power'),
+    avg_speed: actVal('sf-speed'),
+    ride_type: actVal('sf-ridetype'),
+    top_grade: actVal('sf-grade'),
+    project_grade: actVal('sf-project'),
+    problems_count: actVal('sf-problems'),
+    climbing_style: actVal('sf-style'),
+    climb_location: actVal('sf-location'),
+    swim_pace: actVal('sf-pace'),
+    pool_type: actVal('sf-pooltype'),
+    stroke: actVal('sf-stroke'),
+    session_type: actVal('sf-sessiontype'),
+    position: actVal('sf-position'),
+    session_focus: actVal('sf-focus'),
+    total_volume: actVal('sf-volume'),
+    top_lift: actVal('sf-toplift'),
+    sets_completed: actVal('sf-sets'),
+    rpe: actVal('sf-rpe'),
+    trail: actVal('sf-trail'),
+    terrain: actVal('sf-terrain'),
+    pack_weight: actVal('sf-pack'),
+    yoga_style: actVal('sf-ystyle'),
+    yoga_format: actVal('sf-format'),
+    focus_area: actVal('sf-yfocus'),
+    instructor: actVal('sf-instructor')
+  };
+
+  try {
+    var response = await fetch(ACT_BASE + '/api/activities/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    var result = await response.json();
+    if (result.error) {
+      showActError('Error saving: ' + result.error);
+      btn.textContent = 'Save activity →';
+      btn.disabled = false;
+      return;
+    }
+    showToast('✓ Activity logged! Your followers can see it now.');
+    toggleActivityForm();
+    btn.textContent = 'Save activity →';
+    btn.disabled = false;
+    loadActivities();
+  } catch (err) {
+    showActError('Something went wrong — please try again.');
+    btn.textContent = 'Save activity →';
+    btn.disabled = false;
+  }
+}
+
+async function loadActivities() {
+  var uid = window.ARENAS_DATA && window.ARENAS_DATA.userId;
+  if (!uid) return;
+  try {
+    var response = await fetch(ACT_BASE + '/api/activities/' + uid);
+    var data = await response.json();
+    if (data.error || !data.activities) return;
+    renderActivities(data.activities);
+  } catch (err) {
+    console.log('Could not load activities:', err);
+  }
+}
+
+async function deleteActivity(id, card) {
+  if (!confirm('Delete this activity? This cannot be undone.')) return;
+  try {
+    var response = await fetch(ACT_BASE + '/api/activities/' + id, { method: 'DELETE' });
+    var result = await response.json();
+    if (result.success) {
+      card.style.transition = 'opacity .25s';
+      card.style.opacity = '0';
+      setTimeout(function(){
+        card.remove();
+        var list = document.getElementById('activities-list');
+        if (list && !list.querySelector('.activity-card-item')) {
+          var empty = document.getElementById('activities-empty');
+          if (empty) empty.style.display = 'block';
+        }
+      }, 280);
+      showToast('Activity deleted');
+    } else {
+      showToast('Could not delete — please try again');
+    }
+  } catch (err) {
+    showToast('Could not delete — please try again');
+  }
+}
+
+function actTimeAgo(dateStr) {
+  var seconds = Math.floor((new Date() - new Date(dateStr)) / 1000);
+  if (seconds < 60) return 'Just now';
+  if (seconds < 3600) return Math.floor(seconds/60) + 'm ago';
+  if (seconds < 86400) return Math.floor(seconds/3600) + 'h ago';
+  if (seconds < 604800) return Math.floor(seconds/86400) + 'd ago';
+  return new Date(dateStr).toLocaleDateString();
+}
+
+function renderActivities(activities) {
+  var list = document.getElementById('activities-list');
+  var empty = document.getElementById('activities-empty');
+  if (!list) return;
+  // Clear any previously-rendered cards so reloads don't duplicate.
+  list.querySelectorAll('.activity-card-item').forEach(function(c){ c.remove(); });
+  if (!activities || activities.length === 0) {
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  var sportIcons = { running:'🏃', cycling:'🚴', climbing:'🧗', swimming:'🏊',
+    football:'⚽', weightlifting:'🏋️', hiking:'🥾', yoga:'🧘' };
+  var sportColors = {
+    running:'background:#FFF7ED;color:#9A3412;border-color:#FDBA74',
+    cycling:'background:#EFF6FF;color:#1E40AF;border-color:#93C5FD',
+    climbing:'background:#F5F3FF;color:#5B21B6;border-color:#C4B5FD',
+    swimming:'background:#F0FDFA;color:#134E4A;border-color:#5EEAD4',
+    football:'background:#ECFDF5;color:#166534;border-color:#86EFAC',
+    weightlifting:'background:#FEF9C3;color:#854D0E;border-color:#FDE047',
+    hiking:'background:#FAEEDA;color:#633806;border-color:#EF9F27',
+    yoga:'background:#FBEAF0;color:#72243E;border-color:#F4C0D1'
+  };
+
+  function buildStats(a) {
+    var stats = [];
+    if (a.duration) stats.push('<div class="ac-stat-item">⏱ <strong>' + escAct(a.duration) + '</strong></div>');
+    if (a.distance) stats.push('<div class="ac-stat-item">📍 <strong>' + escAct(a.distance) + '</strong></div>');
+    if (a.pace) stats.push('<div class="ac-stat-item">⚡ <strong>' + escAct(a.pace) + '</strong> pace</div>');
+    if (a.avg_power) stats.push('<div class="ac-stat-item">⚡ <strong>' + escAct(a.avg_power) + '</strong></div>');
+    if (a.avg_hr) stats.push('<div class="ac-stat-item">❤️ <strong>' + escAct(a.avg_hr) + '</strong></div>');
+    if (a.elevation) stats.push('<div class="ac-stat-item">⛰ <strong>' + escAct(a.elevation) + '</strong> elev</div>');
+    if (a.top_grade) stats.push('<div class="ac-stat-item">✓ <strong>' + escAct(a.top_grade) + '</strong> sent</div>');
+    if (a.problems_count) stats.push('<div class="ac-stat-item">🧗 <strong>' + escAct(a.problems_count) + '</strong> problems</div>');
+    if (a.rpe) stats.push('<div class="ac-stat-item">💪 <strong>RPE ' + escAct(a.rpe) + '</strong></div>');
+    return stats.join('');
+  }
+
+  var html = activities.map(function(a) {
+    var icon = sportIcons[a.sport] || '🏃';
+    var colorStyle = sportColors[a.sport] || '';
+    var avBg = colorStyle.split(';')[0];
+    var stats = buildStats(a);
+    var sportLabel = a.sport ? (a.sport.charAt(0).toUpperCase() + a.sport.slice(1)) : 'Activity';
+    var cardId = 'act-card-' + escAct(a.id);
+    return '' +
+      '<div class="activity-card-item" id="' + cardId + '">' +
+        '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">' +
+          '<div style="width:38px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;' + avBg + '">' + icon + '</div>' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:2px">' + escAct(a.title) + '</div>' +
+            '<div style="font-size:11px;color:var(--gray-400)">' + actTimeAgo(a.date || a.created_at) + '</div>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:6px">' +
+            '<span style="font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;border:1px solid;' + colorStyle + '">' + escAct(sportLabel) + '</span>' +
+            '<button onclick="deleteActivity(\'' + escAct(a.id) + '\', document.getElementById(\'' + cardId + '\'))" style="width:26px;height:26px;border-radius:6px;border:var(--border);background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--gray-400);font-size:12px" title="Delete activity">✕</button>' +
+          '</div>' +
+        '</div>' +
+        (stats ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">' + stats + '</div>' : '') +
+        (a.notes ? '<div style="font-size:12px;color:var(--gray-600);line-height:1.6;padding:8px 10px;background:var(--gray-50);border-radius:6px;margin-bottom:8px">' + escAct(a.notes) + '</div>' : '') +
+        (a.ai_insight ? '<div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:6px;padding:8px 11px;font-size:12px;color:#7a5c00;display:flex;gap:8px;align-items:flex-start;margin-bottom:8px"><div style="width:18px;height:18px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:var(--gray-900);flex-shrink:0;margin-top:1px">AI</div><span>' + escAct(a.ai_insight) + '</span></div>' : '') +
+        (a.feeling ? '<div style="font-size:11px;color:var(--gray-500);margin-top:4px">Feeling: ' + escAct(a.feeling) + '</div>' : '') +
+      '</div>';
+  }).join('');
+
+  // Empty-state node stays in the DOM (hidden); render cards after it.
+  if (empty) {
+    empty.insertAdjacentHTML('afterend', html);
+  } else {
+    list.insertAdjacentHTML('beforeend', html);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadActivities);
+
+// Reload activities when the Activities tab is opened.
+var actHtab = document.getElementById('htab-activities');
+if (actHtab) actHtab.addEventListener('click', loadActivities);
+
+// Deep link: /profile#activities opens the Activities tab and the entry form.
+if (window.location.hash === '#activities') {
+  if (typeof setTab === 'function') setTab('activities');
+  setTimeout(function(){ toggleActivityForm(); }, 50);
+}
 </script>
 </body>
 </html>
