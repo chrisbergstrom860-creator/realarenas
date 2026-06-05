@@ -613,6 +613,46 @@ async function buildFeedActivities(limit, currentUserId) {
   return enrichActivities(data);
 }
 
+// Recent "going" RSVPs from people the viewer follows, surfaced in the feed.
+// Names come from auth metadata (no `profiles` table); events are joined in JS
+// rather than via a PostgREST embed so this works regardless of FK metadata.
+async function buildFeedRsvps(currentUserId) {
+  if (!supabaseAdmin || !currentUserId) return [];
+  try {
+    const { data: follows } = await supabaseAdmin
+      .from('follows').select('following_id').eq('follower_id', currentUserId);
+    const followingIds = [...new Set((follows || []).map(f => f.following_id).filter(Boolean))];
+    if (!followingIds.length) return [];
+    const { data: rsvpRows } = await supabaseAdmin
+      .from('event_rsvps')
+      .select('event_id, user_id, status, created_at')
+      .in('user_id', followingIds)
+      .eq('status', 'going')
+      .order('created_at', { ascending: false })
+      .limit(10);
+    if (!rsvpRows || !rsvpRows.length) return [];
+    const eventIds = [...new Set(rsvpRows.map(r => r.event_id).filter(Boolean))];
+    const eventMap = {};
+    if (eventIds.length) {
+      const { data: evs } = await supabaseAdmin
+        .from('events').select('id, title, date, location, sport, event_type').in('id', eventIds);
+      (evs || []).forEach(e => { eventMap[e.id] = e; });
+    }
+    const nameMap = await buildUserDisplayMap(rsvpRows.map(r => r.user_id));
+    return rsvpRows
+      .map(r => ({
+        user_id: r.user_id,
+        created_at: r.created_at || null,
+        author: nameMap[r.user_id] || { name: 'Athlete', handle: 'athlete' },
+        event: eventMap[r.event_id] || null
+      }))
+      .filter(r => r.event);
+  } catch (err) {
+    console.log('Feed RSVP build error:', err.message);
+    return [];
+  }
+}
+
 // Create an activity for the logged-in user, generate an AI insight, and notify
 // the user's followers (best-effort). The full activities schema must exist in
 // Supabase (applied via the SQL editor) — until then inserts return an error.
@@ -1088,7 +1128,8 @@ app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
   try {
     const { posts, followsNobody } = await buildFeedPosts(20, req.user.id);
     const feedActivities = await buildFeedActivities(10, req.user.id);
-    const userData = { profile: displayFromUser(req.user), userId: req.user.id, posts, followsNobody, feedActivities };
+    const followingRsvps = await buildFeedRsvps(req.user.id);
+    const userData = { profile: displayFromUser(req.user), userId: req.user.id, posts, followsNobody, feedActivities, followingRsvps };
     const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), userData);
     res.type('html').send(html);
   } catch (err) {
@@ -1173,7 +1214,277 @@ app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
     res.sendFile(path.join(HTML, 'arenas-athletes.html'));
   }
 });
-app.get(BASE + '/events', (req, res) => res.sendFile(path.join(HTML, 'arenas-events.html')));
+// ── EVENTS API ──
+// Mounted under BASE so the shared proxy routes them here (the separate
+// api-server owns the bare "/api"). Display names come from auth metadata (no
+// `profiles` table); related rows are joined in JS, not via PostgREST embeds.
+app.get(BASE + '/api/events', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ upcomingEvents: [], clubEvents: [], myCreatedEvents: [], myRsvps: [] });
+  try {
+    const userId = req.user.id;
+    const nowIso = new Date().toISOString();
+    const { data: memberships } = await supabaseAdmin
+      .from('memberships').select('club_id').eq('user_id', userId);
+    const clubIds = (memberships || []).map(m => m.club_id).filter(Boolean);
+    const { data: following } = await supabaseAdmin
+      .from('follows').select('following_id').eq('follower_id', userId);
+    const followingIds = (following || []).map(f => f.following_id).filter(Boolean);
+
+    const [upcomingRes, clubRes, createdRes] = await Promise.all([
+      supabaseAdmin.from('events').select('*').eq('visibility', 'public')
+        .gte('date', nowIso).order('date', { ascending: true }).limit(50),
+      clubIds.length
+        ? supabaseAdmin.from('events').select('*').in('club_id', clubIds)
+            .gte('date', nowIso).order('date', { ascending: true })
+        : Promise.resolve({ data: [] }),
+      supabaseAdmin.from('events').select('*').eq('created_by', userId)
+        .order('date', { ascending: true })
+    ]);
+    const upcomingEvents = upcomingRes.data || [];
+    const clubEvents = clubRes.data || [];
+    const myCreatedEvents = createdRes.data || [];
+
+    const allEvents = [...upcomingEvents, ...clubEvents, ...myCreatedEvents];
+    const allEventIds = [...new Set(allEvents.map(e => e.id))];
+
+    let allRsvps = [];
+    if (allEventIds.length) {
+      const { data } = await supabaseAdmin
+        .from('event_rsvps').select('event_id, user_id, status').in('event_id', allEventIds);
+      allRsvps = data || [];
+    }
+
+    // The viewer's own RSVPs, with their events joined in JS.
+    const { data: myRsvpRows } = await supabaseAdmin
+      .from('event_rsvps').select('event_id, status').eq('user_id', userId);
+    const myRsvpEventIds = [...new Set((myRsvpRows || []).map(r => r.event_id).filter(Boolean))];
+    const myRsvpEventMap = {};
+    if (myRsvpEventIds.length) {
+      const { data: evs } = await supabaseAdmin
+        .from('events').select('id, title, date, location, sport').in('id', myRsvpEventIds);
+      (evs || []).forEach(e => { myRsvpEventMap[e.id] = e; });
+    }
+    const myRsvps = (myRsvpRows || [])
+      .map(r => ({ event_id: r.event_id, status: r.status, events: myRsvpEventMap[r.event_id] || null }))
+      .filter(r => r.events);
+
+    // Resolve creator + RSVP author names from auth metadata in one batch.
+    const nameMap = await buildUserDisplayMap([
+      ...allEvents.map(e => e.created_by),
+      ...allRsvps.map(r => r.user_id)
+    ]);
+
+    // Resolve club names for any club-attached events.
+    const eventClubIds = [...new Set(allEvents.map(e => e.club_id).filter(Boolean))];
+    const clubMap = {};
+    if (eventClubIds.length) {
+      const { data: clubsData } = await supabaseAdmin
+        .from('clubs').select('id, name').in('id', eventClubIds);
+      (clubsData || []).forEach(c => { clubMap[c.id] = c; });
+    }
+
+    function enrichEvent(event) {
+      const eventRsvps = allRsvps.filter(r => r.event_id === event.id);
+      const goingCount = eventRsvps.filter(r => r.status === 'going').length;
+      const interestedCount = eventRsvps.filter(r => r.status === 'interested').length;
+      const myRsvp = eventRsvps.find(r => r.user_id === userId);
+      const followersGoing = eventRsvps
+        .filter(r => r.status === 'going' && followingIds.includes(r.user_id))
+        .map(r => ({
+          name: (nameMap[r.user_id] || {}).name || 'Athlete',
+          handle: (nameMap[r.user_id] || {}).handle || 'athlete'
+        }));
+      const creator = nameMap[event.created_by] || {};
+      return {
+        ...event,
+        creatorName: creator.name || 'Athlete',
+        creatorHandle: creator.handle || 'athlete',
+        clubs: (event.club_id && clubMap[event.club_id]) ? { name: clubMap[event.club_id].name } : null,
+        goingCount,
+        interestedCount,
+        myRsvpStatus: myRsvp ? myRsvp.status : null,
+        followersGoing,
+        isOwner: event.created_by === userId
+      };
+    }
+
+    res.json({
+      upcomingEvents: upcomingEvents.map(enrichEvent),
+      clubEvents: clubEvents.map(enrichEvent),
+      myCreatedEvents: myCreatedEvents.map(enrichEvent),
+      myRsvps
+    });
+  } catch (err) {
+    console.log('Events fetch error:', err.message);
+    res.json({ error: err.message });
+  }
+});
+
+// Create an event, auto-RSVP the creator as going, and notify invited followers
+// (restricted to people the caller follows) plus club members if club-posted.
+app.post(BASE + '/api/events/create', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for events' });
+  const b = req.body || {};
+  const { title, sport, event_type, date, location, distance, max_participants,
+    entry_fee, level, description, visibility, club_id, invitees } = b;
+  if (!title || !sport || !date || !location) {
+    return res.json({ error: 'Missing required fields' });
+  }
+  const eventDate = new Date(date);
+  if (isNaN(eventDate.getTime())) return res.json({ error: 'Invalid date' });
+  // If posting to a club, the caller must actually be a member of it — otherwise
+  // anyone could create events in arbitrary clubs and trigger club-wide notifs.
+  if (club_id) {
+    const { data: membership } = await supabaseAdmin
+      .from('memberships').select('club_id')
+      .eq('club_id', club_id).eq('user_id', req.user.id).maybeSingle();
+    if (!membership) return res.json({ error: 'You are not a member of that club' });
+  }
+  const { data: event, error } = await supabaseAdmin
+    .from('events').insert({
+      created_by: req.user.id,
+      club_id: club_id || null,
+      title: String(title).trim(),
+      sport,
+      event_type: event_type || null,
+      date: eventDate.toISOString(),
+      location: String(location).trim(),
+      distance: distance || null,
+      max_participants: max_participants ? parseInt(max_participants) : null,
+      entry_fee: entry_fee || null,
+      level: level || null,
+      description: description || null,
+      visibility: visibility || 'public'
+    }).select().single();
+  if (error) return res.json({ error: error.message });
+  // Auto-RSVP the creator as going (best-effort).
+  await supabaseAdmin.from('event_rsvps').insert({ event_id: event.id, user_id: req.user.id, status: 'going' });
+
+  const actor = displayFromUser(req.user);
+  const dateLabel = eventDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  // Restrict invites to followers (the modal only offers those) and cap the
+  // count, so the endpoint can't spam arbitrary user IDs with notifications.
+  let validInvitees = [];
+  if (Array.isArray(invitees) && invitees.length) {
+    const { data: follows } = await supabaseAdmin
+      .from('follows').select('following_id').eq('follower_id', req.user.id);
+    const followingSet = new Set((follows || []).map(f => f.following_id));
+    validInvitees = [...new Set(invitees)].filter(id => followingSet.has(id)).slice(0, 50);
+  }
+  for (const inviteeId of validInvitees) {
+    await createNotification({
+      userId: inviteeId, type: 'event', title: 'Event invite',
+      body: `${actor.name} invited you to "${event.title}" on ${dateLabel} at ${event.location}`,
+      link: '/events', actorId: req.user.id, entityId: event.id
+    });
+  }
+  if (club_id) {
+    const { data: clubMembers } = await supabaseAdmin
+      .from('memberships').select('user_id').eq('club_id', club_id).neq('user_id', req.user.id);
+    for (const m of (clubMembers || [])) {
+      await createNotification({
+        userId: m.user_id, type: 'club', title: 'New club event',
+        body: `${actor.name} created a new event: "${event.title}" on ${dateLabel}`,
+        link: '/events', actorId: req.user.id, entityId: event.id
+      });
+    }
+  }
+  res.json({ success: true, event });
+});
+
+// RSVP to an event (going / interested / cancelled). Notifies the organiser and
+// the viewer's followers when they mark "going".
+app.post(BASE + '/api/events/:id/rsvp', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for events' });
+  const { status } = req.body || {};
+  if (!['going', 'interested', 'cancelled'].includes(status)) {
+    return res.json({ error: 'Invalid status' });
+  }
+  const { data: existing } = await supabaseAdmin
+    .from('event_rsvps').select('event_id, status')
+    .eq('event_id', req.params.id).eq('user_id', req.user.id).maybeSingle();
+  const wasGoing = !!(existing && existing.status === 'going');
+  if (existing) {
+    if (status === 'cancelled') {
+      await supabaseAdmin.from('event_rsvps').delete()
+        .eq('event_id', req.params.id).eq('user_id', req.user.id);
+    } else {
+      await supabaseAdmin.from('event_rsvps').update({ status })
+        .eq('event_id', req.params.id).eq('user_id', req.user.id);
+    }
+  } else if (status !== 'cancelled') {
+    await supabaseAdmin.from('event_rsvps')
+      .insert({ event_id: req.params.id, user_id: req.user.id, status });
+  }
+  // Only fan out notifications on the transition *into* going, so repeatedly
+  // clicking "Going" can't spam the organiser or the viewer's followers.
+  if (status === 'going' && !wasGoing) {
+    try {
+      const { data: event } = await supabaseAdmin
+        .from('events').select('created_by, title').eq('id', req.params.id).maybeSingle();
+      const actor = displayFromUser(req.user);
+      if (event && event.created_by !== req.user.id) {
+        await createNotification({
+          userId: event.created_by, type: 'event', title: 'New RSVP',
+          body: `${actor.name} is going to your event "${event.title}"`,
+          link: '/events', actorId: req.user.id, entityId: req.params.id
+        });
+      }
+      const { data: followers } = await supabaseAdmin
+        .from('follows').select('follower_id').eq('following_id', req.user.id);
+      for (const f of (followers || [])) {
+        await createNotification({
+          userId: f.follower_id, type: 'event', title: 'Friend going to an event',
+          body: `${actor.name} is going to "${event ? event.title : 'an event'}" — are you in?`,
+          link: '/events', actorId: req.user.id, entityId: req.params.id
+        });
+      }
+    } catch (err) {
+      console.log('RSVP notification error:', err.message);
+    }
+  }
+  res.json({ success: true, status });
+});
+
+// Delete one of the viewer's own events (the created_by filter enforces
+// ownership even though the service role bypasses RLS).
+app.delete(BASE + '/api/events/:id', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for events' });
+  const { error } = await supabaseAdmin
+    .from('events').delete().eq('id', req.params.id).eq('created_by', req.user.id);
+  if (error) return res.json({ error: error.message });
+  res.json({ success: true });
+});
+
+// Events page: inject the viewer's identity, the people they follow, and their
+// clubs so the create modal and rendering can use real data. There is no
+// `profiles` table, so names come from auth metadata.
+app.get(BASE + '/events', requirePageAuth, async (req, res) => {
+  try {
+    if (!supabaseAdmin) return res.sendFile(path.join(HTML, 'arenas-events.html'));
+    const userId = req.user.id;
+    const { data: follows } = await supabaseAdmin
+      .from('follows').select('following_id').eq('follower_id', userId);
+    const followingIds = [...new Set((follows || []).map(f => f.following_id).filter(Boolean))];
+    const nameMap = await buildUserDisplayMap(followingIds);
+    const followingList = followingIds.map(id => ({
+      id,
+      name: (nameMap[id] || {}).name || 'Athlete',
+      handle: (nameMap[id] || {}).handle || 'athlete'
+    }));
+    const { data: memberships } = await supabaseAdmin
+      .from('memberships').select('club_id, clubs (id, name, handle)').eq('user_id', userId);
+    const clubs = (memberships || [])
+      .map(m => Array.isArray(m.clubs) ? m.clubs[0] : m.clubs).filter(Boolean);
+    const eventData = { userId, profile: displayFromUser(req.user), following: followingList, clubs };
+    const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-events.html'), 'utf8'), eventData);
+    res.type('html').send(html);
+  } catch (err) {
+    console.log('Events page error:', err.message);
+    res.sendFile(path.join(HTML, 'arenas-events.html'));
+  }
+});
 app.get(BASE + '/leaderboards', (req, res) => res.sendFile(path.join(HTML, 'arenas-leaderboards.html')));
 app.get(BASE + '/challenges', requirePageAuth, async (req, res) => {
   try {

@@ -483,9 +483,12 @@ button,select,input,textarea{font-family:var(--font)}
       </div>
 
       <!-- SECTION HEADER -->
-      <div class="section-header">
-        <div class="section-title">Upcoming events near you</div>
-        <div class="section-meta" id="section-meta">48 events · London · sorted by date</div>
+      <div class="section-header" style="display:flex;align-items:center;gap:12px">
+        <div>
+          <div class="section-title">Upcoming events near you</div>
+          <div class="section-meta" id="section-meta">Loading events…</div>
+        </div>
+        <button id="create-event-btn" onclick="openCreateEvent()" style="margin-left:auto;padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;background:var(--gray-900);color:#fff;cursor:pointer;white-space:nowrap">+ Create event</button>
       </div>
 
       <!-- EVENTS GRID -->
@@ -1197,6 +1200,351 @@ function showToast(msg){
     var navBadge = document.getElementById("nav-unread-badge");
     if (navBadge) navBadge.textContent = unread > 0 ? unread : "";
   }).catch(function(){});
+})();
+</script>
+<style>
+.evx-input,.evx-select,.evx-textarea{width:100%;padding:9px 11px;border:1px solid var(--gray-200);border-radius:8px;font-size:13px;font-family:inherit;color:var(--gray-900);background:#fff;box-sizing:border-box}
+.evx-input:focus,.evx-select:focus,.evx-textarea:focus{outline:none;border-color:var(--yellow-dark)}
+.evx-textarea{resize:vertical;min-height:64px}
+.evx-label{display:block;font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em}
+.evx-field{margin-bottom:12px}
+.evx-row{display:flex;gap:10px}.evx-row>.evx-field{flex:1}
+.evx-invitee{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;font-size:13px;cursor:pointer}
+.evx-invitee:hover{background:var(--gray-50)}
+.evx-card{border:var(--border);border-radius:12px;padding:16px;margin-bottom:12px;display:flex;gap:14px;background:#fff}
+.evx-rbtn{padding:7px 13px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--gray-200);background:#fff;color:var(--gray-700)}
+.evx-rbtn.on{background:var(--green-light);color:#166534;border-color:#86EFAC}
+.evx-rbtn.int.on{background:var(--yellow-light);color:#7a5c00;border-color:var(--yellow-dark)}
+</style>
+<script>
+// ── Real Events wiring (Supabase-backed) ──
+// Server injects window.ARENAS_DATA = { userId, profile, following[], clubs[] }.
+// All fetches are BASE-prefixed so the shared proxy routes them to this app
+// (the bare "/api" belongs to the separate api-server).
+(function () {
+  var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
+  var DATA = window.ARENAS_DATA || {};
+  var following = DATA.following || [];
+  var clubs = DATA.clubs || [];
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+    });
+  }
+  var SPORT_ICON = { running:'🏃', cycling:'🚴', climbing:'🧗', swimming:'🏊',
+    triathlon:'🔱', football:'⚽', weightlifting:'🏋️', hiking:'🥾', yoga:'🧘', any:'✦' };
+  function sportLabel(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Event'; }
+  function dParts(d) {
+    var dt = new Date(d);
+    if (isNaN(dt.getTime())) return { day:'?', mon:'' };
+    return { day: String(dt.getDate()), mon: dt.toLocaleDateString('en-GB', { month:'short' }) };
+  }
+  function dateLine(d) {
+    var dt = new Date(d);
+    if (isNaN(dt.getTime())) return '';
+    return dt.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'long' }) +
+      ' · ' + dt.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+  }
+
+  function tag(text, style) {
+    return '<span class="tag" style="background:var(--gray-100);color:var(--gray-600);border-color:var(--gray-200);' + (style||'') + '">' + esc(text) + '</span>';
+  }
+
+  function buildEventCard(ev) {
+    var p = dParts(ev.date);
+    var tags = '';
+    tags += '<span class="tag" style="background:var(--gray-900);color:#fff;border-color:var(--gray-900)">' + (SPORT_ICON[ev.sport] || '✦') + ' ' + esc(sportLabel(ev.sport)) + '</span>';
+    if (ev.event_type) tags += tag(ev.event_type);
+    if (ev.distance) tags += tag(ev.distance);
+    tags += (ev.entry_fee ? tag(esc(ev.entry_fee)) : '<span class="tag t-free">Free</span>');
+    if (ev.level) tags += tag(ev.level);
+    if (ev.clubs && ev.clubs.name) tags += tag('🏃 ' + ev.clubs.name);
+
+    var social = '';
+    if (ev.followersGoing && ev.followersGoing.length) {
+      var names = ev.followersGoing.slice(0, 3).map(function (f) { return f.name; }).join(', ');
+      var extra = ev.followersGoing.length > 3 ? ' +' + (ev.followersGoing.length - 3) : '';
+      social = esc(names) + extra + ' going';
+    } else if (ev.goingCount) {
+      social = ev.goingCount + (ev.goingCount === 1 ? ' person going' : ' people going');
+    } else {
+      social = 'No RSVPs yet — be first!';
+    }
+
+    var goingOn = ev.myRsvpStatus === 'going';
+    var intOn = ev.myRsvpStatus === 'interested';
+    var actions;
+    if (ev.isOwner) {
+      actions =
+        '<span style="font-size:11px;font-weight:600;color:#166534;background:var(--green-light);padding:4px 9px;border-radius:20px">Your event</span>' +
+        '<button class="evx-rbtn" style="color:#b91c1c;border-color:#fecaca" onclick="ARENAS_EVENTS.del(\'' + esc(ev.id) + '\')">Delete</button>';
+    } else {
+      actions =
+        '<button class="evx-rbtn' + (goingOn ? ' on' : '') + '" onclick="ARENAS_EVENTS.rsvp(\'' + esc(ev.id) + '\',\'' + (goingOn ? 'cancelled' : 'going') + '\')">' + (goingOn ? '✓ Going' : 'Going') + '</button>' +
+        '<button class="evx-rbtn int' + (intOn ? ' on' : '') + '" onclick="ARENAS_EVENTS.rsvp(\'' + esc(ev.id) + '\',\'' + (intOn ? 'cancelled' : 'interested') + '\')">' + (intOn ? '★ Interested' : 'Interested') + '</button>';
+    }
+
+    return '' +
+      '<div class="evx-card">' +
+        '<div class="ev-date-box" style="background:var(--yellow-light);width:54px;height:54px;flex-shrink:0">' +
+          '<div class="edb-day" style="color:#7a5c00">' + esc(p.day) + '</div>' +
+          '<div class="edb-mon" style="color:#7a5c00">' + esc(p.mon) + '</div>' +
+        '</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div class="ev-title">' + esc(ev.title) + '</div>' +
+          '<div class="ev-loc">📍 ' + esc(ev.location || '') + (ev.date ? ' · ' + esc(dateLine(ev.date)) : '') + '</div>' +
+          (ev.description ? '<div style="font-size:12px;color:var(--gray-500);margin:6px 0">' + esc(ev.description) + '</div>' : '') +
+          '<div class="ev-tags" style="margin-top:8px">' + tags + '</div>' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;flex-wrap:wrap">' +
+            '<span class="ev-social-text" style="color:var(--gray-500)">' + social + '</span>' +
+            '<div style="display:flex;gap:8px">' + actions + '</div>' +
+          '</div>' +
+          '<div style="font-size:11px;color:var(--gray-400);margin-top:6px">Organised by ' + esc(ev.creatorName || 'Athlete') + ' · @' + esc(ev.creatorHandle || 'athlete') + '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function renderEvents(payload) {
+    // Merge the three lists, dedupe by id, sort by date ascending.
+    var byId = {};
+    ['upcomingEvents','clubEvents','myCreatedEvents'].forEach(function (k) {
+      (payload[k] || []).forEach(function (ev) { byId[ev.id] = ev; });
+    });
+    var events = Object.keys(byId).map(function (k) { return byId[k]; })
+      .sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
+
+    var grid = document.getElementById('events-grid');
+    if (grid) {
+      grid.style.gridTemplateColumns = '1fr';
+      if (!events.length) {
+        grid.innerHTML = '<div style="padding:40px 16px;text-align:center;color:var(--gray-400);font-size:14px">No upcoming events yet. Be the first to create one!</div>';
+      } else {
+        grid.innerHTML = events.map(buildEventCard).join('');
+      }
+    }
+    var loadMore = document.getElementById('load-more-section');
+    if (loadMore) loadMore.style.display = 'none';
+    var meta = document.getElementById('section-meta');
+    if (meta) meta.textContent = events.length + (events.length === 1 ? ' event' : ' events') + ' · sorted by date';
+    var fc = document.getElementById('filter-count');
+    if (fc) fc.textContent = events.length + ' events';
+
+    renderMyRsvps(payload.myRsvps || []);
+  }
+
+  function renderMyRsvps(rsvps) {
+    // Target the existing "Your RSVPs" side-card (find by its title text).
+    var card = null;
+    document.querySelectorAll('.side-card').forEach(function (c) {
+      var t = c.querySelector('.sc-title');
+      if (t && /your rsvps/i.test(t.textContent)) card = c;
+    });
+    if (!card) return;
+    // Remove the mock rsvp/stat rows but keep the header.
+    card.querySelectorAll('.rsvp-item, .stats-strip').forEach(function (n) { n.remove(); });
+
+    var going = rsvps.filter(function (r) { return r.status === 'going'; });
+    var interested = rsvps.filter(function (r) { return r.status === 'interested'; });
+
+    var stats = document.createElement('div');
+    stats.className = 'stats-strip';
+    stats.style.borderBottom = 'var(--border)';
+    stats.innerHTML =
+      '<div class="stat-block"><div class="sb-val" style="color:var(--green)">' + going.length + '</div><div class="sb-label">Going</div></div>' +
+      '<div class="stat-block"><div class="sb-val">' + interested.length + '</div><div class="sb-label">Interested</div></div>' +
+      '<div class="stat-block"><div class="sb-val">' + rsvps.length + '</div><div class="sb-label">Total</div></div>';
+    card.appendChild(stats);
+
+    if (!rsvps.length) {
+      var empty = document.createElement('div');
+      empty.style.cssText = 'padding:14px;font-size:12px;color:var(--gray-400);text-align:center';
+      empty.textContent = "You haven't RSVP'd to any events yet.";
+      card.appendChild(empty);
+      return;
+    }
+    rsvps.slice(0, 8).forEach(function (r) {
+      var ev = r.events || {};
+      var p = dParts(ev.date);
+      var item = document.createElement('div');
+      item.className = 'rsvp-item';
+      var statusCls = r.status === 'going' ? 'ris-going' : 'ris-pend';
+      var statusTxt = r.status === 'going' ? '✓ Going' : '★ Interested';
+      item.innerHTML =
+        '<div class="' + (r.status === 'going' ? 'going-dot' : 'pend-dot') + '"></div>' +
+        '<div class="ri-date-box" style="background:var(--gray-100)">' +
+          '<div class="ri-day" style="color:var(--gray-700)">' + esc(p.day) + '</div>' +
+          '<div class="ri-mon" style="color:var(--gray-500)">' + esc(p.mon) + '</div>' +
+        '</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div class="ri-name">' + esc(ev.title || 'Event') + '</div>' +
+          '<div class="ri-sport">' + esc(sportLabel(ev.sport)) + (ev.location ? ' · ' + esc(ev.location) : '') + '</div>' +
+        '</div>' +
+        '<span class="ri-status ' + statusCls + '">' + statusTxt + '</span>';
+      card.appendChild(item);
+    });
+  }
+
+  function loadEvents() {
+    return fetch(B + '/api/events', { credentials:'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data && data.error) { console.log('Events load error:', data.error); return; }
+        renderEvents(data || {});
+      })
+      .catch(function (e) { console.log('Events fetch failed:', e.message); });
+  }
+
+  // Hide mock-only chrome that can't operate on real data (the prototype
+  // filters/view toggles target the removed mock cards; the featured card and
+  // the two static side-cards listed hardcoded fake events).
+  function hideMockChrome() {
+    ['filter-zone','featured-section'].forEach(function (id) {
+      var el = document.getElementById(id); if (el) el.style.display = 'none';
+    });
+    document.querySelectorAll('.side-card').forEach(function (c) {
+      var t = c.querySelector('.sc-title');
+      if (t && /(near you this month|hackney rc events)/i.test(t.textContent)) c.style.display = 'none';
+    });
+  }
+
+  // ── Create event modal ──
+  function openCreateEvent() {
+    var existing = document.getElementById('evx-modal');
+    if (existing) existing.remove();
+    var clubOpts = '<option value="">— Personal event —</option>' +
+      clubs.map(function (c) { return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>'; }).join('');
+    var inviteeRows = following.length
+      ? following.map(function (f) {
+          return '<label class="evx-invitee"><input type="checkbox" value="' + esc(f.id) + '"> ' + esc(f.name) + ' <span style="color:var(--gray-400)">@' + esc(f.handle) + '</span></label>';
+        }).join('')
+      : '<div style="font-size:12px;color:var(--gray-400);padding:6px 8px">Follow people to invite them.</div>';
+
+    var overlay = document.createElement('div');
+    overlay.id = 'evx-modal';
+    overlay.className = 'modal-overlay open';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:500;padding:32px 16px;overflow-y:auto';
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    overlay.innerHTML =
+      '<div style="background:#fff;border-radius:14px;max-width:520px;width:100%;padding:22px" onclick="event.stopPropagation()">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
+          '<div style="font-size:17px;font-weight:700;color:var(--gray-900)">Create an event</div>' +
+          '<div style="cursor:pointer;font-size:20px;color:var(--gray-400)" onclick="document.getElementById(\'evx-modal\').remove()">×</div>' +
+        '</div>' +
+        '<form id="evx-form">' +
+          '<div class="evx-field"><label class="evx-label">Title *</label><input class="evx-input" name="title" required placeholder="e.g. Saturday long run"></div>' +
+          '<div class="evx-row">' +
+            '<div class="evx-field"><label class="evx-label">Sport *</label><select class="evx-select" name="sport" required>' +
+              '<option value="">Select…</option><option value="running">Running</option><option value="cycling">Cycling</option><option value="climbing">Climbing</option><option value="swimming">Swimming</option><option value="triathlon">Triathlon</option><option value="football">Football</option><option value="weightlifting">Weightlifting</option><option value="hiking">Hiking</option><option value="yoga">Yoga</option>' +
+            '</select></div>' +
+            '<div class="evx-field"><label class="evx-label">Type</label><input class="evx-input" name="event_type" placeholder="e.g. 10K, Sportive"></div>' +
+          '</div>' +
+          '<div class="evx-row">' +
+            '<div class="evx-field"><label class="evx-label">Date & time *</label><input class="evx-input" type="datetime-local" name="date" required></div>' +
+            '<div class="evx-field"><label class="evx-label">Location *</label><input class="evx-input" name="location" required placeholder="e.g. Victoria Park, London"></div>' +
+          '</div>' +
+          '<div class="evx-row">' +
+            '<div class="evx-field"><label class="evx-label">Distance</label><input class="evx-input" name="distance" placeholder="e.g. 13.1 mi"></div>' +
+            '<div class="evx-field"><label class="evx-label">Entry fee</label><input class="evx-input" name="entry_fee" placeholder="e.g. £20 (blank = free)"></div>' +
+          '</div>' +
+          '<div class="evx-row">' +
+            '<div class="evx-field"><label class="evx-label">Max participants</label><input class="evx-input" type="number" min="1" name="max_participants" placeholder="Optional"></div>' +
+            '<div class="evx-field"><label class="evx-label">Level</label><input class="evx-input" name="level" placeholder="e.g. All levels"></div>' +
+          '</div>' +
+          '<div class="evx-field"><label class="evx-label">Description</label><textarea class="evx-textarea" name="description" placeholder="Tell people what to expect…"></textarea></div>' +
+          '<div class="evx-row">' +
+            '<div class="evx-field"><label class="evx-label">Club</label><select class="evx-select" name="club_id">' + clubOpts + '</select></div>' +
+            '<div class="evx-field"><label class="evx-label">Visibility</label><select class="evx-select" name="visibility"><option value="public">Public</option><option value="club">Club only</option><option value="private">Private (invite only)</option></select></div>' +
+          '</div>' +
+          '<div class="evx-field"><label class="evx-label">Invite people you follow</label><div id="evx-invitees" style="max-height:140px;overflow-y:auto;border:var(--border);border-radius:8px;padding:4px">' + inviteeRows + '</div></div>' +
+          '<div id="evx-error" style="display:none;color:#b91c1c;font-size:12px;margin-bottom:10px"></div>' +
+          '<button type="submit" id="evx-submit" class="btn btn-yellow btn-full" style="justify-content:center">Create event</button>' +
+        '</form>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    document.getElementById('evx-form').addEventListener('submit', submitCreate);
+  }
+
+  function submitCreate(e) {
+    e.preventDefault();
+    var form = e.target;
+    var btn = document.getElementById('evx-submit');
+    var errBox = document.getElementById('evx-error');
+    errBox.style.display = 'none';
+    var invitees = [].slice.call(document.querySelectorAll('#evx-invitees input:checked')).map(function (i) { return i.value; });
+    var body = {
+      title: form.title.value.trim(),
+      sport: form.sport.value,
+      event_type: form.event_type.value.trim() || null,
+      date: form.date.value,
+      location: form.location.value.trim(),
+      distance: form.distance.value.trim() || null,
+      entry_fee: form.entry_fee.value.trim() || null,
+      max_participants: form.max_participants.value || null,
+      level: form.level.value.trim() || null,
+      description: form.description.value.trim() || null,
+      club_id: form.club_id.value || null,
+      visibility: form.visibility.value,
+      invitees: invitees
+    };
+    if (!body.title || !body.sport || !body.date || !body.location) {
+      errBox.textContent = 'Please fill in title, sport, date and location.';
+      errBox.style.display = 'block';
+      return;
+    }
+    btn.disabled = true; btn.textContent = 'Creating…';
+    fetch(B + '/api/events/create', {
+      method:'POST', credentials:'same-origin',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify(body)
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      if (data && data.error) {
+        errBox.textContent = data.error; errBox.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Create event';
+        return;
+      }
+      var m = document.getElementById('evx-modal'); if (m) m.remove();
+      if (window.showToast) showToast('✓ Event created!');
+      loadEvents();
+    }).catch(function (err) {
+      errBox.textContent = 'Something went wrong: ' + err.message; errBox.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Create event';
+    });
+  }
+
+  function rsvp(eventId, desired) {
+    // Toggle off if the viewer already holds the desired status.
+    fetch(B + '/api/events/' + encodeURIComponent(eventId) + '/rsvp', {
+      method:'POST', credentials:'same-origin',
+      headers:{ 'Content-Type':'application/json' },
+      body: JSON.stringify({ status: desired })
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      if (data && data.error) { if (window.showToast) showToast(data.error); return; }
+      if (window.showToast) {
+        showToast(desired === 'going' ? '✓ You\'re going!'
+          : desired === 'interested' ? '★ Marked interested'
+          : 'RSVP removed');
+      }
+      loadEvents();
+    }).catch(function (e) { console.log('RSVP failed:', e.message); });
+  }
+
+  function del(eventId) {
+    if (!window.confirm('Delete this event? This cannot be undone.')) return;
+    fetch(B + '/api/events/' + encodeURIComponent(eventId), {
+      method:'DELETE', credentials:'same-origin'
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      if (data && data.error) { if (window.showToast) showToast(data.error); return; }
+      if (window.showToast) showToast('Event deleted');
+      loadEvents();
+    }).catch(function (e) { console.log('Delete failed:', e.message); });
+  }
+
+  window.ARENAS_EVENTS = { rsvp: rsvp, del: del };
+  window.openCreateEvent = openCreateEvent;
+
+  hideMockChrome();
+  loadEvents();
 })();
 </script>
 </body>

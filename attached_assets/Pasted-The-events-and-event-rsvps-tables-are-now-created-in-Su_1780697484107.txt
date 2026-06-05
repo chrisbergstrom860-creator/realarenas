@@ -1,0 +1,919 @@
+The events and event_rsvps tables are now created in Supabase. Please build the full Events feature. Here is everything to do:
+1. Add all event API routes to server.js:
+javascript// Get events for the logged in user
+app.get('/api/events', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const userId = req.user.id;
+
+  // Get user's club memberships
+  const { data: memberships } = await supabaseAdmin
+    .from('memberships')
+    .select('club_id')
+    .eq('user_id', userId);
+  const clubIds = (memberships || []).map(m => m.club_id);
+
+  // Get who the user follows
+  const { data: following } = await supabaseAdmin
+    .from('follows')
+    .select('following_id')
+    .eq('follower_id', userId);
+  const followingIds = (following || []).map(f => f.following_id);
+
+  // Get upcoming public events
+  const { data: upcomingEvents } = await supabaseAdmin
+    .from('events')
+    .select('*, profiles:created_by(name, handle)')
+    .eq('visibility', 'public')
+    .gte('date', new Date().toISOString())
+    .order('date', { ascending: true })
+    .limit(50);
+
+  // Get club events
+  const { data: clubEvents } = await supabaseAdmin
+    .from('events')
+    .select('*, profiles:created_by(name, handle), clubs:club_id(name)')
+    .in('club_id', clubIds.length ? clubIds : ['00000000-0000-0000-0000-000000000000'])
+    .gte('date', new Date().toISOString())
+    .order('date', { ascending: true });
+
+  // Get events created by the user
+  const { data: myCreatedEvents } = await supabaseAdmin
+    .from('events')
+    .select('*, profiles:created_by(name, handle)')
+    .eq('created_by', userId)
+    .order('date', { ascending: true });
+
+  // Get all event IDs to fetch RSVPs
+  const allEventIds = [
+    ...(upcomingEvents || []).map(e => e.id),
+    ...(clubEvents || []).map(e => e.id),
+    ...(myCreatedEvents || []).map(e => e.id)
+  ].filter((v, i, a) => a.indexOf(v) === i);
+
+  // Get all RSVPs for these events
+  const { data: allRsvps } = await supabaseAdmin
+    .from('event_rsvps')
+    .select('event_id, user_id, status, profiles:user_id(name, handle)')
+    .in('event_id', allEventIds.length ? allEventIds : ['00000000-0000-0000-0000-000000000000']);
+
+  // Get user's own RSVPs
+  const { data: myRsvps } = await supabaseAdmin
+    .from('event_rsvps')
+    .select('event_id, status, events(id, title, date, location, sport)')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  // Enrich events with RSVP data
+  function enrichEvent(event) {
+    const eventRsvps = (allRsvps || []).filter(r => r.event_id === event.id);
+    const goingCount = eventRsvps.filter(r => r.status === 'going').length;
+    const interestedCount = eventRsvps.filter(r => r.status === 'interested').length;
+    const myRsvp = eventRsvps.find(r => r.user_id === userId);
+
+    // Find followers who are going
+    const followersGoing = eventRsvps.filter(r =>
+      r.status === 'going' && followingIds.includes(r.user_id)
+    );
+
+    return {
+      ...event,
+      goingCount,
+      interestedCount,
+      myRsvpStatus: myRsvp?.status || null,
+      followersGoing: followersGoing.map(r => ({
+        name: r.profiles?.name || 'Athlete',
+        handle: r.profiles?.handle || 'athlete'
+      })),
+      isOwner: event.created_by === userId
+    };
+  }
+
+  res.json({
+    upcomingEvents: (upcomingEvents || []).map(enrichEvent),
+    clubEvents: (clubEvents || []).map(enrichEvent),
+    myCreatedEvents: (myCreatedEvents || []).map(enrichEvent),
+    myRsvps: myRsvps || []
+  });
+});
+
+// Create an event
+app.post('/api/events/create', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const {
+    title, sport, event_type, date, location,
+    distance, max_participants, entry_fee, level,
+    description, visibility, club_id, invitees
+  } = req.body;
+  if (!title || !sport || !date || !location) {
+    return res.json({ error: 'Missing required fields' });
+  }
+  const { data: event, error } = await supabaseAdmin
+    .from('events')
+    .insert({
+      created_by: req.user.id,
+      club_id: club_id || null,
+      title, sport, event_type,
+      date: new Date(date).toISOString(),
+      location, distance,
+      max_participants: max_participants ? parseInt(max_participants) : null,
+      entry_fee, level, description,
+      visibility: visibility || 'public'
+    })
+    .select()
+    .single();
+  if (error) return res.json({ error: error.message });
+  // Auto RSVP the creator as going
+  await supabaseAdmin.from('event_rsvps').insert({
+    event_id: event.id,
+    user_id: req.user.id,
+    status: 'going'
+  });
+  // Get creator profile
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('name')
+    .eq('id', req.user.id)
+    .single();
+  // Send invites to selected followers
+  for (const inviteeId of (invitees || [])) {
+    await createNotification(supabaseAdmin, {
+      userId: inviteeId,
+      type: 'event',
+      title: 'Event invite',
+      body: `${profile?.name || 'Someone'} invited you to "${title}" on ${new Date(date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })} at ${location}`,
+      link: '/events',
+      actorId: req.user.id,
+      entityId: event.id
+    });
+  }
+  // Notify club members if posted to a club
+  if (club_id) {
+    const { data: clubMembers } = await supabaseAdmin
+      .from('memberships')
+      .select('user_id')
+      .eq('club_id', club_id)
+      .neq('user_id', req.user.id);
+    for (const member of (clubMembers || [])) {
+      await createNotification(supabaseAdmin, {
+        userId: member.user_id,
+        type: 'club',
+        title: 'New club event',
+        body: `${profile?.name || 'Your coach'} created a new event: "${title}" on ${new Date(date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}`,
+        link: '/events',
+        actorId: req.user.id,
+        entityId: event.id
+      });
+    }
+  }
+  res.json({ success: true, event });
+});
+
+// RSVP to an event
+app.post('/api/events/:id/rsvp', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const { status } = req.body;
+  if (!['going', 'interested', 'cancelled'].includes(status)) {
+    return res.json({ error: 'Invalid status' });
+  }
+  // Check if already RSVPd
+  const { data: existing } = await supabaseAdmin
+    .from('event_rsvps')
+    .select()
+    .eq('event_id', req.params.id)
+    .eq('user_id', req.user.id)
+    .single();
+  if (existing) {
+    if (status === 'cancelled') {
+      await supabaseAdmin.from('event_rsvps').delete()
+        .eq('event_id', req.params.id)
+        .eq('user_id', req.user.id);
+    } else {
+      await supabaseAdmin.from('event_rsvps').update({ status })
+        .eq('event_id', req.params.id)
+        .eq('user_id', req.user.id);
+    }
+  } else {
+    await supabaseAdmin.from('event_rsvps').insert({
+      event_id: req.params.id,
+      user_id: req.user.id,
+      status
+    });
+  }
+  // Notify event creator when someone RSVPs as going
+  if (status === 'going') {
+    const { data: event } = await supabaseAdmin
+      .from('events')
+      .select('created_by, title')
+      .eq('id', req.params.id)
+      .single();
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('name')
+      .eq('id', req.user.id)
+      .single();
+    if (event && event.created_by !== req.user.id) {
+      await createNotification(supabaseAdmin, {
+        userId: event.created_by,
+        type: 'event',
+        title: 'New RSVP',
+        body: `${profile?.name || 'Someone'} is going to your event "${event.title}"`,
+        link: '/events',
+        actorId: req.user.id,
+        entityId: req.params.id
+      });
+    }
+    // Notify followers that this user is going
+    const { data: followers } = await supabaseAdmin
+      .from('follows')
+      .select('follower_id')
+      .eq('following_id', req.user.id);
+    for (const follower of (followers || [])) {
+      await createNotification(supabaseAdmin, {
+        userId: follower.follower_id,
+        type: 'event',
+        title: 'Friend going to an event',
+        body: `${profile?.name || 'Someone you follow'} is going to "${event?.title}" — are you in?`,
+        link: '/events',
+        actorId: req.user.id,
+        entityId: req.params.id
+      });
+    }
+  }
+  res.json({ success: true, status });
+});
+
+// Delete an event
+app.delete('/api/events/:id', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const { error } = await supabaseAdmin
+    .from('events')
+    .delete()
+    .eq('id', req.params.id)
+    .eq('created_by', req.user.id);
+  if (error) return res.json({ error: error.message });
+  res.json({ success: true });
+});
+2. Update the /events route in server.js to inject real data:
+javascriptapp.get('/events', requireAuth, async (req, res) => {
+  try {
+    const supabaseAdmin = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+    const userId = req.user.id;
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('name, handle, location')
+      .eq('id', userId)
+      .single();
+    const { data: following } = await supabaseAdmin
+      .from('follows')
+      .select('following_id, profiles:following_id(id, name, handle)')
+      .eq('follower_id', userId);
+    const { data: memberships } = await supabaseAdmin
+      .from('memberships')
+      .select('club_id, clubs(id, name, handle)')
+      .eq('user_id', userId);
+    const eventData = {
+      userId,
+      profile: profile || { name: req.user.email, handle: 'athlete' },
+      following: (following || []).map(f => f.profiles).filter(Boolean),
+      clubs: (memberships || []).map(m => m.clubs).filter(Boolean)
+    };
+    const fs = require('fs');
+    let html = fs.readFileSync(path.join(HTML, 'arenas-events.html'), 'utf8');
+    const dataScript = `<script>window.ARENAS_DATA = ${JSON.stringify(eventData)};<\/script>`;
+    html = html.replace('</head>', dataScript + '</head>');
+    res.send(html);
+  } catch (err) {
+    console.log('Events error:', err.message);
+    res.sendFile(path.join(HTML, 'arenas-events.html'));
+  }
+});
+3. Add this complete JavaScript to arenas-events.html before </body>:
+javascript(function() {
+  const data = window.ARENAS_DATA;
+  if (!data) return;
+
+  // Update user initials throughout
+  const name = data.profile?.name || 'Athlete';
+  const initials = name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+  document.querySelectorAll('.user-av').forEach(el => {
+    if (el.textContent.trim() === 'JK') el.textContent = initials;
+  });
+
+  // Sport colors and icons
+  const sportColors = {
+    running: { bg:'#FFF7ED', color:'#9A3412', border:'#FDBA74', icon:'🏃' },
+    cycling: { bg:'#EFF6FF', color:'#1E40AF', border:'#93C5FD', icon:'🚴' },
+    climbing: { bg:'#F5F3FF', color:'#5B21B6', border:'#C4B5FD', icon:'🧗' },
+    swimming: { bg:'#F0FDFA', color:'#134E4A', border:'#5EEAD4', icon:'🏊' },
+    triathlon: { bg:'#FBEAF0', color:'#72243E', border:'#F4C0D1', icon:'🔱' },
+    football: { bg:'#ECFDF5', color:'#166534', border:'#86EFAC', icon:'⚽' },
+    hiking: { bg:'#FAEEDA', color:'#633806', border:'#EF9F27', icon:'🥾' },
+    yoga: { bg:'#FBEAF0', color:'#72243E', border:'#F4C0D1', icon:'🧘' },
+    weightlifting: { bg:'#FEF9C3', color:'#854D0E', border:'#FDE047', icon:'🏋️' }
+  };
+
+  const avColors = [
+    {bg:'#FEF9C3',c:'#854D0E'},{bg:'#FCE7F3',c:'#9D174D'},
+    {bg:'#E0F2FE',c:'#0369A1'},{bg:'#F5F3FF',c:'#5B21B6'},
+    {bg:'#ECFDF5',c:'#065F46'},{bg:'#FAEEDA',c:'#633806'}
+  ];
+
+  function formatDate(dateStr) {
+    const d = new Date(dateStr);
+    return {
+      month: d.toLocaleDateString('en-GB', { month: 'short' }).toUpperCase(),
+      day: d.getDate(),
+      full: d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }),
+      time: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    };
+  }
+
+  function timeUntil(dateStr) {
+    const diff = new Date(dateStr) - new Date();
+    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+    if (days < 0) return 'Past';
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Tomorrow';
+    if (days <= 7) return 'This week';
+    if (days <= 14) return 'Next week';
+    return 'Upcoming';
+  }
+
+  function buildEventCard(event) {
+    const sc = sportColors[event.sport] || sportColors.running;
+    const d = formatDate(event.date);
+    const followerInitials = (event.followersGoing || []).slice(0, 4).map((f, i) => {
+      const av = avColors[i % avColors.length];
+      const ini = f.name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+      return `<div style="width:18px;height:18px;border-radius:50%;background:${av.bg};color:${av.c};border:1.5px solid white;margin-left:${i === 0 ? '0' : '-5px'};display:flex;align-items:center;justify-content:center;font-size:6px;font-weight:500;flex-shrink:0">${ini}</div>`;
+    }).join('');
+    const followerText = event.followersGoing?.length > 0
+      ? `${event.followersGoing[0].name}${event.followersGoing.length > 1 ? ` and ${event.followersGoing.length - 1} other${event.followersGoing.length > 2 ? 's' : ''}` : ''} going`
+      : '';
+    const rsvpStatus = event.myRsvpStatus;
+    const rsvpButtons = rsvpStatus === 'going'
+      ? `<button class="rsvp-confirmed" style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;background:#ECFDF5;color:#166534;border:0.5px solid #86EFAC;cursor:pointer" onclick="cancelRsvp('${event.id}',this)">✓ Going</button>`
+      : rsvpStatus === 'interested'
+      ? `<button class="rsvp-going" style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;background:#FFD21E;color:#111827;border:0.5px solid #E6B800;cursor:pointer" onclick="rsvpEvent('${event.id}','going',this)">I'm going →</button>
+         <button class="rsvp-interested" style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;background:#FFF9E0;color:#633806;border:0.5px solid #fde68a;cursor:pointer" onclick="cancelRsvp('${event.id}',this)">✓ Interested</button>`
+      : `<button class="rsvp-going" style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;background:#FFD21E;color:#111827;border:0.5px solid #E6B800;cursor:pointer" onclick="rsvpEvent('${event.id}','going',this)">I'm going →</button>
+         <button class="rsvp-interested" style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;background:white;color:var(--gray-600);border:var(--border);cursor:pointer" onclick="rsvpEvent('${event.id}','interested',this)">Interested</button>`;
+    return `
+      <div class="event-card-item" id="event-${event.id}" style="background:white;border-bottom:var(--border);padding:14px 16px;cursor:pointer;transition:background .1s" onmouseenter="this.style.background='var(--gray-50)'" onmouseleave="this.style.background='white'">
+        <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:10px">
+          <div style="width:44px;height:48px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;background:${sc.bg};border:0.5px solid ${sc.border}">
+            <div style="font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:${sc.color}">${d.month}</div>
+            <div style="font-size:20px;font-weight:500;font-family:var(--mono);line-height:1;color:${sc.color}">${d.day}</div>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:4px">${event.title}</div>
+            <div style="font-size:11px;color:var(--gray-500);display:flex;align-items:center;gap:5px;margin-bottom:6px;flex-wrap:wrap">
+              <span>📍</span>
+              <span>${event.location}</span>
+              <span>·</span>
+              <span>${d.time}</span>
+            </div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <span style="font-size:10px;font-weight:500;padding:2px 8px;border-radius:20px;background:${sc.bg};color:${sc.color};border:0.5px solid ${sc.border}">${sc.icon} ${event.sport.charAt(0).toUpperCase() + event.sport.slice(1)}</span>
+              ${event.event_type ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:var(--gray-100);color:var(--gray-600);border:var(--border)">${event.event_type}</span>` : ''}
+              ${event.distance ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:var(--gray-100);color:var(--gray-600);border:var(--border)">${event.distance}</span>` : ''}
+              ${event.entry_fee ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:var(--gray-100);color:var(--gray-600);border:var(--border)">${event.entry_fee}</span>` : '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:#EFF6FF;color:#1E40AF;border:0.5px solid #93C5FD">Free</span>'}
+              ${event.clubs?.name ? `<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:#ECFDF5;color:#166534;border:0.5px solid #86EFAC">${event.clubs.name}</span>` : ''}
+              ${event.isOwner ? '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:var(--yellow-light);color:#7a5c00;border:1px solid #fde68a">You created this</span>' : ''}
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+            <div style="font-size:11px;color:var(--gray-500)"><strong style="color:var(--gray-900)">${event.goingCount}</strong> going</div>
+            ${event.level && event.level !== 'All abilities' ? `<div style="font-size:10px;color:var(--gray-400)">${event.level}</div>` : ''}
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div style="display:flex;align-items:center;gap:6px">
+            ${followerInitials ? `<div style="display:flex">${followerInitials}</div>` : ''}
+            ${followerText ? `<span style="font-size:11px;color:var(--gray-500)">${followerText}</span>` : `<span style="font-size:11px;color:var(--gray-400)">${event.goingCount} going</span>`}
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            ${rsvpButtons}
+            ${event.isOwner ? `<button onclick="deleteEvent('${event.id}',this)" style="padding:5px 10px;border-radius:7px;font-size:11px;border:0.5px solid #FECACA;background:var(--red-light);color:#A32D2D;cursor:pointer">Delete</button>` : ''}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // RSVP handler
+  window.rsvpEvent = async function(eventId, status, btn) {
+    btn.textContent = status === 'going' ? 'Going…' : 'Saving…';
+    btn.disabled = true;
+    try {
+      const response = await fetch(`/api/events/${eventId}/rsvp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      const result = await response.json();
+      if (result.error) {
+        showToast('Error: ' + result.error);
+        btn.textContent = status === 'going' ? 'I\'m going →' : 'Interested';
+        btn.disabled = false;
+        return;
+      }
+      if (status === 'going') {
+        const footer = btn.closest('[style*="display:flex"]');
+        if (footer) {
+          const rsvpArea = footer.querySelector('[style*="gap:6px"]:last-child') || footer;
+          btn.outerHTML = `<button class="rsvp-confirmed" style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;background:#ECFDF5;color:#166534;border:0.5px solid #86EFAC;cursor:pointer">✓ Going</button>`;
+        }
+        showToast('✓ You\'re going! Your followers have been notified.');
+      } else {
+        btn.style.background = '#FFF9E0';
+        btn.style.color = '#633806';
+        btn.style.borderColor = '#fde68a';
+        btn.textContent = '✓ Interested';
+        btn.disabled = false;
+        showToast('Marked as interested');
+      }
+      // Update going count
+      const card = document.getElementById('event-' + eventId);
+      if (card) {
+        const countEl = card.querySelector('[style*="gray-900"] strong');
+        if (countEl && status === 'going') {
+          countEl.textContent = parseInt(countEl.textContent) + 1;
+        }
+      }
+    } catch (err) {
+      showToast('Something went wrong — please try again');
+      btn.textContent = status === 'going' ? 'I\'m going →' : 'Interested';
+      btn.disabled = false;
+    }
+  };
+
+  // Cancel RSVP
+  window.cancelRsvp = async function(eventId, btn) {
+    if (!confirm('Cancel your RSVP for this event?')) return;
+    try {
+      await fetch(`/api/events/${eventId}/rsvp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'cancelled' })
+      });
+      const card = document.getElementById('event-' + eventId);
+      if (card) {
+        const rsvpBtns = card.querySelectorAll('[onclick*="rsvpEvent"],[onclick*="cancelRsvp"]');
+        const area = btn.parentElement;
+        if (area) area.innerHTML = `
+          <button style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;background:#FFD21E;color:#111827;border:0.5px solid #E6B800;cursor:pointer" onclick="rsvpEvent('${eventId}','going',this)">I'm going →</button>
+          <button style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;background:white;color:var(--gray-600);border:var(--border);cursor:pointer" onclick="rsvpEvent('${eventId}','interested',this)">Interested</button>`;
+      }
+      showToast('RSVP cancelled');
+    } catch (err) {
+      showToast('Something went wrong — please try again');
+    }
+  };
+
+  // Delete event
+  window.deleteEvent = async function(eventId, btn) {
+    if (!confirm('Delete this event? This cannot be undone.')) return;
+    try {
+      await fetch(`/api/events/${eventId}`, { method: 'DELETE' });
+      const card = document.getElementById('event-' + eventId);
+      if (card) {
+        card.style.transition = 'opacity .25s';
+        card.style.opacity = '0';
+        setTimeout(() => card.remove(), 250);
+      }
+      showToast('Event deleted');
+    } catch (err) {
+      showToast('Something went wrong');
+    }
+  };
+
+  // Load and render events
+  async function loadEvents() {
+    try {
+      const response = await fetch('/api/events');
+      const result = await response.json();
+      if (result.error) return;
+      renderUpcoming(result.upcomingEvents || []);
+      renderMyRsvps(result.myRsvps || []);
+      renderClubEvents(result.clubEvents || []);
+      renderMyCreated(result.myCreatedEvents || []);
+    } catch (err) {
+      console.log('Could not load events:', err);
+    }
+  }
+
+  function groupByTime(events) {
+    const groups = {};
+    events.forEach(e => {
+      const label = timeUntil(e.date);
+      if (!groups[label]) groups[label] = [];
+      groups[label].push(e);
+    });
+    return groups;
+  }
+
+  function renderUpcoming(events) {
+    // Find the main events container — look for the feed/list area
+    const container = document.querySelector('.events-list, #events-list, .feed-items, #feed-items') ||
+      findMainEventsContainer();
+    if (!container) return;
+    if (events.length === 0) {
+      container.innerHTML = `
+        <div style="text-align:center;padding:48px 24px;background:white">
+          <div style="font-size:36px;margin-bottom:12px">📅</div>
+          <div style="font-size:15px;font-weight:600;color:var(--gray-900);margin-bottom:6px">No upcoming events near you</div>
+          <div style="font-size:13px;color:var(--gray-500);line-height:1.6">Change your location or create the first event in your area.</div>
+        </div>`;
+      return;
+    }
+    const groups = groupByTime(events);
+    let html = '';
+    ['Today','Tomorrow','This week','Next week','Upcoming'].forEach(label => {
+      if (groups[label]?.length > 0) {
+        html += `<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-400);padding:12px 16px 6px;background:var(--gray-50);border-bottom:var(--border)">${label} · ${groups[label].length} event${groups[label].length !== 1 ? 's' : ''}</div>`;
+        html += groups[label].map(e => buildEventCard(e)).join('');
+      }
+    });
+    container.innerHTML = html;
+  }
+
+  function renderMyRsvps(rsvps) {
+    // Find My RSVPs sidebar section
+    const container = document.querySelector('.my-rsvps, #my-rsvps, .rsvp-sidebar');
+    if (!container || rsvps.length === 0) return;
+    const upcoming = rsvps.filter(r => r.events && new Date(r.events.date) >= new Date()).slice(0, 5);
+    if (upcoming.length === 0) return;
+    const sportIcons = { running:'🏃', cycling:'🚴', climbing:'🧗', swimming:'🏊', triathlon:'🔱', football:'⚽', hiking:'🥾', yoga:'🧘' };
+    const sportBgs = { running:'#FFF7ED', cycling:'#EFF6FF', climbing:'#F5F3FF', swimming:'#F0FDFA', triathlon:'#FBEAF0', football:'#ECFDF5', hiking:'#FAEEDA', yoga:'#FBEAF0' };
+    const sportColors2 = { running:'#9A3412', cycling:'#1E40AF', climbing:'#5B21B6', swimming:'#134E4A', triathlon:'#72243E', football:'#166534', hiking:'#633806', yoga:'#72243E' };
+    container.innerHTML = upcoming.map(rsvp => {
+      if (!rsvp.events) return '';
+      const d = formatDate(rsvp.events.date);
+      const bg = sportBgs[rsvp.events.sport] || '#F3F4F6';
+      const col = sportColors2[rsvp.events.sport] || '#374151';
+      const statusStyle = rsvp.status === 'going'
+        ? 'background:#ECFDF5;color:#166534;border:0.5px solid #86EFAC'
+        : 'background:#FFF9E0;color:#633806;border:0.5px solid #fde68a';
+      const statusText = rsvp.status === 'going' ? 'Going ✓' : 'Interested';
+      return `
+        <div style="display:flex;gap:9px;align-items:flex-start;padding:9px 14px;border-bottom:var(--border);cursor:pointer;transition:background .1s" onmouseenter="this.style.background='var(--gray-50)'" onmouseleave="this.style.background=''">
+          <div style="width:32px;height:36px;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;background:${bg}">
+            <div style="font-size:8px;font-weight:500;text-transform:uppercase;color:${col}">${d.month}</div>
+            <div style="font-size:14px;font-weight:500;font-family:var(--mono);line-height:1;color:${col}">${d.day}</div>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:600;color:var(--gray-900);margin-bottom:2px">${rsvp.events.title}</div>
+            <div style="font-size:10px;color:var(--gray-400)">${d.time} · ${rsvp.events.location}</div>
+          </div>
+          <div style="font-size:10px;font-weight:500;padding:2px 7px;border-radius:10px;flex-shrink:0;margin-top:2px;${statusStyle}">${statusText}</div>
+        </div>`;
+    }).join('');
+  }
+
+  function renderClubEvents(events) {
+    // Find club events tab content
+    // Will be wired based on actual tab structure in the HTML
+  }
+
+  function renderMyCreated(events) {
+    // Find created by me tab content
+    // Will be wired based on actual tab structure in the HTML
+  }
+
+  function findMainEventsContainer() {
+    return document.querySelector('main, .main-content, .events-content, #events-content');
+  }
+
+  // Create event form wiring
+  window.openCreateEvent = function() {
+    const overlay = document.createElement('div');
+    overlay.id = 'create-event-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto';
+    overlay.innerHTML = buildCreateModal();
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+    // Set default date to tomorrow
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const dateEl = document.getElementById('ev-date');
+    if (dateEl) dateEl.value = tomorrow.toISOString().split('T')[0];
+  };
+
+  function buildCreateModal() {
+    const clubOptions = (data.clubs || []).map(c =>
+      `<option value="${c.id}">${c.name}</option>`
+    ).join('');
+    const followingOptions = (data.following || []).map(f =>
+      `<option value="${f.id}">${f.name} (@${f.handle})</option>`
+    ).join('');
+    return `
+      <div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:580px;overflow:hidden;box-shadow:var(--shadow-lg)">
+        <div style="padding:16px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700;color:var(--gray-900)">Create an event</div>
+          <button onclick="document.getElementById('create-event-overlay').remove()" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>
+        </div>
+        <div style="padding:18px;max-height:70vh;overflow-y:auto">
+          <div id="ev-error" style="display:none;background:var(--red-light);border:1px solid #FECACA;border-radius:8px;padding:10px 14px;font-size:13px;color:#A32D2D;margin-bottom:12px"></div>
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Event title *</div>
+            <input class="form-input" type="text" id="ev-title" placeholder="e.g. Saturday Morning Group Run, Summer Sportive…">
+          </div>
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:8px">Sport *</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap" id="ev-sports">
+              <button type="button" class="ev-sport-chip selected" data-sport="running" onclick="selectEvSport(this)">🏃 Running</button>
+              <button type="button" class="ev-sport-chip" data-sport="cycling" onclick="selectEvSport(this)">🚴 Cycling</button>
+              <button type="button" class="ev-sport-chip" data-sport="climbing" onclick="selectEvSport(this)">🧗 Climbing</button>
+              <button type="button" class="ev-sport-chip" data-sport="swimming" onclick="selectEvSport(this)">🏊 Swimming</button>
+              <button type="button" class="ev-sport-chip" data-sport="triathlon" onclick="selectEvSport(this)">🔱 Triathlon</button>
+              <button type="button" class="ev-sport-chip" data-sport="football" onclick="selectEvSport(this)">⚽ Football</button>
+              <button type="button" class="ev-sport-chip" data-sport="hiking" onclick="selectEvSport(this)">🥾 Hiking</button>
+              <button type="button" class="ev-sport-chip" data-sport="yoga" onclick="selectEvSport(this)">🧘 Yoga</button>
+              <button type="button" class="ev-sport-chip" data-sport="weightlifting" onclick="selectEvSport(this)">🏋️ Weights</button>
+            </div>
+          </div>
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:8px">Event type</div>
+            <div style="display:flex;gap:5px;flex-wrap:wrap" id="ev-types">
+              <button type="button" class="ev-type-chip" onclick="selectEvType(this)">Race</button>
+              <button type="button" class="ev-type-chip selected" onclick="selectEvType(this)">Group training</button>
+              <button type="button" class="ev-type-chip" onclick="selectEvType(this)">Social run/ride</button>
+              <button type="button" class="ev-type-chip" onclick="selectEvType(this)">Track session</button>
+              <button type="button" class="ev-type-chip" onclick="selectEvType(this)">Sportive</button>
+              <button type="button" class="ev-type-chip" onclick="selectEvType(this)">Climbing session</button>
+              <button type="button" class="ev-type-chip" onclick="selectEvType(this)">Open water swim</button>
+              <button type="button" class="ev-type-chip" onclick="selectEvType(this)">Other</button>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Date *</div>
+              <input class="form-input" type="date" id="ev-date">
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Start time *</div>
+              <input class="form-input" type="time" id="ev-time" value="08:00">
+            </div>
+          </div>
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Location *</div>
+            <input class="form-input" type="text" id="ev-location" placeholder="e.g. London Fields, Hackney or full address…">
+            <div style="font-size:10px;color:var(--gray-400);margin-top:3px">Used to show distance from each attendee</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Distance <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div>
+              <input class="form-input" type="text" id="ev-distance" placeholder="e.g. 10km, 80mi, V4+…">
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Max participants <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div>
+              <input class="form-input" type="number" id="ev-max" placeholder="Unlimited" min="1">
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Entry fee <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div>
+              <input class="form-input" type="text" id="ev-fee" placeholder="e.g. £15 or leave blank if free">
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Level</div>
+              <select class="form-select" id="ev-level">
+                <option value="All abilities">All abilities</option>
+                <option>Beginner friendly</option>
+                <option>Intermediate</option>
+                <option>Advanced</option>
+                <option>Elite / competitive</option>
+              </select>
+            </div>
+          </div>
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Description <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div>
+            <textarea class="form-textarea" id="ev-desc" placeholder="Route details, pace groups, what to bring, meeting point instructions…" style="min-height:72px"></textarea>
+          </div>
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:8px">Visibility *</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px" id="ev-visibility">
+              <div class="ev-vis-opt" data-vis="private" onclick="selectEvVis(this)" style="border:var(--border);border-radius:8px;padding:10px;cursor:pointer;text-align:center">
+                <div style="font-size:16px;margin-bottom:4px">🔒</div>
+                <div style="font-size:12px;font-weight:600;color:var(--gray-900)">Private</div>
+                <div style="font-size:10px;color:var(--gray-400)">Invite only</div>
+              </div>
+              <div class="ev-vis-opt selected" data-vis="public" onclick="selectEvVis(this)" style="border:1px solid var(--yellow-dark);background:var(--yellow-light);border-radius:8px;padding:10px;cursor:pointer;text-align:center">
+                <div style="font-size:16px;margin-bottom:4px">🌍</div>
+                <div style="font-size:12px;font-weight:600;color:#7a5c00">Public</div>
+                <div style="font-size:10px;color:#7a5c00">Anyone can see</div>
+              </div>
+              <div class="ev-vis-opt" data-vis="club" onclick="selectEvVis(this)" style="border:var(--border);border-radius:8px;padding:10px;cursor:pointer;text-align:center">
+                <div style="font-size:16px;margin-bottom:4px">🏃</div>
+                <div style="font-size:12px;font-weight:600;color:var(--gray-900)">Club only</div>
+                <div style="font-size:10px;color:var(--gray-400)">Club members</div>
+              </div>
+            </div>
+          </div>
+          ${clubOptions ? `
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Post to club <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div>
+            <select class="form-select" id="ev-club">
+              <option value="">Don't post to a club</option>
+              ${clubOptions}
+            </select>
+            <div style="font-size:10px;color:var(--gray-400);margin-top:3px">Club members will be notified and see this in their Club Events tab</div>
+          </div>` : ''}
+          ${followingOptions ? `
+          <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Invite followers <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div>
+            <select class="form-select" id="ev-invitees" multiple style="min-height:80px">
+              ${followingOptions}
+            </select>
+            <div style="font-size:10px;color:var(--gray-400);margin-top:3px">Hold Ctrl/Cmd to select multiple · They'll receive an invitation notification</div>
+          </div>` : ''}
+        </div>
+        <div style="padding:14px 18px;border-top:var(--border);background:var(--gray-50);display:flex;gap:8px;align-items:center">
+          <button onclick="document.getElementById('create-event-overlay').remove()" style="padding:8px 14px;border:var(--border);border-radius:7px;font-size:13px;background:white;color:var(--gray-600);cursor:pointer">Cancel</button>
+          <div style="font-size:11px;color:var(--gray-400)">RSVPs tracked automatically</div>
+          <button onclick="submitCreateEvent()" style="padding:8px 18px;border:none;border-radius:7px;font-size:13px;font-weight:600;background:var(--gray-900);color:white;cursor:pointer;margin-left:auto">Create event →</button>
+        </div>
+      </div>`;
+  }
+
+  window.selectEvSport = function(btn) {
+    document.querySelectorAll('.ev-sport-chip').forEach(c => {
+      c.classList.remove('selected');
+      c.style.background='white'; c.style.borderColor='var(--gray-200)'; c.style.color='var(--gray-600)';
+    });
+    btn.classList.add('selected');
+    btn.style.background='var(--yellow-light)'; btn.style.borderColor='#fde68a'; btn.style.color='#7a5c00';
+  };
+
+  window.selectEvType = function(btn) {
+    document.querySelectorAll('.ev-type-chip').forEach(c => {
+      c.classList.remove('selected');
+      c.style.background='white'; c.style.borderColor='var(--gray-200)'; c.style.color='var(--gray-600)';
+    });
+    btn.classList.add('selected');
+    btn.style.background='var(--yellow-light)'; btn.style.borderColor='#fde68a'; btn.style.color='#7a5c00';
+  };
+
+  window.selectEvVis = function(el) {
+    document.querySelectorAll('.ev-vis-opt').forEach(v => {
+      v.classList.remove('selected');
+      v.style.background='white'; v.style.borderColor='var(--gray-200)';
+      const label = v.querySelector('div:nth-child(2)');
+      const sub = v.querySelector('div:nth-child(3)');
+      if (label) label.style.color='var(--gray-900)';
+      if (sub) sub.style.color='var(--gray-400)';
+    });
+    el.classList.add('selected');
+    el.style.background='var(--yellow-light)'; el.style.borderColor='var(--yellow-dark)';
+  };
+
+  window.submitCreateEvent = async function() {
+    const title = document.getElementById('ev-title')?.value?.trim();
+    const sport = document.querySelector('.ev-sport-chip.selected')?.dataset?.sport;
+    const event_type = document.querySelector('.ev-type-chip.selected')?.textContent?.trim();
+    const date = document.getElementById('ev-date')?.value;
+    const time = document.getElementById('ev-time')?.value || '08:00';
+    const location = document.getElementById('ev-location')?.value?.trim();
+    const distance = document.getElementById('ev-distance')?.value?.trim();
+    const max_participants = document.getElementById('ev-max')?.value;
+    const entry_fee = document.getElementById('ev-fee')?.value?.trim();
+    const level = document.getElementById('ev-level')?.value;
+    const description = document.getElementById('ev-desc')?.value?.trim();
+    const visibility = document.querySelector('.ev-vis-opt.selected')?.dataset?.vis || 'public';
+    const club_id = document.getElementById('ev-club')?.value || null;
+    const inviteSelect = document.getElementById('ev-invitees');
+    const invitees = inviteSelect ? [...inviteSelect.selectedOptions].map(o => o.value) : [];
+    const errorEl = document.getElementById('ev-error');
+    if (!title) { errorEl.textContent='Please enter an event title.'; errorEl.style.display='block'; return; }
+    if (!sport) { errorEl.textContent='Please select a sport.'; errorEl.style.display='block'; return; }
+    if (!date) { errorEl.textContent='Please select a date.'; errorEl.style.display='block'; return; }
+    if (!location) { errorEl.textContent='Please enter a location.'; errorEl.style.display='block'; return; }
+    const submitBtn = document.querySelector('#create-event-overlay button:last-child');
+    if (submitBtn) { submitBtn.textContent='Creating…'; submitBtn.disabled=true; }
+    try {
+      const response = await fetch('/api/events/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title, sport, event_type,
+          date: new Date(date + 'T' + time).toISOString(),
+          location, distance, max_participants,
+          entry_fee: entry_fee || null,
+          level, description, visibility,
+          club_id: club_id || null,
+          invitees
+        })
+      });
+      const result = await response.json();
+      if (result.error) {
+        errorEl.textContent='Error: '+result.error; errorEl.style.display='block';
+        if (submitBtn) { submitBtn.textContent='Create event →'; submitBtn.disabled=false; }
+        return;
+      }
+      document.getElementById('create-event-overlay')?.remove();
+      showToast('✓ Event created! Invites sent to selected followers.');
+      setTimeout(() => loadEvents(), 500);
+    } catch (err) {
+      errorEl.textContent='Something went wrong — please try again.'; errorEl.style.display='block';
+      if (submitBtn) { submitBtn.textContent='Create event →'; submitBtn.disabled=false; }
+    }
+  };
+
+  // Wire Create event button
+  const createEventBtn = [...document.querySelectorAll('button, .btn, [onclick]')]
+    .find(b => b.textContent?.includes('Create event') || b.getAttribute('onclick')?.includes('createEvent'));
+  if (createEventBtn) createEventBtn.onclick = openCreateEvent;
+
+  // Location search wiring
+  const locationBar = document.querySelector('.location-bar, [onclick*="location"], [data-location]');
+
+  // CSS for sport/type chips in create modal
+  const style = document.createElement('style');
+  style.textContent = `
+    .ev-sport-chip, .ev-type-chip {
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      border: var(--border);
+      background: white;
+      color: var(--gray-600);
+      cursor: pointer;
+      transition: all .12s;
+    }
+    .ev-sport-chip.selected, .ev-type-chip.selected {
+      background: var(--yellow-light);
+      border-color: #fde68a;
+      color: #7a5c00;
+    }
+  `;
+  document.head.appendChild(style);
+
+  // Load events on page open
+  loadEvents();
+})();
+4. Add the Log Activity sidebar nav link for Events page too — in arenas-events.html find the sidebar nav and make sure the Events nav item is marked as active.
+5. Update the feed to show RSVP activity — when someone RSVPs as going to an event their followers should see a card in the feed. Update the /feed route to also fetch recent RSVPs from followed users:
+javascript// Get recent RSVPs from followed users for the feed
+const { data: followingRsvps } = await supabaseAdmin
+  .from('event_rsvps')
+  .select('*, events(id, title, date, location, sport, event_type), profiles:user_id(name, handle)')
+  .in('user_id', followingIds.length ? followingIds : ['00000000-0000-0000-0000-000000000000'])
+  .eq('status', 'going')
+  .order('created_at', { ascending: false })
+  .limit(10);
+
+userData.followingRsvps = followingRsvps || [];
+Then add this to the feed rendering in arenas-feed.html to show when someone you follow RSVPs to an event:
+javascript// Render RSVP activity cards in feed
+if (data.followingRsvps && data.followingRsvps.length > 0) {
+  const rsvpCardsHTML = data.followingRsvps.map(rsvp => {
+    if (!rsvp.events) return '';
+    const initials = (rsvp.profiles?.name || 'A').split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+    const isOwn = rsvp.user_id === data.userId;
+    const d = new Date(rsvp.events.date);
+    const dateStr = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    const timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    return `
+      <div class="feed-item-wrap">
+        <div class="post-note-card">
+          <div class="pn-head">
+            <div class="pn-av" style="background:${isOwn ? '#FFD21E' : '#F3F4F6'};color:${isOwn ? '#111827' : '#374151'}">${initials}</div>
+            <div>
+              <div class="pn-name">${rsvp.profiles?.name || 'Athlete'} is going to an event${isOwn ? ' <span style="font-size:11px;color:#9CA3AF;font-weight:400">(you)</span>' : ''}</div>
+              <div class="pn-meta">@${rsvp.profiles?.handle || 'athlete'}</div>
+            </div>
+            <span style="margin-left:auto;font-size:11px;padding:2px 9px;border-radius:20px;background:#EFF6FF;color:#1E40AF;border:1px solid #93C5FD">📅 Event</span>
+          </div>
+          <div style="background:var(--gray-50);border:var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">
+            <div style="font-size:13px;font-weight:600;color:var(--gray-900);margin-bottom:4px">${rsvp.events.title}</div>
+            <div style="font-size:12px;color:var(--gray-500)">📍 ${rsvp.events.location} · ${dateStr} at ${timeStr}</div>
+          </div>
+          <div class="pn-footer">
+            <button class="pn-action" onclick="window.location.href='/events'">📅 View event</button>
+            <button class="pn-action" onclick="window.location.href='/events'">I'm going too →</button>
+            <span style="margin-left:auto;font-size:11px;color:#9CA3AF">RSVP activity</span>
+          </div>
+        </div>
+      </div>`;
+  }).filter(Boolean).join('');
+  if (feedContainer && rsvpCardsHTML) {
+    feedContainer.insertAdjacentHTML('afterbegin', rsvpCardsHTML);
+  }
+}
+6. Wait for checkpoint then commit and push to GitHub main immediately.
