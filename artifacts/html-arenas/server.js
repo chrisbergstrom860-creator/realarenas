@@ -609,7 +609,83 @@ app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
     res.sendFile(path.join(HTML, 'arenas-feed.html'));
   }
 });
-app.get(BASE + '/athletes', (req, res) => res.sendFile(path.join(HTML, 'arenas-athletes.html')));
+// Athletes directory. Lists real signed-up users (resolved from auth metadata,
+// since this project has no usable `profiles` table) with follower/post counts
+// and the viewer's follow status, so the page shows the live community instead
+// of the hardcoded demo athletes.
+app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
+  let athleteData = {
+    athletes: [],
+    myProfile: displayFromUser(req.user),
+    userId: req.user.id,
+    followingIds: []
+  };
+  try {
+    if (supabaseAdmin) {
+      // Pull all users via the admin API and drop the viewer themselves.
+      const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 100 });
+      const others = ((list && list.users) || [])
+        .filter(u => u.id !== req.user.id)
+        .slice(0, 50);
+      const athleteIds = others.map(u => u.id);
+
+      // Who the viewer already follows.
+      const { data: following } = await supabaseAdmin
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', req.user.id);
+      const followingIds = (following || []).map(f => f.following_id).filter(Boolean);
+
+      // Post and follower counts for the listed athletes (one query each).
+      let postRows = [];
+      let followerRows = [];
+      if (athleteIds.length) {
+        const [pc, fc] = await Promise.all([
+          supabaseAdmin.from('posts').select('user_id').in('user_id', athleteIds),
+          supabaseAdmin.from('follows').select('following_id').in('following_id', athleteIds)
+        ]);
+        postRows = pc.data || [];
+        followerRows = fc.data || [];
+      }
+
+      const athletes = others.map(u => {
+        const meta = u.user_metadata || {};
+        const disp = displayFromUser(u);
+        const initials = (disp.name || 'A')
+          .split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+        return {
+          id: u.id,
+          name: disp.name,
+          handle: disp.handle,
+          bio: meta.bio || null,
+          location: meta.location || null,
+          sports: Array.isArray(meta.sports) ? meta.sports : [],
+          level: meta.level || null,
+          initials,
+          postCount: postRows.filter(p => p.user_id === u.id).length,
+          followerCount: followerRows.filter(f => f.following_id === u.id).length,
+          isFollowing: followingIds.includes(u.id)
+        };
+      });
+
+      athleteData = {
+        athletes,
+        myProfile: displayFromUser(req.user),
+        userId: req.user.id,
+        followingIds
+      };
+    }
+  } catch (err) {
+    console.log('Athletes data error:', err.message);
+  }
+  try {
+    const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-athletes.html'), 'utf8'), athleteData);
+    res.type('html').send(html);
+  } catch (err) {
+    console.log('Athletes render error:', err.message);
+    res.sendFile(path.join(HTML, 'arenas-athletes.html'));
+  }
+});
 app.get(BASE + '/events', (req, res) => res.sendFile(path.join(HTML, 'arenas-events.html')));
 app.get(BASE + '/leaderboards', (req, res) => res.sendFile(path.join(HTML, 'arenas-leaderboards.html')));
 app.get(BASE + '/challenges', (req, res) => res.sendFile(path.join(HTML, 'arenas-challenges.html')));

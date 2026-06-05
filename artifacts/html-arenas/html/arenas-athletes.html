@@ -1210,12 +1210,14 @@ function setView(type) {
   if (type === 'grid') {
     grid.className = 'athlete-grid grid-2';
     document.querySelectorAll('.athlete-card').forEach(c => {
-      c.querySelector('.ac-sparkline-wrap').style.display = 'flex';
+      const sw = c.querySelector('.ac-sparkline-wrap');
+      if (sw) sw.style.display = 'flex';
     });
   } else {
     grid.className = 'athlete-grid list-view';
     document.querySelectorAll('.athlete-card').forEach(c => {
-      c.querySelector('.ac-sparkline-wrap').style.display = 'none';
+      const sw = c.querySelector('.ac-sparkline-wrap');
+      if (sw) sw.style.display = 'none';
     });
   }
   fixGridBorders();
@@ -1294,6 +1296,246 @@ function showToast(msg) {
     var navBadge = document.getElementById("nav-unread-badge");
     if (navBadge) navBadge.textContent = unread > 0 ? unread : "";
   }).catch(function(){});
+})();
+</script>
+<script>
+// ── REAL ATHLETES (from window.ARENAS_DATA) ──
+(function() {
+  const data = window.ARENAS_DATA;
+  if (!data) return;
+  const B = window.BASE || '';
+
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  // Update the logged-in user's initials in the nav.
+  const myName = (data.myProfile && data.myProfile.name) || 'Athlete';
+  const myInitials = myName.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+  document.querySelectorAll('.user-av').forEach(el => {
+    if (el.textContent.trim() === 'JK') el.textContent = myInitials;
+  });
+
+  // Hide the hardcoded "recommended" and "nearby" strips, the demo "load more"
+  // button, and override search so cleared searches don't re-show fake sections.
+  const recSection = document.getElementById('rec-section');
+  const nearbySection = document.getElementById('nearby-section');
+  const loadMoreEl = document.querySelector('.load-more');
+  if (recSection) recSection.style.display = 'none';
+  if (nearbySection) nearbySection.style.display = 'none';
+  if (loadMoreEl) loadMoreEl.style.display = 'none';
+
+  const athletes = data.athletes || [];
+  const countEl = document.getElementById('athlete-count');
+  if (countEl) countEl.textContent = athletes.length + ' athlete' + (athletes.length === 1 ? '' : 's');
+
+  const grid = document.getElementById('athlete-grid');
+
+  // Empty state when no other users have joined yet.
+  if (!athletes.length) {
+    if (grid) {
+      grid.className = 'athlete-grid';
+      grid.innerHTML =
+        '<div style="grid-column:1/-1;text-align:center;padding:56px 24px;background:white">' +
+        '<div style="font-size:36px;margin-bottom:12px">👥</div>' +
+        '<h3 style="font-size:16px;font-weight:600;color:var(--gray-900);margin-bottom:6px">No athletes yet</h3>' +
+        '<p style="font-size:13px;color:var(--gray-500);line-height:1.6">As more people join Arenas they will appear here.</p>' +
+        '</div>';
+    }
+    return;
+  }
+
+  const sportColors = {
+    running:'background:#FFF7ED;color:#9A3412;border-color:#FDBA74',
+    cycling:'background:#E0F2FE;color:#1E40AF;border-color:#93C5FD',
+    climbing:'background:#F5F3FF;color:#5B21B6;border-color:#C4B5FD',
+    swimming:'background:#F0FDFA;color:#134E4A;border-color:#5EEAD4',
+    triathlon:'background:#FCE7F3;color:#72243E;border-color:#F4C0D1',
+    football:'background:#ECFDF5;color:#166534;border-color:#86EFAC'
+  };
+  const sportEmojis = {
+    running:'🏃 Running', cycling:'🚴 Cycling', climbing:'🧗 Climbing',
+    swimming:'🏊 Swimming', triathlon:'🔱 Triathlon', football:'⚽ Football'
+  };
+  const avColors = [
+    {bg:'#FEF9C3',color:'#854D0E'},{bg:'#FCE7F3',color:'#9D174D'},
+    {bg:'#E0F2FE',color:'#0369A1'},{bg:'#F5F3FF',color:'#5B21B6'},
+    {bg:'#ECFDF5',color:'#065F46'},{bg:'#FFF7ED',color:'#9A3412'},
+    {bg:'#F0FDFA',color:'#134E4A'},{bg:'#FBEAF0',color:'#72243E'}
+  ];
+
+  if (!grid) return;
+  grid.className = 'athlete-grid grid-2';
+  grid.innerHTML = athletes.map((a, i) => {
+    const av = avColors[i % avColors.length];
+    const sports = a.sports || [];
+    const primary = sports[0] || null;
+    const sportStyle = primary ? (sportColors[primary] || '') : '';
+    const sportLabel = primary ? (sportEmojis[primary] || primary) : null;
+    const levelLabel = a.level ? (a.level.charAt(0).toUpperCase() + a.level.slice(1)) : null;
+    const followers = a.followerCount || 0;
+    return '' +
+      '<div class="athlete-card" data-sport="' + esc(primary || 'all') + '" data-name="' + esc(a.name || 'Athlete') + '"' +
+        ' data-user-id="' + esc(a.id) + '" style="animation-delay:' + (i * 0.05) + 's" onclick="openAthleteModal(\'' + esc(a.id) + '\')">' +
+        '<div class="ac-head">' +
+          '<div class="ac-av" style="background:' + av.bg + ';color:' + av.color + '">' + esc(a.initials) + '</div>' +
+          '<div>' +
+            '<div class="ac-name">' + esc(a.name || 'Athlete') + '</div>' +
+            '<div class="ac-location">' + (a.location ? '📍 ' + esc(a.location) : '📍 Location not set') + ' · @' + esc(a.handle || 'athlete') + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="ac-tags">' +
+          (sportLabel ? '<span class="pill" style="' + sportStyle + '">' + esc(sportLabel) + '</span>' : '') +
+          (levelLabel ? '<span class="pill p-int">' + esc(levelLabel) + '</span>' : '') +
+        '</div>' +
+        '<div class="ac-mini-stats">' +
+          '<div class="ms-item"><span class="ms-val">' + followers + '</span><span class="ms-label">followers</span></div>' +
+          '<div class="ms-item"><span class="ms-val">' + (a.postCount || 0) + '</span><span class="ms-label">posts</span></div>' +
+          '<div class="ms-item"><span class="ms-val">' + sports.length + '</span><span class="ms-label">sports</span></div>' +
+        '</div>' +
+        '<div class="ac-footer">' +
+          '<div class="ac-mutual">' + followers + ' follower' + (followers === 1 ? '' : 's') + '</div>' +
+          '<button class="follow-btn ' + (a.isFollowing ? 'following' : 'default') + '" id="follow-btn-' + esc(a.id) + '"' +
+            ' onclick="event.stopPropagation();handleFollow(\'' + esc(a.id) + '\',this)">' +
+            (a.isFollowing ? 'Following' : 'Follow') +
+          '</button>' +
+        '</div>' +
+      '</div>';
+  }).join('');
+  if (typeof fixGridBorders === 'function') fixGridBorders();
+
+  // Clean search override: filter real cards, never re-show the fake strips.
+  window.handleSearch = function(val) {
+    const q = (val || '').toLowerCase().trim();
+    let visible = 0;
+    document.querySelectorAll('.athlete-card').forEach(c => {
+      const show = !q || c.textContent.toLowerCase().includes(q);
+      c.style.display = show ? 'flex' : 'none';
+      if (show) visible++;
+    });
+    if (countEl) countEl.textContent = (q ? visible : athletes.length) + ' athlete' + ((q ? visible : athletes.length) === 1 ? '' : 's');
+    if (typeof fixGridBorders === 'function') fixGridBorders();
+  };
+
+  function syncFollowUI(id, isFollowing) {
+    // The in-memory athlete model is the source of truth for the follower count;
+    // every visible counter (card footer, card mini-stat, open modal) is derived
+    // from it so they never drift apart.
+    const a = athletes.find(x => x.id === id);
+    if (a) {
+      if (isFollowing && !a.isFollowing) a.followerCount = (a.followerCount || 0) + 1;
+      else if (!isFollowing && a.isFollowing) a.followerCount = Math.max(0, (a.followerCount || 0) - 1);
+      a.isFollowing = isFollowing;
+    }
+    const followers = a ? (a.followerCount || 0) : 0;
+    const followerText = followers + ' follower' + (followers === 1 ? '' : 's');
+
+    const cardBtn = document.getElementById('follow-btn-' + id);
+    if (cardBtn) {
+      cardBtn.classList.toggle('following', isFollowing);
+      cardBtn.classList.toggle('default', !isFollowing);
+      cardBtn.textContent = isFollowing ? 'Following' : 'Follow';
+      cardBtn.disabled = false;
+      const card = cardBtn.closest('.athlete-card');
+      if (card) {
+        const mutual = card.querySelector('.ac-mutual');
+        if (mutual) mutual.textContent = followerText;
+        const firstStat = card.querySelector('.ac-mini-stats .ms-item .ms-val');
+        if (firstStat) firstStat.textContent = followers;
+      }
+    }
+
+    const modalBtn = document.getElementById('modal-follow-btn');
+    if (modalBtn && modalBtn.dataset.userId === id) {
+      modalBtn.disabled = false;
+      modalBtn.textContent = isFollowing ? '✓ Following' : 'Follow';
+      modalBtn.classList.toggle('btn-yellow', !isFollowing);
+      const statsEl = document.getElementById('modal-stats');
+      const firstMv = statsEl && statsEl.querySelector('.modal-stat .mv');
+      if (firstMv) firstMv.textContent = followers;
+    }
+  }
+
+  window.handleFollow = async function(userId, btn) {
+    const wasFollowing = btn.classList.contains('following');
+    btn.disabled = true;
+    btn.textContent = wasFollowing ? 'Unfollowing…' : 'Following…';
+    try {
+      const res = await fetch(B + '/api/follow/' + userId, { method: wasFollowing ? 'DELETE' : 'POST' });
+      const result = await res.json();
+      if (result.error) {
+        showToast('Error: ' + result.error);
+        btn.disabled = false;
+        btn.textContent = wasFollowing ? 'Following' : 'Follow';
+        return;
+      }
+      syncFollowUI(userId, !!result.following);
+      showToast(result.following ? '✓ Following — their posts will appear in your feed' : 'Unfollowed');
+    } catch (err) {
+      showToast('Something went wrong — please try again');
+      btn.disabled = false;
+      btn.textContent = wasFollowing ? 'Following' : 'Follow';
+    }
+  };
+
+  window.openAthleteModal = function(userId) {
+    const a = athletes.find(x => x.id === userId);
+    if (!a) return;
+    const av = avColors[athletes.indexOf(a) % avColors.length];
+    const modal = document.getElementById('modal-profile');
+    if (!modal) return;
+    const avEl = document.getElementById('modal-av');
+    if (avEl) {
+      avEl.textContent = a.initials;
+      avEl.style.cssText = 'width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;flex-shrink:0;border:3px solid rgba(255,255,255,.15);position:relative;z-index:1;background:' + av.bg + ';color:' + av.color;
+    }
+    const nameEl = document.getElementById('modal-name');
+    if (nameEl) nameEl.textContent = a.name || 'Athlete';
+    const handleEl = document.getElementById('modal-handle');
+    if (handleEl) handleEl.textContent = '@' + (a.handle || 'athlete') + (a.location ? ' · ' + a.location : '');
+    const tagsEl = document.getElementById('modal-tags');
+    if (tagsEl) tagsEl.innerHTML = (a.sports || []).map(s => '<span class="mh-tag">' + esc(sportEmojis[s] || s) + '</span>').join('');
+    const statsEl = document.getElementById('modal-stats');
+    if (statsEl) statsEl.innerHTML =
+      '<div class="modal-stat"><div class="mv">' + (a.followerCount || 0) + '</div><div class="ml">Followers</div></div>' +
+      '<div class="modal-stat"><div class="mv">' + (a.postCount || 0) + '</div><div class="ml">Posts</div></div>' +
+      '<div class="modal-stat"><div class="mv">' + (a.sports ? a.sports.length : 0) + '</div><div class="ml">Sports</div></div>' +
+      '<div class="modal-stat"><div class="mv">' + esc(a.level || '—') + '</div><div class="ml">Level</div></div>';
+    const bioEl = document.getElementById('modal-bio-section');
+    if (bioEl) bioEl.innerHTML = a.bio
+      ? '<div><div class="modal-section-title">About</div><div style="font-size:13px;color:var(--gray-600);line-height:1.65">' + esc(a.bio) + '</div></div>'
+      : '';
+    const recentEl = document.getElementById('modal-recent');
+    if (recentEl) recentEl.innerHTML = '';
+    const actionsEl = document.getElementById('modal-footer-actions');
+    if (actionsEl) actionsEl.innerHTML =
+      '<button class="btn ' + (a.isFollowing ? '' : 'btn-yellow') + '" id="modal-follow-btn" data-user-id="' + esc(a.id) + '" onclick="handleModalFollow(\'' + esc(a.id) + '\')">' +
+        (a.isFollowing ? '✓ Following' : 'Follow') +
+      '</button>' +
+      '<button class="btn" onclick="showToast(\'Messaging coming soon!\')">💬 Message</button>';
+    modal.classList.add('open');
+  };
+
+  window.handleModalFollow = async function(userId) {
+    const a = athletes.find(x => x.id === userId);
+    if (!a) return;
+    const wasFollowing = a.isFollowing;
+    const modalBtn = document.getElementById('modal-follow-btn');
+    if (modalBtn) { modalBtn.disabled = true; modalBtn.textContent = wasFollowing ? 'Unfollowing…' : 'Following…'; }
+    try {
+      const res = await fetch(B + '/api/follow/' + userId, { method: wasFollowing ? 'DELETE' : 'POST' });
+      const result = await res.json();
+      if (result.error) {
+        showToast('Error: ' + result.error);
+        if (modalBtn) { modalBtn.disabled = false; modalBtn.textContent = wasFollowing ? '✓ Following' : 'Follow'; }
+        return;
+      }
+      syncFollowUI(userId, !!result.following);
+      showToast(result.following ? '✓ Following' : 'Unfollowed');
+    } catch (err) {
+      showToast('Something went wrong — please try again');
+      if (modalBtn) { modalBtn.disabled = false; modalBtn.textContent = wasFollowing ? '✓ Following' : 'Follow'; }
+    }
+  };
 })();
 </script>
 </body>
