@@ -761,22 +761,14 @@ button,select,input,textarea{font-family:var(--font)}
 <div class="tab-content" id="tab-following">
   <div class="content-cols-full">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
-      <div><h2 style="font-size:17px;font-weight:700;color:var(--gray-900)">Following</h2><p style="font-size:13px;color:var(--gray-500)">89 following · 142 followers</p></div>
+      <div><h2 style="font-size:17px;font-weight:700;color:var(--gray-900)">Following</h2><p style="font-size:13px;color:var(--gray-500)" id="follow-summary">0 following · 0 followers</p></div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-ghost btn-sm" style="background:var(--gray-100)" onclick="showToast('Showing following')">Following (89)</button>
-        <button class="btn btn-ghost btn-sm" onclick="showToast('Showing followers')">Followers (142)</button>
+        <button class="btn btn-ghost btn-sm" id="ft-following" style="background:var(--gray-100)" onclick="showFollowList('following')">Following (0)</button>
+        <button class="btn btn-ghost btn-sm" id="ft-followers" onclick="showFollowList('followers')">Followers (0)</button>
       </div>
     </div>
     <div class="card">
-      <div class="following-grid">
-        <div class="follow-card"><div class="fc-av" style="background:#FEF9C3;color:#854D0E">SL</div><div><div class="fc-name">Sofia L.</div><div class="fc-sport">🏃 Running · Coach</div><div class="fc-streak">🔥 21d streak · 9,840pts</div></div><button class="btn btn-sm btn-ghost" onclick="showToast('Unfollowed Sofia')">Following</button></div>
-        <div class="follow-card"><div class="fc-av" style="background:#FCE7F3;color:#9D174D">YT</div><div><div class="fc-name">Yuki T.</div><div class="fc-sport">🏃 Running · Advanced</div><div class="fc-streak">🔥 14d streak · 7,610pts</div></div><button class="btn btn-sm btn-ghost" onclick="showToast('Unfollowed Yuki')">Following</button></div>
-        <div class="follow-card"><div class="fc-av" style="background:#E0F2FE;color:#0369A1">AL</div><div><div class="fc-name">Alena L.</div><div class="fc-sport">🏃 Running · Advanced</div><div class="fc-streak">🔥 6d streak · 7,220pts</div></div><button class="btn btn-sm btn-ghost" onclick="showToast('Unfollowed Alena')">Following</button></div>
-        <div class="follow-card"><div class="fc-av" style="background:#FBEAF0;color:#72243E">PR</div><div><div class="fc-name">Priya R.</div><div class="fc-sport">🏃 Running · Advanced</div><div class="fc-streak">🔥 6d streak · 6,980pts</div></div><button class="btn btn-sm btn-ghost" onclick="showToast('Unfollowed Priya')">Following</button></div>
-        <div class="follow-card"><div class="fc-av" style="background:#F5F3FF;color:#5B21B6">TR</div><div><div class="fc-name">Tom R.</div><div class="fc-sport">🏃 Running · Intermediate</div><div class="fc-streak">4d streak · 5,880pts</div></div><button class="btn btn-sm btn-ghost" onclick="showToast('Unfollowed Tom')">Following</button></div>
-        <div class="follow-card"><div class="fc-av" style="background:#FEF3C7;color:#92400E">MC</div><div><div class="fc-name">Marco C.</div><div class="fc-sport">🚴 Cycling · Advanced</div><div class="fc-streak">🔥 9d streak</div></div><button class="btn btn-sm btn-ghost" onclick="showToast('Unfollowed Marco')">Following</button></div>
-      </div>
-      <div style="padding:10px 18px;border-top:var(--border);text-align:center"><button class="btn btn-ghost btn-sm" onclick="showToast('Loading more…')">Load all 89</button></div>
+      <div class="following-grid" id="follow-grid"></div>
     </div>
   </div>
 </div>
@@ -1264,6 +1256,132 @@ document.getElementById('htab-overview').classList.add('active');
     var navBadge = document.getElementById("nav-unread-badge");
     if (navBadge) navBadge.textContent = unread > 0 ? unread : "";
   }).catch(function(){});
+})();
+</script>
+<script>
+// ── REAL FOLLOWING / FOLLOWERS (from window.ARENAS_DATA) ──
+// Renders the people the viewer follows (and their followers) from live data
+// instead of the hardcoded demo athletes. The two header buttons toggle which
+// list is shown in the same grid; only the "following" list is unfollowable.
+(function(){
+  var data = window.ARENAS_DATA;
+  if (!data) return;
+  var B = window.BASE || '';
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  var sportEmojis = { running:'🏃 Running', cycling:'🚴 Cycling', climbing:'🧗 Climbing',
+    swimming:'🏊 Swimming', triathlon:'🔱 Triathlon', football:'⚽ Football' };
+  var avColors = [
+    {bg:'#FEF9C3',color:'#854D0E'},{bg:'#FCE7F3',color:'#9D174D'},
+    {bg:'#E0F2FE',color:'#0369A1'},{bg:'#F5F3FF',color:'#5B21B6'},
+    {bg:'#ECFDF5',color:'#065F46'},{bg:'#FFF7ED',color:'#9A3412'},
+    {bg:'#F0FDFA',color:'#134E4A'},{bg:'#FBEAF0',color:'#72243E'}
+  ];
+
+  var grid = document.getElementById('follow-grid');
+  if (!grid) return;
+  var summary = document.getElementById('follow-summary');
+  var btnFollowing = document.getElementById('ft-following');
+  var btnFollowers = document.getElementById('ft-followers');
+
+  var following = (data.followingList || []).slice();
+  var followers = (data.followerList || []).slice();
+  var counts = {
+    following: (data.followingCount != null ? data.followingCount : following.length),
+    followers: (data.followerCount != null ? data.followerCount : followers.length)
+  };
+
+  function refreshHeader(){
+    if (summary) summary.textContent = counts.following + ' following · ' + counts.followers + ' follower' + (counts.followers === 1 ? '' : 's');
+    if (btnFollowing) btnFollowing.textContent = 'Following (' + counts.following + ')';
+    if (btnFollowers) btnFollowers.textContent = 'Followers (' + counts.followers + ')';
+    var folTab = document.querySelector('#htab-following .tab-count');
+    if (folTab) folTab.textContent = counts.following;
+    document.querySelectorAll('.hero-stat').forEach(function(stat){
+      var label = (stat.querySelector('.hero-stat-label') || {}).textContent || '';
+      var v = stat.querySelector('.hero-stat-val');
+      if (!v) return;
+      if (/Following/i.test(label)) v.textContent = counts.following;
+      else if (/Followers/i.test(label)) v.textContent = counts.followers;
+    });
+  }
+
+  function initials(name){ return (name || 'A').split(' ').map(function(n){ return n[0]; }).join('').slice(0,2).toUpperCase(); }
+
+  function subline(a){
+    var primary = (a.sports && a.sports[0]) || null;
+    var bits = ['@' + esc(a.handle || 'athlete')];
+    if (a.location) bits.push(esc(a.location));
+    var sub = bits.join(' · ');
+    if (primary) sub = esc(sportEmojis[primary] || primary) + ' · ' + sub;
+    return sub;
+  }
+
+  function cardHTML(a, i, canUnfollow){
+    var av = avColors[i % avColors.length];
+    return '<div class="follow-card">' +
+      '<div class="fc-av" style="background:' + av.bg + ';color:' + av.color + '">' + esc(initials(a.name)) + '</div>' +
+      '<div style="flex:1;min-width:0">' +
+        '<div class="fc-name">' + esc(a.name || 'Athlete') + '</div>' +
+        '<div class="fc-sport">' + subline(a) + '</div>' +
+      '</div>' +
+      (canUnfollow
+        ? '<button class="btn btn-sm btn-ghost" onclick="handleUnfollow(\'' + esc(a.id) + '\',this)">Following</button>'
+        : '') +
+      '</div>';
+  }
+
+  function emptyHTML(view){
+    var msg = view === 'following' ? 'You are not following anyone yet' : 'No followers yet';
+    var hint = view === 'following'
+      ? 'Discover athletes on the <a href="' + B + '/athletes" style="color:var(--gray-900);font-weight:500">Athletes page</a>'
+      : 'Share your profile to get followers';
+    return '<div style="grid-column:1/-1;text-align:center;padding:40px 24px">' +
+      '<div style="font-size:32px;margin-bottom:10px">👥</div>' +
+      '<div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:6px">' + msg + '</div>' +
+      '<div style="font-size:13px;color:var(--gray-500)">' + hint + '</div></div>';
+  }
+
+  var currentView = 'following';
+  window.showFollowList = function(view){
+    currentView = view;
+    var list = view === 'following' ? following : followers;
+    var canUnfollow = view === 'following';
+    if (btnFollowing) btnFollowing.style.background = view === 'following' ? 'var(--gray-100)' : '';
+    if (btnFollowers) btnFollowers.style.background = view === 'followers' ? 'var(--gray-100)' : '';
+    grid.innerHTML = list.length
+      ? list.map(function(a, i){ return cardHTML(a, i, canUnfollow); }).join('')
+      : emptyHTML(view);
+  };
+
+  window.handleUnfollow = async function(userId, btn){
+    btn.disabled = true; btn.textContent = 'Unfollowing…';
+    try {
+      var res = await fetch(B + '/api/follow/' + userId, { method: 'DELETE' });
+      var result = await res.json();
+      if (result.error){ showToast('Error: ' + result.error); btn.disabled = false; btn.textContent = 'Following'; return; }
+      following = following.filter(function(a){ return a.id !== userId; });
+      counts.following = Math.max(0, counts.following - 1);
+      var card = btn.closest('.follow-card');
+      if (card){
+        card.style.transition = 'opacity .2s';
+        card.style.opacity = '0';
+        setTimeout(function(){
+          card.remove();
+          if (!following.length && currentView === 'following') grid.innerHTML = emptyHTML('following');
+        }, 200);
+      }
+      refreshHeader();
+      showToast('Unfollowed');
+    } catch (err){
+      showToast('Something went wrong — please try again');
+      btn.disabled = false; btn.textContent = 'Following';
+    }
+  };
+
+  refreshHeader();
+  showFollowList('following');
 })();
 </script>
 </body>

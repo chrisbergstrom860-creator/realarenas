@@ -25,11 +25,12 @@ people write into snippets. Verified against the live DB.
 - Other tables present: `posts (id,user_id,content,sport,feeling,created_at)`,
   `post_likes (post_id,user_id,created_at)`, `post_comments`.
 - **`follows`** table exists with `follower_id` / `following_id` (both auth user
-  UUIDs). The feed only shows posts from followed users + self. There are no
-  real user rows behind the **Athletes page** — those cards are hardcoded
-  prototype data (`athleteData` keyed by slugs like `'sofia-l'`), so the Follow
-  buttons there are visual-only and cannot write real `follows` rows until the
-  page is backed by real Supabase users.
+  UUIDs). The feed only shows posts from followed users + self. The **Athletes
+  page** and the profile **Following tab** are now backed by real Supabase users
+  (resolved from auth metadata via `listUsers` / `getUserById`) and their Follow /
+  Unfollow buttons write real `follows` rows through the `/api/follow` POST/DELETE
+  routes. The `follows` table is NOT guaranteed to have a `created_at` column, so
+  do not `.order('created_at')` on it.
 
 **Why:** A user-provided spec assumed a `profiles` table, `memberships.status`/
 `joined_at`, `clubs.plan`, and `sport` as an array — all of which would return

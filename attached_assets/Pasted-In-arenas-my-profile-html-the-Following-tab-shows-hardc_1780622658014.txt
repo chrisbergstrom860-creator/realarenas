@@ -1,0 +1,180 @@
+In arenas-my-profile.html the Following tab shows hardcoded demo athletes instead of real users. Please wire it to show real followed athletes from Supabase.
+1. Update the /profile route in server.js to also fetch the list of users the logged in user follows:
+javascript// Get the list of users this person follows with their profiles
+const { data: followingList } = await supabaseAdmin
+  .from('follows')
+  .select('following_id, profiles:following_id(id, name, handle, sports, level, location)')
+  .eq('follower_id', req.user.id)
+  .order('created_at', { ascending: false });
+
+// Get the list of users who follow this person
+const { data: followerList } = await supabaseAdmin
+  .from('follows')
+  .select('follower_id, profiles:follower_id(id, name, handle, sports, level, location)')
+  .eq('following_id', req.user.id)
+  .order('created_at', { ascending: false });
+Add these two queries to the existing /profile route and include the results in the profileData object:
+javascriptconst profileData = {
+  profile: profile || { ... },
+  userId: req.user.id,
+  email: req.user.email,
+  postCount: postCount || 0,
+  followerCount: followerCount || 0,
+  followingCount: followingCount || 0,
+  posts: posts || [],
+  membership: membership || null,
+  followingList: (followingList || []).map(f => f.profiles).filter(Boolean),
+  followerList: (followerList || []).map(f => f.profiles).filter(Boolean)
+};
+2. Add this to the profile data injection script in arenas-my-profile.html to render real following and followers lists:
+javascript// Render real following list
+function renderFollowList(athletes, containerId, emptyMessage) {
+  const container = document.getElementById(containerId) ||
+    document.querySelector(containerId);
+  if (!container) return;
+
+  const sportEmojis = {
+    running: '🏃 Running',
+    cycling: '🚴 Cycling',
+    climbing: '🧗 Climbing',
+    swimming: '🏊 Swimming',
+    triathlon: '🔱 Triathlon',
+    football: '⚽ Football'
+  };
+
+  const avColors = [
+    {bg:'#FEF9C3',color:'#854D0E'},
+    {bg:'#FCE7F3',color:'#9D174D'},
+    {bg:'#E0F2FE',color:'#0369A1'},
+    {bg:'#F5F3FF',color:'#5B21B6'},
+    {bg:'#ECFDF5',color:'#065F46'},
+    {bg:'#FFF7ED',color:'#9A3412'}
+  ];
+
+  if (!athletes || athletes.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:40px 24px">
+        <div style="font-size:32px;margin-bottom:10px">👥</div>
+        <div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:6px">${emptyMessage}</div>
+        <div style="font-size:13px;color:var(--gray-500)">Discover athletes on the <a href="/athletes" style="color:var(--gray-900);font-weight:500">Athletes page</a></div>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = athletes.map((athlete, i) => {
+    const av = avColors[i % avColors.length];
+    const initials = (athlete.name || 'A').split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+    const primarySport = athlete.sports?.[0];
+    return `
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:var(--border);cursor:pointer;transition:background .1s"
+           onmouseenter="this.style.background='var(--gray-50)'"
+           onmouseleave="this.style.background=''"
+           onclick="window.location.href='/athletes'">
+        <div style="width:40px;height:40px;border-radius:50%;background:${av.bg};color:${av.color};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;flex-shrink:0">
+          ${initials}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600;color:var(--gray-900)">${athlete.name || 'Athlete'}</div>
+          <div style="font-size:12px;color:var(--gray-500)">@${athlete.handle || 'athlete'}${athlete.location ? ' · ' + athlete.location : ''}</div>
+          ${primarySport ? `<div style="margin-top:4px"><span style="font-size:11px;padding:2px 8px;border-radius:20px;background:var(--gray-100);color:var(--gray-600)">${sportEmojis[primarySport] || primarySport}</span></div>` : ''}
+        </div>
+        <button onclick="event.stopPropagation();handleUnfollow('${athlete.id}',this)"
+                style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:var(--gray-100);color:var(--gray-600);cursor:pointer;transition:all .13s"
+                onmouseenter="this.style.background='var(--red-light)';this.style.color='#A32D2D';this.style.borderColor='#FECACA'"
+                onmouseleave="this.style.background='var(--gray-100)';this.style.color='var(--gray-600)';this.style.borderColor='var(--gray-200)'">
+          Following
+        </button>
+      </div>`;
+  }).join('');
+}
+
+// Render followers list (read only — can't unfollow someone who follows you)
+function renderFollowerList(athletes, containerId, emptyMessage) {
+  const container = document.getElementById(containerId) ||
+    document.querySelector(containerId);
+  if (!container) return;
+
+  const avColors = [
+    {bg:'#FEF9C3',color:'#854D0E'},
+    {bg:'#FCE7F3',color:'#9D174D'},
+    {bg:'#E0F2FE',color:'#0369A1'},
+    {bg:'#F5F3FF',color:'#5B21B6'},
+    {bg:'#ECFDF5',color:'#065F46'},
+    {bg:'#FFF7ED',color:'#9A3412'}
+  ];
+
+  if (!athletes || athletes.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:40px 24px">
+        <div style="font-size:32px;margin-bottom:10px">👥</div>
+        <div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:6px">${emptyMessage}</div>
+        <div style="font-size:13px;color:var(--gray-500)">Share your profile link to get followers</div>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = athletes.map((athlete, i) => {
+    const av = avColors[i % avColors.length];
+    const initials = (athlete.name || 'A').split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+    return `
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:var(--border);cursor:pointer;transition:background .1s"
+           onmouseenter="this.style.background='var(--gray-50)'"
+           onmouseleave="this.style.background=''">
+        <div style="width:40px;height:40px;border-radius:50%;background:${av.bg};color:${av.color};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;flex-shrink:0">
+          ${initials}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600;color:var(--gray-900)">${athlete.name || 'Athlete'}</div>
+          <div style="font-size:12px;color:var(--gray-500)">@${athlete.handle || 'athlete'}${athlete.location ? ' · ' + athlete.location : ''}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// Find the Following and Followers tab content containers
+// They are probably shown/hidden based on which tab is active
+// Look for containers with IDs or classes related to following/followers tabs
+
+// Try common selectors for the following tab content
+const followingContainer =
+  document.getElementById('tab-following') ||
+  document.getElementById('following-list') ||
+  document.querySelector('[data-tab="following"] .tab-content') ||
+  document.querySelector('.following-tab-content');
+
+const followersContainer =
+  document.getElementById('tab-followers') ||
+  document.getElementById('followers-list') ||
+  document.querySelector('[data-tab="followers"] .tab-content') ||
+  document.querySelector('.followers-tab-content');
+
+if (followingContainer) {
+  renderFollowList(data.followingList, followingContainer, 'You are not following anyone yet');
+}
+if (followersContainer) {
+  renderFollowerList(data.followerList, followersContainer, 'No followers yet');
+}
+
+// Handle unfollow from the following list
+window.handleUnfollow = async function(userId, btn) {
+  if (!confirm('Unfollow this athlete?')) return;
+  try {
+    const response = await fetch('/api/follow/' + userId, { method: 'DELETE' });
+    const result = await response.json();
+    if (result.error) { showToast('Error: ' + result.error); return; }
+    const row = btn.closest('[style*="display:flex"]') || btn.parentElement;
+    row.style.transition = 'opacity .25s';
+    row.style.opacity = '0';
+    setTimeout(() => row.remove(), 250);
+    showToast('Unfollowed');
+    // Update following count
+    data.followingCount = Math.max(0, (data.followingCount || 1) - 1);
+    document.querySelectorAll('.following-count').forEach(el => {
+      el.textContent = data.followingCount;
+    });
+  } catch (err) {
+    showToast('Something went wrong — please try again');
+  }
+};
+3. Open arenas-my-profile.html and find the Following and Followers tab content sections. Tell me the exact IDs or classes of the containers that hold the hardcoded following/follower cards so I can confirm the selectors above will find them correctly.
+4. Wait for checkpoint then commit and push to GitHub main.

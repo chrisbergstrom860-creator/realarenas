@@ -700,18 +700,51 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
     const meta = req.user.user_metadata || {};
     const display = displayFromUser(req.user);
 
-    const [postCountRes, followerRes, followingRes, postsRes, membershipRes] = await Promise.all([
+    const [postCountRes, followerRes, followingRes, postsRes, membershipRes, followingListRes, followerListRes] = await Promise.all([
       supabaseAdmin.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', req.user.id),
       supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', req.user.id),
       supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', req.user.id),
       supabaseAdmin.from('posts').select('id, content, sport, feeling, created_at').eq('user_id', req.user.id).order('created_at', { ascending: false }).limit(10),
-      supabaseAdmin.from('memberships').select('role, clubs (name, handle)').eq('user_id', req.user.id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      supabaseAdmin.from('memberships').select('role, clubs (name, handle)').eq('user_id', req.user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      // Raw follow edges (no `created_at` ordering — not guaranteed on this table).
+      supabaseAdmin.from('follows').select('following_id').eq('follower_id', req.user.id),
+      supabaseAdmin.from('follows').select('follower_id').eq('following_id', req.user.id)
     ]);
 
     const membership = membershipRes.data || null;
     const club = membership && membership.clubs
       ? (Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs)
       : null;
+
+    // Resolve the people the viewer follows / who follow them into display info.
+    // There is no `profiles` table, so map each follow edge to its auth metadata
+    // (one lookup per unique user, same approach as enrichNotifications).
+    const followingIds = (followingListRes.data || []).map(r => r.following_id).filter(Boolean);
+    const followerIds = (followerListRes.data || []).map(r => r.follower_id).filter(Boolean);
+    const uniqueIds = [...new Set([...followingIds, ...followerIds])];
+    const userMap = {};
+    await Promise.all(uniqueIds.map(async (id) => {
+      try {
+        const { data: u } = await supabaseAdmin.auth.admin.getUserById(id);
+        const user = u && u.user;
+        if (!user) return;
+        const m = user.user_metadata || {};
+        const disp = displayFromUser(user);
+        userMap[id] = {
+          id,
+          name: disp.name,
+          handle: disp.handle,
+          bio: m.bio || null,
+          location: m.location || null,
+          sports: Array.isArray(m.sports) ? m.sports : [],
+          level: m.level || null
+        };
+      } catch (err) {
+        // Ignore individual lookup failures; the row is simply omitted.
+      }
+    }));
+    const followingList = followingIds.map(id => userMap[id]).filter(Boolean);
+    const followerList = followerIds.map(id => userMap[id]).filter(Boolean);
 
     const profileData = {
       profile: {
@@ -727,7 +760,9 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
       followerCount: followerRes.count || 0,
       followingCount: followingRes.count || 0,
       posts: postsRes.data || [],
-      membership: membership ? { role: membership.role, club } : null
+      membership: membership ? { role: membership.role, club } : null,
+      followingList,
+      followerList
     };
 
     const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-my-profile.html'), 'utf8'), profileData);
