@@ -773,21 +773,40 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
       .from('memberships').select('club_id').eq('user_id', userId);
     const clubIds = [...new Set((memberships || []).map((m) => m.club_id).filter(Boolean))];
 
-    let orFilter = `created_by.eq.${userId}`;
-    if (myIds.length) orFilter += `,id.in.(${myIds.join(',')})`;
-    const { data: myChallenges } = await supabaseAdmin
-      .from('challenges').select('*').or(orFilter)
+    // My challenges = ones I created + ones I joined. Split into two queries to
+    // sidestep Supabase .or() quirks with UUID id.in lists.
+    const { data: createdChallenges } = await supabaseAdmin
+      .from('challenges').select('*')
+      .eq('created_by', userId)
       .order('created_at', { ascending: false });
+    const createdIds = new Set((createdChallenges || []).map((c) => c.id));
+    const joinedIds = myIds.filter((id) => !createdIds.has(id));
+    let joinedChallenges = [];
+    if (joinedIds.length) {
+      const { data } = await supabaseAdmin
+        .from('challenges').select('*')
+        .in('id', joinedIds)
+        .order('created_at', { ascending: false });
+      joinedChallenges = data || [];
+    }
+    const myChallenges = [...(createdChallenges || []), ...joinedChallenges];
 
     const { data: clubChallenges } = await supabaseAdmin
       .from('challenges').select('*')
       .in('club_id', clubIds.length ? clubIds : [PLACEHOLDER])
       .order('created_at', { ascending: false });
 
-    const { data: publicChallenges } = await supabaseAdmin
+    // Discover = public, non-expired challenges the user neither created nor
+    // joined. Skip the .not() filter entirely when there's nothing to exclude.
+    const excludeFromDiscover = [...new Set([...myChallenges.map((c) => c.id), ...myIds])];
+    let publicQuery = supabaseAdmin
       .from('challenges').select('*')
       .eq('visibility', 'public')
-      .gt('end_date', new Date().toISOString())
+      .gt('end_date', new Date().toISOString());
+    if (excludeFromDiscover.length) {
+      publicQuery = publicQuery.not('id', 'in', `(${excludeFromDiscover.join(',')})`);
+    }
+    const { data: publicChallenges } = await publicQuery
       .order('created_at', { ascending: false }).limit(20);
 
     // De-duplicate the full set so we only look up each challenge once.

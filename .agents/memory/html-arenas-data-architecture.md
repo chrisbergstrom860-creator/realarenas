@@ -6,10 +6,10 @@ description: Where app data lives and how the server writes it for the html-aren
 # html-arenas data architecture
 
 - **Single source of truth = Supabase.** User accounts AND app data (clubs, memberships) live in the Supabase project, not in Replit's built-in Postgres. `DATABASE_URL`/`PG*` env vars point at Replit "Helium" Postgres — that is NOT the Supabase DB and must not be used for this artifact's data.
-- **No service-role key / no Supabase DB connection string is available.** The server only has the anon key. It therefore cannot run DDL or bypass RLS. Schema changes must be applied by the user in the Supabase SQL editor.
+- **A `SUPABASE_SERVICE_ROLE_KEY` IS configured** (server-only; see write path below). What is NOT available is a direct Supabase Postgres connection string, so the server still cannot run DDL — schema/table changes must be applied by the user in the Supabase SQL editor. The service role can bypass RLS for trusted writes but cannot create tables.
 - **Auth is auto-confirm ON** (`mailer_autoconfirm: true`), so `supabase.auth.signUp()` returns a session immediately. The server uses that session's access_token to build a per-request authenticated client so `auth.uid()` resolves for RLS / RPC.
 
-**Why:** chosen by the user for a single source of truth; the constraints (anon-key-only) dictate the patterns below.
+**Why:** chosen by the user for a single source of truth; the constraints (service-role for writes, but no DDL/connection string) dictate the patterns below.
 
 **How to apply — writing app data from the server:**
 - A `SUPABASE_SERVICE_ROLE_KEY` is now configured. The server uses a module-level `supabaseAdmin` client (service role, `persistSession:false`) for trusted writes; it bypasses RLS. This key is server-only and must NEVER reach the browser.

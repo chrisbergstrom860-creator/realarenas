@@ -33,3 +33,9 @@ helper (mirrors notification enrichment) — there is no usable `profiles` table
 
 - Empty `.in(col, ids)` is invalid in Supabase — pass a placeholder array when
   `ids` is empty (`ids.length ? ids : ['00000000-...']`).
+- **My-vs-Discover partitioning:** fetch created (`created_by`) and joined
+  (`id.in(joinedIds)`) challenges as TWO separate queries and merge — avoids
+  `.or()` UUID quirks. Discover must EXCLUDE created+joined ids via
+  `.not('id','in','(...)')`, applied ONLY when the exclude list is non-empty
+  (an empty `.not(...in...)` errors). **Why:** a created challenge was leaking
+  into Discover because the public query didn't exclude the user's own.
