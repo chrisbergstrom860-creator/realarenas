@@ -876,14 +876,29 @@ updateCounts();
     if (invites.length===0){ showToast('Please add at least one valid email address'); return; }
     api('/api/clubs/'+clubId+'/invites/bulk', { method:'POST', body: JSON.stringify({ invites: invites }) }).then(function(r){
       if (!r.ok){ showToast(r.data.error || 'Could not send invites'); return; }
-      var sent = (r.data.sent||[]).length, skipped = (r.data.skipped||[]).length, failed = (r.data.failed||[]).length;
+      var sentList = r.data.sent||[];
+      var sent = sentList.length, skipped = (r.data.skipped||[]).length, failed = (r.data.failed||[]).length;
+      var notified = sentList.filter(function(s){ return s.existingUser; }).length;
+      var newUsers = sentList.filter(function(s){ return !s.existingUser; });
       var modal = document.getElementById('modal-success');
       if (modal){
         var v = modal.querySelector('.ss-val'); if (v) v.textContent = sent;
         var title = modal.querySelector('.sb-title'); if (title) title.textContent = sent+' invitation'+(sent!==1?'s':'')+' sent successfully';
         modal.classList.add('open');
       }
-      showToast(sent+' sent'+(skipped?', '+skipped+' skipped':'')+(failed?', '+failed+' failed':''));
+      // Surface a copyable join link for the first brand-new invitee.
+      var linkEl = document.getElementById('join-link-url');
+      if (linkEl && newUsers.length && newUsers[0].joinUrl){
+        linkEl.value = newUsers[0].joinUrl;
+        var copyBtn = document.getElementById('copy-link-btn'); if (copyBtn) copyBtn.style.display = 'inline-flex';
+      }
+      if (notified && newUsers.length){
+        showToast('✓ '+newUsers.length+' invite link'+(newUsers.length!==1?'s':'')+' created · '+notified+' existing member'+(notified!==1?'s':'')+' notified in-app');
+      } else if (notified){
+        showToast('✓ '+notified+' '+(notified!==1?'people':'person')+' already on Arenas — notified in-app to join your club');
+      } else {
+        showToast(sent+' sent'+(skipped?', '+skipped+' skipped':'')+(failed?', '+failed+' failed':''));
+      }
       var tb = document.getElementById('invite-rows');
       if (tb){
         tb.innerHTML = '<tr><td><input class="inv-row-input" type="email" placeholder="name@example.com" oninput="validateEmail(this)"></td><td><input class="inv-row-input" type="text" placeholder="Name"></td><td><select class="inv-row-select"><option>Member</option><option>Coach</option><option>Admin</option></select></td><td style="text-align:center"><button class="inv-row-del" onclick="delRow(this)">✕</button></td></tr>';
