@@ -219,7 +219,6 @@ button,select,input,textarea{font-family:var(--font)}
 <aside class="sidebar">
   <div class="nav-section-label">Club management</div>
   <div class="nav-item" onclick="setTab('overview',this)"><span class="nav-icon">📊</span> Overview</div>
-  <div class="nav-item active" id="nav-invites" onclick="setTab('invites',this)"><span class="nav-icon">✉️</span> Invite members <span class="nav-badge alert" id="pending-badge">8</span></div>
   <div class="nav-item" onclick="showToast('Members tab')"><span class="nav-icon">👥</span> Members <span class="nav-badge">48</span></div>
   <div class="nav-item" onclick="showToast('Training load')"><span class="nav-icon">📈</span> Training load <span class="nav-badge alert">3</span></div>
   <div class="nav-item" onclick="nav('/leaderboards')"><span class="nav-icon">🏆</span> Leaderboard</div>
@@ -259,7 +258,7 @@ button,select,input,textarea{font-family:var(--font)}
     <div class="stat-card"><div class="sc-label">Accepted this month</div><div class="sc-value">11</div><div class="sc-delta up">↑ +4 vs last month</div></div>
     <div class="stat-card"><div class="sc-label">Acceptance rate</div><div class="sc-value">78%</div><div class="sc-delta neutral">Industry avg: 65%</div></div>
   </div>
-  <div style="text-align:center;padding:40px;color:var(--gray-400);font-size:13px">← Click <strong style="color:var(--gray-700)">Invite members</strong> in the sidebar to send and manage invitations</div>
+  <div style="text-align:center;padding:40px;color:var(--gray-400);font-size:13px">Use the <strong style="color:var(--gray-700)">✉️ Invite members</strong> button above to send and manage invitations</div>
 </div>
 
 <!-- INVITE MEMBERS -->
@@ -668,7 +667,7 @@ function revoke(btn){
   const row=btn.closest('tr');
   const name=row.querySelector('.member-name')?.textContent||'member';
   row.style.transition='opacity 0.3s';row.style.opacity='0';
-  setTimeout(()=>{row.remove();const pb=document.getElementById('pending-badge');pb.textContent=Math.max(0,parseInt(pb.textContent)-1);showToast('Invite revoked for '+name);},300);
+  setTimeout(()=>{row.remove();const pb=document.getElementById('pending-badge');if(pb)pb.textContent=Math.max(0,parseInt(pb.textContent)-1);showToast('Invite revoked for '+name);},300);
 }
 function openModal(id){document.getElementById('modal-'+id).classList.add('open');}
 function closeModals(e){if(!e||e.target.classList.contains('modal-overlay'))document.querySelectorAll('.modal-overlay').forEach(m=>m.classList.remove('open'));}
