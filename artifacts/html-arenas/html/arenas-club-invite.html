@@ -702,5 +702,201 @@ updateCounts();
   }).catch(function(){});
 })();
 </script>
+<script>
+// Wire the invite console to real club data injected as window.INVITE_DATA.
+// When absent (e.g. the viewer isn't a club manager) the static mockup is shown.
+(function(){
+  var D = window.INVITE_DATA;
+  if (!D || !D.club) return;
+  var B = window.BASE || '';
+  var clubId = D.club.id;
+  var isAdmin = D.role === 'admin';
+  var pillRole = { member:'pill-member', coach:'pill-coach', admin:'pill-admin' };
+
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function initials(name){ return ((name||'?').trim().split(/\s+/).map(function(w){return w[0]||'';}).slice(0,2).join('')||'?').toUpperCase(); }
+  function api(path, opts){
+    return fetch(B + path, Object.assign({ headers:{'Content-Type':'application/json'} }, opts||{}))
+      .then(function(r){ return r.json().catch(function(){return {};}).then(function(j){ return { ok:r.ok, data:j }; }); });
+  }
+  function fmtAgo(iso){ if(!iso) return '—'; var d=(Date.now()-new Date(iso).getTime())/86400000; if(d<1) return 'today'; return Math.floor(d)+'d ago'; }
+  function fmtLeft(iso){ if(!iso) return '—'; var d=(new Date(iso).getTime()-Date.now())/86400000; if(d<0) return 'expired'; var n=Math.ceil(d); return n+' day'+(n!==1?'s':''); }
+
+  // ── Rebrand the mockup with the real club + manager ──
+  document.title = 'Invite members · ' + D.club.name;
+  var swaps = [['Hackney Running Club', D.club.name], ['Hackney RC', D.club.name]];
+  (function walk(node){
+    for (var i=0;i<node.childNodes.length;i++){
+      var c = node.childNodes[i];
+      if (c.nodeType===3){ var t=c.nodeValue; swaps.forEach(function(p){ if(t.indexOf(p[0])!==-1) t=t.split(p[0]).join(p[1]); }); c.nodeValue=t; }
+      else if (c.nodeType===1 && c.tagName!=='SCRIPT' && c.tagName!=='STYLE'){ walk(c); }
+    }
+  })(document.body);
+  if (D.profile){
+    document.querySelectorAll('.sf-name').forEach(function(el){ el.textContent = D.profile.name; });
+    document.querySelectorAll('.sf-av, .user-av').forEach(function(el){ el.textContent = initials(D.profile.name); });
+  }
+
+  function setStat(label, value){
+    document.querySelectorAll('.stat-card').forEach(function(card){
+      var l = card.querySelector('.sc-label');
+      if (l && l.textContent.trim().toLowerCase()===label){ var v=card.querySelector('.sc-value'); if(v) v.textContent=value; }
+    });
+  }
+
+  // ── Pending invites table (real data) ──
+  function renderPending(invites){
+    var tb = document.getElementById('pending-body');
+    if (!tb) return;
+    var pending = (invites||[]).filter(function(i){ return i.status==='pending' && !i.isOpen; });
+    if (pending.length===0){
+      tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:24px">No pending invitations yet</td></tr>';
+    } else {
+      tb.innerHTML = pending.map(function(i){
+        var name = i.email.split('@')[0];
+        var exp = i.isExpired;
+        return '<tr'+(exp?' style="background:#FFF5F5"':'')+'>'+
+          '<td><div class="member-cell"><div class="av-sm" style="background:var(--gray-100);color:var(--gray-500)">'+esc(initials(name))+'</div><div><div class="member-name">'+esc(name)+'</div><div class="member-email">'+esc(i.email)+'</div></div></div></td>'+
+          '<td><span class="pill '+(pillRole[i.role]||'pill-member')+'">'+esc(i.role)+'</span></td>'+
+          '<td class="time-ago">'+esc(fmtAgo(i.created_at))+'</td>'+
+          '<td class="time-ago"'+(exp?' style="color:var(--red);font-weight:600"':'')+'>'+esc(fmtLeft(i.expires_at))+'</td>'+
+          '<td><span class="pill '+(exp?'pill-expired':'pill-pending')+'">'+(exp?'Expired':'⏳ Pending')+'</span></td>'+
+          '<td><div class="actions-cell"><button class="btn btn-sm btn-ghost" data-resend="'+esc(i.id)+'">↩ Resend</button><button class="btn btn-sm btn-red" data-revoke="'+esc(i.id)+'">✕ Revoke</button></div></td>'+
+        '</tr>';
+      }).join('');
+    }
+    var badge = document.getElementById('pending-badge'); if (badge) badge.textContent = pending.length;
+    setStat('pending', pending.length);
+  }
+
+  // ── Members management + shareable join link (injected section) ──
+  var tab = document.getElementById('tab-invites');
+  if (tab){
+    var section = document.createElement('div');
+    section.style.marginTop = '24px';
+    section.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div style="font-size:15px;font-weight:600;color:var(--gray-900)">Club members <span id="rm-count" style="font-size:13px;font-family:var(--mono);font-weight:400;color:var(--gray-500);margin-left:6px"></span></div></div>'+
+      '<div class="card"><table class="pending-table"><thead><tr><th>Member</th><th>Role</th><th>Joined</th><th>Actions</th></tr></thead><tbody id="members-body"><tr><td colspan="4" style="text-align:center;color:var(--gray-400);padding:18px">Loading…</td></tr></tbody></table></div>'+
+      '<div class="card" style="margin-top:20px"><div class="card-header"><span class="card-title">Shareable join link</span></div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"><div style="font-size:12px;color:var(--gray-500)">Anyone with this link can join '+esc(D.club.name)+' as a member. Generate a fresh link any time.</div><div style="display:flex;gap:8px"><input id="join-link-url" class="form-input" style="flex:1;font-family:var(--mono);font-size:12px" readonly placeholder="Click generate to create a link"><button class="btn btn-primary btn-sm" id="copy-link-btn" style="display:none">Copy</button></div><button class="btn btn-yellow btn-sm" id="gen-link-btn" style="align-self:flex-start">🔗 Generate join link</button></div></div>';
+    tab.appendChild(section);
+
+    document.getElementById('gen-link-btn').addEventListener('click', function(){
+      var btn = this; btn.disabled = true;
+      api('/api/clubs/'+clubId+'/join-link', { method:'POST' }).then(function(r){
+        btn.disabled = false;
+        if (r.ok && r.data.joinUrl){
+          var i = document.getElementById('join-link-url'); i.value = r.data.joinUrl;
+          document.getElementById('copy-link-btn').style.display = 'inline-flex';
+          showToast('Join link generated');
+        } else { showToast(r.data.error || 'Could not generate link'); }
+      });
+    });
+    document.getElementById('copy-link-btn').addEventListener('click', function(){
+      var i = document.getElementById('join-link-url'); i.select();
+      try { document.execCommand('copy'); } catch(e){}
+      if (navigator.clipboard) navigator.clipboard.writeText(i.value).catch(function(){});
+      showToast('Link copied');
+    });
+  }
+
+  function loadMembers(){
+    api('/api/clubs/'+clubId+'/members', {}).then(function(r){
+      var body = document.getElementById('members-body'); if (!body) return;
+      var members = (r.data && r.data.members) || [];
+      var rc = document.getElementById('rm-count'); if (rc) rc.textContent = members.length+' member'+(members.length!==1?'s':'');
+      setStat('members', members.length);
+      if (members.length===0){ body.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--gray-400);padding:18px">No members yet</td></tr>'; return; }
+      body.innerHTML = members.map(function(m){
+        var roleCell = (isAdmin && !m.isSelf)
+          ? '<select class="inv-row-select" data-role-for="'+esc(m.user_id)+'" style="width:auto">'+['member','coach','admin'].map(function(ro){ return '<option value="'+ro+'"'+(m.role===ro?' selected':'')+'>'+ro.charAt(0).toUpperCase()+ro.slice(1)+'</option>'; }).join('')+'</select>'
+          : '<span class="pill '+(pillRole[m.role]||'pill-member')+'">'+esc(m.role)+'</span>';
+        var actions = (isAdmin && !m.isSelf)
+          ? '<button class="btn btn-sm btn-red" data-remove="'+esc(m.user_id)+'">Remove</button>'
+          : (m.isSelf ? '<span style="font-size:11px;color:var(--gray-400)">You</span>' : '');
+        return '<tr><td><div class="member-cell"><div class="av-sm" style="background:var(--yellow-light);color:#7a5c00">'+esc(initials(m.name))+'</div><div><div class="member-name">'+esc(m.name)+'</div><div class="member-email">@'+esc(m.handle)+'</div></div></div></td>'+
+          '<td>'+roleCell+'</td>'+
+          '<td class="time-ago">'+esc(fmtAgo(m.joined_at))+'</td>'+
+          '<td><div class="actions-cell">'+actions+'</div></td></tr>';
+      }).join('');
+    });
+  }
+
+  function refresh(){
+    api('/api/clubs/'+clubId+'/invites', {}).then(function(r){ if (r.ok && r.data.invites) renderPending(r.data.invites); });
+    loadMembers();
+  }
+
+  // ── Delegated actions ──
+  document.addEventListener('click', function(e){
+    var rs = e.target.closest && e.target.closest('[data-resend]');
+    var rv = e.target.closest && e.target.closest('[data-revoke]');
+    var rm = e.target.closest && e.target.closest('[data-remove]');
+    if (rs){
+      var id = rs.getAttribute('data-resend'); rs.disabled = true;
+      api('/api/clubs/invites/'+id+'/resend', { method:'POST' }).then(function(r){
+        if (r.ok){ showToast('Invite resent'); rs.textContent='✓ Resent'; rs.classList.add('btn-green'); setTimeout(refresh, 900); }
+        else { showToast(r.data.error || 'Could not resend'); rs.disabled = false; }
+      });
+    }
+    if (rv){
+      var id2 = rv.getAttribute('data-revoke');
+      api('/api/clubs/invites/'+id2, { method:'DELETE' }).then(function(r){
+        if (r.ok){ showToast('Invite revoked'); refresh(); } else { showToast(r.data.error || 'Could not revoke'); }
+      });
+    }
+    if (rm){
+      var uid = rm.getAttribute('data-remove');
+      api('/api/clubs/'+clubId+'/members/'+uid, { method:'DELETE' }).then(function(r){
+        if (r.ok && !r.data.error){ showToast('Member removed'); loadMembers(); } else { showToast(r.data.error || 'Could not remove member'); }
+      });
+    }
+  });
+  document.addEventListener('change', function(e){
+    var sel = e.target.closest && e.target.closest('[data-role-for]');
+    if (sel){
+      var uid = sel.getAttribute('data-role-for');
+      api('/api/clubs/'+clubId+'/members/'+uid+'/role', { method:'PATCH', body: JSON.stringify({ role: sel.value }) }).then(function(r){
+        showToast(r.ok && !r.data.error ? 'Role updated' : (r.data.error || 'Could not update role'));
+      });
+    }
+  });
+
+  // ── Override the mock send with a real bulk invite ──
+  window.sendInvites = function(){
+    var rows = Array.prototype.slice.call(document.querySelectorAll('#invite-rows tr'));
+    var invites = [];
+    rows.forEach(function(r){
+      var emailEl = r.querySelector('input[type=email]');
+      var email = (emailEl && emailEl.value || '').trim();
+      var inputs = r.querySelectorAll('input');
+      var name = inputs[1] ? inputs[1].value : '';
+      var role = ((r.querySelector('select') || {}).value || 'member').toLowerCase();
+      if (email && email.indexOf('@')!==-1) invites.push({ email: email, name: name, role: role });
+    });
+    if (invites.length===0){ showToast('Please add at least one valid email address'); return; }
+    api('/api/clubs/'+clubId+'/invites/bulk', { method:'POST', body: JSON.stringify({ invites: invites }) }).then(function(r){
+      if (!r.ok){ showToast(r.data.error || 'Could not send invites'); return; }
+      var sent = (r.data.sent||[]).length, skipped = (r.data.skipped||[]).length, failed = (r.data.failed||[]).length;
+      var modal = document.getElementById('modal-success');
+      if (modal){
+        var v = modal.querySelector('.ss-val'); if (v) v.textContent = sent;
+        var title = modal.querySelector('.sb-title'); if (title) title.textContent = sent+' invitation'+(sent!==1?'s':'')+' sent successfully';
+        modal.classList.add('open');
+      }
+      showToast(sent+' sent'+(skipped?', '+skipped+' skipped':'')+(failed?', '+failed+' failed':''));
+      var tb = document.getElementById('invite-rows');
+      if (tb){
+        tb.innerHTML = '<tr><td><input class="inv-row-input" type="email" placeholder="name@example.com" oninput="validateEmail(this)"></td><td><input class="inv-row-input" type="text" placeholder="Name"></td><td><select class="inv-row-select"><option>Member</option><option>Coach</option><option>Admin</option></select></td><td style="text-align:center"><button class="inv-row-del" onclick="delRow(this)">✕</button></td></tr>';
+        if (window.updateCounts) updateCounts();
+      }
+      refresh();
+    });
+  };
+
+  // ── Initial render ──
+  renderPending(D.invites || []);
+  loadMembers();
+})();
+</script>
 </body>
 </html>

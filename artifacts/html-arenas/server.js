@@ -7,6 +7,7 @@ console.log('All env vars:', Object.keys(process.env).filter(k => !k.includes('K
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -315,6 +316,60 @@ async function buildUserDisplayMap(ids) {
     }
   }));
   return map;
+}
+
+// ── CLUB INVITES (helpers) ──
+// Sentinel email stored on shareable "open" invite links that aren't tied to a
+// specific recipient, so the admin UI can tell open links apart from personal
+// email invites.
+const OPEN_INVITE_EMAIL = 'open-invite@realarenas.com';
+// Personal email invites live 14 days; open shareable links live 30 days.
+const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+const OPEN_INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+// Random, unguessable invite token (256 bits of entropy, hex-encoded).
+function generateInviteToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// Absolute base URL for building shareable join links. Derived from the
+// incoming request (honoring the proxy's forwarded protocol and the artifact
+// BASE path) instead of a hard-coded domain, so links are correct on both the
+// Replit (/html) preview and the Railway (root) deployment.
+function publicBaseUrl(req) {
+  const proto = (req.get('x-forwarded-proto') || req.protocol || 'https').split(',')[0].trim();
+  return `${proto}://${req.get('host')}${BASE}`;
+}
+
+// Look up a user's role within a specific club (or null if they aren't a
+// member). Used to authorize invite/member management so one club's manager
+// can't read or mutate another club's data.
+async function getClubRole(userId, clubId) {
+  if (!supabaseAdmin || !userId || !clubId) return null;
+  try {
+    const { data } = await supabaseAdmin
+      .from('memberships')
+      .select('role')
+      .eq('user_id', userId)
+      .eq('club_id', clubId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    return (Array.isArray(data) && data[0]) || null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function isClubManagerRole(role) {
+  return role === 'admin' || role === 'coach';
+}
+
+// Inject a server-built object into a page as window.<varName>, escaping `<`
+// so club/member names can't break out of the <script> tag. Mirrors
+// injectArenasData but supports page-specific variable names.
+function injectNamedData(html, varName, dataObj) {
+  const json = JSON.stringify(dataObj).replace(/</g, '\\u003c');
+  return html.replace('</head>', `<script>window.${varName} = ${json};</script></head>`);
 }
 
 // ── POSTS API (training notes) ──
@@ -1654,6 +1709,7 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
     const clubId = membership && membership.club_id;
     let memberCount = 0;
     let members = [];
+    let pendingCount = 0;
 
     if (clubId) {
       const { count } = await supabaseAdmin
@@ -1681,6 +1737,18 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
         }
         return { user_id: m.user_id, role: m.role, joined_at: m.created_at, name: display.name, handle: display.handle };
       }));
+
+      // Count pending invitations so the dashboard can surface them.
+      try {
+        const { count: pc } = await supabaseAdmin
+          .from('club_invites')
+          .select('*', { count: 'exact', head: true })
+          .eq('club_id', clubId)
+          .eq('status', 'pending');
+        pendingCount = pc || 0;
+      } catch (e) {
+        // Non-fatal: dashboard still renders without the pending count.
+      }
     }
 
     const clubData = {
@@ -1688,6 +1756,7 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
       profile: displayFromUser(req.user),
       memberCount,
       members,
+      pendingCount,
       userEmail: req.user.email
     };
 
@@ -1699,7 +1768,555 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
   }
 });
 app.get(BASE + '/clubs/member', (req, res) => res.sendFile(path.join(HTML, 'arenas-club-member.html')));
-app.get(BASE + '/clubs/invite', (req, res) => res.sendFile(path.join(HTML, 'arenas-club-invite.html')));
+
+// ── CLUB INVITE ADMIN PAGE ──
+// Renders the invite console with the manager's real club, pending invites, and
+// members injected as window.INVITE_DATA. Falls back to the static mockup if the
+// viewer isn't a club manager or data can't be loaded.
+app.get(BASE + '/clubs/invite', requirePageAuth, async (req, res) => {
+  const servePlain = () => res.sendFile(path.join(HTML, 'arenas-club-invite.html'));
+  try {
+    if (!supabaseAdmin) return servePlain();
+
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('club_id, role, clubs (id, name, handle, sport, city)')
+      .eq('user_id', req.user.id)
+      .in('role', ['admin', 'coach'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!membership || !membership.club_id) return servePlain();
+    const clubId = membership.club_id;
+
+    const [invitesRes, membersRes, countRes] = await Promise.all([
+      supabaseAdmin.from('club_invites').select('*').eq('club_id', clubId).order('created_at', { ascending: false }),
+      supabaseAdmin.from('memberships').select('user_id, role, created_at').eq('club_id', clubId).order('created_at', { ascending: false }),
+      supabaseAdmin.from('memberships').select('*', { count: 'exact', head: true }).eq('club_id', clubId)
+    ]);
+
+    const invites = invitesRes.data || [];
+    const memberRows = membersRes.data || [];
+    const memberCount = countRes.count || 0;
+
+    const nameMap = await buildUserDisplayMap([
+      ...invites.map(i => i.invited_by),
+      ...memberRows.map(m => m.user_id)
+    ]);
+
+    const now = Date.now();
+    const inviteData = {
+      club: membership.clubs || { id: clubId, name: 'Your club' },
+      role: membership.role,
+      profile: displayFromUser(req.user),
+      memberCount,
+      invites: invites.map(i => ({
+        id: i.id,
+        email: i.email,
+        role: i.role,
+        status: i.status,
+        created_at: i.created_at,
+        expires_at: i.expires_at,
+        accepted_at: i.accepted_at,
+        isOpen: i.email === OPEN_INVITE_EMAIL,
+        isExpired: i.expires_at ? new Date(i.expires_at).getTime() < now : false,
+        invitedByName: (nameMap[i.invited_by] && nameMap[i.invited_by].name) || 'A coach'
+      })),
+      members: memberRows.map(m => ({
+        user_id: m.user_id,
+        role: m.role,
+        joined_at: m.created_at,
+        name: (nameMap[m.user_id] && nameMap[m.user_id].name) || 'Member',
+        handle: (nameMap[m.user_id] && nameMap[m.user_id].handle) || 'member',
+        isSelf: m.user_id === req.user.id
+      })),
+      baseUrl: publicBaseUrl(req)
+    };
+
+    const html = injectNamedData(fs.readFileSync(path.join(HTML, 'arenas-club-invite.html'), 'utf8'), 'INVITE_DATA', inviteData);
+    res.type('html').send(html);
+  } catch (err) {
+    console.log('Invite page data error:', err.message);
+    servePlain();
+  }
+});
+
+// ── CLUB INVITES API ──
+// Create a single personal email invite. Only club admins/coaches may invite.
+app.post(BASE + '/api/clubs/:clubId/invites', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server not configured' });
+  const { clubId } = req.params;
+  const role = await getClubRole(req.user.id, clubId);
+  if (!isClubManagerRole(role && role.role)) return res.status(403).json({ error: 'Not authorized' });
+
+  let email = (req.body && req.body.email || '').trim().toLowerCase();
+  let inviteRole = ['member', 'coach', 'admin'].includes(req.body && req.body.role) ? req.body.role : 'member';
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'A valid email is required' });
+  }
+  try {
+    const { data: existing } = await supabaseAdmin
+      .from('club_invites')
+      .select('id')
+      .eq('club_id', clubId)
+      .eq('email', email)
+      .eq('status', 'pending')
+      .maybeSingle();
+    if (existing) return res.status(409).json({ error: 'An invite is already pending for this email' });
+
+    const token = generateInviteToken();
+    const { data: invite, error } = await supabaseAdmin
+      .from('club_invites')
+      .insert({
+        club_id: clubId,
+        invited_by: req.user.id,
+        email,
+        role: inviteRole,
+        token,
+        status: 'pending',
+        expires_at: new Date(Date.now() + INVITE_TTL_MS).toISOString()
+      })
+      .select('*')
+      .single();
+    if (error) {
+      console.log('Invite insert error:', error.message);
+      return res.status(500).json({ error: 'Could not create invite' });
+    }
+    const joinUrl = `${publicBaseUrl(req)}/join/${token}`;
+    if (process.env.NODE_ENV !== 'production') console.log('INVITE - To:', email, 'Join URL:', joinUrl);
+    return res.json({ success: true, invite, joinUrl });
+  } catch (err) {
+    console.log('Invite error:', err.message);
+    return res.status(500).json({ error: 'Could not create invite' });
+  }
+});
+
+// Create many invites at once (used by the invite form and CSV/paste import).
+app.post(BASE + '/api/clubs/:clubId/invites/bulk', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server not configured' });
+  const { clubId } = req.params;
+  const role = await getClubRole(req.user.id, clubId);
+  if (!isClubManagerRole(role && role.role)) return res.status(403).json({ error: 'Not authorized' });
+
+  const incoming = Array.isArray(req.body && req.body.invites) ? req.body.invites : [];
+  if (incoming.length === 0) return res.status(400).json({ error: 'No invites provided' });
+  if (incoming.length > 200) return res.status(400).json({ error: 'Too many invites at once (max 200)' });
+
+  const results = { sent: [], skipped: [], failed: [] };
+  for (const raw of incoming) {
+    const email = (raw && raw.email || '').trim().toLowerCase();
+    const irole = ['member', 'coach', 'admin'].includes(raw && raw.role) ? raw.role : 'member';
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { results.failed.push({ email, reason: 'invalid_email' }); continue; }
+    try {
+      const { data: existing } = await supabaseAdmin
+        .from('club_invites')
+        .select('id')
+        .eq('club_id', clubId)
+        .eq('email', email)
+        .eq('status', 'pending')
+        .maybeSingle();
+      if (existing) { results.skipped.push({ email, reason: 'already_pending' }); continue; }
+      const token = generateInviteToken();
+      const { error } = await supabaseAdmin
+        .from('club_invites')
+        .insert({
+          club_id: clubId,
+          invited_by: req.user.id,
+          email,
+          role: irole,
+          token,
+          status: 'pending',
+          expires_at: new Date(Date.now() + INVITE_TTL_MS).toISOString()
+        });
+      if (error) { results.failed.push({ email, reason: 'db' }); continue; }
+      const joinUrl = `${publicBaseUrl(req)}/join/${token}`;
+      if (process.env.NODE_ENV !== 'production') console.log('BULK INVITE - To:', email, 'Join URL:', joinUrl);
+      results.sent.push({ email, joinUrl });
+    } catch (err) {
+      results.failed.push({ email, reason: 'db' });
+    }
+  }
+  return res.json({ success: true, ...results });
+});
+
+// List a club's invites (managers only). Resolves inviter display names since
+// there is no profiles table.
+app.get(BASE + '/api/clubs/:clubId/invites', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ invites: [] });
+  const { clubId } = req.params;
+  const role = await getClubRole(req.user.id, clubId);
+  if (!isClubManagerRole(role && role.role)) return res.status(403).json({ error: 'Not authorized' });
+  try {
+    const { data } = await supabaseAdmin
+      .from('club_invites')
+      .select('*')
+      .eq('club_id', clubId)
+      .order('created_at', { ascending: false });
+    const invites = data || [];
+    const nameMap = await buildUserDisplayMap(invites.map(i => i.invited_by));
+    const now = Date.now();
+    return res.json({
+      invites: invites.map(i => ({
+        id: i.id,
+        email: i.email,
+        role: i.role,
+        status: i.status,
+        created_at: i.created_at,
+        expires_at: i.expires_at,
+        accepted_at: i.accepted_at,
+        isOpen: i.email === OPEN_INVITE_EMAIL,
+        isExpired: i.expires_at ? new Date(i.expires_at).getTime() < now : false,
+        invitedByName: (nameMap[i.invited_by] && nameMap[i.invited_by].name) || 'A coach'
+      }))
+    });
+  } catch (err) {
+    return res.json({ invites: [] });
+  }
+});
+
+// Resend (extend) a pending invite. Authorized via the invite's own club.
+app.post(BASE + '/api/clubs/invites/:inviteId/resend', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server not configured' });
+  try {
+    const { data: invite } = await supabaseAdmin
+      .from('club_invites')
+      .select('*')
+      .eq('id', req.params.inviteId)
+      .maybeSingle();
+    if (!invite) return res.status(404).json({ error: 'Invite not found' });
+    const role = await getClubRole(req.user.id, invite.club_id);
+    if (!isClubManagerRole(role && role.role)) return res.status(403).json({ error: 'Not authorized' });
+    if (invite.status !== 'pending') return res.status(400).json({ error: 'Only pending invites can be resent' });
+
+    const ttl = invite.email === OPEN_INVITE_EMAIL ? OPEN_INVITE_TTL_MS : INVITE_TTL_MS;
+    const { data: updated, error } = await supabaseAdmin
+      .from('club_invites')
+      .update({ expires_at: new Date(Date.now() + ttl).toISOString() })
+      .eq('id', invite.id)
+      .select('*')
+      .single();
+    if (error) return res.status(500).json({ error: 'Could not resend invite' });
+    const joinUrl = `${publicBaseUrl(req)}/join/${invite.token}`;
+    if (process.env.NODE_ENV !== 'production') console.log('RESEND INVITE - To:', invite.email, 'Join URL:', joinUrl);
+    return res.json({ success: true, invite: updated, joinUrl });
+  } catch (err) {
+    return res.status(500).json({ error: 'Could not resend invite' });
+  }
+});
+
+// Cancel/delete an invite. Authorized via the invite's own club.
+app.delete(BASE + '/api/clubs/invites/:inviteId', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server not configured' });
+  try {
+    const { data: invite } = await supabaseAdmin
+      .from('club_invites')
+      .select('club_id')
+      .eq('id', req.params.inviteId)
+      .maybeSingle();
+    if (!invite) return res.status(404).json({ error: 'Invite not found' });
+    const role = await getClubRole(req.user.id, invite.club_id);
+    if (!isClubManagerRole(role && role.role)) return res.status(403).json({ error: 'Not authorized' });
+    const { error } = await supabaseAdmin.from('club_invites').delete().eq('id', req.params.inviteId);
+    if (error) return res.status(500).json({ error: 'Could not revoke invite' });
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Could not revoke invite' });
+  }
+});
+
+// List club members (managers only). Resolves names from auth metadata since
+// there is no profiles table, and uses created_at as the join date.
+app.get(BASE + '/api/clubs/:clubId/members', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ members: [] });
+  const { clubId } = req.params;
+  const role = await getClubRole(req.user.id, clubId);
+  if (!isClubManagerRole(role && role.role)) return res.status(403).json({ error: 'Not authorized' });
+  try {
+    const { data } = await supabaseAdmin
+      .from('memberships')
+      .select('user_id, role, created_at')
+      .eq('club_id', clubId)
+      .order('created_at', { ascending: true });
+    const rows = data || [];
+    const nameMap = await buildUserDisplayMap(rows.map(m => m.user_id));
+    return res.json({
+      members: rows.map(m => ({
+        user_id: m.user_id,
+        role: m.role,
+        joined_at: m.created_at,
+        name: (nameMap[m.user_id] && nameMap[m.user_id].name) || 'Member',
+        handle: (nameMap[m.user_id] && nameMap[m.user_id].handle) || 'member',
+        isSelf: m.user_id === req.user.id
+      }))
+    });
+  } catch (err) {
+    return res.json({ members: [] });
+  }
+});
+
+// Change a member's role (admins only).
+app.patch(BASE + '/api/clubs/:clubId/members/:userId/role', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server not configured' });
+  const { clubId, userId } = req.params;
+  const newRole = req.body && req.body.role;
+  if (!['member', 'coach', 'admin'].includes(newRole)) return res.status(400).json({ error: 'Invalid role' });
+  const requester = await getClubRole(req.user.id, clubId);
+  if (!requester || requester.role !== 'admin') return res.status(403).json({ error: 'Only admins can change roles' });
+  try {
+    const { error } = await supabaseAdmin
+      .from('memberships')
+      .update({ role: newRole })
+      .eq('user_id', userId)
+      .eq('club_id', clubId);
+    if (error) return res.status(500).json({ error: 'Could not update role' });
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Could not update role' });
+  }
+});
+
+// Remove a member from a club (admins only; can't remove yourself).
+app.delete(BASE + '/api/clubs/:clubId/members/:userId', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server not configured' });
+  const { clubId, userId } = req.params;
+  const requester = await getClubRole(req.user.id, clubId);
+  if (!requester || requester.role !== 'admin') return res.status(403).json({ error: 'Only admins can remove members' });
+  if (userId === req.user.id) return res.status(400).json({ error: 'You cannot remove yourself from the club' });
+  try {
+    const { error } = await supabaseAdmin
+      .from('memberships')
+      .delete()
+      .eq('user_id', userId)
+      .eq('club_id', clubId);
+    if (error) return res.status(500).json({ error: 'Could not remove member' });
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Could not remove member' });
+  }
+});
+
+// Generate a shareable open join link (managers only).
+app.post(BASE + '/api/clubs/:clubId/join-link', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server not configured' });
+  const { clubId } = req.params;
+  const role = await getClubRole(req.user.id, clubId);
+  if (!isClubManagerRole(role && role.role)) return res.status(403).json({ error: 'Not authorized' });
+  try {
+    const token = generateInviteToken();
+    const { error } = await supabaseAdmin
+      .from('club_invites')
+      .insert({
+        club_id: clubId,
+        invited_by: req.user.id,
+        email: OPEN_INVITE_EMAIL,
+        role: 'member',
+        token,
+        status: 'pending',
+        expires_at: new Date(Date.now() + OPEN_INVITE_TTL_MS).toISOString()
+      });
+    if (error) return res.status(500).json({ error: 'Could not generate link' });
+    return res.json({ success: true, joinUrl: `${publicBaseUrl(req)}/join/${token}` });
+  } catch (err) {
+    return res.status(500).json({ error: 'Could not generate link' });
+  }
+});
+
+// ── PUBLIC JOIN FLOW ──
+// View the branded join page for an invite token. No auth required.
+app.get(BASE + '/join/:token', async (req, res) => {
+  const render = (state) => {
+    try {
+      const html = injectNamedData(fs.readFileSync(path.join(HTML, 'arenas-club-join.html'), 'utf8'), 'JOIN_DATA', state);
+      res.type('html').send(html);
+    } catch (err) {
+      res.status(500).send('Unable to load invite');
+    }
+  };
+  try {
+    if (!supabaseAdmin) return render({ status: 'error', baseUrl: publicBaseUrl(req) });
+    const { data: invite } = await supabaseAdmin
+      .from('club_invites')
+      .select('*, clubs (id, name, handle, sport, city)')
+      .eq('token', req.params.token)
+      .maybeSingle();
+    if (!invite) return render({ status: 'invalid', baseUrl: publicBaseUrl(req) });
+
+    const nameMap = await buildUserDisplayMap([invite.invited_by]);
+    const invitedByName = (nameMap[invite.invited_by] && nameMap[invite.invited_by].name) || 'A coach';
+    const isExpired = invite.expires_at ? new Date(invite.expires_at).getTime() < Date.now() : false;
+    const isOpen = invite.email === OPEN_INVITE_EMAIL;
+
+    // Offer one-click join if the visitor is already signed in.
+    let viewer = null;
+    const tok = req.signedCookies && req.signedCookies.sb_access_token;
+    if (tok) {
+      try {
+        const { data } = await supabase.auth.getUser(tok);
+        if (data && data.user) viewer = { name: displayFromUser(data.user).name, email: data.user.email };
+      } catch (e) { /* treat as logged out */ }
+    }
+
+    let status = 'ok';
+    if (invite.status === 'accepted') status = 'accepted';
+    else if (invite.status !== 'pending') status = 'invalid';
+    else if (isExpired) status = 'expired';
+
+    return render({
+      status,
+      token: req.params.token,
+      error: req.query.error || null,
+      club: invite.clubs || { name: 'a club' },
+      role: invite.role || 'member',
+      invitedByName,
+      email: isOpen ? '' : invite.email,
+      lockEmail: !isOpen,
+      isOpen,
+      expiresAt: invite.expires_at,
+      viewer,
+      baseUrl: publicBaseUrl(req)
+    });
+  } catch (err) {
+    console.log('Join page error:', err.message);
+    return render({ status: 'error', baseUrl: publicBaseUrl(req) });
+  }
+});
+
+// Accept an invite by creating a brand-new account, joining the club, and
+// signing in. Form POST → redirects back to the join page on error.
+app.post(BASE + '/auth/join/:token', async (req, res) => {
+  const back = (err) => res.redirect(`${BASE}/join/${req.params.token}?error=${err}`);
+  try {
+    if (!supabaseAdmin) return back('unavailable');
+    const { data: invite } = await supabaseAdmin
+      .from('club_invites')
+      .select('*, clubs (name)')
+      .eq('token', req.params.token)
+      .eq('status', 'pending')
+      .maybeSingle();
+    if (!invite) return back('invalid');
+    if (invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()) return back('expired');
+
+    const isOpen = invite.email === OPEN_INVITE_EMAIL;
+    const email = (isOpen ? (req.body.email || '') : invite.email).trim().toLowerCase();
+    const password = req.body.password || '';
+    const name = (req.body.name || '').trim() || (email ? email.split('@')[0] : 'Athlete');
+    if (!email) return back('missing_email');
+    if (!password || password.length < 6) return back('weak_password');
+
+    const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { name }
+    });
+    if (authErr || !authData || !authData.user) return back('account_exists');
+    const userId = authData.user.id;
+
+    const { error: memErr } = await supabaseAdmin
+      .from('memberships')
+      .insert({ user_id: userId, club_id: invite.club_id, role: invite.role || 'member' });
+    if (memErr) {
+      await supabaseAdmin.auth.admin.deleteUser(userId);
+      return back('unknown');
+    }
+
+    // Personal invites are single-use (marked accepted). Open shareable links
+    // stay pending so they can be reused until they expire.
+    if (!isOpen) {
+      await supabaseAdmin
+        .from('club_invites')
+        .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+        .eq('token', req.params.token);
+    }
+
+    try {
+      const { data: admins } = await supabaseAdmin
+        .from('memberships').select('user_id').eq('club_id', invite.club_id).eq('role', 'admin');
+      const clubName = (invite.clubs && invite.clubs.name) || 'your club';
+      await Promise.all((admins || []).map(a => createNotification({
+        userId: a.user_id,
+        type: 'club',
+        title: 'New member joined',
+        body: `${name} accepted your invite and joined ${clubName}`,
+        link: '/clubs/dashboard',
+        actorId: userId,
+        entityId: invite.club_id
+      })));
+    } catch (e) {
+      console.log('Join notify error:', e.message);
+    }
+
+    const { data: signInData } = await supabase.auth.signInWithPassword({ email, password });
+    if (signInData && signInData.session) setSession(res, signInData.session);
+    return res.redirect(BASE + '/feed');
+  } catch (err) {
+    console.log('Join error:', err.message);
+    return back('unknown');
+  }
+});
+
+// Accept an invite as an already-signed-in user (one-click join).
+app.post(BASE + '/auth/join/:token/existing', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server not configured' });
+  try {
+    const { data: invite } = await supabaseAdmin
+      .from('club_invites')
+      .select('*, clubs (name)')
+      .eq('token', req.params.token)
+      .eq('status', 'pending')
+      .maybeSingle();
+    if (!invite) return res.status(404).json({ error: 'Invalid or expired invite' });
+    if (invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()) {
+      return res.status(400).json({ error: 'This invite has expired' });
+    }
+
+    // Personal invites are bound to a specific email; only that account may
+    // redeem them. Open shareable links accept any signed-in user.
+    const isOpen = invite.email === OPEN_INVITE_EMAIL;
+    if (!isOpen && (req.user.email || '').toLowerCase() !== (invite.email || '').toLowerCase()) {
+      return res.status(403).json({ error: 'This invite was sent to a different email address' });
+    }
+
+    const already = await getClubRole(req.user.id, invite.club_id);
+    if (already) return res.json({ success: true, alreadyMember: true });
+
+    const { error } = await supabaseAdmin
+      .from('memberships')
+      .insert({ user_id: req.user.id, club_id: invite.club_id, role: invite.role || 'member' });
+    if (error) return res.status(500).json({ error: 'Could not join club' });
+
+    // Single-use for personal invites; open links remain reusable until expiry.
+    if (!isOpen) {
+      await supabaseAdmin
+        .from('club_invites')
+        .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+        .eq('token', req.params.token);
+    }
+
+    try {
+      const { data: admins } = await supabaseAdmin
+        .from('memberships').select('user_id').eq('club_id', invite.club_id).eq('role', 'admin');
+      const joiner = displayFromUser(req.user);
+      const clubName = (invite.clubs && invite.clubs.name) || 'your club';
+      await Promise.all((admins || []).map(a => createNotification({
+        userId: a.user_id,
+        type: 'club',
+        title: 'New member joined',
+        body: `${joiner.name} accepted your invite and joined ${clubName}`,
+        link: '/clubs/dashboard',
+        actorId: req.user.id,
+        entityId: invite.club_id
+      })));
+    } catch (e) {
+      console.log('Join notify error:', e.message);
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Could not join club' });
+  }
+});
 app.get(BASE + '/landing', (req, res) => res.sendFile(path.join(HTML, 'arenas-landing-login.html')));
 // ── NOTIFICATIONS API ──
 // List the viewer's 50 most recent notifications with actor display info and an

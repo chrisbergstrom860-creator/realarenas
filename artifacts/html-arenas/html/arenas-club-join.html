@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Join a club · Arenas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --yellow:#FFD21E;--yellow-dark:#E6B800;--yellow-light:#FFF9E0;
+  --gray-50:#F9FAFB;--gray-100:#F3F4F6;--gray-200:#E5E7EB;--gray-300:#D1D5DB;
+  --gray-400:#9CA3AF;--gray-500:#6B7280;--gray-600:#4B5563;--gray-700:#374151;
+  --gray-800:#1F2937;--gray-900:#111827;
+  --green:#10B981;--green-light:#ECFDF5;--red:#EF4444;--red-light:#FEF2F2;
+  --font:'Source Sans 3',sans-serif;--mono:'IBM Plex Mono',monospace;
+  --border:1px solid var(--gray-200);--radius:8px;--radius-lg:12px;
+  --shadow:0 1px 3px rgba(0,0,0,0.07),0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:0 10px 30px rgba(0,0,0,0.10);
+}
+body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);font-size:14px;line-height:1.5;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.wrap{width:100%;max-width:460px}
+.brand{display:flex;align-items:center;gap:9px;justify-content:center;margin-bottom:18px}
+.logo-icon{width:30px;height:30px;background:var(--yellow);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:16px}
+.logo-text{font-size:17px;font-weight:700;color:var(--gray-900)}
+.card{background:white;border:var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);overflow:hidden}
+.card-top{background:var(--gray-900);color:white;padding:22px 26px}
+.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--yellow);font-weight:700;margin-bottom:8px}
+.card-top h1{font-size:21px;font-weight:700;line-height:1.25;letter-spacing:-0.01em}
+.card-top .by{font-size:13px;color:var(--gray-300);margin-top:8px}
+.card-body{padding:24px 26px;display:flex;flex-direction:column;gap:16px}
+.club-card{background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:13px 15px}
+.club-name{font-size:15px;font-weight:700;color:var(--gray-900);margin-bottom:4px}
+.club-meta{font-size:12px;color:var(--gray-500);display:flex;gap:12px;flex-wrap:wrap}
+.perks{display:flex;flex-direction:column;gap:7px}
+.perk{font-size:13px;color:var(--gray-700);display:flex;gap:8px}
+.perk .tick{color:var(--green);font-weight:700;flex-shrink:0}
+.form-field{display:flex;flex-direction:column;gap:5px}
+.form-label{font-size:12px;font-weight:600;color:var(--gray-700)}
+.form-input{padding:10px 12px;border:var(--border);border-radius:var(--radius);font-size:14px;color:var(--gray-800);outline:none;transition:border-color .13s}
+.form-input:focus{border-color:var(--gray-400);box-shadow:0 0 0 3px rgba(107,114,128,0.08)}
+.form-input:disabled{background:var(--gray-100);color:var(--gray-500)}
+.btn{padding:12px 18px;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid transparent;width:100%;text-align:center;display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:all .13s;text-decoration:none}
+.btn-yellow{background:var(--yellow);color:var(--gray-900);border-color:var(--yellow-dark)}
+.btn-yellow:hover{background:var(--yellow-dark)}
+.btn-ghost{background:white;color:var(--gray-700);border-color:var(--gray-200);font-weight:500;font-size:13px;padding:10px 16px}
+.btn-ghost:hover{background:var(--gray-50)}
+.muted{font-size:12px;color:var(--gray-400);text-align:center;line-height:1.6}
+.muted a{color:var(--gray-600)}
+.alert{background:var(--red-light);border:1px solid #FECACA;color:#A32D2D;border-radius:var(--radius);padding:10px 13px;font-size:13px}
+.state{text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center}
+.state .emoji{font-size:40px}
+.state h2{font-size:18px;font-weight:700;color:var(--gray-900)}
+.state p{font-size:13px;color:var(--gray-500)}
+.divider{display:flex;align-items:center;gap:10px;color:var(--gray-400);font-size:12px}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--gray-200)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><div class="logo-icon">🏟</div><span class="logo-text">Arenas</span></div>
+  <div class="card" id="card"></div>
+</div>
+<script>
+(function(){
+  var D = window.JOIN_DATA || { status: 'error' };
+  var baseUrl = D.baseUrl || '';
+  var card = document.getElementById('card');
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+
+  var ERR = {
+    invalid: 'That invite link is no longer valid.',
+    expired: 'That invite has expired. Ask the club for a fresh link.',
+    missing_email: 'Please enter your email address.',
+    weak_password: 'Please choose a password of at least 6 characters.',
+    account_exists: 'An account with that email already exists. Try signing in instead.',
+    unavailable: 'The service is temporarily unavailable. Please try again shortly.',
+    unknown: 'Something went wrong. Please try again.'
+  };
+
+  function clubBlock(){
+    var c = D.club || {};
+    var meta = [];
+    if (c.sport) meta.push('🏅 ' + esc(c.sport));
+    if (c.city) meta.push('📍 ' + esc(c.city));
+    return '<div class="club-card"><div class="club-name">'+esc(c.name||'a club')+'</div>'+
+      (meta.length ? '<div class="club-meta">'+meta.map(function(m){return '<span>'+m+'</span>';}).join('')+'</div>' : '')+
+    '</div>';
+  }
+
+  function perks(){
+    return '<div class="perks">'+
+      '<div class="perk"><span class="tick">✓</span> Private club leaderboard and weekly rankings</div>'+
+      '<div class="perk"><span class="tick">✓</span> AI coaching on every activity you log</div>'+
+      '<div class="perk"><span class="tick">✓</span> Club challenges and event sign-ups</div>'+
+      '<div class="perk"><span class="tick">✓</span> Follow your teammates in the club feed</div>'+
+    '</div>';
+  }
+
+  function stateCard(emoji, title, body, actionHtml){
+    card.innerHTML = '<div class="card-body"><div class="state"><div class="emoji">'+emoji+'</div><h2>'+esc(title)+'</h2><p>'+esc(body)+'</p>'+(actionHtml||'')+'</div></div>';
+  }
+
+  if (D.status === 'invalid' || D.status === 'error'){
+    stateCard('🔗', 'Invite not found', ERR.invalid, '<a class="btn btn-ghost" href="'+esc(baseUrl)+'/landing">Go to Arenas</a>');
+    return;
+  }
+  if (D.status === 'expired'){
+    stateCard('⌛', 'Invite expired', ERR.expired, '<a class="btn btn-ghost" href="'+esc(baseUrl)+'/landing">Go to Arenas</a>');
+    return;
+  }
+  if (D.status === 'accepted'){
+    stateCard('✅', 'Already accepted', 'This invite has already been used. Sign in to access your club.', '<a class="btn btn-yellow" href="'+esc(baseUrl)+'/landing">Sign in</a>');
+    return;
+  }
+
+  // status === 'ok' — render the join experience.
+  var errBanner = D.error ? '<div class="alert">'+esc(ERR[D.error] || ERR.unknown)+'</div>' : '';
+  var top = '<div class="card-top"><div class="eyebrow">Club invitation</div><h1>You\u2019ve been invited to join '+esc((D.club&&D.club.name)||'a club')+'</h1><div class="by">Invited by '+esc(D.invitedByName||'a coach')+' \u00b7 as '+esc(D.role||'member')+'</div></div>';
+
+  if (D.viewer){
+    // Logged-in: offer one-click join.
+    card.innerHTML = top + '<div class="card-body">'+ errBanner + clubBlock() + perks() +
+      '<button class="btn btn-yellow" id="join-btn">Join '+esc((D.club&&D.club.name)||'this club')+'</button>'+
+      '<div class="muted">Signed in as <strong>'+esc(D.viewer.name)+'</strong> ('+esc(D.viewer.email)+')<br><a href="'+esc(baseUrl)+'/auth/logout">Use a different account</a></div>'+
+    '</div>';
+    document.getElementById('join-btn').addEventListener('click', function(){
+      var btn = this; btn.disabled = true; btn.textContent = 'Joining\u2026';
+      fetch(baseUrl + '/auth/join/' + D.token + '/existing', { method:'POST', headers:{'Content-Type':'application/json'} })
+        .then(function(r){ return r.json().catch(function(){return {};}).then(function(j){ return {ok:r.ok, data:j}; }); })
+        .then(function(r){
+          if (r.ok && r.data.success){ window.location.href = baseUrl + '/feed'; }
+          else { btn.disabled = false; btn.textContent = 'Join '+((D.club&&D.club.name)||'this club'); card.querySelector('.card-body').insertAdjacentHTML('afterbegin','<div class="alert">'+esc(r.data.error||ERR.unknown)+'</div>'); }
+        })
+        .catch(function(){ btn.disabled=false; btn.textContent='Try again'; });
+    });
+    return;
+  }
+
+  // Logged-out: signup form.
+  var emailVal = esc(D.email || '');
+  var emailField = D.lockEmail
+    ? '<input class="form-input" type="email" name="email" value="'+emailVal+'" disabled><input type="hidden" name="email" value="'+emailVal+'">'
+    : '<input class="form-input" type="email" name="email" value="'+emailVal+'" placeholder="you@example.com" required>';
+
+  card.innerHTML = top + '<div class="card-body">'+ errBanner + clubBlock() + perks() +
+    '<form method="POST" action="'+esc(baseUrl)+'/auth/join/'+esc(D.token)+'" style="display:flex;flex-direction:column;gap:14px">'+
+      '<div class="form-field"><label class="form-label">Your name</label><input class="form-input" type="text" name="name" placeholder="Jamie King" required></div>'+
+      '<div class="form-field"><label class="form-label">Email</label>'+emailField+'</div>'+
+      '<div class="form-field"><label class="form-label">Create a password</label><input class="form-input" type="password" name="password" placeholder="At least 6 characters" minlength="6" required></div>'+
+      '<button class="btn btn-yellow" type="submit">Create account &amp; join \u2192</button>'+
+    '</form>'+
+    '<div class="divider">or</div>'+
+    '<a class="btn btn-ghost" href="'+esc(baseUrl)+'/landing">Already have an Arenas account? Sign in</a>'+
+    '<div class="muted">By joining you agree to Arenas\u2019 Terms and Privacy Policy.</div>'+
+  '</div>';
+})();
+</script>
+</body>
+</html>
