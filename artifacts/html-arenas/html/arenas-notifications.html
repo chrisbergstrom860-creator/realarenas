@@ -985,6 +985,30 @@ function showToast(msg) {
     system: { icon: '✦', bg: 'var(--yellow-light)', label: 'System' }
   };
 
+  // Club invite notifications get inline Accept / Decline actions. The club id
+  // is carried on entity_id (the link is /join/<token> and has no club id).
+  function buildNotifActions(n) {
+    if (n.type === 'club' && (n.body || '').toLowerCase().includes('invited you to join')) {
+      const linkMatch = n.link && n.link.match(/join-club\/([^?]+)/);
+      const clubId = n.entity_id || (linkMatch && linkMatch[1]);
+      if (!clubId) return '';
+      const id = esc(n.id);
+      const cid = esc(clubId);
+      return `
+        <div style="display:flex;gap:6px;margin-top:8px" id="invite-actions-${id}">
+          <button onclick="event.stopPropagation();acceptClubInvite('${cid}','${id}',this)"
+            style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;background:#FFD21E;color:#111827;border:0.5px solid #E6B800;cursor:pointer">
+            ✓ Accept invite
+          </button>
+          <button onclick="event.stopPropagation();declineClubInvite('${id}',this)"
+            style="padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;background:white;color:var(--gray-600);border:var(--border);cursor:pointer">
+            Decline
+          </button>
+        </div>`;
+    }
+    return '';
+  }
+
   function renderItem(n, i) {
     const config = typeConfig[n.type] || typeConfig.system;
     const actorName = (n.actor && n.actor.name) || 'A';
@@ -1003,6 +1027,7 @@ function showToast(msg) {
             <span class="notif-time">${esc(timeAgo(n.created_at))}</span>
             <span class="notif-source">${config.label}</span>
           </div>
+          ${buildNotifActions(n)}
         </div>
         ${!n.read ? '<div class="unread-dot"></div>' : ''}
         <button class="notif-dismiss" onclick="event.stopPropagation();dismissNotif(this,'${esc(n.id)}')" title="Dismiss">✕</button>
@@ -1037,6 +1062,54 @@ function showToast(msg) {
       item.classList.remove('unread');
       item.querySelector('.unread-bar')?.remove();
       item.querySelector('.unread-dot')?.remove();
+    }
+  };
+
+  window.acceptClubInvite = async function(clubId, notifId, btn) {
+    btn.textContent = 'Joining…';
+    btn.disabled = true;
+    try {
+      const response = await fetch(window.BASE + '/api/clubs/' + clubId + '/accept-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const result = await response.json();
+      if (result.error) {
+        showToast('Error: ' + result.error);
+        btn.textContent = '✓ Accept invite';
+        btn.disabled = false;
+        return;
+      }
+      const actionsEl = document.getElementById('invite-actions-' + notifId);
+      if (actionsEl) {
+        actionsEl.innerHTML = `
+          <div style="font-size:12px;color:#166534;background:#ECFDF5;border:0.5px solid #86EFAC;padding:5px 12px;border-radius:20px;display:inline-flex;align-items:center;gap:5px">
+            ✓ You joined the club! <a href="${window.BASE}/feed" style="color:#166534;font-weight:600;text-decoration:underline">Go to feed →</a>
+          </div>`;
+      }
+      showToast('✓ Welcome to the club! You can now see club content in your feed.');
+      markRead(notifId);
+    } catch (err) {
+      showToast('Something went wrong — please try again');
+      btn.textContent = '✓ Accept invite';
+      btn.disabled = false;
+    }
+  };
+
+  window.declineClubInvite = async function(notifId, btn) {
+    btn.textContent = 'Declining…';
+    btn.disabled = true;
+    try {
+      const actionsEl = document.getElementById('invite-actions-' + notifId);
+      if (actionsEl) {
+        actionsEl.innerHTML = `<div style="font-size:12px;color:var(--gray-400)">Invite declined</div>`;
+      }
+      markRead(notifId);
+      showToast('Invite declined');
+    } catch (err) {
+      showToast('Something went wrong');
+      btn.textContent = 'Decline';
+      btn.disabled = false;
     }
   };
 

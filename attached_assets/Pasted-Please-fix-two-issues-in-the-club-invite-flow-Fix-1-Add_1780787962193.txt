@@ -1,0 +1,100 @@
+Please fix two issues in the club invite flow:
+Fix 1 — Add Accept and Decline buttons to club invite notifications
+In arenas-notifications.html update the notification rendering script to detect notifications of type club that contain the word "invited" in the body and add Accept and Decline action buttons below them:
+javascript// In the notification rendering function, after building the notif HTML
+// add this check for club invite notifications
+function buildNotifActions(n) {
+  if (n.type === 'club' && n.body?.toLowerCase().includes('invited you to join')) {
+    // Extract club ID from the notification link
+    // Link format: /join-club/CLUB_ID?token=...
+    const clubIdMatch = n.link?.match(/join-club\/([^?]+)/);
+    const clubId = clubIdMatch?.[1] || n.entity_id;
+    if (!clubId) return '';
+    return `
+      <div style="display:flex;gap:6px;margin-top:8px" id="invite-actions-${n.id}">
+        <button onclick="acceptClubInvite('${clubId}','${n.id}',this)"
+          style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;background:#FFD21E;color:#111827;border:0.5px solid #E6B800;cursor:pointer">
+          ✓ Accept invite
+        </button>
+        <button onclick="declineClubInvite('${n.id}',this)"
+          style="padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;background:white;color:var(--gray-600);border:var(--border);cursor:pointer">
+          Decline
+        </button>
+      </div>`;
+  }
+  return '';
+}
+Update the notification item HTML in the rendering script to include the actions below the notification body. Find where each notification card is built and add ${buildNotifActions(n)} inside the .notif-content div after the .notif-text and .notif-meta divs:
+javascript// The notif-content div should now look like this:
+`<div class="notif-content">
+  <div class="notif-text">${n.body}</div>
+  <div class="notif-meta">
+    <span class="notif-time">${timeAgo(n.created_at)}</span>
+    <span class="notif-source">${config.label}</span>
+  </div>
+  ${buildNotifActions(n)}
+</div>`
+Then add these two handler functions to the notifications script:
+javascriptwindow.acceptClubInvite = async function(clubId, notifId, btn) {
+  btn.textContent = 'Joining…';
+  btn.disabled = true;
+  try {
+    const response = await fetch(`/api/clubs/${clubId}/accept-invite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const result = await response.json();
+    if (result.error) {
+      showToast('Error: ' + result.error);
+      btn.textContent = '✓ Accept invite';
+      btn.disabled = false;
+      return;
+    }
+    // Replace the action buttons with a success message
+    const actionsEl = document.getElementById('invite-actions-' + notifId);
+    if (actionsEl) {
+      actionsEl.innerHTML = `
+        <div style="font-size:12px;color:#166534;background:#ECFDF5;border:0.5px solid #86EFAC;padding:5px 12px;border-radius:20px;display:inline-flex;align-items:center;gap:5px">
+          ✓ You joined the club! <a href="/feed" style="color:#166534;font-weight:600;text-decoration:underline">Go to feed →</a>
+        </div>`;
+    }
+    showToast('✓ Welcome to the club! You can now see club content in your feed.');
+    // Mark notification as read
+    await fetch('/api/notifications/' + notifId + '/read', { method: 'POST' });
+  } catch (err) {
+    showToast('Something went wrong — please try again');
+    btn.textContent = '✓ Accept invite';
+    btn.disabled = false;
+  }
+};
+
+window.declineClubInvite = async function(notifId, btn) {
+  btn.textContent = 'Declining…';
+  btn.disabled = true;
+  try {
+    // Mark notification as read and dismiss it
+    await fetch('/api/notifications/' + notifId + '/read', { method: 'POST' });
+    const actionsEl = document.getElementById('invite-actions-' + notifId);
+    if (actionsEl) {
+      actionsEl.innerHTML = `<div style="font-size:12px;color:var(--gray-400)">Invite declined</div>`;
+    }
+    showToast('Invite declined');
+  } catch (err) {
+    showToast('Something went wrong');
+    btn.textContent = 'Decline';
+    btn.disabled = false;
+  }
+};
+Fix 2 — Remove the redundant Invite Members tab in the club dashboard
+In arenas-club-dashboard.html find the Members tab section. There is a button or nav item labelled "Invite members" that is incorrectly creating a new tab instead of navigating to /clubs/invite. Find it and change its behaviour:
+Search for any element with text "Invite members" inside the members tab content or the tab row and either:
+
+Remove it entirely if it is a duplicate tab
+Or change its onclick to window.location.href='/clubs/invite' if it should be a button
+
+The sidebar nav item for Invite members should navigate directly to /clubs/invite and should NOT create a new tab in the page. Make sure the sidebar nav item looks like this:
+html<div class="nav-item" onclick="window.location.href='/clubs/invite'">
+  <span class="nav-icon">✉️</span> Invite members
+</div>
+Also check the Members tab content in the dashboard — if there is a tab row inside the members section that includes an "Invite members" tab, remove that tab entirely. The invite functionality lives on a separate page at /clubs/invite, not as a tab within the dashboard members section.
+Wait for checkpoint then commit and push to GitHub main immediately.

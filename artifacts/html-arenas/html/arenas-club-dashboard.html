@@ -864,26 +864,6 @@ button, select, input { font-family: var(--font); }
 </div>
 
 <!-- MODALS -->
-<!-- Invite members modal -->
-<div class="modal-overlay" id="modal-invite" onclick="closeAllModals(event)">
-  <div class="modal">
-    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Invite members</div><div style="font-size:13px;color:var(--gray-500);margin-top:2px">Invitations are sent by email — members set up their own Arenas profile</div></div><button class="modal-close" onclick="closeAllModals()">✕</button></div>
-    <div class="modal-body">
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <div style="display:grid;grid-template-columns:1fr 120px;gap:8px"><input class="form-input" type="email" placeholder="email@example.com"><select class="form-select"><option>Member</option><option>Coach</option><option>Admin</option></select></div>
-        <div style="display:grid;grid-template-columns:1fr 120px;gap:8px"><input class="form-input" type="email" placeholder="email@example.com"><select class="form-select"><option>Member</option><option>Coach</option><option>Admin</option></select></div>
-        <div style="display:grid;grid-template-columns:1fr 120px;gap:8px"><input class="form-input" type="email" placeholder="email@example.com"><select class="form-select"><option>Member</option><option>Coach</option><option>Admin</option></select></div>
-        <button class="btn btn-ghost" style="width:fit-content;font-size:12px" onclick="showToast('Row added')">+ Add another</button>
-      </div>
-      <div style="background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:12px 14px;display:flex;justify-content:space-between;align-items:center">
-        <div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Share join link</div><div style="font-size:12px;color:var(--gray-500);margin-top:2px">arenas.io/join/hrc-2026</div></div>
-        <button class="btn btn-ghost btn-sm" onclick="showToast('Join link copied!')">Copy link</button>
-      </div>
-    </div>
-    <div class="modal-footer"><button class="btn btn-yellow" style="flex:1;justify-content:center" onclick="closeAllModals();showToast('✓ Invitations sent!')">Send invitations</button><button class="btn btn-ghost" onclick="closeAllModals()">Cancel</button></div>
-  </div>
-</div>
-
 <!-- New event modal -->
 <div class="modal-overlay" id="modal-event" onclick="closeAllModals(event)">
   <div class="modal">
