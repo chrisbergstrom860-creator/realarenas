@@ -1206,7 +1206,25 @@ app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
     const { posts, followsNobody } = await buildFeedPosts(20, req.user.id);
     const feedActivities = await buildFeedActivities(10, req.user.id);
     const followingRsvps = await buildFeedRsvps(req.user.id);
-    const userData = { profile: displayFromUser(req.user), userId: req.user.id, posts, followsNobody, feedActivities, followingRsvps };
+    // Viewer's real club memberships for the sidebar "My clubs" section. No
+    // `status` column on memberships — every row is an active membership.
+    let userClubs = [];
+    if (supabaseAdmin) {
+      try {
+        const { data: cm } = await supabaseAdmin
+          .from('memberships')
+          .select('role, clubs:club_id (id, name, handle, sport)')
+          .eq('user_id', req.user.id)
+          .order('created_at', { ascending: false });
+        userClubs = (cm || []).map(m => {
+          const c = Array.isArray(m.clubs) ? m.clubs[0] : m.clubs;
+          return c ? Object.assign({}, c, { role: m.role }) : null;
+        }).filter(Boolean);
+      } catch (e) {
+        userClubs = [];
+      }
+    }
+    const userData = { profile: displayFromUser(req.user), userId: req.user.id, posts, followsNobody, feedActivities, followingRsvps, clubs: userClubs };
     const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), userData);
     res.type('html').send(html);
   } catch (err) {
@@ -1597,12 +1615,15 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
     const meta = req.user.user_metadata || {};
     const display = displayFromUser(req.user);
 
-    const [postCountRes, followerRes, followingRes, postsRes, membershipRes, followingListRes, followerListRes] = await Promise.all([
+    const [postCountRes, followerRes, followingRes, postsRes, membershipRes, clubsRes, followingListRes, followerListRes] = await Promise.all([
       supabaseAdmin.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', req.user.id),
       supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', req.user.id),
       supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', req.user.id),
       supabaseAdmin.from('posts').select('id, content, sport, feeling, created_at').eq('user_id', req.user.id).order('created_at', { ascending: false }).limit(10),
       supabaseAdmin.from('memberships').select('role, clubs (name, handle)').eq('user_id', req.user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      // All clubs the viewer belongs to (My Clubs tab). No `status` column on
+      // memberships — every row is treated as an active membership.
+      supabaseAdmin.from('memberships').select('role, clubs:club_id (id, name, handle, sport, city)').eq('user_id', req.user.id).order('created_at', { ascending: false }),
       // Raw follow edges (no `created_at` ordering — not guaranteed on this table).
       supabaseAdmin.from('follows').select('following_id').eq('follower_id', req.user.id),
       supabaseAdmin.from('follows').select('follower_id').eq('following_id', req.user.id)
@@ -1612,6 +1633,12 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
     const club = membership && membership.clubs
       ? (Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs)
       : null;
+
+    // Flatten all memberships into a clubs[] array (joined club + the viewer's role).
+    const userClubs = (clubsRes.data || []).map(m => {
+      const c = Array.isArray(m.clubs) ? m.clubs[0] : m.clubs;
+      return c ? Object.assign({}, c, { role: m.role }) : null;
+    }).filter(Boolean);
 
     // Resolve the people the viewer follows / who follow them into display info.
     // There is no `profiles` table, so map each follow edge to its auth metadata
@@ -1658,6 +1685,7 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
       followingCount: followingRes.count || 0,
       posts: postsRes.data || [],
       membership: membership ? { role: membership.role, club } : null,
+      clubs: userClubs,
       followingList,
       followerList
     };

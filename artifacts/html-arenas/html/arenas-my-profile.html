@@ -1184,6 +1184,64 @@ document.getElementById('htab-overview').classList.add('active');
     clubNav.style.display = 'none';
   }
 
+  // My Clubs tab: replace the hardcoded club card(s) with the viewer's real
+  // memberships (data.clubs), keeping the "Find clubs near you" dashed card.
+  (function () {
+    var clubs = data.clubs || [];
+    var sportIcons = { running:'🏃', cycling:'🚴', climbing:'🧗', swimming:'🏊', football:'⚽', triathlon:'🔱', hiking:'🥾', yoga:'🧘', weightlifting:'🏋️' };
+    function titleCase(s){ return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+    var firstCard = document.querySelector('#tab-clubs .club-card');
+    var col = firstCard ? firstCard.parentElement : null;
+    if (col) {
+      var dashed = null;
+      Array.prototype.slice.call(col.children).forEach(function (child) {
+        if (child.classList.contains('club-card')) child.remove();
+        else dashed = child;
+      });
+      clubs.forEach(function (club) {
+        var card = document.createElement('div');
+        card.className = 'club-card';
+        var ic = document.createElement('div');
+        ic.className = 'club-icon';
+        ic.style.background = 'var(--orange-light)';
+        ic.textContent = sportIcons[club.sport] || '🏟';
+        card.appendChild(ic);
+        var mid = document.createElement('div');
+        mid.style.flex = '1';
+        var nm = document.createElement('div');
+        nm.className = 'club-name';
+        nm.textContent = club.name || 'Club';
+        mid.appendChild(nm);
+        var meta = document.createElement('div');
+        meta.className = 'club-meta';
+        var parts = [];
+        if (club.city) parts.push(club.city);
+        if (club.sport) parts.push(titleCase(club.sport));
+        meta.textContent = parts.join(' · ');
+        mid.appendChild(meta);
+        var pillRow = document.createElement('div');
+        pillRow.style.cssText = 'display:flex;gap:5px;margin-top:6px';
+        var rolePill = document.createElement('span');
+        rolePill.className = 'club-role';
+        rolePill.style.cssText = 'background:var(--gray-100);color:var(--gray-600)';
+        rolePill.textContent = titleCase(club.role) || 'Member';
+        pillRow.appendChild(rolePill);
+        mid.appendChild(pillRow);
+        card.appendChild(mid);
+        var btn = document.createElement('button');
+        btn.className = 'btn btn-ghost btn-sm';
+        btn.textContent = 'Open →';
+        btn.onclick = function () { nav('/clubs/member'); };
+        card.appendChild(btn);
+        if (dashed) col.insertBefore(card, dashed); else col.appendChild(card);
+      });
+      var sub = document.querySelector('#tab-clubs p');
+      if (sub) sub.textContent = clubs.length + (clubs.length === 1 ? ' active club' : ' active clubs') + ' · Find more in the Athletes directory';
+      var tc = document.querySelector('#htab-clubs .tab-count');
+      if (tc) tc.textContent = String(clubs.length);
+    }
+  })();
+
   // Render the user's real posts into the overview "Recent activities" card
   function timeAgo(dateStr) {
     var secs = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
