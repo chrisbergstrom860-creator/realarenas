@@ -965,6 +965,19 @@ function showToast(msg) {
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2800);
 }
+
+// Open the correct tab when arriving with a hash (e.g. from the invite page
+// sidebar: /clubs/dashboard#members). Club settings / Billing route to /profile,
+// matching their own sidebar items.
+document.addEventListener('DOMContentLoaded', function () {
+  var hash = (window.location.hash || '').replace('#', '');
+  if (!hash) return;
+  if (hash === 'settings' || hash === 'billing') { nav('/profile'); return; }
+  var tabIds = ['overview', 'members', 'training', 'leaderboard', 'challenges', 'events', 'feed', 'reports'];
+  if (tabIds.indexOf(hash) === -1) return;
+  var el = document.querySelector('.nav-item[onclick*="setTab(\'' + hash + '\'"]');
+  setTab(hash, el);
+});
 </script>
 <script>
 // Wire the coach's real club, member count and name into the dashboard (server

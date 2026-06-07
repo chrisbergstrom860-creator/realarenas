@@ -218,19 +218,18 @@ button,select,input,textarea{font-family:var(--font)}
 
 <aside class="sidebar">
   <div class="nav-section-label">Club management</div>
-  <div class="nav-item" onclick="setTab('overview',this)"><span class="nav-icon">📊</span> Overview</div>
-  <div class="nav-item" onclick="showToast('Members tab')"><span class="nav-icon">👥</span> Members <span class="nav-badge">48</span></div>
-  <div class="nav-item" onclick="showToast('Training load')"><span class="nav-icon">📈</span> Training load <span class="nav-badge alert">3</span></div>
-  <div class="nav-item" onclick="nav('/leaderboards')"><span class="nav-icon">🏆</span> Leaderboard</div>
-  <div class="nav-item" onclick="nav('/challenges')"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">4</span></div>
-  <div class="nav-item" onclick="nav('/profile#activities')"><span class="nav-icon">➕</span> Log activity</div>
-  <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">📅</span> Events <span class="nav-badge">3</span></div>
+  <div class="nav-item" onclick="nav('/clubs/dashboard')"><span class="nav-icon">📊</span> Overview</div>
+  <div class="nav-item" onclick="nav('/clubs/dashboard#members')"><span class="nav-icon">👥</span> Members <span class="nav-badge">48</span></div>
+  <div class="nav-item" onclick="nav('/clubs/dashboard#training')"><span class="nav-icon">📈</span> Training load <span class="nav-badge alert">3</span></div>
+  <div class="nav-item" onclick="nav('/clubs/dashboard#leaderboard')"><span class="nav-icon">🏆</span> Leaderboard</div>
+  <div class="nav-item" onclick="nav('/clubs/dashboard#challenges')"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">4</span></div>
+  <div class="nav-item" onclick="nav('/clubs/dashboard#events')"><span class="nav-icon">📅</span> Events <span class="nav-badge">3</span></div>
   <div class="nav-section-label">Analytics</div>
-  <div class="nav-item" onclick="showToast('Club feed')"><span class="nav-icon">🏃</span> Club feed</div>
-  <div class="nav-item" onclick="setTab('history',this)"><span class="nav-icon">📋</span> Invite history</div>
+  <div class="nav-item" onclick="nav('/clubs/dashboard#feed')"><span class="nav-icon">🏃</span> Club feed</div>
+  <div class="nav-item" onclick="nav('/clubs/dashboard#reports')"><span class="nav-icon">📋</span> Reports</div>
   <div class="nav-section-label">Settings</div>
-  <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">⚙️</span> Club settings</div>
-  <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">💳</span> Billing</div>
+  <div class="nav-item" onclick="nav('/clubs/dashboard#settings')"><span class="nav-icon">⚙️</span> Club settings</div>
+  <div class="nav-item" onclick="nav('/clubs/dashboard#billing')"><span class="nav-icon">💳</span> Billing</div>
   <div class="sidebar-footer">
     <div class="sf-row">
       <div class="sf-av">RH</div>
