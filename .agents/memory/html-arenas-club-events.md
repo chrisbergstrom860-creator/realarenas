@@ -30,3 +30,10 @@ card disappears then reappears on reload (false-success UX).
 define action handlers UNCONDITIONALLY (not after the empty-state early return, or
 the "Create first event" button is dead); the tab is shown via the global
 `setTab(id, el)` — wrap `window.setTab` to call the renderer when id==='events'.
+
+**View RSVPs / Edit:** two more routes back the card buttons — `GET BASE+/api/events/:id/rsvps`
+(gate via `requireEventManager`; names via `buildUserDisplayMap`; filter to going/interested)
+and `PATCH BASE+/api/events/:id` (creator OR admin/coach authz like DELETE; build the
+update obj from defined fields only; reject empty updates + invalid date). Edit modal
+pre-fills from `window.ARENAS_DATA` (upcoming+past). Same false-success trap applies:
+never use a `created_by`-only filter — it no-ops silently for managing coaches.

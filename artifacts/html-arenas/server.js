@@ -1659,6 +1659,68 @@ app.post(BASE + '/api/events/:id/duplicate', requireAuth, async (req, res) => {
   res.json({ success: true, event: newEvent });
 });
 
+// List an event's RSVPs for the coach RSVP modal (admin/coach of the event's
+// club only). Names come from auth metadata — there is no usable profiles table.
+app.get(BASE + '/api/events/:id/rsvps', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for events' });
+  const event = await requireEventManager(req.params.id, req.user.id, 'id, title, date, location, sport');
+  if (!event) return res.json({ error: 'Event not found' });
+  const { data: rsvpData } = await supabaseAdmin
+    .from('event_rsvps')
+    .select('status, user_id, created_at')
+    .eq('event_id', req.params.id)
+    .order('created_at', { ascending: true });
+  const nameMap = await buildUserDisplayMap((rsvpData || []).map(r => r.user_id));
+  const rsvps = (rsvpData || [])
+    .filter(r => r.status === 'going' || r.status === 'interested')
+    .map(r => ({
+      status: r.status,
+      userId: r.user_id,
+      name: (nameMap[r.user_id] || {}).name || 'Member',
+      handle: (nameMap[r.user_id] || {}).handle || 'member'
+    }));
+  res.json({ event, rsvps });
+});
+
+// Update an event (creator OR club admin/coach). A created_by-only filter would
+// silently update 0 rows for a managing coach yet still report success.
+app.patch(BASE + '/api/events/:id', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for events' });
+  const { data: event } = await supabaseAdmin
+    .from('events').select('id, created_by, club_id').eq('id', req.params.id).maybeSingle();
+  if (!event) return res.json({ error: 'Event not found' });
+  let allowed = event.created_by === req.user.id;
+  if (!allowed && event.club_id) {
+    const { data: mgr } = await supabaseAdmin
+      .from('memberships').select('role')
+      .eq('club_id', event.club_id).eq('user_id', req.user.id)
+      .in('role', ['admin', 'coach']).maybeSingle();
+    allowed = !!mgr;
+  }
+  if (!allowed) return res.json({ error: 'You do not have permission to edit this event' });
+
+  const { title, event_type, date, location, distance, level, description, entry_fee, max_participants } = req.body;
+  if (date !== undefined && isNaN(new Date(date).getTime())) {
+    return res.json({ error: 'Invalid date' });
+  }
+  const updates = {};
+  if (title !== undefined) updates.title = title;
+  if (event_type !== undefined) updates.event_type = event_type;
+  if (date !== undefined) updates.date = date;
+  if (location !== undefined) updates.location = location;
+  if (distance !== undefined) updates.distance = distance;
+  if (level !== undefined) updates.level = level;
+  if (description !== undefined) updates.description = description;
+  if (entry_fee !== undefined) updates.entry_fee = entry_fee;
+  if (max_participants !== undefined) updates.max_participants = max_participants;
+  if (Object.keys(updates).length === 0) {
+    return res.json({ error: 'No fields to update' });
+  }
+  const { error } = await supabaseAdmin.from('events').update(updates).eq('id', req.params.id);
+  if (error) return res.json({ error: error.message });
+  res.json({ success: true });
+});
+
 // Events page: inject the viewer's identity, the people they follow, and their
 // clubs so the create modal and rendering can use real data. There is no
 // `profiles` table, so names come from auth metadata.

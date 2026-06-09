@@ -1314,8 +1314,158 @@ document.addEventListener('DOMContentLoaded', function () {
     } catch (err) { showToast('Something went wrong'); }
   };
 
-  window.viewEventRsvps = function () { showToast('Detailed RSVP view coming soon'); };
-  window.editClubEvent = function () { showToast('Edit event coming soon'); };
+  window.viewEventRsvps = async function (eventId) {
+    try {
+      var response = await fetch(B + '/api/events/' + eventId + '/rsvps');
+      var result = await response.json();
+      if (result.error) { showToast('Could not load RSVPs'); return; }
+      var event = result.event || {};
+      var rsvps = result.rsvps || [];
+      var going = rsvps.filter(function (r) { return r.status === 'going'; });
+      var interested = rsvps.filter(function (r) { return r.status === 'interested'; });
+      function memberRow(r, i) {
+        var av = avColors[i % avColors.length];
+        return '<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:var(--border)">' +
+          '<div style="width:30px;height:30px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0">' + esc(initialsOf(r.name)) + '</div>' +
+          '<div style="flex:1">' +
+            '<div style="font-size:13px;font-weight:500;color:var(--gray-900)">' + esc(r.name || 'Member') + '</div>' +
+            '<div style="font-size:11px;color:var(--gray-400)">@' + esc(r.handle || 'member') + '</div>' +
+          '</div>' +
+        '</div>';
+      }
+      var listHtml = '';
+      if (going.length) {
+        listHtml += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#10B981;padding:10px 16px 4px;background:#F0FDF4;border-bottom:var(--border)">✓ Going · ' + going.length + '</div>';
+        listHtml += going.map(memberRow).join('');
+      }
+      if (interested.length) {
+        listHtml += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#633806;padding:10px 16px 4px;background:var(--yellow-light);border-bottom:var(--border)">Interested · ' + interested.length + '</div>';
+        listHtml += interested.map(memberRow).join('');
+      }
+      if (!going.length && !interested.length) {
+        listHtml = '<div style="text-align:center;padding:40px 24px;color:var(--gray-400);font-size:13px">No RSVPs yet — send a nudge to get responses</div>';
+      }
+      var overlay = document.createElement('div');
+      overlay.id = 'rsvp-modal-overlay';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px';
+      overlay.innerHTML =
+        '<div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:480px;max-height:80vh;overflow:hidden;display:flex;flex-direction:column">' +
+          '<div style="padding:14px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">' +
+            '<div>' +
+              '<div style="font-size:15px;font-weight:700;color:var(--gray-900)">' + esc(event.title || 'Event RSVPs') + '</div>' +
+              '<div style="font-size:12px;color:var(--gray-400);margin-top:2px">' + going.length + ' going · ' + interested.length + ' interested</div>' +
+            '</div>' +
+            '<button onclick="document.getElementById(\'rsvp-modal-overlay\').remove()" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>' +
+          '</div>' +
+          '<div style="overflow-y:auto;flex:1">' + listHtml + '</div>' +
+        '</div>';
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+      document.body.appendChild(overlay);
+    } catch (err) {
+      showToast('Could not load RSVPs — please try again');
+    }
+  };
+
+  window.editClubEvent = function (eventId) {
+    var data = window.ARENAS_DATA || {};
+    var allEvents = (data.upcomingEvents || []).concat(data.pastEvents || []);
+    var event = allEvents.find(function (e) { return e.id === eventId; });
+    if (!event) { showToast('Could not load event details'); return; }
+    var eventDate = new Date(event.date);
+    var dateStr = eventDate.toISOString().split('T')[0];
+    var timeStr = eventDate.toTimeString().slice(0, 5);
+    function sel(v, opt) { return v === opt ? ' selected' : ''; }
+    var overlay = document.createElement('div');
+    overlay.id = 'edit-event-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto';
+    overlay.innerHTML =
+      '<div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:540px;overflow:hidden">' +
+        '<div style="padding:14px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">' +
+          '<div style="font-size:15px;font-weight:700;color:var(--gray-900)">Edit event</div>' +
+          '<button onclick="document.getElementById(\'edit-event-overlay\').remove()" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>' +
+        '</div>' +
+        '<div style="padding:18px;max-height:65vh;overflow-y:auto">' +
+          '<div id="edit-ev-error" style="display:none;background:var(--red-light);border:1px solid #FECACA;border-radius:8px;padding:10px 14px;font-size:13px;color:#A32D2D;margin-bottom:12px"></div>' +
+          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Event title *</div><input class="form-input" style="width:100%" type="text" id="edit-ev-title" value="' + esc(event.title || '') + '"></div>' +
+          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Event type</div>' +
+            '<select class="form-select" style="width:100%" id="edit-ev-type">' +
+              '<option' + sel(event.event_type, 'Group training') + '>Group training</option>' +
+              '<option' + sel(event.event_type, 'Track session') + '>Track session</option>' +
+              '<option' + sel(event.event_type, 'Long run / ride') + '>Long run / ride</option>' +
+              '<option' + sel(event.event_type, 'Race') + '>Race</option>' +
+              '<option' + sel(event.event_type, 'Social run / ride') + '>Social run / ride</option>' +
+              '<option' + sel(event.event_type, 'Open water swim') + '>Open water swim</option>' +
+              '<option' + sel(event.event_type, 'Climbing session') + '>Climbing session</option>' +
+              '<option' + sel(event.event_type, 'Other') + '>Other</option>' +
+            '</select></div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:13px">' +
+            '<div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Date *</div><input class="form-input" style="width:100%" type="date" id="edit-ev-date" value="' + esc(dateStr) + '"></div>' +
+            '<div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Start time *</div><input class="form-input" style="width:100%" type="time" id="edit-ev-time" value="' + esc(timeStr) + '"></div>' +
+          '</div>' +
+          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Location *</div><input class="form-input" style="width:100%" type="text" id="edit-ev-location" value="' + esc(event.location || '') + '"></div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:13px">' +
+            '<div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Distance <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div><input class="form-input" style="width:100%" type="text" id="edit-ev-distance" value="' + esc(event.distance || '') + '"></div>' +
+            '<div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Level</div><select class="form-select" style="width:100%" id="edit-ev-level">' +
+              '<option' + sel(event.level, 'All abilities') + '>All abilities</option>' +
+              '<option' + sel(event.level, 'Beginner friendly') + '>Beginner friendly</option>' +
+              '<option' + sel(event.level, 'Intermediate') + '>Intermediate</option>' +
+              '<option' + sel(event.level, 'Advanced') + '>Advanced</option>' +
+              '<option' + sel(event.level, 'Elite / competitive') + '>Elite / competitive</option>' +
+            '</select></div>' +
+          '</div>' +
+          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Description <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div><textarea class="form-textarea" style="width:100%;min-height:64px" id="edit-ev-desc">' + esc(event.description || '') + '</textarea></div>' +
+          '<div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:12px;color:#7a5c00">🔔 Saving changes will not re-notify members. Use "Post to feed" after saving if you want members to see the update.</div>' +
+        '</div>' +
+        '<div style="padding:13px 18px;border-top:var(--border);background:var(--gray-50);display:flex;gap:8px;align-items:center">' +
+          '<button onclick="document.getElementById(\'edit-event-overlay\').remove()" style="padding:8px 14px;border:var(--border);border-radius:7px;font-size:13px;background:white;color:var(--gray-600);cursor:pointer">Cancel</button>' +
+          '<button id="edit-ev-submit-btn" onclick="submitEditEvent(\'' + esc(eventId) + '\')" style="padding:8px 18px;border:none;border-radius:7px;font-size:13px;font-weight:600;background:var(--gray-900);color:white;cursor:pointer;margin-left:auto">Save changes →</button>' +
+        '</div>' +
+      '</div>';
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+  };
+
+  window.submitEditEvent = async function (eventId) {
+    function g(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+    var title = (g('edit-ev-title') || '').trim();
+    var event_type = g('edit-ev-type');
+    var date = g('edit-ev-date');
+    var time = g('edit-ev-time') || '07:00';
+    var location = (g('edit-ev-location') || '').trim();
+    var distance = (g('edit-ev-distance') || '').trim();
+    var level = g('edit-ev-level');
+    var description = (g('edit-ev-desc') || '').trim();
+    var errorEl = document.getElementById('edit-ev-error');
+    function fail(msg) { if (errorEl) { errorEl.textContent = msg; errorEl.style.display = 'block'; } }
+    if (!title) return fail('Please enter a title.');
+    if (!date) return fail('Please select a date.');
+    if (!location) return fail('Please enter a location.');
+    var submitBtn = document.getElementById('edit-ev-submit-btn');
+    if (submitBtn) { submitBtn.textContent = 'Saving…'; submitBtn.disabled = true; }
+    try {
+      var response = await fetch(B + '/api/events/' + eventId, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title, event_type: event_type,
+          date: new Date(date + 'T' + time).toISOString(),
+          location: location, distance: distance, level: level, description: description
+        })
+      });
+      var result = await response.json();
+      if (result.error) {
+        fail('Error: ' + result.error);
+        if (submitBtn) { submitBtn.textContent = 'Save changes →'; submitBtn.disabled = false; }
+        return;
+      }
+      var ov = document.getElementById('edit-event-overlay'); if (ov) ov.remove();
+      showToast('✓ Event updated successfully');
+      setTimeout(function () { window.location.reload(); }, 1200);
+    } catch (err) {
+      fail('Something went wrong — please try again.');
+      if (submitBtn) { submitBtn.textContent = 'Save changes →'; submitBtn.disabled = false; }
+    }
+  };
 
   window.filterClubEvents = function (btn, sport) {
     document.querySelectorAll('.ev-filter-pill').forEach(function (p) {
