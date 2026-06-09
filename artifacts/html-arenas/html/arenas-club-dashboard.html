@@ -1298,7 +1298,7 @@ document.addEventListener('DOMContentLoaded', function () {
       var result = await r.json();
       if (result.error) { showToast('Error: ' + result.error); return; }
       showToast('✓ Event duplicated for next week — edit it to adjust the date');
-      setTimeout(function () { window.location.reload(); }, 1500);
+      setTimeout(function () { window.location.hash = 'events'; window.location.reload(); }, 1500);
     } catch (err) { showToast('Something went wrong'); }
   };
 
@@ -1581,7 +1581,7 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       var ov = document.getElementById('create-club-event-overlay'); if (ov) ov.remove();
       showToast('✓ Event created — all club members notified!');
-      setTimeout(function () { window.location.reload(); }, 1500);
+      setTimeout(function () { window.location.hash = 'events'; window.location.reload(); }, 1500);
     } catch (err) {
       fail('Something went wrong — please try again.');
       if (submitBtn) { submitBtn.textContent = 'Create & notify members →'; submitBtn.disabled = false; }
