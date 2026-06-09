@@ -1546,10 +1546,117 @@ app.post(BASE + '/api/events/:id/rsvp', requireAuth, async (req, res) => {
 // ownership even though the service role bypasses RLS).
 app.delete(BASE + '/api/events/:id', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for events' });
-  const { error } = await supabaseAdmin
-    .from('events').delete().eq('id', req.params.id).eq('created_by', req.user.id);
+  // Allow the event creator OR a club admin/coach to delete. Without this, the
+  // dashboard "Cancel" button (shown to coaches) would delete 0 rows yet still
+  // report success, so the event reappears on reload.
+  const { data: event } = await supabaseAdmin
+    .from('events').select('id, created_by, club_id').eq('id', req.params.id).maybeSingle();
+  if (!event) return res.json({ error: 'Event not found' });
+  let allowed = event.created_by === req.user.id;
+  if (!allowed && event.club_id) {
+    const { data: mgr } = await supabaseAdmin
+      .from('memberships').select('role')
+      .eq('club_id', event.club_id).eq('user_id', req.user.id)
+      .in('role', ['admin', 'coach']).maybeSingle();
+    allowed = !!mgr;
+  }
+  if (!allowed) return res.json({ error: 'You do not have permission to cancel this event' });
+  const { error } = await supabaseAdmin.from('events').delete().eq('id', req.params.id);
   if (error) return res.json({ error: error.message });
   res.json({ success: true });
+});
+
+// Confirm the caller manages (admin/coach) the club an event belongs to. Used by
+// the coach-only event actions below so they can't be triggered for arbitrary
+// clubs. Returns the event row on success, or null.
+async function requireEventManager(eventId, userId, columns = '*') {
+  const { data: event } = await supabaseAdmin
+    .from('events').select(columns).eq('id', eventId).maybeSingle();
+  if (!event || !event.club_id) return null;
+  const { data: mgr } = await supabaseAdmin
+    .from('memberships').select('role')
+    .eq('club_id', event.club_id).eq('user_id', userId)
+    .in('role', ['admin', 'coach']).maybeSingle();
+  return mgr ? event : null;
+}
+
+// Nudge club members who haven't RSVP'd to an event yet (coach/admin only).
+app.post(BASE + '/api/events/:id/nudge', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for events' });
+  const event = await requireEventManager(req.params.id, req.user.id, 'id, club_id, title, date');
+  if (!event) return res.json({ error: 'Event not found' });
+
+  const { data: members } = await supabaseAdmin
+    .from('memberships').select('user_id').eq('club_id', event.club_id);
+  const { data: rsvps } = await supabaseAdmin
+    .from('event_rsvps').select('user_id').eq('event_id', event.id);
+  const responded = new Set((rsvps || []).map(r => r.user_id));
+  const actor = displayFromUser(req.user);
+  const eventDate = new Date(event.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  const nonResponders = (members || []).filter(m => !responded.has(m.user_id) && m.user_id !== req.user.id);
+  for (const m of nonResponders) {
+    await createNotification({
+      userId: m.user_id, type: 'club', title: 'RSVP reminder',
+      body: `${actor.name} is asking — are you coming to "${event.title}" on ${eventDate}? Please RSVP so they can plan ahead.`,
+      link: '/events', actorId: req.user.id, entityId: event.id
+    });
+  }
+  res.json({ success: true, nudged: nonResponders.length });
+});
+
+// Post an event to the club feed and notify members (coach/admin only).
+app.post(BASE + '/api/events/:id/post-to-feed', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for events' });
+  const event = await requireEventManager(req.params.id, req.user.id, 'id, club_id, title, date, location, sport');
+  if (!event) return res.json({ error: 'Event not found' });
+
+  const actor = displayFromUser(req.user);
+  const eventDate = new Date(event.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  const { error: postErr } = await supabaseAdmin.from('posts').insert({
+    user_id: req.user.id,
+    content: `📅 Club event: ${event.title} — ${eventDate} at ${event.location}. Come join us! RSVP on the Events page.`,
+    sport: event.sport || null
+  });
+  if (postErr) return res.json({ error: postErr.message });
+
+  const { data: members } = await supabaseAdmin
+    .from('memberships').select('user_id').eq('club_id', event.club_id).neq('user_id', req.user.id);
+  for (const m of (members || [])) {
+    await createNotification({
+      userId: m.user_id, type: 'club', title: 'Event reminder',
+      body: `${actor.name} posted about "${event.title}" — check the feed for details`,
+      link: '/feed', actorId: req.user.id, entityId: event.id
+    });
+  }
+  res.json({ success: true });
+});
+
+// Duplicate an event one week later (coach/admin only).
+app.post(BASE + '/api/events/:id/duplicate', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for events' });
+  const event = await requireEventManager(req.params.id, req.user.id, '*');
+  if (!event) return res.json({ error: 'Event not found' });
+
+  const newDate = new Date(event.date);
+  newDate.setDate(newDate.getDate() + 7);
+  const { data: newEvent, error } = await supabaseAdmin
+    .from('events').insert({
+      created_by: req.user.id,
+      club_id: event.club_id,
+      title: event.title,
+      sport: event.sport,
+      event_type: event.event_type,
+      date: newDate.toISOString(),
+      location: event.location,
+      distance: event.distance,
+      max_participants: event.max_participants,
+      entry_fee: event.entry_fee,
+      level: event.level,
+      description: event.description,
+      visibility: event.visibility
+    }).select().single();
+  if (error) return res.json({ error: error.message });
+  res.json({ success: true, event: newEvent });
 });
 
 // Events page: inject the viewer's identity, the people they follow, and their
@@ -1760,6 +1867,9 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
     let memberCount = 0;
     let members = [];
     let pendingCount = 0;
+    let upcomingEvents = [];
+    let pastEvents = [];
+    let eventStats = { upcomingCount: 0, totalRsvps: 0, totalNotResponded: 0, avgAttendance: 0 };
 
     if (clubId) {
       const { count } = await supabaseAdmin
@@ -1799,6 +1909,76 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
       } catch (e) {
         // Non-fatal: dashboard still renders without the pending count.
       }
+
+      // ── Club events + RSVP rollups for the Events tab. The user-supplied
+      // snippet embedded `profiles:user_id(name,handle)`, but this app has no
+      // usable profiles table — going-member names come from auth metadata via
+      // buildUserDisplayMap. RSVP `status` values are 'going'/'interested'.
+      try {
+        const { data: clubEvents } = await supabaseAdmin
+          .from('events')
+          .select('*')
+          .eq('club_id', clubId)
+          .order('date', { ascending: true });
+
+        const eventIds = (clubEvents || []).map(e => e.id);
+        let eventRsvps = [];
+        if (eventIds.length) {
+          const { data: rsvpRows } = await supabaseAdmin
+            .from('event_rsvps')
+            .select('event_id, user_id, status')
+            .in('event_id', eventIds);
+          eventRsvps = rsvpRows || [];
+        }
+
+        // One batched auth lookup for every distinct "going" member.
+        const goingUserIds = eventRsvps.filter(r => r.status === 'going').map(r => r.user_id);
+        const nameMap = await buildUserDisplayMap(goingUserIds);
+
+        const now = Date.now();
+        const enriched = (clubEvents || []).map(event => {
+          const rsvps = eventRsvps.filter(r => r.event_id === event.id);
+          const goingCount = rsvps.filter(r => r.status === 'going').length;
+          const interestedCount = rsvps.filter(r => r.status === 'interested').length;
+          const notRespondedCount = Math.max(0, memberCount - rsvps.length);
+          const goingMembers = rsvps
+            .filter(r => r.status === 'going')
+            .slice(0, 6)
+            .map(r => ({
+              name: (nameMap[r.user_id] && nameMap[r.user_id].name) || 'Member',
+              handle: (nameMap[r.user_id] && nameMap[r.user_id].handle) || 'member'
+            }));
+          const attendancePct = memberCount > 0 ? Math.round((goingCount / memberCount) * 100) : 0;
+          const eventTime = new Date(event.date).getTime();
+          return {
+            ...event,
+            goingCount,
+            interestedCount,
+            notRespondedCount,
+            goingMembers,
+            attendancePct,
+            isPast: eventTime < now,
+            daysUntil: Math.ceil((eventTime - now) / (1000 * 60 * 60 * 24))
+          };
+        });
+
+        upcomingEvents = enriched.filter(e => !e.isPast);
+        pastEvents = enriched.filter(e => e.isPast).reverse();
+
+        const totalRsvps = upcomingEvents.reduce((s, e) => s + e.goingCount, 0);
+        const totalNotResponded = upcomingEvents.reduce((s, e) => s + e.notRespondedCount, 0);
+        const avgAttendance = upcomingEvents.length > 0
+          ? Math.round(upcomingEvents.reduce((s, e) => s + e.attendancePct, 0) / upcomingEvents.length)
+          : 0;
+        eventStats = {
+          upcomingCount: upcomingEvents.length,
+          totalRsvps,
+          totalNotResponded,
+          avgAttendance
+        };
+      } catch (e) {
+        // Non-fatal: dashboard renders without the events rollup.
+      }
     }
 
     const clubData = {
@@ -1807,6 +1987,9 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
       memberCount,
       members,
       pendingCount,
+      upcomingEvents,
+      pastEvents: pastEvents.slice(0, 5),
+      eventStats,
       userEmail: req.user.email
     };
 

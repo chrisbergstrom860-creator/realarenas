@@ -661,98 +661,49 @@ button, select, input { font-family: var(--font); }
 
   <!-- ═══ EVENTS TAB ═══ -->
   <div class="tab-content" id="tab-events">
+    <!-- Header -->
     <div class="page-hdr">
-      <div class="page-hdr-left"><h1>Club events 📅</h1><p>Register, track RSVPs, and manage attendance across all club events</p></div>
+      <div class="page-hdr-left"><h1>Club events 📅</h1><p>Manage training sessions, races, and social events for your club</p></div>
       <div class="page-hdr-right">
-        <button class="btn btn-ghost" onclick="showToast('Browsing Arenas event directory…')">🔍 Find events</button>
-        <button class="btn btn-yellow" onclick="openModal('event')">+ Add event</button>
+        <button class="btn btn-yellow" onclick="openCreateClubEvent()">+ Create event</button>
       </div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:14px">
-      <div class="ev-card">
-        <div class="ev-card-top">
-          <div class="ev-date-box"><div class="ed">13</div><div class="em">Apr</div></div>
-          <div class="ev-info">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
-              <div class="ev-name">London Half Marathon</div>
-              <span class="pill pill-run" style="font-size:10px">Running</span>
-              <span class="pill pill-new" style="font-size:10px">Registration open</span>
-            </div>
-            <div class="ev-meta">Blackheath, London · 7:00 AM start · 13.1 miles</div>
-            <div class="ev-meta" style="margin-top:2px">Club deadline: Apr 6 · Entry fee: £45/member</div>
-          </div>
-          <div style="flex-shrink:0;display:flex;flex-direction:column;gap:6px;align-items:flex-end">
-            <button class="btn btn-sm btn-primary" onclick="showToast('Bulk registration link sent to all members')">📢 Notify all members</button>
-            <button class="btn btn-sm btn-ghost" onclick="openModal('event-rsvp')">View RSVPs</button>
-          </div>
-        </div>
-        <div class="ev-rsvp-bar">
-          <div class="rsvp-counts">
-            <div class="rsvp-item"><div class="rsvp-dot" style="background:var(--green)"></div><span style="color:var(--green);font-weight:600">34 going</span></div>
-            <div class="rsvp-item"><div class="rsvp-dot" style="background:var(--orange)"></div><span style="color:var(--orange)">8 pending</span></div>
-            <div class="rsvp-item"><div class="rsvp-dot" style="background:var(--gray-300)"></div><span style="color:var(--gray-500)">6 declined</span></div>
-            <div class="rsvp-item"><div class="rsvp-dot" style="background:var(--gray-200)"></div><span style="color:var(--gray-400)">0 not seen</span></div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <div style="flex:1;background:var(--gray-100);height:6px;border-radius:3px;overflow:hidden;display:flex">
-              <div style="width:70%;background:var(--green)"></div>
-              <div style="width:16%;background:var(--orange)"></div>
-              <div style="width:14%;background:var(--gray-300)"></div>
-            </div>
-            <span style="font-size:11px;font-family:var(--mono);color:var(--gray-500)">48 total</span>
-          </div>
-        </div>
-        <div class="ev-card-footer">
-          <div style="display:flex;align-items:center;gap:8px">
-            <div class="ev-member-avs">
-              <div class="ev-av" style="background:#FEF9C3;color:#854D0E">SL</div>
-              <div class="ev-av" style="background:#FCE7F3;color:#9D174D">YT</div>
-              <div class="ev-av" style="background:#E0F2FE;color:#0369A1">AL</div>
-              <div class="ev-av" style="background:#FFF7ED;color:#9A3412">JK</div>
-              <div class="ev-av" style="background:var(--gray-100);color:var(--gray-500);font-size:7px">+30</div>
-            </div>
-            <span style="font-size:12px;color:var(--gray-500)">34 confirmed going</span>
-          </div>
-          <button class="btn btn-sm btn-yellow" onclick="showToast('Reminder sent to 8 pending members')">Nudge 8 pending →</button>
-        </div>
-      </div>
 
-      <div class="ev-card">
-        <div class="ev-card-top">
-          <div class="ev-date-box" style="background:var(--gray-100)"><div class="ed" style="color:var(--gray-700)">19</div><div class="em" style="color:var(--gray-600)">Apr</div></div>
-          <div class="ev-info">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
-              <div class="ev-name">Saturday Parkrun Club Takeover</div>
-              <span class="pill pill-run" style="font-size:10px">Running</span>
-              <span class="pill pill-active" style="font-size:10px">Club event</span>
-            </div>
-            <div class="ev-meta">Victoria Park, London · 9:00 AM · Free · Bring friends</div>
-          </div>
-          <div style="flex-shrink:0;display:flex;flex-direction:column;gap:6px;align-items:flex-end">
-            <button class="btn btn-sm btn-primary" onclick="showToast('Notifications sent to all members')">📢 Notify all members</button>
-            <button class="btn btn-sm btn-ghost" onclick="openModal('event-rsvp')">View RSVPs</button>
-          </div>
-        </div>
-        <div class="ev-rsvp-bar">
-          <div class="rsvp-counts">
-            <div class="rsvp-item"><div class="rsvp-dot" style="background:var(--green)"></div><span style="color:var(--green);font-weight:600">22 going</span></div>
-            <div class="rsvp-item"><div class="rsvp-dot" style="background:var(--orange)"></div><span style="color:var(--orange)">14 pending</span></div>
-            <div class="rsvp-item"><div class="rsvp-dot" style="background:var(--gray-300)"></div><span style="color:var(--gray-500)">2 declined</span></div>
-            <div class="rsvp-item"><div class="rsvp-dot" style="background:var(--gray-200)"></div><span style="color:var(--gray-400)">10 not seen</span></div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <div style="flex:1;background:var(--gray-100);height:6px;border-radius:3px;overflow:hidden;display:flex">
-              <div style="width:46%;background:var(--green)"></div>
-              <div style="width:29%;background:var(--orange)"></div>
-              <div style="width:25%;background:var(--gray-300)"></div>
-            </div>
-            <span style="font-size:11px;font-family:var(--mono);color:var(--gray-500)">48 total</span>
-          </div>
-        </div>
-        <div class="ev-card-footer">
-          <div style="font-size:12px;color:var(--gray-500)">Free event · No registration needed · Show up!</div>
-          <button class="btn btn-sm btn-yellow" onclick="showToast('Reminder sent to 14 pending + 10 unseen members')">Nudge 24 members →</button>
-        </div>
+    <!-- Stats bar -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:14px">
+      <div style="padding:14px 16px;border-right:var(--border)">
+        <div style="font-size:22px;font-weight:700;color:var(--gray-900);font-family:var(--mono);line-height:1" id="ev-stat-upcoming">0</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Upcoming</div>
+      </div>
+      <div style="padding:14px 16px;border-right:var(--border)">
+        <div style="font-size:22px;font-weight:700;color:var(--gray-900);font-family:var(--mono);line-height:1" id="ev-stat-rsvps">0</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Total RSVPs</div>
+      </div>
+      <div style="padding:14px 16px;border-right:var(--border)">
+        <div style="font-size:22px;font-weight:700;color:var(--red);font-family:var(--mono);line-height:1" id="ev-stat-noresponse">0</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Not responded</div>
+      </div>
+      <div style="padding:14px 16px">
+        <div style="font-size:22px;font-weight:700;color:var(--gray-900);font-family:var(--mono);line-height:1" id="ev-stat-attendance">0%</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Avg attendance</div>
+      </div>
+    </div>
+
+    <!-- Filter row -->
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+      <div class="ev-filter-pill" onclick="filterClubEvents(this,'all')" style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid #fde68a;background:var(--yellow-light);color:#7a5c00;cursor:pointer">All events</div>
+      <div class="ev-filter-pill" onclick="filterClubEvents(this,'running')" style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🏃 Running</div>
+      <div class="ev-filter-pill" onclick="filterClubEvents(this,'cycling')" style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🚴 Cycling</div>
+      <div class="ev-filter-pill" onclick="filterClubEvents(this,'climbing')" style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🧗 Climbing</div>
+    </div>
+
+    <!-- Events list (populated from window.ARENAS_DATA by renderClubEvents) -->
+    <div id="club-events-list">
+      <div style="text-align:center;padding:48px 24px;background:white;border:var(--border);border-radius:var(--radius-lg)">
+        <div style="font-size:36px;margin-bottom:12px">📅</div>
+        <div style="font-size:15px;font-weight:700;color:var(--gray-900);margin-bottom:6px">No events yet</div>
+        <div style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:16px">Create your first club event and your members will be notified automatically.</div>
+        <button onclick="openCreateClubEvent()" class="btn btn-yellow">+ Create first event</button>
       </div>
     </div>
   </div>
@@ -1134,6 +1085,366 @@ document.addEventListener('DOMContentLoaded', function () {
     var navBadge = document.getElementById("nav-unread-badge");
     if (navBadge) navBadge.textContent = unread > 0 ? unread : "";
   }).catch(function(){});
+})();
+</script>
+<script>
+// ── CLUB EVENTS TAB ── wired to window.ARENAS_DATA injected by the server.
+// All DB-derived strings are escaped (esc) before being placed via innerHTML.
+(function () {
+  var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function set(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
+  function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  var sportColors = {
+    running: { bg:'#FFF7ED', color:'#9A3412', border:'#FDBA74', icon:'🏃' },
+    cycling: { bg:'#EFF6FF', color:'#1E40AF', border:'#93C5FD', icon:'🚴' },
+    climbing: { bg:'#F5F3FF', color:'#5B21B6', border:'#C4B5FD', icon:'🧗' },
+    swimming: { bg:'#F0FDFA', color:'#134E4A', border:'#5EEAD4', icon:'🏊' },
+    football: { bg:'#ECFDF5', color:'#166534', border:'#86EFAC', icon:'⚽' },
+    weightlifting: { bg:'#FEF9C3', color:'#854D0E', border:'#FDE047', icon:'🏋️' },
+    hiking: { bg:'#FAEEDA', color:'#633806', border:'#EF9F27', icon:'🥾' },
+    yoga: { bg:'#FBEAF0', color:'#72243E', border:'#F4C0D1', icon:'🧘' }
+  };
+  var avColors = [
+    {bg:'#FEF9C3',c:'#854D0E'},{bg:'#FCE7F3',c:'#9D174D'},
+    {bg:'#E0F2FE',c:'#0369A1'},{bg:'#F5F3FF',c:'#5B21B6'},
+    {bg:'#ECFDF5',c:'#065F46'},{bg:'#FAEEDA',c:'#633806'}
+  ];
+
+  function initialsOf(name) {
+    return String(name || '?').trim().split(/\s+/).map(function (n) { return n[0] || ''; }).join('').slice(0,2).toUpperCase() || '?';
+  }
+  function formatEventDate(dateStr) {
+    var d = new Date(dateStr);
+    return {
+      month: d.toLocaleDateString('en-GB', { month: 'short' }).toUpperCase(),
+      day: d.getDate(),
+      time: d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    };
+  }
+  function daysLabel(daysUntil) {
+    if (daysUntil <= 0) return 'Today';
+    if (daysUntil === 1) return 'Tomorrow';
+    if (daysUntil <= 7) return 'In ' + daysUntil + ' days';
+    return 'In ' + Math.ceil(daysUntil / 7) + ' weeks';
+  }
+  function groupEventsByTime(events) {
+    var groups = {};
+    events.forEach(function (e) {
+      var days = e.daysUntil, label;
+      if (days <= 7) label = 'This week';
+      else if (days <= 14) label = 'Next week';
+      else if (days <= 30) label = 'This month';
+      else label = 'Later';
+      (groups[label] = groups[label] || []).push(e);
+    });
+    return groups;
+  }
+
+  function buildEventCard(event, isPast, totalMembers) {
+    var sc = sportColors[event.sport] || sportColors.running;
+    var d = formatEventDate(event.date);
+    var id = esc(event.id);
+    var goingPct = totalMembers > 0 ? Math.round((event.goingCount / totalMembers) * 100) : 0;
+    var interestedPct = totalMembers > 0 ? Math.round((event.interestedCount / totalMembers) * 100) : 0;
+    var nonePct = Math.max(0, 100 - goingPct - interestedPct);
+    var avatarHtml = (event.goingMembers || []).slice(0, 5).map(function (m, i) {
+      var av = avColors[i % avColors.length];
+      return '<div style="width:24px;height:24px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';border:1.5px solid white;margin-left:' + (i === 0 ? '0' : '-6px') + ';display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:600;flex-shrink:0">' + esc(initialsOf(m.name)) + '</div>';
+    }).join('');
+    var extraCount = (event.goingCount || 0) - 5;
+    var notRespondedColor = event.notRespondedCount > 10 ? '#EF4444' : event.notRespondedCount > 5 ? '#E6B800' : 'var(--gray-400)';
+
+    if (isPast) {
+      return '' +
+        '<div class="club-event-card" data-sport="' + esc(event.sport) + '" style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:10px;opacity:.7" id="club-event-' + id + '">' +
+          '<div style="display:flex;gap:12px;align-items:flex-start;padding:14px 16px">' +
+            '<div style="width:48px;height:52px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;background:var(--gray-100);border:var(--border)">' +
+              '<div style="font-size:9px;font-weight:600;text-transform:uppercase;color:var(--gray-400)">' + esc(d.month) + '</div>' +
+              '<div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1;color:var(--gray-600)">' + d.day + '</div>' +
+            '</div>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="font-size:14px;font-weight:600;color:var(--gray-600);margin-bottom:4px">' + esc(event.title) + '</div>' +
+              '<div style="font-size:11px;color:var(--gray-400);margin-bottom:6px">📍 ' + esc(event.location) + ' · ' + esc(d.time) + '</div>' +
+              '<div style="display:flex;gap:5px;flex-wrap:wrap">' +
+                '<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:var(--gray-100);color:var(--gray-500);border:var(--border)">Completed</span>' +
+                '<span style="font-size:10px;color:#10B981;font-weight:500">✓ ' + event.goingCount + ' attended</span>' +
+                '<span style="font-size:10px;color:var(--gray-400)">' + event.attendancePct + '% attendance</span>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="padding:10px 16px;border-top:var(--border);display:flex;gap:6px;background:var(--gray-50)">' +
+            '<button onclick="viewEventRsvps(\'' + id + '\')" style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">View attendance</button>' +
+            '<button onclick="duplicateEvent(\'' + id + '\')" style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Duplicate event</button>' +
+          '</div>' +
+        '</div>';
+    }
+
+    return '' +
+      '<div class="club-event-card" data-sport="' + esc(event.sport) + '" style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:10px" id="club-event-' + id + '">' +
+        '<div style="display:flex;gap:12px;align-items:flex-start;padding:14px 16px">' +
+          '<div style="width:48px;height:52px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;background:' + sc.bg + ';border:0.5px solid ' + sc.border + '">' +
+            '<div style="font-size:9px;font-weight:600;text-transform:uppercase;color:' + sc.color + '">' + esc(d.month) + '</div>' +
+            '<div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1;color:' + sc.color + '">' + d.day + '</div>' +
+          '</div>' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:4px">' + esc(event.title) + '</div>' +
+            '<div style="font-size:11px;color:var(--gray-500);margin-bottom:6px">📍 ' + esc(event.location) + ' · ' + esc(d.time) + '</div>' +
+            '<div style="display:flex;gap:5px;flex-wrap:wrap">' +
+              '<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:' + sc.bg + ';color:' + sc.color + ';border:0.5px solid ' + sc.border + '">' + sc.icon + ' ' + esc(cap(event.sport)) + '</span>' +
+              (event.event_type ? '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:var(--gray-100);color:var(--gray-600);border:var(--border)">' + esc(event.event_type) + '</span>' : '') +
+              (event.distance ? '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:var(--gray-100);color:var(--gray-600);border:var(--border)">' + esc(event.distance) + '</span>' : '') +
+              (event.entry_fee ? '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:var(--gray-100);color:var(--gray-600);border:var(--border)">' + esc(event.entry_fee) + '</span>' : '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:#EFF6FF;color:#1E40AF;border:0.5px solid #93C5FD">Free</span>') +
+            '</div>' +
+          '</div>' +
+          '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">' +
+            '<div style="font-size:11px;font-family:var(--mono);color:var(--gray-400)">' + esc(daysLabel(event.daysUntil)) + '</div>' +
+            '<div style="font-size:13px;font-weight:600;color:var(--gray-900)"><strong>' + event.goingCount + '</strong> going</div>' +
+            (event.notRespondedCount > 0 ? '<div style="font-size:10px;color:' + notRespondedColor + '">⚠ ' + event.notRespondedCount + ' no response</div>' : '<div style="font-size:10px;color:#10B981">All responded ✓</div>') +
+          '</div>' +
+        '</div>' +
+        '<div style="padding:0 16px 12px">' +
+          '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+            '<div style="flex:1;height:6px;background:var(--gray-100);border-radius:3px;overflow:hidden;display:flex">' +
+              '<div style="width:' + goingPct + '%;height:100%;background:#10B981;border-radius:3px 0 0 3px"></div>' +
+              '<div style="width:' + interestedPct + '%;height:100%;background:#FFD21E"></div>' +
+              '<div style="width:' + nonePct + '%;height:100%;background:var(--gray-200)"></div>' +
+            '</div>' +
+            '<span style="font-size:10px;font-family:var(--mono);color:var(--gray-400)">' + totalMembers + ' members</span>' +
+          '</div>' +
+          '<div style="display:flex;gap:12px">' +
+            '<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--gray-500)"><div style="width:7px;height:7px;border-radius:50%;background:#10B981;flex-shrink:0"></div>' + event.goingCount + ' going</div>' +
+            '<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--gray-500)"><div style="width:7px;height:7px;border-radius:50%;background:#FFD21E;flex-shrink:0"></div>' + event.interestedCount + ' interested</div>' +
+            '<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--gray-500)"><div style="width:7px;height:7px;border-radius:50%;background:var(--gray-200);flex-shrink:0"></div>' + event.notRespondedCount + ' no response</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="padding:10px 16px;border-top:var(--border);display:flex;align-items:center;gap:6px;background:var(--gray-50)">' +
+          '<button onclick="viewEventRsvps(\'' + id + '\')" style="padding:5px 12px;border-radius:7px;font-size:12px;font-weight:600;border:none;background:var(--gray-900);color:white;cursor:pointer">View RSVPs</button>' +
+          (event.notRespondedCount > 0 ? '<button onclick="nudgeNonResponders(\'' + id + '\',this)" style="padding:5px 12px;border-radius:7px;font-size:12px;border:1px solid #fde68a;background:var(--yellow-light);color:#7a5c00;cursor:pointer">⚡ Nudge ' + event.notRespondedCount + ' non-responders</button>' : '') +
+          '<div style="margin-left:auto;display:flex;gap:5px;align-items:center">' +
+            avatarHtml +
+            (extraCount > 0 ? '<div style="width:24px;height:24px;border-radius:50%;background:var(--gray-100);color:var(--gray-500);border:1.5px solid white;margin-left:-6px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600">+' + extraCount + '</div>' : '') +
+            '<button onclick="editClubEvent(\'' + id + '\')" style="margin-left:8px;padding:5px 10px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Edit</button>' +
+            '<button onclick="postEventToFeed(\'' + id + '\',this)" style="padding:5px 10px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Post to feed</button>' +
+            '<button onclick="cancelClubEvent(\'' + id + '\',this)" style="padding:5px 10px;border-radius:7px;font-size:12px;border:1px solid #FECACA;background:var(--red-light);color:#A32D2D;cursor:pointer">Cancel</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function renderClubEvents() {
+    var data = window.ARENAS_DATA;
+    if (!data) return;
+    var stats = data.eventStats || {};
+    set('ev-stat-upcoming', stats.upcomingCount || 0);
+    set('ev-stat-rsvps', stats.totalRsvps || 0);
+    set('ev-stat-noresponse', stats.totalNotResponded || 0);
+    set('ev-stat-attendance', (stats.avgAttendance || 0) + '%');
+
+    var container = document.getElementById('club-events-list');
+    if (!container) return;
+    var upcoming = data.upcomingEvents || [];
+    var past = data.pastEvents || [];
+    var totalMembers = data.memberCount || 0;
+    if (upcoming.length === 0 && past.length === 0) return; // keep the empty state
+
+    var html = '';
+    var groups = groupEventsByTime(upcoming);
+    ['This week', 'Next week', 'This month', 'Later'].forEach(function (label) {
+      if (groups[label] && groups[label].length) {
+        html += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-400);padding:10px 2px 6px;display:flex;align-items:center;gap:8px">' + esc(label) + ' · ' + groups[label].length + ' event' + (groups[label].length !== 1 ? 's' : '') + '<div style="flex:1;height:0.5px;background:var(--gray-200)"></div></div>';
+        html += groups[label].map(function (e) { return buildEventCard(e, false, totalMembers); }).join('');
+      }
+    });
+    if (past.length) {
+      html += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-400);padding:10px 2px 6px;display:flex;align-items:center;gap:8px">Past events · ' + past.length + '<div style="flex:1;height:0.5px;background:var(--gray-200)"></div></div>';
+      html += past.map(function (e) { return buildEventCard(e, true, totalMembers); }).join('');
+    }
+    if (html) container.innerHTML = html;
+  }
+
+  // ── Coach actions (defined unconditionally so the empty-state button works) ──
+  window.nudgeNonResponders = async function (eventId, btn) {
+    btn.textContent = 'Sending…'; btn.disabled = true;
+    try {
+      var r = await fetch(B + '/api/events/' + eventId + '/nudge', { method: 'POST' });
+      var result = await r.json();
+      if (result.error) { showToast('Error: ' + result.error); btn.textContent = '⚡ Nudge non-responders'; btn.disabled = false; return; }
+      showToast('✓ Nudge sent to ' + result.nudged + ' member' + (result.nudged !== 1 ? 's' : ''));
+      btn.textContent = '✓ Nudged'; btn.style.background = '#ECFDF5'; btn.style.color = '#166534'; btn.style.borderColor = '#86EFAC';
+    } catch (err) { showToast('Something went wrong'); btn.textContent = '⚡ Nudge non-responders'; btn.disabled = false; }
+  };
+
+  window.postEventToFeed = async function (eventId, btn) {
+    btn.textContent = 'Posting…'; btn.disabled = true;
+    try {
+      var r = await fetch(B + '/api/events/' + eventId + '/post-to-feed', { method: 'POST' });
+      var result = await r.json();
+      if (result.error) { showToast('Error: ' + result.error); btn.textContent = 'Post to feed'; btn.disabled = false; return; }
+      showToast('✓ Posted to club feed — members notified');
+      btn.textContent = '✓ Posted'; btn.disabled = true;
+    } catch (err) { showToast('Something went wrong'); btn.textContent = 'Post to feed'; btn.disabled = false; }
+  };
+
+  window.duplicateEvent = async function (eventId) {
+    try {
+      var r = await fetch(B + '/api/events/' + eventId + '/duplicate', { method: 'POST' });
+      var result = await r.json();
+      if (result.error) { showToast('Error: ' + result.error); return; }
+      showToast('✓ Event duplicated for next week — edit it to adjust the date');
+      setTimeout(function () { window.location.reload(); }, 1500);
+    } catch (err) { showToast('Something went wrong'); }
+  };
+
+  window.cancelClubEvent = async function (eventId, btn) {
+    if (!confirm('Cancel this event? All members will be notified.')) return;
+    try {
+      var r = await fetch(B + '/api/events/' + eventId, { method: 'DELETE' });
+      var result = await r.json();
+      if (result.error) { showToast('Error: ' + result.error); return; }
+      var card = document.getElementById('club-event-' + eventId);
+      if (card) { card.style.transition = 'opacity .25s'; card.style.opacity = '0'; setTimeout(function () { card.remove(); }, 250); }
+      showToast('Event cancelled');
+    } catch (err) { showToast('Something went wrong'); }
+  };
+
+  window.viewEventRsvps = function () { showToast('Detailed RSVP view coming soon'); };
+  window.editClubEvent = function () { showToast('Edit event coming soon'); };
+
+  window.filterClubEvents = function (btn, sport) {
+    document.querySelectorAll('.ev-filter-pill').forEach(function (p) {
+      p.style.background = 'white'; p.style.borderColor = 'var(--gray-200)'; p.style.color = 'var(--gray-600)';
+    });
+    btn.style.background = 'var(--yellow-light)'; btn.style.borderColor = '#fde68a'; btn.style.color = '#7a5c00';
+    document.querySelectorAll('.club-event-card').forEach(function (card) {
+      card.style.display = (sport === 'all' || card.dataset.sport === sport) ? 'block' : 'none';
+    });
+  };
+
+  window.selectCevSport = function (btn) {
+    document.querySelectorAll('.cev-sport-chip').forEach(function (c) {
+      c.classList.remove('selected'); c.style.background = 'white'; c.style.borderColor = 'var(--gray-200)'; c.style.color = 'var(--gray-600)';
+    });
+    btn.classList.add('selected'); btn.style.background = 'var(--yellow-light)'; btn.style.borderColor = '#fde68a'; btn.style.color = '#7a5c00';
+  };
+
+  window.openCreateClubEvent = function () {
+    var data = window.ARENAS_DATA || {};
+    var clubId = data.club && data.club.id;
+    var memberCount = data.memberCount || 0;
+    if (!clubId) { showToast('No club found for your account'); return; }
+    var overlay = document.createElement('div');
+    overlay.id = 'create-club-event-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto';
+    overlay.innerHTML =
+      '<div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:540px;overflow:hidden">' +
+        '<div style="padding:14px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">' +
+          '<div style="font-size:15px;font-weight:700;color:var(--gray-900)">Create a club event</div>' +
+          '<button onclick="document.getElementById(\'create-club-event-overlay\').remove()" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>' +
+        '</div>' +
+        '<div style="padding:18px;max-height:65vh;overflow-y:auto">' +
+          '<div id="cev-error" style="display:none;background:var(--red-light);border:1px solid #FECACA;border-radius:8px;padding:10px 14px;font-size:13px;color:#A32D2D;margin-bottom:12px"></div>' +
+          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Event title *</div><input class="form-input" style="width:100%" type="text" id="cev-title" placeholder="e.g. Saturday Long Run, Tuesday Track Session…"></div>' +
+          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:8px">Sport *</div>' +
+            '<div style="display:flex;gap:5px;flex-wrap:wrap" id="cev-sports">' +
+              '<button type="button" class="cev-sport-chip selected" data-sport="running" onclick="selectCevSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid #fde68a;background:var(--yellow-light);color:#7a5c00;cursor:pointer">🏃 Running</button>' +
+              '<button type="button" class="cev-sport-chip" data-sport="cycling" onclick="selectCevSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🚴 Cycling</button>' +
+              '<button type="button" class="cev-sport-chip" data-sport="climbing" onclick="selectCevSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🧗 Climbing</button>' +
+              '<button type="button" class="cev-sport-chip" data-sport="swimming" onclick="selectCevSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🏊 Swimming</button>' +
+              '<button type="button" class="cev-sport-chip" data-sport="football" onclick="selectCevSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">⚽ Football</button>' +
+              '<button type="button" class="cev-sport-chip" data-sport="hiking" onclick="selectCevSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🥾 Hiking</button>' +
+              '<button type="button" class="cev-sport-chip" data-sport="weightlifting" onclick="selectCevSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🏋️ Weights</button>' +
+              '<button type="button" class="cev-sport-chip" data-sport="yoga" onclick="selectCevSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🧘 Yoga</button>' +
+            '</div>' +
+          '</div>' +
+          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Event type</div>' +
+            '<select class="form-select" style="width:100%" id="cev-type"><option>Group training</option><option>Track session</option><option>Long run / ride</option><option>Race</option><option>Social run / ride</option><option>Open water swim</option><option>Climbing session</option><option>Other</option></select></div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:13px">' +
+            '<div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Date *</div><input class="form-input" style="width:100%" type="date" id="cev-date"></div>' +
+            '<div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Start time *</div><input class="form-input" style="width:100%" type="time" id="cev-time" value="07:00"></div>' +
+          '</div>' +
+          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Location *</div><input class="form-input" style="width:100%" type="text" id="cev-location" placeholder="e.g. London Fields, Hackney or full address…"></div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:13px">' +
+            '<div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Distance <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div><input class="form-input" style="width:100%" type="text" id="cev-distance" placeholder="e.g. 18–22km"></div>' +
+            '<div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Level</div><select class="form-select" style="width:100%" id="cev-level"><option>All abilities</option><option>Beginner friendly</option><option>Intermediate</option><option>Advanced</option><option>Elite / competitive</option></select></div>' +
+          '</div>' +
+          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Description <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div><textarea class="form-textarea" style="width:100%" id="cev-desc" placeholder="Route details, pace groups, what to bring, meeting point…"></textarea></div>' +
+          '<div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:8px;padding:10px 14px;display:flex;align-items:flex-start;gap:10px"><span style="font-size:16px">🔔</span><div style="font-size:12px;color:#7a5c00;line-height:1.6"><strong>All ' + memberCount + ' club members will be notified</strong> when this event is created. They can RSVP directly from their notification or the Events page.</div></div>' +
+        '</div>' +
+        '<div style="padding:13px 18px;border-top:var(--border);background:var(--gray-50);display:flex;gap:8px;align-items:center">' +
+          '<button onclick="document.getElementById(\'create-club-event-overlay\').remove()" style="padding:8px 14px;border:var(--border);border-radius:7px;font-size:13px;background:white;color:var(--gray-600);cursor:pointer">Cancel</button>' +
+          '<button id="cev-submit-btn" onclick="submitCreateClubEvent()" style="padding:8px 18px;border:none;border-radius:7px;font-size:13px;font-weight:600;background:var(--gray-900);color:white;cursor:pointer;margin-left:auto">Create &amp; notify members →</button>' +
+        '</div>' +
+      '</div>';
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+    var tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+    var dateEl = document.getElementById('cev-date');
+    if (dateEl) dateEl.value = tomorrow.toISOString().split('T')[0];
+  };
+
+  window.submitCreateClubEvent = async function () {
+    var data = window.ARENAS_DATA || {};
+    var clubId = data.club && data.club.id;
+    var title = (document.getElementById('cev-title') || {}).value;
+    title = title ? title.trim() : '';
+    var sport = (document.querySelector('.cev-sport-chip.selected') || {}).dataset ? document.querySelector('.cev-sport-chip.selected').dataset.sport : 'running';
+    var event_type = (document.getElementById('cev-type') || {}).value;
+    var date = (document.getElementById('cev-date') || {}).value;
+    var time = (document.getElementById('cev-time') || {}).value || '07:00';
+    var location = (document.getElementById('cev-location') || {}).value;
+    location = location ? location.trim() : '';
+    var distance = (document.getElementById('cev-distance') || {}).value;
+    distance = distance ? distance.trim() : '';
+    var level = (document.getElementById('cev-level') || {}).value;
+    var description = (document.getElementById('cev-desc') || {}).value;
+    description = description ? description.trim() : '';
+    var errorEl = document.getElementById('cev-error');
+    function fail(msg) { if (errorEl) { errorEl.textContent = msg; errorEl.style.display = 'block'; } }
+    if (!title) return fail('Please enter an event title.');
+    if (!date) return fail('Please select a date.');
+    if (!location) return fail('Please enter a location.');
+    var submitBtn = document.getElementById('cev-submit-btn');
+    if (submitBtn) { submitBtn.textContent = 'Creating…'; submitBtn.disabled = true; }
+    try {
+      var r = await fetch(B + '/api/events/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title, sport: sport, event_type: event_type,
+          date: new Date(date + 'T' + time).toISOString(),
+          location: location, distance: distance, level: level, description: description,
+          visibility: 'club', club_id: clubId, invitees: []
+        })
+      });
+      var result = await r.json();
+      if (result.error) {
+        fail('Error: ' + result.error);
+        if (submitBtn) { submitBtn.textContent = 'Create & notify members →'; submitBtn.disabled = false; }
+        return;
+      }
+      var ov = document.getElementById('create-club-event-overlay'); if (ov) ov.remove();
+      showToast('✓ Event created — all club members notified!');
+      setTimeout(function () { window.location.reload(); }, 1500);
+    } catch (err) {
+      fail('Something went wrong — please try again.');
+      if (submitBtn) { submitBtn.textContent = 'Create & notify members →'; submitBtn.disabled = false; }
+    }
+  };
+
+  // Render now, on load, and whenever the Events tab is opened via setTab.
+  if (typeof window.setTab === 'function') {
+    var _setTab = window.setTab;
+    window.setTab = function (id, el) { _setTab(id, el); if (id === 'events') renderClubEvents(); };
+  }
+  document.addEventListener('DOMContentLoaded', renderClubEvents);
+  renderClubEvents();
 })();
 </script>
 </body>

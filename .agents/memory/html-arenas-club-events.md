@@ -1,0 +1,32 @@
+---
+name: html-arenas club events tab
+description: How the coach club-dashboard Events tab is wired (server rollups + coach actions) and its authz/UX rules.
+---
+
+# Club Events tab (coach dashboard, /clubs/dashboard)
+
+The Events tab is server-rendered data injected as `window.ARENAS_DATA`, then a
+client script in `html/arenas-club-dashboard.html` renders cards into
+`#club-events-list` and updates the `#ev-stat-*` stat tiles.
+
+- The `/clubs/dashboard` route computes the rollup itself (upcomingEvents,
+  pastEvents sliced to 5, eventStats) and attaches it to clubData. Going-member
+  names come from auth metadata via `buildUserDisplayMap` — there is NO usable
+  profiles table (see html-arenas-supabase-schema).
+- Coach-only actions are 3 routes: `POST BASE+/api/events/:id/{nudge,post-to-feed,duplicate}`.
+  All gate on `requireEventManager(eventId,userId,cols)` which checks the caller
+  is admin/coach in the event's club. The user's original snippet had NO authz —
+  add it for any new event-management route.
+
+**Why:** the snippet assumed a profiles table and skipped authorization; both are
+wrong for this app.
+
+**Cancel/delete rule:** `DELETE BASE+/api/events/:id` must allow the creator OR a
+club admin/coach, and must return an error when 0 rows match. A `created_by`-only
+filter silently deletes 0 rows for a non-creator coach yet returns success, so the
+card disappears then reappears on reload (false-success UX).
+
+**Client rules:** escape every DB string with a local `esc()` before `innerHTML`;
+define action handlers UNCONDITIONALLY (not after the empty-state early return, or
+the "Create first event" button is dead); the tab is shown via the global
+`setTab(id, el)` — wrap `window.setTab` to call the renderer when id==='events'.
