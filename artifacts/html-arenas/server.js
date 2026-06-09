@@ -1663,7 +1663,7 @@ app.post(BASE + '/api/events/:id/duplicate', requireAuth, async (req, res) => {
 // club only). Names come from auth metadata — there is no usable profiles table.
 app.get(BASE + '/api/events/:id/rsvps', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for events' });
-  const event = await requireEventManager(req.params.id, req.user.id, 'id, title, date, location, sport');
+  const event = await requireEventManager(req.params.id, req.user.id, 'id, title, club_id');
   if (!event) return res.json({ error: 'Event not found' });
   const { data: rsvpData } = await supabaseAdmin
     .from('event_rsvps')

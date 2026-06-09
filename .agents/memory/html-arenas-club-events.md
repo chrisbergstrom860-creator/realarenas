@@ -31,8 +31,15 @@ define action handlers UNCONDITIONALLY (not after the empty-state early return, 
 the "Create first event" button is dead); the tab is shown via the global
 `setTab(id, el)` — wrap `window.setTab` to call the renderer when id==='events'.
 
+**`requireEventManager` columns trap:** the helper reads `event.club_id` internally to
+check membership, so the `columns` arg you pass MUST include `club_id`. Omitting it makes
+`event.club_id` undefined → helper returns null → caller responds "Event not found" even
+for a real event owned by the coach. (This silently broke View RSVPs once.) Express route
+ordering is NOT the issue here — `:id` never matches across `/`, so `/events/:id` (PATCH/DELETE)
+cannot intercept `/events/:id/rsvps` (GET).
+
 **View RSVPs / Edit:** two more routes back the card buttons — `GET BASE+/api/events/:id/rsvps`
-(gate via `requireEventManager`; names via `buildUserDisplayMap`; filter to going/interested)
+(gate via `requireEventManager` with `'id, title, club_id'`; names via `buildUserDisplayMap`; filter to going/interested)
 and `PATCH BASE+/api/events/:id` (creator OR admin/coach authz like DELETE; build the
 update obj from defined fields only; reject empty updates + invalid date). Edit modal
 pre-fills from `window.ARENAS_DATA` (upcoming+past). Same false-success trap applies:
