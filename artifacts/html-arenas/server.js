@@ -1344,6 +1344,116 @@ app.post(BASE + '/api/clubs/:clubId/checkin', requireAuth, async (req, res) => {
   }
 });
 
+// ── CLUB OVERVIEW: RECENT ACTIVITY ──
+// Merges members' latest logged activities, recent "going" RSVPs to club events,
+// and recent joins into one chronological feed for the overview tab. The
+// user-supplied snippet embedded `profiles:user_id(name)` and ordered activities
+// by `created_at`, but this app has no usable profiles table (names come from
+// auth metadata via buildUserProfileMap) and `activities`/`memberships` have no
+// `joined_at` — joins use `created_at`, activities use their `date` timestamp.
+// Admin/coach of the :clubId only.
+app.get(BASE + '/api/clubs/:clubId/recent-activity', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ feed: [] });
+  const clubId = req.params.clubId;
+  try {
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('club_id')
+      .eq('user_id', req.user.id)
+      .eq('club_id', clubId)
+      .in('role', ['admin', 'coach'])
+      .maybeSingle();
+    if (!membership) return res.status(403).json({ error: 'Not authorised' });
+
+    const { data: members } = await supabaseAdmin
+      .from('memberships')
+      .select('user_id, created_at')
+      .eq('club_id', clubId);
+    const memberIds = [...new Set((members || []).map((m) => m.user_id).filter(Boolean))];
+    const safeIds = memberIds.length ? memberIds : ['00000000-0000-0000-0000-000000000000'];
+
+    // Latest logged activities (`date` is a full ISO timestamp set on insert).
+    const { data: recentActivities } = await supabaseAdmin
+      .from('activities')
+      .select('user_id, sport, distance, duration, date')
+      .in('user_id', safeIds)
+      .order('date', { ascending: false })
+      .limit(8);
+
+    // Latest "going" RSVPs to this club's events.
+    const { data: clubEvents } = await supabaseAdmin
+      .from('events')
+      .select('id, title')
+      .eq('club_id', clubId);
+    const eventTitleMap = {};
+    (clubEvents || []).forEach((e) => { eventTitleMap[e.id] = e.title; });
+    const eventIds = (clubEvents || []).map((e) => e.id);
+    let recentRsvps = [];
+    if (eventIds.length) {
+      const { data: rsvpRows } = await supabaseAdmin
+        .from('event_rsvps')
+        .select('user_id, event_id, status, created_at')
+        .in('event_id', eventIds)
+        .eq('status', 'going')
+        .order('created_at', { ascending: false })
+        .limit(5);
+      recentRsvps = rsvpRows || [];
+    }
+
+    // Recent joins: membership rows created in the last 14 days.
+    const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+    const recentJoins = (members || [])
+      .filter((m) => m.created_at && (Date.now() - new Date(m.created_at).getTime()) < fourteenDaysMs)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 3);
+
+    // One batched auth-metadata lookup for every name we need.
+    const nameMap = await buildUserProfileMap([
+      ...(recentActivities || []).map((a) => a.user_id),
+      ...recentRsvps.map((r) => r.user_id),
+      ...recentJoins.map((m) => m.user_id)
+    ]);
+    const nameOf = (id) => (nameMap[id] && nameMap[id].name) || 'A member';
+
+    const sportLabels = {
+      running: 'run', cycling: 'ride', climbing: 'climb', swimming: 'swim',
+      football: 'football session', weightlifting: 'weights session', hiking: 'hike', yoga: 'yoga session'
+    };
+
+    const feed = [];
+    (recentActivities || []).forEach((a) => {
+      const dist = a.distance ? `${a.distance} ` : '';
+      feed.push({
+        type: 'activity',
+        name: nameOf(a.user_id),
+        text: `logged a ${dist}${sportLabels[a.sport] || a.sport || 'session'}`,
+        timestamp: a.date
+      });
+    });
+    recentRsvps.forEach((r) => {
+      feed.push({
+        type: 'rsvp',
+        name: nameOf(r.user_id),
+        text: `RSVP'd going to ${eventTitleMap[r.event_id] || 'an event'}`,
+        timestamp: r.created_at
+      });
+    });
+    recentJoins.forEach((m) => {
+      feed.push({
+        type: 'join',
+        name: nameOf(m.user_id),
+        text: 'joined the club',
+        timestamp: m.created_at
+      });
+    });
+    feed.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    res.json({ feed: feed.slice(0, 10) });
+  } catch (err) {
+    console.log('Recent activity error:', err.message);
+    res.json({ feed: [] });
+  }
+});
+
 // ── CHALLENGES API ──
 // Compute a participant's progress toward a challenge goal from their logged
 // activities. `distance` sums numeric distance values; `sessions` counts
@@ -2561,6 +2671,7 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
     let memberCount = 0;
     let members = [];
     let pendingCount = 0;
+    let pendingInvites = [];
     let upcomingEvents = [];
     let pastEvents = [];
     let eventStats = { upcomingCount: 0, totalRsvps: 0, totalNotResponded: 0, avgAttendance: 0 };
@@ -2595,16 +2706,28 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
         return { user_id: m.user_id, role: m.role, joined_at: m.created_at, name: display.name, handle: display.handle };
       }));
 
-      // Count pending invitations so the dashboard can surface them.
+      // Pending invitations for the overview "needs attention" panel + members
+      // KPI. Expiry/open-link flags are derived here so the client can flag
+      // soon-to-expire invites without re-deriving TTL rules.
       try {
-        const { count: pc } = await supabaseAdmin
+        const { data: inviteRows } = await supabaseAdmin
           .from('club_invites')
-          .select('*', { count: 'exact', head: true })
+          .select('id, email, status, expires_at')
           .eq('club_id', clubId)
-          .eq('status', 'pending');
-        pendingCount = pc || 0;
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false });
+        const inviteNow = Date.now();
+        pendingInvites = (inviteRows || []).map((i) => ({
+          id: i.id,
+          email: i.email,
+          status: i.status,
+          expires_at: i.expires_at,
+          isOpen: i.email === OPEN_INVITE_EMAIL,
+          isExpired: i.expires_at ? new Date(i.expires_at).getTime() < inviteNow : false
+        }));
+        pendingCount = pendingInvites.length;
       } catch (e) {
-        // Non-fatal: dashboard still renders without the pending count.
+        // Non-fatal: dashboard still renders without the pending invites.
       }
 
       // ── Club events + RSVP rollups for the Events tab. The user-supplied
@@ -2782,6 +2905,7 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
       memberCount,
       members,
       pendingCount,
+      pendingInvites,
       upcomingEvents,
       pastEvents: pastEvents.slice(0, 5),
       eventStats,

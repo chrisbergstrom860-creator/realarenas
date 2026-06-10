@@ -356,131 +356,105 @@ button, select, input { font-family: var(--font); }
 
   <!-- ═══ OVERVIEW TAB ═══ -->
   <div class="tab-content active" id="tab-overview">
-    <div class="page-hdr">
-      <div class="page-hdr-left">
-        <h1>Good morning, <span class="coach-name">Rachel</span> 👋</h1>
-        <p><span class="club-name">Hackney Running Club</span> · Week of May 15–22, 2026 · <span class="member-count">48</span> members</p>
+    <!-- Greeting header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:var(--border);background:white">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:var(--gray-900)" id="ov-greeting">Welcome back 👋</div>
+        <div style="font-size:12px;color:var(--gray-400);margin-top:2px" id="ov-greeting-sub">Here's what's happening at your club this week</div>
       </div>
-      <div class="page-hdr-right">
-        <button class="btn btn-ghost" onclick="showToast('Generating weekly report PDF…')">📋 Export report</button>
-        <button class="btn btn-yellow" onclick="openModal('event')">+ New event</button>
-      </div>
-    </div>
-
-    <!-- Risk alerts -->
-    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
-      <div class="risk-card">
-        <div class="risk-icon">⚠️</div>
-        <div class="risk-content">
-          <div class="risk-name">Yuki T. — overtraining risk</div>
-          <div class="risk-desc">Training load spiked 42% above their 4-week average this week (68km vs 48km norm). Heart rate also elevated in last 3 sessions. Recommend rest day before Saturday's long run.</div>
-          <div class="risk-actions">
-            <button class="btn btn-sm btn-primary" onclick="showToast('Message sent to Yuki T.')">Message member</button>
-            <button class="btn btn-sm btn-ghost" onclick="showToast('Dismissed for this week')">Dismiss</button>
-          </div>
-        </div>
+      <div style="display:flex;gap:6px">
+        <button onclick="switchToTabAndCreate('events')" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;font-size:12px;font-weight:600;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">📅 Event</button>
+        <button onclick="switchToTabAndCreate('challenges')" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;font-size:12px;font-weight:600;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">⚡ Challenge</button>
+        <button onclick="nav('/clubs/invite')" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">+ Invite members</button>
       </div>
     </div>
 
-    <!-- Stat cards -->
-    <div class="grid-4" style="margin-bottom:16px">
-      <div class="stat-card">
-        <div class="sc-label">Active members</div>
-        <div class="sc-value">39</div>
-        <div class="sc-delta up">↑ +4 vs last week</div>
-        <div class="sc-bar"><div class="sc-bar-fill" style="width:81%;background:var(--green)"></div></div>
+    <!-- KPI row -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);background:white;border-bottom:var(--border)">
+      <div onclick="navToTab('members')" style="padding:14px 16px;border-right:var(--border);cursor:pointer" onmouseenter="this.style.background='var(--gray-50)'" onmouseleave="this.style.background='white'">
+        <div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1;color:var(--gray-900)" id="ov-kpi-members">—</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Members</div>
+        <div style="font-size:10px;margin-top:3px;color:var(--gray-400)" id="ov-kpi-members-sub"></div>
       </div>
-      <div class="stat-card">
-        <div class="sc-label">Total km this week</div>
-        <div class="sc-value">312</div>
-        <div class="sc-delta up">↑ +48km vs last week</div>
-        <div class="sc-bar"><div class="sc-bar-fill" style="width:72%;background:var(--orange)"></div></div>
+      <div onclick="navToTab('training')" style="padding:14px 16px;border-right:var(--border);cursor:pointer" onmouseenter="this.style.background='var(--gray-50)'" onmouseleave="this.style.background='white'">
+        <div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1;color:var(--gray-900)" id="ov-kpi-hours">—</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Training this week</div>
+        <div style="font-size:10px;margin-top:3px" id="ov-kpi-hours-sub"></div>
       </div>
-      <div class="stat-card">
-        <div class="sc-label">Challenge completion</div>
-        <div class="sc-value">89%</div>
-        <div class="sc-delta up">↑ +12% vs last week</div>
-        <div class="sc-bar"><div class="sc-bar-fill" style="width:89%;background:var(--purple)"></div></div>
+      <div onclick="navToTab('events')" style="padding:14px 16px;border-right:var(--border);cursor:pointer" onmouseenter="this.style.background='var(--gray-50)'" onmouseleave="this.style.background='white'">
+        <div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1;color:var(--gray-900)" id="ov-kpi-events">—</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Upcoming events</div>
+        <div style="font-size:10px;margin-top:3px;color:#E6B800" id="ov-kpi-events-sub"></div>
       </div>
-      <div class="stat-card">
-        <div class="sc-label">Injury risk flags</div>
-        <div class="sc-value">3</div>
-        <div class="sc-delta dn">↑ +1 vs last week</div>
-        <div class="sc-bar"><div class="sc-bar-fill" style="width:30%;background:var(--red)"></div></div>
+      <div onclick="navToTab('challenges')" style="padding:14px 16px;cursor:pointer" onmouseenter="this.style.background='var(--gray-50)'" onmouseleave="this.style.background='white'">
+        <div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1;color:var(--gray-900)" id="ov-kpi-challenges">—</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Active challenges</div>
+        <div style="font-size:10px;margin-top:3px;color:var(--gray-400)" id="ov-kpi-challenges-sub"></div>
       </div>
     </div>
 
-    <!-- Bottom grid: top members + upcoming events + activity -->
-    <div class="grid-3">
-      <!-- Recent members -->
-      <div class="card">
-        <div class="card-header">
-          <div class="card-header-left"><span>👥</span><span class="card-title">Recent members</span></div>
-          <button class="btn btn-sm btn-ghost" onclick="setTab('members',null)">All members →</button>
-        </div>
-        <div style="padding:6px 0" id="recent-members">
-          <!-- Populated from window.ARENAS_DATA.members -->
-        </div>
-        <div id="recent-members-empty" style="display:none;padding:20px 14px;text-align:center;color:var(--gray-500);font-size:13px">
-          No members yet — invite people to your club to get started.
-        </div>
+    <!-- Needs attention panel -->
+    <div id="ov-attention-panel" style="margin:14px;background:white;border:0.5px solid #fde68a;border-radius:var(--radius-lg);overflow:hidden;display:none">
+      <div style="padding:11px 14px;background:var(--yellow-light);border-bottom:0.5px solid #fde68a;display:flex;align-items:center;gap:7px">
+        <span style="font-size:14px">⚠️</span>
+        <div style="font-size:12px;font-weight:600;color:#633806" id="ov-attention-title">Needs your attention</div>
       </div>
+      <div id="ov-attention-items"></div>
+    </div>
 
-      <!-- Next events -->
-      <div class="card">
-        <div class="card-header">
-          <div class="card-header-left"><span>📅</span><span class="card-title">Upcoming events</span></div>
-          <button class="btn btn-sm btn-ghost" onclick="setTab('events',null)">All events →</button>
+    <!-- All clear state -->
+    <div id="ov-allclear" style="margin:14px;background:#ECFDF5;border:0.5px solid #86EFAC;border-radius:var(--radius-lg);padding:14px;display:none;align-items:center;gap:10px">
+      <span style="font-size:18px">✅</span>
+      <div style="font-size:13px;color:#166534">All clear — no items need your attention right now</div>
+    </div>
+
+    <!-- Two column grid -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 14px 14px">
+
+      <!-- Upcoming events -->
+      <div style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">
+        <div style="padding:10px 14px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--gray-50)">
+          <div style="font-size:12px;font-weight:600">📅 Upcoming events</div>
+          <span onclick="navToTab('events')" style="font-size:11px;color:var(--gray-400);cursor:pointer">View all →</span>
         </div>
-        <div style="display:flex;flex-direction:column;gap:0">
-          <div class="feed-item">
-            <div class="ev-date-box" style="width:40px;height:40px;border-radius:7px;flex-shrink:0"><div class="ed" style="font-size:15px">13</div><div class="em">Apr</div></div>
-            <div>
-              <div style="font-size:13px;font-weight:600;color:var(--gray-900)">London Half Marathon</div>
-              <div style="font-size:11px;color:var(--gray-500)">34 going · 8 pending · 6 declined</div>
-              <div style="display:flex;gap:4px;margin-top:4px">
-                <button class="btn btn-sm btn-ghost" style="font-size:11px;padding:3px 8px" onclick="openModal('event-rsvp')">View RSVPs</button>
-                <button class="btn btn-sm btn-yellow" style="font-size:11px;padding:3px 8px" onclick="showToast('Reminder sent to 8 pending members')">Nudge pending</button>
-              </div>
-            </div>
-          </div>
-          <div class="feed-item">
-            <div class="ev-date-box" style="width:40px;height:40px;border-radius:7px;flex-shrink:0"><div class="ed" style="font-size:15px">19</div><div class="em">Apr</div></div>
-            <div>
-              <div style="font-size:13px;font-weight:600;color:var(--gray-900)">Parkrun Club Takeover</div>
-              <div style="font-size:11px;color:var(--gray-500)">22 going · 14 pending</div>
-              <div style="display:flex;gap:4px;margin-top:4px">
-                <button class="btn btn-sm btn-ghost" style="font-size:11px;padding:3px 8px" onclick="openModal('event-rsvp')">View RSVPs</button>
-              </div>
-            </div>
-          </div>
+        <div id="ov-events-list">
+          <div style="padding:20px;text-align:center;font-size:12px;color:var(--gray-400)">Loading…</div>
         </div>
       </div>
 
       <!-- Active challenges -->
-      <div class="card">
-        <div class="card-header">
-          <div class="card-header-left"><span>⚡</span><span class="card-title">Active challenges</span></div>
-          <button class="btn btn-sm btn-ghost" onclick="setTab('challenges',null)">All →</button>
+      <div style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">
+        <div style="padding:10px 14px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--gray-50)">
+          <div style="font-size:12px;font-weight:600">⚡ Active challenges</div>
+          <span onclick="navToTab('challenges')" style="font-size:11px;color:var(--gray-400);cursor:pointer">View all →</span>
         </div>
-        <div style="display:flex;flex-direction:column;gap:10px;padding:14px">
-          <div>
-            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span style="font-weight:600;color:var(--gray-900)">100km May Run</span><span style="color:var(--gray-500);font-family:var(--mono)">9 days</span></div>
-            <div class="prog-track"><div class="prog-fill" style="width:72%;background:var(--orange)"></div></div>
-            <div style="font-size:11px;color:var(--gray-500);margin-top:3px">32 / 44 members completed</div>
-          </div>
-          <div>
-            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span style="font-weight:600;color:var(--gray-900)">Club weekly streak</span><span style="color:var(--gray-500);font-family:var(--mono)">ongoing</span></div>
-            <div class="prog-track"><div class="prog-fill" style="width:89%;background:var(--purple)"></div></div>
-            <div style="font-size:11px;color:var(--gray-500);margin-top:3px">39 / 44 members active this week</div>
-          </div>
-          <div>
-            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span style="font-weight:600;color:var(--gray-900)">Sub-25 5K club</span><span style="color:var(--gray-500);font-family:var(--mono)">always open</span></div>
-            <div class="prog-track"><div class="prog-fill" style="width:38%;background:var(--blue)"></div></div>
-            <div style="font-size:11px;color:var(--gray-500);margin-top:3px">17 / 44 members achieved</div>
-          </div>
+        <div id="ov-challenges-list">
+          <div style="padding:20px;text-align:center;font-size:12px;color:var(--gray-400)">Loading…</div>
         </div>
       </div>
+
+      <!-- Training volume snapshot -->
+      <div style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">
+        <div style="padding:10px 14px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--gray-50)">
+          <div style="font-size:12px;font-weight:600">📊 Club training volume</div>
+          <span onclick="navToTab('training')" style="font-size:11px;color:var(--gray-400);cursor:pointer">Details →</span>
+        </div>
+        <div id="ov-volume-chart" style="display:flex;align-items:flex-end;gap:6px;height:70px;padding:12px 14px 8px">
+          <div style="flex:1;text-align:center;font-size:12px;color:var(--gray-400);align-self:center">Loading…</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);border-top:var(--border)" id="ov-volume-stats"></div>
+      </div>
+
+      <!-- Recent activity -->
+      <div style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">
+        <div style="padding:10px 14px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--gray-50)">
+          <div style="font-size:12px;font-weight:600">🏃 Recent member activity</div>
+        </div>
+        <div id="ov-activity-feed">
+          <div style="padding:20px;text-align:center;font-size:12px;color:var(--gray-400)">Loading…</div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -2556,5 +2530,299 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 })();
 </script>
+  <script>
+  // ── OVERVIEW TAB ── Renders the club dashboard landing tab from the data the
+  // server injects into window.ARENAS_DATA, plus two live fetches (training-load
+  // + recent-activity). All user-supplied strings are escaped before insertion;
+  // inline onclick handlers only ever embed escaped UUIDs, never names/free text.
+  (function () {
+    var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    var sportIcons = { running: '🏃', cycling: '🚴', climbing: '🧗', swimming: '🏊', football: '⚽', weightlifting: '🏋️', hiking: '🥾', yoga: '🧘', any: '⚡' };
+    function setText(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
+
+    window.navToTab = function (tab) {
+      if (typeof window.setTab === 'function') window.setTab(tab, null);
+    };
+    window.switchToTabAndCreate = function (tab) {
+      window.navToTab(tab);
+      setTimeout(function () {
+        if (tab === 'events' && typeof openCreateClubEvent === 'function') openCreateClubEvent();
+        if (tab === 'challenges' && typeof openCreateClubChallenge === 'function') openCreateClubChallenge();
+      }, 300);
+    };
+
+    async function renderClubOverview() {
+      var data = window.ARENAS_DATA;
+      if (!data) return;
+      var clubId = data.club && data.club.id;
+
+      // Greeting.
+      var hour = new Date().getHours();
+      var greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+      var coachName = ((data.profile && data.profile.name) || '').split(' ')[0];
+      setText('ov-greeting', greeting + (coachName ? ', ' + coachName : '') + ' 👋');
+      setText('ov-greeting-sub', "Here's what's happening at " + ((data.club && data.club.name) || 'your club') + ' this week');
+
+      // KPIs from injected data.
+      var memberCount = data.memberCount || (data.members ? data.members.length : 0) || 0;
+      var pendingInvites = (data.pendingInvites || []).filter(function (i) {
+        return i.status === 'pending' && !i.isExpired && !i.isOpen;
+      });
+      setText('ov-kpi-members', memberCount);
+      setText('ov-kpi-members-sub', pendingInvites.length > 0
+        ? pendingInvites.length + ' pending invite' + (pendingInvites.length !== 1 ? 's' : '')
+        : 'No pending invites');
+
+      var upcomingEvents = data.upcomingEvents || [];
+      var pendingRsvps = upcomingEvents.reduce(function (s, e) { return s + (e.notRespondedCount || 0); }, 0);
+      setText('ov-kpi-events', upcomingEvents.length);
+      setText('ov-kpi-events-sub', pendingRsvps > 0 ? pendingRsvps + ' RSVPs still pending' : 'All RSVPs in');
+
+      var activeChallenges = data.activeChallenges || [];
+      var totalParticipants = activeChallenges.reduce(function (s, c) { return s + (c.participantCount || 0); }, 0);
+      setText('ov-kpi-challenges', activeChallenges.length);
+      setText('ov-kpi-challenges-sub', totalParticipants + ' total participant' + (totalParticipants !== 1 ? 's' : ''));
+
+      // Training load (live fetch).
+      var tlData = null;
+      try {
+        var tlResponse = await fetch(B + '/api/clubs/' + clubId + '/training-load?weeks=6');
+        tlData = await tlResponse.json();
+        if (tlData && !tlData.error) {
+          setText('ov-kpi-hours', ((tlData.stats && tlData.stats.clubThisWeek) || 0) + 'h');
+          var hoursSubEl = document.getElementById('ov-kpi-hours-sub');
+          if (hoursSubEl) {
+            var d = (tlData.stats && tlData.stats.clubDelta) || 0;
+            hoursSubEl.textContent = d >= 0 ? '↑ +' + d + 'h vs 4-week avg' : '↓ ' + d + 'h vs 4-week avg';
+            hoursSubEl.style.color = d >= 0 ? '#10B981' : '#854D0E';
+          }
+        }
+      } catch (err) { /* training-load is best-effort */ }
+
+      // ── NEEDS ATTENTION ──
+      var attentionItems = [];
+      var members = (tlData && tlData.members) || [];
+      members.filter(function (m) { return m.status === 'overdoing'; }).slice(0, 2).forEach(function (m) {
+        attentionItems.push({
+          icon: '📈', iconBg: '#FEF2F2',
+          text: '<strong>' + esc(m.name) + ' is overdoing it</strong> — training ' + esc(m.trend) + '% above their average' + (m.restDays === 0 ? ' with 0 rest days this week' : ''),
+          actionLabel: 'Send check-in',
+          action: "sendTlCheckin('" + esc(m.userId) + "',this)"
+        });
+      });
+      var inactive = members.filter(function (m) { return m.status === 'inactive'; });
+      if (inactive.length > 0) {
+        var names = inactive.slice(0, 2).map(function (m) { return esc(m.name); }).join(' and ');
+        attentionItems.push({
+          icon: '💤', iconBg: '#FEF2F2',
+          text: '<strong>' + inactive.length + ' member' + (inactive.length !== 1 ? 's' : '') + ' inactive this week</strong>' + (names ? ' — including ' + names : ''),
+          actionLabel: 'Nudge all',
+          action: 'nudgeInactiveFromOverview()'
+        });
+      }
+      upcomingEvents.filter(function (e) { return e.daysUntil <= 2 && e.notRespondedCount > 0; }).slice(0, 2).forEach(function (e) {
+        var when = e.daysUntil <= 0 ? 'today' : e.daysUntil === 1 ? 'tomorrow' : 'in 2 days';
+        attentionItems.push({
+          icon: '📅', iconBg: 'var(--yellow-light)',
+          text: '<strong>' + esc(e.title) + ' is ' + when + '</strong> — ' + e.notRespondedCount + ' member' + (e.notRespondedCount !== 1 ? 's' : '') + " still haven't responded",
+          actionLabel: 'Nudge RSVPs',
+          action: "nudgeNonResponders('" + esc(e.id) + "',this)"
+        });
+      });
+      var expiringSoon = pendingInvites.filter(function (i) {
+        if (!i.expires_at) return false;
+        var daysLeft = Math.ceil((new Date(i.expires_at) - new Date()) / (1000 * 60 * 60 * 24));
+        return daysLeft <= 2;
+      });
+      if (expiringSoon.length > 0) {
+        attentionItems.push({
+          icon: '✉️', iconBg: 'var(--yellow-light)',
+          text: '<strong>' + expiringSoon.length + ' invite' + (expiringSoon.length !== 1 ? 's' : '') + ' expiring soon</strong> — ' + expiringSoon.slice(0, 2).map(function (i) { return esc(i.email); }).join(' and '),
+          actionLabel: 'Manage invites',
+          action: "nav('/clubs/invite')"
+        });
+      }
+
+      var attentionPanel = document.getElementById('ov-attention-panel');
+      var allClearEl = document.getElementById('ov-allclear');
+      if (attentionItems.length > 0) {
+        if (attentionPanel) {
+          attentionPanel.style.display = 'block';
+          setText('ov-attention-title', 'Needs your attention · ' + attentionItems.length + ' item' + (attentionItems.length !== 1 ? 's' : ''));
+          var itemsEl = document.getElementById('ov-attention-items');
+          if (itemsEl) {
+            itemsEl.innerHTML = attentionItems.map(function (item) {
+              return '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:var(--border)">' +
+                '<div style="width:30px;height:30px;border-radius:7px;background:' + item.iconBg + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">' + item.icon + '</div>' +
+                '<div style="flex:1;font-size:12px;color:var(--gray-900);line-height:1.45">' + item.text + '</div>' +
+                '<button onclick="' + item.action + '" style="padding:4px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0;border:var(--border);background:white;color:var(--gray-600)">' + item.actionLabel + '</button>' +
+                '</div>';
+            }).join('');
+          }
+        }
+        if (allClearEl) allClearEl.style.display = 'none';
+      } else {
+        if (attentionPanel) attentionPanel.style.display = 'none';
+        if (allClearEl) allClearEl.style.display = 'flex';
+      }
+      window._ovInactiveMembers = inactive;
+
+      // ── UPCOMING EVENTS CARD ──
+      var eventsEl = document.getElementById('ov-events-list');
+      if (eventsEl) {
+        if (upcomingEvents.length === 0) {
+          eventsEl.innerHTML = '<div style="padding:20px;text-align:center;font-size:12px;color:var(--gray-400)">No upcoming events — <span onclick="switchToTabAndCreate(\'events\')" style="color:var(--gray-600);font-weight:600;cursor:pointer">create one →</span></div>';
+        } else {
+          eventsEl.innerHTML = upcomingEvents.slice(0, 3).map(function (e) {
+            var dt = new Date(e.date);
+            var month = dt.toLocaleDateString('en-GB', { month: 'short' });
+            var day = dt.getDate();
+            var time = dt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+            var when = e.daysUntil <= 0 ? 'Today' : e.daysUntil === 1 ? 'Tomorrow' : dt.toLocaleDateString('en-GB', { weekday: 'short' });
+            return '<div onclick="navToTab(\'events\')" style="display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:var(--border);cursor:pointer">' +
+              '<div style="width:34px;height:38px;border-radius:6px;background:#FFF7ED;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0">' +
+              '<div style="font-size:8px;font-weight:600;text-transform:uppercase;color:#9A3412">' + esc(month) + '</div>' +
+              '<div style="font-size:15px;font-weight:700;font-family:var(--mono);line-height:1;color:#9A3412">' + day + '</div></div>' +
+              '<div style="flex:1;min-width:0">' +
+              '<div style="font-size:12px;font-weight:600;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(e.title) + '</div>' +
+              '<div style="font-size:10px;color:var(--gray-400)">' + esc(when) + ' ' + esc(time) + (e.location ? ' · ' + esc(e.location) : '') + '</div></div>' +
+              '<div style="text-align:right;flex-shrink:0">' +
+              '<div style="font-size:11px;font-family:var(--mono);color:var(--gray-600)">' + (e.goingCount || 0) + ' going</div>' +
+              (e.notRespondedCount > 0 ? '<div style="font-size:9px;color:#E6B800">' + e.notRespondedCount + ' pending</div>' : '') +
+              '</div></div>';
+          }).join('');
+        }
+      }
+
+      // ── ACTIVE CHALLENGES CARD ──
+      var challengesEl = document.getElementById('ov-challenges-list');
+      if (challengesEl) {
+        if (activeChallenges.length === 0) {
+          challengesEl.innerHTML = '<div style="padding:20px;text-align:center;font-size:12px;color:var(--gray-400)">No active challenges — <span onclick="switchToTabAndCreate(\'challenges\')" style="color:var(--gray-600);font-weight:600;cursor:pointer">create one →</span></div>';
+        } else {
+          challengesEl.innerHTML = activeChallenges.slice(0, 3).map(function (c) {
+            var leader = c.top3 && c.top3[0];
+            var pct = c.participationPct || 0;
+            var fillColor = pct >= 80 ? '#10B981' : pct >= 50 ? '#FFD21E' : '#3B82F6';
+            return '<div onclick="navToTab(\'challenges\')" style="padding:9px 14px;border-bottom:var(--border);cursor:pointer">' +
+              '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">' +
+              '<span style="font-size:13px;flex-shrink:0">' + (sportIcons[c.sport] || '⚡') + '</span>' +
+              '<div style="font-size:12px;font-weight:600;color:var(--gray-900);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(c.title) + '</div>' +
+              '<div style="font-size:10px;font-family:var(--mono);color:var(--gray-400);flex-shrink:0">' + (c.daysLeft || 0) + 'd left</div></div>' +
+              '<div style="height:4px;background:var(--gray-100);border-radius:2px;overflow:hidden;margin-bottom:3px">' +
+              '<div style="width:' + pct + '%;height:100%;background:' + fillColor + ';border-radius:2px"></div></div>' +
+              '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--gray-400)">' +
+              '<span>' + (c.participantCount || 0) + ' / ' + memberCount + ' joined</span>' +
+              (leader ? '<span>Leader: ' + esc(leader.name) + ' · ' + esc(leader.progress) + ' ' + esc(c.goal_unit || '') + '</span>' : '') +
+              '</div></div>';
+          }).join('');
+        }
+      }
+
+      // ── TRAINING VOLUME SNAPSHOT ──
+      if (tlData && !tlData.error) {
+        var chartEl = document.getElementById('ov-volume-chart');
+        if (chartEl) {
+          var weekly = tlData.clubWeekly || [];
+          var labels = tlData.weekLabels || [];
+          var maxVal = Math.max.apply(null, weekly.concat([1]));
+          chartEl.innerHTML = weekly.map(function (h, i) {
+            var isCurrent = i === weekly.length - 1;
+            var heightPct = Math.max(6, Math.round((h / maxVal) * 85));
+            return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end">' +
+              '<div style="width:100%;max-width:30px;height:' + heightPct + '%;border-radius:3px 3px 0 0;background:' + (isCurrent ? '#E6B800' : '#FFD21E') + '" title="' + esc(h) + 'h"></div>' +
+              '<div style="font-size:9px;color:' + (isCurrent ? 'var(--gray-600)' : 'var(--gray-400)') + ';font-weight:' + (isCurrent ? '600' : '400') + '">' + (isCurrent ? 'Now' : esc(labels[i] || '')) + '</div></div>';
+          }).join('');
+        }
+        var statsEl = document.getElementById('ov-volume-stats');
+        if (statsEl) {
+          var tlMembers = tlData.members || [];
+          var totalSessions = tlMembers.reduce(function (s, m) { return s + (m.sessionsThisWeek || 0); }, 0);
+          var totalKm = Math.round(tlMembers.reduce(function (s, m) { return s + (m.kmThisWeek || 0); }, 0) * 10) / 10;
+          statsEl.innerHTML =
+            '<div style="padding:9px 12px;text-align:center;border-right:var(--border)"><div style="font-size:13px;font-weight:700;font-family:var(--mono)">' + ((tlData.stats && tlData.stats.clubThisWeek) || 0) + 'h</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;margin-top:1px">This week</div></div>' +
+            '<div style="padding:9px 12px;text-align:center;border-right:var(--border)"><div style="font-size:13px;font-weight:700;font-family:var(--mono)">' + totalSessions + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;margin-top:1px">Sessions</div></div>' +
+            '<div style="padding:9px 12px;text-align:center"><div style="font-size:13px;font-weight:700;font-family:var(--mono)">' + totalKm + ' km</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;margin-top:1px">Distance</div></div>';
+        }
+      }
+
+      // ── RECENT ACTIVITY FEED ──
+      try {
+        var feedResponse = await fetch(B + '/api/clubs/' + clubId + '/recent-activity');
+        var feedData = await feedResponse.json();
+        var feedEl = document.getElementById('ov-activity-feed');
+        if (feedEl) {
+          if (feedData.error || !(feedData.feed && feedData.feed.length)) {
+            feedEl.innerHTML = '<div style="padding:20px;text-align:center;font-size:12px;color:var(--gray-400)">No recent activity yet</div>';
+          } else {
+            var avColors = [
+              { bg: '#FEF9C3', c: '#854D0E' }, { bg: '#FCE7F3', c: '#9D174D' },
+              { bg: '#E0F2FE', c: '#0369A1' }, { bg: '#F5F3FF', c: '#5B21B6' },
+              { bg: '#ECFDF5', c: '#065F46' }, { bg: '#FAEEDA', c: '#633806' }
+            ];
+            var timeAgo = function (ts) {
+              var s = Math.floor((new Date() - new Date(ts)) / 1000);
+              if (s < 3600) return Math.max(1, Math.floor(s / 60)) + 'm ago';
+              if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+              return Math.floor(s / 86400) + 'd ago';
+            };
+            feedEl.innerHTML = feedData.feed.slice(0, 6).map(function (item, i) {
+              var av = avColors[i % avColors.length];
+              var ini = String(item.name || '?').split(' ').map(function (n) { return n[0]; }).join('').slice(0, 2).toUpperCase();
+              return '<div style="display:flex;align-items:flex-start;gap:9px;padding:9px 14px;border-bottom:var(--border)">' +
+                '<div style="width:26px;height:26px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600;flex-shrink:0;margin-top:1px">' + esc(ini) + '</div>' +
+                '<div style="flex:1;font-size:12px;color:var(--gray-500);line-height:1.5"><strong style="color:var(--gray-900);font-weight:600">' + esc(item.name) + '</strong> ' + esc(item.text) + '</div>' +
+                '<div style="font-size:10px;color:var(--gray-400);flex-shrink:0;margin-top:2px">' + esc(timeAgo(item.timestamp)) + '</div>' +
+                '</div>';
+            }).join('');
+          }
+        }
+      } catch (err) { /* recent-activity is best-effort */ }
+    }
+
+    window.nudgeInactiveFromOverview = async function () {
+      var data = window.ARENAS_DATA;
+      var clubId = data && data.club && data.club.id;
+      var inactive = window._ovInactiveMembers || [];
+      if (!clubId || inactive.length === 0) return;
+      try {
+        var userIds = inactive.map(function (m) { return m.userId; }).filter(Boolean);
+        var response = await fetch(B + '/api/clubs/' + clubId + '/nudge-atrisk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userIds: userIds })
+        });
+        var result = await response.json();
+        if (result.error) { if (typeof showToast === 'function') showToast('Error: ' + result.error); return; }
+        if (typeof showToast === 'function') showToast('✓ Check-in nudge sent to ' + result.nudged + ' member' + (result.nudged !== 1 ? 's' : ''));
+      } catch (err) {
+        if (typeof showToast === 'function') showToast('Something went wrong');
+      }
+    };
+
+    window.renderClubOverview = renderClubOverview;
+
+    // Chain onto the global tab switcher so the overview re-renders when re-opened.
+    if (typeof window.setTab === 'function') {
+      var _setTabOv = window.setTab;
+      window.setTab = function (id, el) {
+        _setTabOv(id, el);
+        if (id === 'overview') renderClubOverview();
+      };
+    }
+
+    // Overview is the default landing tab, so render it once on load.
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { renderClubOverview(); });
+    } else {
+      renderClubOverview();
+    }
+  })();
+  </script>
 </body>
 </html>

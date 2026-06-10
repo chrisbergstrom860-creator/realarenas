@@ -1,0 +1,497 @@
+Please build the Overview tab in the club dashboard. Most of the data is already injected into window.ARENAS_DATA from previous work (upcomingEvents, activeChallenges, eventStats, challengeStats, pendingInvites, activeMembers, memberCount). We need one new API route for recent member activity, and the overview rendering pulls everything together. Here is everything to do:
+1. Add a recent activity API route to server.js:
+javascript// Recent member activity for club overview
+app.get('/api/clubs/:clubId/recent-activity', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  // Check requester is admin/coach
+  const { data: membership } = await supabaseAdmin
+    .from('memberships')
+    .select('role')
+    .eq('user_id', req.user.id)
+    .eq('club_id', req.params.clubId)
+    .in('role', ['admin', 'coach'])
+    .single();
+  if (!membership) return res.json({ error: 'Not authorised' });
+  // Get club member IDs
+  const { data: members } = await supabaseAdmin
+    .from('memberships')
+    .select('user_id, joined_at, profiles:user_id(name, handle)')
+    .eq('club_id', req.params.clubId);
+  const memberIds = (members || []).map(m => m.user_id);
+  const safeIds = memberIds.length ? memberIds : ['00000000-0000-0000-0000-000000000000'];
+  // Recent activities
+  const { data: recentActivities } = await supabaseAdmin
+    .from('activities')
+    .select('user_id, sport, distance, duration, created_at, profiles:user_id(name)')
+    .in('user_id', safeIds)
+    .order('created_at', { ascending: false })
+    .limit(8);
+  // Recent RSVPs to club events
+  const { data: clubEvents } = await supabaseAdmin
+    .from('events')
+    .select('id, title')
+    .eq('club_id', req.params.clubId);
+  const eventIds = (clubEvents || []).map(e => e.id);
+  const eventTitleMap = {};
+  (clubEvents || []).forEach(e => eventTitleMap[e.id] = e.title);
+  const { data: recentRsvps } = await supabaseAdmin
+    .from('event_rsvps')
+    .select('user_id, event_id, status, created_at, profiles:user_id(name)')
+    .in('event_id', eventIds.length ? eventIds : ['00000000-0000-0000-0000-000000000000'])
+    .eq('status', 'going')
+    .order('created_at', { ascending: false })
+    .limit(5);
+  // Recent joins
+  const recentJoins = (members || [])
+    .filter(m => m.joined_at && (new Date() - new Date(m.joined_at)) < 14 * 24 * 60 * 60 * 1000)
+    .sort((a, b) => new Date(b.joined_at) - new Date(a.joined_at))
+    .slice(0, 3);
+  // Merge into one feed
+  const sportIcons = { running:'run', cycling:'ride', climbing:'climb', swimming:'swim', football:'football session', weightlifting:'weights session', hiking:'hike', yoga:'yoga session' };
+  const feed = [];
+  (recentActivities || []).forEach(a => {
+    const dist = a.distance ? `${a.distance} ` : '';
+    feed.push({
+      type: 'activity',
+      name: a.profiles?.name || 'A member',
+      text: `logged a ${dist}${sportIcons[a.sport] || a.sport}`,
+      timestamp: a.created_at
+    });
+  });
+  (recentRsvps || []).forEach(r => {
+    feed.push({
+      type: 'rsvp',
+      name: r.profiles?.name || 'A member',
+      text: `RSVP'd going to ${eventTitleMap[r.event_id] || 'an event'}`,
+      timestamp: r.created_at
+    });
+  });
+  recentJoins.forEach(m => {
+    feed.push({
+      type: 'join',
+      name: m.profiles?.name || 'A new member',
+      text: 'joined the club',
+      timestamp: m.joined_at
+    });
+  });
+  feed.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  res.json({ feed: feed.slice(0, 10) });
+});
+2. Replace the Overview tab content in arenas-club-dashboard.html.
+Find the existing Overview tab panel — it has hardcoded content. Replace its inner content with:
+html<!-- Greeting header -->
+<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:var(--border);background:white">
+  <div>
+    <div style="font-size:16px;font-weight:700;color:var(--gray-900)" id="ov-greeting">Welcome back 👋</div>
+    <div style="font-size:12px;color:var(--gray-400);margin-top:2px" id="ov-greeting-sub">Here's what's happening at your club this week</div>
+  </div>
+  <div style="display:flex;gap:6px">
+    <button onclick="switchToTabAndCreate('events')" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;font-size:12px;font-weight:600;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">📅 Event</button>
+    <button onclick="switchToTabAndCreate('challenges')" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;font-size:12px;font-weight:600;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">⚡ Challenge</button>
+    <button onclick="window.location.href='/clubs/invite'" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">+ Invite members</button>
+  </div>
+</div>
+
+<!-- KPI row -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);background:white;border-bottom:var(--border)">
+  <div onclick="navToTab('members')" style="padding:14px 16px;border-right:var(--border);cursor:pointer" onmouseenter="this.style.background='var(--gray-50)'" onmouseleave="this.style.background='white'">
+    <div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1;color:var(--gray-900)" id="ov-kpi-members">—</div>
+    <div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Members</div>
+    <div style="font-size:10px;margin-top:3px;color:var(--gray-400)" id="ov-kpi-members-sub"></div>
+  </div>
+  <div onclick="navToTab('training')" style="padding:14px 16px;border-right:var(--border);cursor:pointer" onmouseenter="this.style.background='var(--gray-50)'" onmouseleave="this.style.background='white'">
+    <div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1;color:var(--gray-900)" id="ov-kpi-hours">—</div>
+    <div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Training this week</div>
+    <div style="font-size:10px;margin-top:3px" id="ov-kpi-hours-sub"></div>
+  </div>
+  <div onclick="navToTab('events')" style="padding:14px 16px;border-right:var(--border);cursor:pointer" onmouseenter="this.style.background='var(--gray-50)'" onmouseleave="this.style.background='white'">
+    <div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1;color:var(--gray-900)" id="ov-kpi-events">—</div>
+    <div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Upcoming events</div>
+    <div style="font-size:10px;margin-top:3px;color:#E6B800" id="ov-kpi-events-sub"></div>
+  </div>
+  <div onclick="navToTab('challenges')" style="padding:14px 16px;cursor:pointer" onmouseenter="this.style.background='var(--gray-50)'" onmouseleave="this.style.background='white'">
+    <div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1;color:var(--gray-900)" id="ov-kpi-challenges">—</div>
+    <div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Active challenges</div>
+    <div style="font-size:10px;margin-top:3px;color:var(--gray-400)" id="ov-kpi-challenges-sub"></div>
+  </div>
+</div>
+
+<!-- Needs attention panel -->
+<div id="ov-attention-panel" style="margin:14px;background:white;border:0.5px solid #fde68a;border-radius:var(--radius-lg);overflow:hidden;display:none">
+  <div style="padding:11px 14px;background:var(--yellow-light);border-bottom:0.5px solid #fde68a;display:flex;align-items:center;gap:7px">
+    <span style="font-size:14px">⚠️</span>
+    <div style="font-size:12px;font-weight:600;color:#633806" id="ov-attention-title">Needs your attention</div>
+  </div>
+  <div id="ov-attention-items"></div>
+</div>
+
+<!-- All clear state -->
+<div id="ov-allclear" style="margin:14px;background:#ECFDF5;border:0.5px solid #86EFAC;border-radius:var(--radius-lg);padding:14px;display:none;align-items:center;gap:10px">
+  <span style="font-size:18px">✅</span>
+  <div style="font-size:13px;color:#166534">All clear — no items need your attention right now</div>
+</div>
+
+<!-- Two column grid -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 14px 14px">
+
+  <!-- Upcoming events -->
+  <div style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">
+    <div style="padding:10px 14px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--gray-50)">
+      <div style="font-size:12px;font-weight:600">📅 Upcoming events</div>
+      <span onclick="navToTab('events')" style="font-size:11px;color:var(--gray-400);cursor:pointer">View all →</span>
+    </div>
+    <div id="ov-events-list">
+      <div style="padding:20px;text-align:center;font-size:12px;color:var(--gray-400)">Loading…</div>
+    </div>
+  </div>
+
+  <!-- Active challenges -->
+  <div style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">
+    <div style="padding:10px 14px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--gray-50)">
+      <div style="font-size:12px;font-weight:600">⚡ Active challenges</div>
+      <span onclick="navToTab('challenges')" style="font-size:11px;color:var(--gray-400);cursor:pointer">View all →</span>
+    </div>
+    <div id="ov-challenges-list">
+      <div style="padding:20px;text-align:center;font-size:12px;color:var(--gray-400)">Loading…</div>
+    </div>
+  </div>
+
+  <!-- Training volume snapshot -->
+  <div style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">
+    <div style="padding:10px 14px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--gray-50)">
+      <div style="font-size:12px;font-weight:600">📊 Club training volume</div>
+      <span onclick="navToTab('training')" style="font-size:11px;color:var(--gray-400);cursor:pointer">Details →</span>
+    </div>
+    <div id="ov-volume-chart" style="display:flex;align-items:flex-end;gap:6px;height:70px;padding:12px 14px 8px">
+      <div style="flex:1;text-align:center;font-size:12px;color:var(--gray-400);align-self:center">Loading…</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);border-top:var(--border)" id="ov-volume-stats"></div>
+  </div>
+
+  <!-- Recent activity -->
+  <div style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">
+    <div style="padding:10px 14px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--gray-50)">
+      <div style="font-size:12px;font-weight:600">🏃 Recent member activity</div>
+    </div>
+    <div id="ov-activity-feed">
+      <div style="padding:20px;text-align:center;font-size:12px;color:var(--gray-400)">Loading…</div>
+    </div>
+  </div>
+
+</div>
+3. Add this JavaScript to arenas-club-dashboard.html before </body>:
+javascript// ── OVERVIEW TAB ──
+window.navToTab = function(tab) {
+  const tabFn = window.switchTab || window.showTab || window.openTab;
+  if (tabFn) tabFn(tab);
+};
+
+window.switchToTabAndCreate = function(tab) {
+  navToTab(tab);
+  setTimeout(() => {
+    if (tab === 'events' && typeof openCreateClubEvent === 'function') openCreateClubEvent();
+    if (tab === 'challenges' && typeof openCreateClubChallenge === 'function') openCreateClubChallenge();
+  }, 300);
+};
+
+async function renderClubOverview() {
+  const data = window.ARENAS_DATA;
+  if (!data) return;
+  const clubId = data.club?.id;
+
+  // Greeting
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const coachName = (data.profile?.name || data.coachName || '').split(' ')[0];
+  const greetEl = document.getElementById('ov-greeting');
+  if (greetEl) greetEl.textContent = `${greeting}${coachName ? ', ' + coachName : ''} 👋`;
+  const greetSub = document.getElementById('ov-greeting-sub');
+  if (greetSub) greetSub.textContent = `Here's what's happening at ${data.club?.name || 'your club'} this week`;
+
+  const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+  // KPIs from injected data
+  const memberCount = data.memberCount || data.activeMembers?.length || 0;
+  const pendingInvites = (data.pendingInvites || []).filter(i => i.status === 'pending' && !i.isExpired && i.email !== 'open-invite@realarenas.com');
+  setEl('ov-kpi-members', memberCount);
+  setEl('ov-kpi-members-sub', pendingInvites.length > 0 ? `${pendingInvites.length} pending invite${pendingInvites.length !== 1 ? 's' : ''}` : 'No pending invites');
+
+  const upcomingEvents = data.upcomingEvents || [];
+  const pendingRsvps = upcomingEvents.reduce((s, e) => s + (e.notRespondedCount || 0), 0);
+  setEl('ov-kpi-events', upcomingEvents.length);
+  setEl('ov-kpi-events-sub', pendingRsvps > 0 ? `${pendingRsvps} RSVPs still pending` : 'All RSVPs in');
+
+  const activeChallenges = data.activeChallenges || [];
+  const totalParticipants = activeChallenges.reduce((s, c) => s + (c.participantCount || 0), 0);
+  setEl('ov-kpi-challenges', activeChallenges.length);
+  setEl('ov-kpi-challenges-sub', `${totalParticipants} total participants`);
+
+  // Training load — fetch from API
+  let tlData = null;
+  try {
+    const tlResponse = await fetch(`/api/clubs/${clubId}/training-load?weeks=6`);
+    tlData = await tlResponse.json();
+    if (!tlData.error) {
+      setEl('ov-kpi-hours', (tlData.stats?.clubThisWeek || 0) + 'h');
+      const hoursSubEl = document.getElementById('ov-kpi-hours-sub');
+      if (hoursSubEl) {
+        const d = tlData.stats?.clubDelta || 0;
+        hoursSubEl.textContent = d >= 0 ? `↑ +${d}h vs 4-week avg` : `↓ ${d}h vs 4-week avg`;
+        hoursSubEl.style.color = d >= 0 ? '#10B981' : '#854D0E';
+      }
+    }
+  } catch (err) {}
+
+  // ── NEEDS ATTENTION PANEL ──
+  const attentionItems = [];
+  // Overdoing members
+  const overdoing = (tlData?.members || []).filter(m => m.status === 'overdoing');
+  overdoing.slice(0, 2).forEach(m => {
+    attentionItems.push({
+      icon: '📈', iconBg: '#FEF2F2', iconColor: '#A32D2D',
+      text: `<strong>${m.name} is overdoing it</strong> — training ${m.trend}% above their average${m.restDays === 0 ? ' with 0 rest days this week' : ''}`,
+      actionLabel: 'Send check-in',
+      action: `sendTlCheckin('${m.userId}','${m.name}',this)`
+    });
+  });
+  // Inactive members
+  const inactive = (tlData?.members || []).filter(m => m.status === 'inactive');
+  if (inactive.length > 0) {
+    const names = inactive.slice(0, 2).map(m => m.name).join(' and ');
+    attentionItems.push({
+      icon: '💤', iconBg: '#FEF2F2', iconColor: '#A32D2D',
+      text: `<strong>${inactive.length} member${inactive.length !== 1 ? 's' : ''} inactive this week</strong>${names ? ' — including ' + names : ''}`,
+      actionLabel: 'Nudge all',
+      action: `nudgeInactiveFromOverview()`
+    });
+  }
+  // Events soon with pending RSVPs
+  upcomingEvents.filter(e => e.daysUntil <= 2 && e.notRespondedCount > 0).slice(0, 2).forEach(e => {
+    const when = e.daysUntil <= 0 ? 'today' : e.daysUntil === 1 ? 'tomorrow' : 'in 2 days';
+    attentionItems.push({
+      icon: '📅', iconBg: 'var(--yellow-light)', iconColor: '#854D0E',
+      text: `<strong>${e.title} is ${when}</strong> — ${e.notRespondedCount} member${e.notRespondedCount !== 1 ? 's' : ''} still haven't responded`,
+      actionLabel: 'Nudge RSVPs',
+      action: `nudgeNonResponders('${e.id}',this)`
+    });
+  });
+  // Expiring invites
+  const expiringSoon = pendingInvites.filter(i => {
+    const daysLeft = Math.ceil((new Date(i.expires_at) - new Date()) / (1000 * 60 * 60 * 24));
+    return daysLeft <= 2;
+  });
+  if (expiringSoon.length > 0) {
+    attentionItems.push({
+      icon: '✉️', iconBg: 'var(--yellow-light)', iconColor: '#854D0E',
+      text: `<strong>${expiringSoon.length} invite${expiringSoon.length !== 1 ? 's' : ''} expiring soon</strong> — ${expiringSoon.slice(0, 2).map(i => i.email).join(' and ')}`,
+      actionLabel: 'Manage invites',
+      action: `window.location.href='/clubs/invite'`
+    });
+  }
+
+  const attentionPanel = document.getElementById('ov-attention-panel');
+  const allClearEl = document.getElementById('ov-allclear');
+  if (attentionItems.length > 0) {
+    if (attentionPanel) {
+      attentionPanel.style.display = 'block';
+      setEl('ov-attention-title', `Needs your attention · ${attentionItems.length} item${attentionItems.length !== 1 ? 's' : ''}`);
+      const itemsEl = document.getElementById('ov-attention-items');
+      if (itemsEl) {
+        itemsEl.innerHTML = attentionItems.map(item => `
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:var(--border)">
+            <div style="width:30px;height:30px;border-radius:7px;background:${item.iconBg};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">${item.icon}</div>
+            <div style="flex:1;font-size:12px;color:var(--gray-900);line-height:1.45">${item.text}</div>
+            <button onclick="${item.action}" style="padding:4px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0;border:var(--border);background:white;color:var(--gray-600)">${item.actionLabel}</button>
+          </div>`).join('');
+      }
+    }
+    if (allClearEl) allClearEl.style.display = 'none';
+  } else {
+    if (attentionPanel) attentionPanel.style.display = 'none';
+    if (allClearEl) allClearEl.style.display = 'flex';
+  }
+
+  // Store inactive for the nudge function
+  window._ovInactiveMembers = inactive;
+
+  // ── UPCOMING EVENTS CARD ──
+  const eventsEl = document.getElementById('ov-events-list');
+  if (eventsEl) {
+    if (upcomingEvents.length === 0) {
+      eventsEl.innerHTML = `<div style="padding:20px;text-align:center;font-size:12px;color:var(--gray-400)">No upcoming events — <span onclick="switchToTabAndCreate('events')" style="color:var(--gray-600);font-weight:600;cursor:pointer">create one →</span></div>`;
+    } else {
+      eventsEl.innerHTML = upcomingEvents.slice(0, 3).map(e => {
+        const d = new Date(e.date);
+        const month = d.toLocaleDateString('en-GB', { month: 'short' });
+        const day = d.getDate();
+        const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        const when = e.daysUntil <= 0 ? 'Today' : e.daysUntil === 1 ? 'Tomorrow' : d.toLocaleDateString('en-GB', { weekday: 'short' });
+        return `
+          <div onclick="navToTab('events')" style="display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:var(--border);cursor:pointer" onmouseenter="this.style.background='var(--gray-50)'" onmouseleave="this.style.background='white'">
+            <div style="width:34px;height:38px;border-radius:6px;background:#FFF7ED;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0">
+              <div style="font-size:8px;font-weight:600;text-transform:uppercase;color:#9A3412">${month}</div>
+              <div style="font-size:15px;font-weight:700;font-family:var(--mono);line-height:1;color:#9A3412">${day}</div>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;font-weight:600;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.title}</div>
+              <div style="font-size:10px;color:var(--gray-400)">${when} ${time} · ${e.location}</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:11px;font-family:var(--mono);color:var(--gray-600)">${e.goingCount} going</div>
+              ${e.notRespondedCount > 0 ? `<div style="font-size:9px;color:#E6B800">${e.notRespondedCount} pending</div>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+    }
+  }
+
+  // ── ACTIVE CHALLENGES CARD ──
+  const challengesEl = document.getElementById('ov-challenges-list');
+  if (challengesEl) {
+    if (activeChallenges.length === 0) {
+      challengesEl.innerHTML = `<div style="padding:20px;text-align:center;font-size:12px;color:var(--gray-400)">No active challenges — <span onclick="switchToTabAndCreate('challenges')" style="color:var(--gray-600);font-weight:600;cursor:pointer">create one →</span></div>`;
+    } else {
+      const sportIcons = { running:'🏃',cycling:'🚴',climbing:'🧗',swimming:'🏊',football:'⚽',weightlifting:'🏋️',hiking:'🥾',yoga:'🧘',any:'⚡' };
+      challengesEl.innerHTML = activeChallenges.slice(0, 3).map(c => {
+        const leader = c.top3?.[0];
+        const pct = c.participationPct || 0;
+        const fillColor = pct >= 80 ? '#10B981' : pct >= 50 ? '#FFD21E' : '#3B82F6';
+        return `
+          <div onclick="navToTab('challenges')" style="padding:9px 14px;border-bottom:var(--border);cursor:pointer" onmouseenter="this.style.background='var(--gray-50)'" onmouseleave="this.style.background='white'">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+              <span style="font-size:13px;flex-shrink:0">${sportIcons[c.sport] || '⚡'}</span>
+              <div style="font-size:12px;font-weight:600;color:var(--gray-900);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.title}</div>
+              <div style="font-size:10px;font-family:var(--mono);color:var(--gray-400);flex-shrink:0">${c.daysLeft}d left</div>
+            </div>
+            <div style="height:4px;background:var(--gray-100);border-radius:2px;overflow:hidden;margin-bottom:3px">
+              <div style="width:${pct}%;height:100%;background:${fillColor};border-radius:2px"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--gray-400)">
+              <span>${c.participantCount} / ${memberCount} joined</span>
+              ${leader ? `<span>Leader: ${leader.name} · ${leader.progress} ${c.goal_unit}</span>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+    }
+  }
+
+  // ── TRAINING VOLUME SNAPSHOT ──
+  if (tlData && !tlData.error) {
+    const chartEl = document.getElementById('ov-volume-chart');
+    if (chartEl) {
+      const weekly = tlData.clubWeekly || [];
+      const labels = tlData.weekLabels || [];
+      const maxVal = Math.max(...weekly, 1);
+      chartEl.innerHTML = weekly.map((h, i) => {
+        const isCurrent = i === weekly.length - 1;
+        const heightPct = Math.max(6, Math.round((h / maxVal) * 85));
+        return `
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end">
+            <div style="width:100%;max-width:30px;height:${heightPct}%;border-radius:3px 3px 0 0;background:${isCurrent ? '#E6B800' : '#FFD21E'}"></div>
+            <div style="font-size:9px;color:${isCurrent ? 'var(--gray-600)' : 'var(--gray-400)'};font-weight:${isCurrent ? '600' : '400'}">${isCurrent ? 'Now' : labels[i]}</div>
+          </div>`;
+      }).join('');
+    }
+    const statsEl = document.getElementById('ov-volume-stats');
+    if (statsEl) {
+      const totalSessions = (tlData.members || []).reduce((s, m) => s + (m.sessionsThisWeek || 0), 0);
+      const totalKm = Math.round((tlData.members || []).reduce((s, m) => s + (m.kmThisWeek || 0), 0) * 10) / 10;
+      statsEl.innerHTML = `
+        <div style="padding:9px 12px;text-align:center;border-right:var(--border)">
+          <div style="font-size:13px;font-weight:700;font-family:var(--mono)">${tlData.stats?.clubThisWeek || 0}h</div>
+          <div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;margin-top:1px">This week</div>
+        </div>
+        <div style="padding:9px 12px;text-align:center;border-right:var(--border)">
+          <div style="font-size:13px;font-weight:700;font-family:var(--mono)">${totalSessions}</div>
+          <div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;margin-top:1px">Sessions</div>
+        </div>
+        <div style="padding:9px 12px;text-align:center">
+          <div style="font-size:13px;font-weight:700;font-family:var(--mono)">${totalKm} km</div>
+          <div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;margin-top:1px">Distance</div>
+        </div>`;
+    }
+  }
+
+  // ── RECENT ACTIVITY FEED ──
+  try {
+    const feedResponse = await fetch(`/api/clubs/${clubId}/recent-activity`);
+    const feedData = await feedResponse.json();
+    const feedEl = document.getElementById('ov-activity-feed');
+    if (feedEl) {
+      if (feedData.error || !feedData.feed?.length) {
+        feedEl.innerHTML = '<div style="padding:20px;text-align:center;font-size:12px;color:var(--gray-400)">No recent activity yet</div>';
+      } else {
+        const avColors = [
+          {bg:'#FEF9C3',c:'#854D0E'},{bg:'#FCE7F3',c:'#9D174D'},
+          {bg:'#E0F2FE',c:'#0369A1'},{bg:'#F5F3FF',c:'#5B21B6'},
+          {bg:'#ECFDF5',c:'#065F46'},{bg:'#FAEEDA',c:'#633806'}
+        ];
+        function timeAgo(ts) {
+          const s = Math.floor((new Date() - new Date(ts)) / 1000);
+          if (s < 3600) return Math.max(1, Math.floor(s/60)) + 'm ago';
+          if (s < 86400) return Math.floor(s/3600) + 'h ago';
+          return Math.floor(s/86400) + 'd ago';
+        }
+        feedEl.innerHTML = feedData.feed.slice(0, 6).map((item, i) => {
+          const av = avColors[i % avColors.length];
+          const ini = item.name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+          return `
+            <div style="display:flex;align-items:flex-start;gap:9px;padding:9px 14px;border-bottom:var(--border)">
+              <div style="width:26px;height:26px;border-radius:50%;background:${av.bg};color:${av.c};display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600;flex-shrink:0;margin-top:1px">${ini}</div>
+              <div style="flex:1;font-size:12px;color:var(--gray-500);line-height:1.5"><strong style="color:var(--gray-900);font-weight:600">${item.name}</strong> ${item.text}</div>
+              <div style="font-size:10px;color:var(--gray-400);flex-shrink:0;margin-top:2px">${timeAgo(item.timestamp)}</div>
+            </div>`;
+        }).join('');
+      }
+    }
+  } catch (err) {}
+}
+
+window.nudgeInactiveFromOverview = async function() {
+  const data = window.ARENAS_DATA;
+  const clubId = data?.club?.id;
+  const inactive = window._ovInactiveMembers || [];
+  if (!clubId || inactive.length === 0) return;
+  try {
+    const userIds = inactive.map(m => m.userId).filter(Boolean);
+    const response = await fetch(`/api/clubs/${clubId}/nudge-atrisk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userIds })
+    });
+    const result = await response.json();
+    if (result.error) { showToast('Error: ' + result.error); return; }
+    showToast(`✓ Check-in nudge sent to ${result.nudged} member${result.nudged !== 1 ? 's' : ''}`);
+  } catch (err) {
+    showToast('Something went wrong');
+  }
+};
+
+// Hook into tab switching
+const _ovOrigTabFn = window.switchTab || window.showTab || window.openTab;
+if (_ovOrigTabFn) {
+  const _ovTabName = window.switchTab ? 'switchTab' : window.showTab ? 'showTab' : 'openTab';
+  const _ovOrig = window[_ovTabName];
+  window[_ovTabName] = function(tabId) {
+    _ovOrig(tabId);
+    if (tabId === 'overview' || tabId === 'tab-overview' || tabId?.includes('overview')) {
+      renderClubOverview();
+    }
+  };
+}
+
+// Render on load since Overview is the default landing tab
+document.addEventListener('DOMContentLoaded', function() {
+  renderClubOverview();
+});
+4. Make sure the /clubs/dashboard route injects the coach's profile name so the greeting works. If it isn't already there, add to the route:
+javascriptconst { data: coachProfile } = await supabaseAdmin
+  .from('profiles')
+  .select('name')
+  .eq('id', req.user.id)
+  .single();
+clubData.profile = coachProfile || {};
+5. Wait for checkpoint then push to GitHub main immediately.
