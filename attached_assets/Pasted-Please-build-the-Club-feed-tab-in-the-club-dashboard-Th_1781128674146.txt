@@ -1,0 +1,520 @@
+Please build the Club feed tab in the club dashboard. The posts, post_likes, activities, event_rsvps, and memberships tables all exist. Here is everything to do:
+1. Add a club feed API route to server.js:
+javascript// Club feed — merged content from all club members
+app.get('/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  // Check requester is a member of this club
+  const { data: membership } = await supabaseAdmin
+    .from('memberships')
+    .select('role')
+    .eq('user_id', req.user.id)
+    .eq('club_id', req.params.clubId)
+    .single();
+  if (!membership) return res.json({ error: 'Not authorised' });
+  // Get club members with roles
+  const { data: members } = await supabaseAdmin
+    .from('memberships')
+    .select('user_id, role, joined_at, profiles:user_id(name, handle, sports)')
+    .eq('club_id', req.params.clubId);
+  const memberIds = (members || []).map(m => m.user_id);
+  const safeIds = memberIds.length ? memberIds : ['00000000-0000-0000-0000-000000000000'];
+  const roleMap = {};
+  const profileMap = {};
+  (members || []).forEach(m => {
+    roleMap[m.user_id] = m.role;
+    profileMap[m.user_id] = m.profiles || {};
+  });
+
+  const feed = [];
+
+  // 1. Posts from club members
+  const { data: posts } = await supabaseAdmin
+    .from('posts')
+    .select('id, user_id, content, sport, created_at')
+    .in('user_id', safeIds)
+    .order('created_at', { ascending: false })
+    .limit(20);
+  // Get likes for these posts
+  const postIds = (posts || []).map(p => p.id);
+  const { data: likes } = await supabaseAdmin
+    .from('post_likes')
+    .select('post_id, user_id')
+    .in('post_id', postIds.length ? postIds : ['00000000-0000-0000-0000-000000000000']);
+  (posts || []).forEach(p => {
+    const postLikes = (likes || []).filter(l => l.post_id === p.id);
+    feed.push({
+      type: roleMap[p.user_id] === 'admin' || roleMap[p.user_id] === 'coach' ? 'announcement' : 'post',
+      id: p.id,
+      userId: p.user_id,
+      name: profileMap[p.user_id]?.name || 'Member',
+      handle: profileMap[p.user_id]?.handle || 'member',
+      role: roleMap[p.user_id],
+      content: p.content,
+      sport: p.sport,
+      likeCount: postLikes.length,
+      likedByMe: postLikes.some(l => l.user_id === req.user.id),
+      timestamp: p.created_at
+    });
+  });
+
+  // 2. Activities from club members
+  const { data: activities } = await supabaseAdmin
+    .from('activities')
+    .select('id, user_id, sport, title, notes, distance, duration, pace, ai_insight, created_at')
+    .in('user_id', safeIds)
+    .order('created_at', { ascending: false })
+    .limit(20);
+  (activities || []).forEach(a => {
+    feed.push({
+      type: 'activity',
+      id: a.id,
+      userId: a.user_id,
+      name: profileMap[a.user_id]?.name || 'Member',
+      handle: profileMap[a.user_id]?.handle || 'member',
+      content: a.notes || a.title || '',
+      sport: a.sport,
+      distance: a.distance,
+      duration: a.duration,
+      pace: a.pace,
+      aiInsight: a.ai_insight,
+      timestamp: a.created_at
+    });
+  });
+
+  // 3. RSVPs to club events
+  const { data: clubEvents } = await supabaseAdmin
+    .from('events')
+    .select('id, title, date, location')
+    .eq('club_id', req.params.clubId)
+    .gte('date', new Date().toISOString());
+  const eventMap = {};
+  (clubEvents || []).forEach(e => eventMap[e.id] = e);
+  const eventIds = Object.keys(eventMap);
+  const { data: rsvps } = await supabaseAdmin
+    .from('event_rsvps')
+    .select('id, user_id, event_id, status, created_at')
+    .in('event_id', eventIds.length ? eventIds : ['00000000-0000-0000-0000-000000000000'])
+    .eq('status', 'going')
+    .order('created_at', { ascending: false })
+    .limit(10);
+  // Count going per event
+  const goingCounts = {};
+  (rsvps || []).forEach(r => {
+    goingCounts[r.event_id] = (goingCounts[r.event_id] || 0) + 1;
+  });
+  (rsvps || []).slice(0, 8).forEach(r => {
+    const event = eventMap[r.event_id];
+    if (!event) return;
+    feed.push({
+      type: 'rsvp',
+      id: r.id,
+      userId: r.user_id,
+      name: profileMap[r.user_id]?.name || 'Member',
+      handle: profileMap[r.user_id]?.handle || 'member',
+      eventTitle: event.title,
+      eventDate: event.date,
+      eventLocation: event.location,
+      goingCount: goingCounts[r.event_id] || 1,
+      timestamp: r.created_at
+    });
+  });
+
+  // 4. New member joins (last 14 days)
+  (members || [])
+    .filter(m => m.joined_at && (new Date() - new Date(m.joined_at)) < 14 * 24 * 60 * 60 * 1000)
+    .forEach(m => {
+      feed.push({
+        type: 'join',
+        id: 'join-' + m.user_id,
+        userId: m.user_id,
+        name: m.profiles?.name || 'New member',
+        handle: m.profiles?.handle || 'member',
+        sports: m.profiles?.sports || [],
+        timestamp: m.joined_at
+      });
+    });
+
+  // 5. Challenge completions (milestones)
+  const { data: clubChallengesList } = await supabaseAdmin
+    .from('challenges')
+    .select('id, title, goal_type, goal_target, goal_unit, sport, start_date, end_date')
+    .eq('club_id', req.params.clubId)
+    .gte('end_date', new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString());
+  // For each active/recent challenge check who has achieved the goal
+  for (const challenge of (clubChallengesList || [])) {
+    const { data: participants } = await supabaseAdmin
+      .from('challenge_participants')
+      .select('user_id')
+      .eq('challenge_id', challenge.id);
+    for (const participant of (participants || []).slice(0, 20)) {
+      const { data: acts } = await supabaseAdmin
+        .from('activities')
+        .select('sport, distance, date, created_at')
+        .eq('user_id', participant.user_id)
+        .gte('date', challenge.start_date)
+        .lte('date', challenge.end_date)
+        .order('created_at', { ascending: true });
+      let progress = 0;
+      let completedAt = null;
+      for (const a of (acts || [])) {
+        if (challenge.sport !== 'any' && a.sport !== challenge.sport) continue;
+        if (challenge.goal_type === 'distance') {
+          const dist = parseFloat((a.distance || '0').replace(/[^0-9.]/g, ''));
+          if (!isNaN(dist)) progress += dist;
+        } else if (challenge.goal_type === 'sessions') {
+          progress += 1;
+        } else if (challenge.goal_type === 'streak') {
+          progress += 1; // simplified
+        }
+        if (progress >= challenge.goal_target && !completedAt) {
+          completedAt = a.created_at;
+        }
+      }
+      if (completedAt) {
+        feed.push({
+          type: 'milestone',
+          id: 'milestone-' + challenge.id + '-' + participant.user_id,
+          userId: participant.user_id,
+          name: profileMap[participant.user_id]?.name || 'Member',
+          handle: profileMap[participant.user_id]?.handle || 'member',
+          challengeTitle: challenge.title,
+          goalTarget: challenge.goal_target,
+          goalUnit: challenge.goal_unit,
+          timestamp: completedAt
+        });
+      }
+    }
+  }
+
+  // Sort by timestamp descending and limit
+  feed.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  res.json({ feed: feed.slice(0, 30), memberCount: members.length });
+});
+
+// Coach posts an announcement to the club
+app.post('/api/clubs/:clubId/announce', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const { content } = req.body;
+  if (!content?.trim()) return res.json({ error: 'Announcement cannot be empty' });
+  // Check requester is admin/coach
+  const { data: membership } = await supabaseAdmin
+    .from('memberships')
+    .select('role')
+    .eq('user_id', req.user.id)
+    .eq('club_id', req.params.clubId)
+    .in('role', ['admin', 'coach'])
+    .single();
+  if (!membership) return res.json({ error: 'Only coaches can post announcements' });
+  // Create the post
+  const { data: post, error } = await supabaseAdmin
+    .from('posts')
+    .insert({ user_id: req.user.id, content: content.trim() })
+    .select()
+    .single();
+  if (error) return res.json({ error: error.message });
+  // Notify all club members
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('name')
+    .eq('id', req.user.id)
+    .single();
+  const { data: members } = await supabaseAdmin
+    .from('memberships')
+    .select('user_id')
+    .eq('club_id', req.params.clubId)
+    .neq('user_id', req.user.id);
+  for (const member of (members || [])) {
+    await createNotification(supabaseAdmin, {
+      userId: member.user_id,
+      type: 'club',
+      title: 'Coach announcement',
+      body: `${profile?.name || 'Your coach'}: ${content.trim().slice(0, 120)}${content.length > 120 ? '…' : ''}`,
+      link: '/feed',
+      actorId: req.user.id,
+      entityId: post.id
+    });
+  }
+  res.json({ success: true, post });
+});
+2. Replace the Club feed tab content in arenas-club-dashboard.html (find the existing club feed tab panel) with:
+html<!-- Header -->
+<div style="padding:14px 20px;border-bottom:var(--border);background:white">
+  <div style="font-size:16px;font-weight:700;color:var(--gray-900)">Club feed</div>
+  <div style="font-size:12px;color:var(--gray-400);margin-top:2px" id="cf-sub">Everything happening at your club · post announcements to all members</div>
+</div>
+
+<div style="max-width:660px">
+  <!-- Coach composer -->
+  <div style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:14px;overflow:hidden">
+    <div style="display:flex;gap:10px;padding:13px 14px">
+      <div style="width:36px;height:36px;border-radius:50%;background:var(--yellow);color:var(--gray-900);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0" id="cf-comp-av">C</div>
+      <textarea id="cf-comp-text" placeholder="Post an announcement to all members…" style="flex:1;border:none;outline:none;font-size:13px;font-family:var(--sans);color:var(--gray-900);background:transparent;resize:none;min-height:38px;padding-top:9px"></textarea>
+    </div>
+    <div style="padding:9px 14px;border-top:var(--border);display:flex;align-items:center;gap:8px;background:var(--gray-50)">
+      <div style="font-size:11px;color:var(--gray-400)">📣 Posts appear in all member feeds with a Coach badge</div>
+      <button onclick="postClubAnnouncement()" id="cf-post-btn" style="margin-left:auto;padding:6px 16px;border-radius:7px;font-size:12px;font-weight:600;background:var(--gray-900);color:white;border:none;cursor:pointer">Post →</button>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div style="padding:0 14px 10px;display:flex;gap:6px;flex-wrap:wrap">
+    <div class="cf-filter on-cf" data-type="all" onclick="setCfFilter(this,'all')" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid var(--yellow-dark);background:var(--yellow-light);color:#7a5c00;cursor:pointer">All</div>
+    <div class="cf-filter" data-type="activity" onclick="setCfFilter(this,'activity')" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Activities</div>
+    <div class="cf-filter" data-type="post" onclick="setCfFilter(this,'post')" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Posts</div>
+    <div class="cf-filter" data-type="rsvp" onclick="setCfFilter(this,'rsvp')" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">RSVPs</div>
+    <div class="cf-filter" data-type="milestone" onclick="setCfFilter(this,'milestone')" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Milestones</div>
+  </div>
+
+  <!-- Feed -->
+  <div id="cf-feed-list">
+    <div style="padding:32px;text-align:center;font-size:13px;color:var(--gray-400)">Loading club feed…</div>
+  </div>
+</div>
+3. Add this JavaScript to arenas-club-dashboard.html before </body>:
+javascript// ── CLUB FEED TAB ──
+let cfFilter = 'all';
+let cfFeedItems = [];
+
+window.setCfFilter = function(el, type) {
+  document.querySelectorAll('.cf-filter').forEach(p => {
+    p.style.background = 'white'; p.style.borderColor = 'var(--gray-200)'; p.style.color = 'var(--gray-600)';
+  });
+  el.style.background = 'var(--yellow-light)'; el.style.borderColor = 'var(--yellow-dark)'; el.style.color = '#7a5c00';
+  cfFilter = type;
+  renderClubFeed();
+};
+
+window.postClubAnnouncement = async function() {
+  const data = window.ARENAS_DATA;
+  const clubId = data?.club?.id;
+  const textEl = document.getElementById('cf-comp-text');
+  const content = textEl?.value?.trim();
+  if (!content) { showToast('Write something first'); return; }
+  const btn = document.getElementById('cf-post-btn');
+  if (btn) { btn.textContent = 'Posting…'; btn.disabled = true; }
+  try {
+    const response = await fetch(`/api/clubs/${clubId}/announce`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content })
+    });
+    const result = await response.json();
+    if (result.error) {
+      showToast('Error: ' + result.error);
+      if (btn) { btn.textContent = 'Post →'; btn.disabled = false; }
+      return;
+    }
+    showToast('✓ Announcement posted — all members notified');
+    if (textEl) textEl.value = '';
+    if (btn) { btn.textContent = 'Post →'; btn.disabled = false; }
+    loadClubFeed();
+  } catch (err) {
+    showToast('Something went wrong');
+    if (btn) { btn.textContent = 'Post →'; btn.disabled = false; }
+  }
+};
+
+async function loadClubFeed() {
+  const data = window.ARENAS_DATA;
+  const clubId = data?.club?.id;
+  if (!clubId) return;
+  // Set composer initials
+  const coachName = data.profile?.name || '';
+  const avEl = document.getElementById('cf-comp-av');
+  if (avEl && coachName) avEl.textContent = coachName.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+  const subEl = document.getElementById('cf-sub');
+  if (subEl) subEl.textContent = `Everything happening at ${data.club?.name || 'your club'} · post announcements to all members`;
+  try {
+    const response = await fetch(`/api/clubs/${clubId}/feed`);
+    const result = await response.json();
+    if (result.error) return;
+    cfFeedItems = result.feed || [];
+    renderClubFeed();
+  } catch (err) {
+    console.log('Could not load club feed:', err);
+  }
+}
+
+function renderClubFeed() {
+  const container = document.getElementById('cf-feed-list');
+  if (!container) return;
+  const filtered = cfFilter === 'all'
+    ? cfFeedItems
+    : cfFeedItems.filter(item => {
+        if (cfFilter === 'post') return item.type === 'post' || item.type === 'announcement';
+        return item.type === cfFilter;
+      });
+  if (filtered.length === 0) {
+    container.innerHTML = '<div style="padding:32px;text-align:center;font-size:13px;color:var(--gray-400)">Nothing here yet — activity from your members will appear as it happens</div>';
+    return;
+  }
+  const avColors = [
+    {bg:'#FEF9C3',c:'#854D0E'},{bg:'#FCE7F3',c:'#9D174D'},
+    {bg:'#E0F2FE',c:'#0369A1'},{bg:'#F5F3FF',c:'#5B21B6'},
+    {bg:'#ECFDF5',c:'#065F46'},{bg:'#FAEEDA',c:'#633806'}
+  ];
+  const sportColors = {
+    running:{bg:'#FFF7ED',color:'#9A3412',border:'#FDBA74',icon:'🏃'},
+    cycling:{bg:'#EFF6FF',color:'#1E40AF',border:'#93C5FD',icon:'🚴'},
+    climbing:{bg:'#F5F3FF',color:'#5B21B6',border:'#C4B5FD',icon:'🧗'},
+    swimming:{bg:'#F0FDFA',color:'#134E4A',border:'#5EEAD4',icon:'🏊'},
+    football:{bg:'#ECFDF5',color:'#166534',border:'#86EFAC',icon:'⚽'},
+    weightlifting:{bg:'#FEF9C3',color:'#854D0E',border:'#FDE047',icon:'🏋️'},
+    hiking:{bg:'#FAEEDA',color:'#633806',border:'#EF9F27',icon:'🥾'},
+    yoga:{bg:'#FBEAF0',color:'#72243E',border:'#F4C0D1',icon:'🧘'}
+  };
+  function timeAgo(ts) {
+    const s = Math.floor((new Date() - new Date(ts)) / 1000);
+    if (s < 3600) return Math.max(1, Math.floor(s/60)) + 'm ago';
+    if (s < 86400) return Math.floor(s/3600) + 'h ago';
+    return Math.floor(s/86400) + 'd ago';
+  }
+  container.innerHTML = filtered.map((item, i) => {
+    const av = avColors[i % avColors.length];
+    const ini = (item.name || 'M').split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
+    const isCoach = item.type === 'announcement';
+    const avStyle = isCoach ? 'background:var(--yellow);color:var(--gray-900)' : `background:${av.bg};color:${av.c}`;
+
+    let badge = '';
+    let body = '';
+    let metaLabel = '';
+
+    if (item.type === 'announcement') {
+      badge = '<span style="margin-left:auto;font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;background:var(--yellow);color:var(--gray-900);border:0.5px solid var(--yellow-dark);flex-shrink:0">📣 Coach</span>';
+      metaLabel = 'Club ' + (item.role || 'coach');
+      body = `<div style="padding:0 14px 10px;font-size:13px;color:var(--gray-900);line-height:1.6">${item.content}</div>`;
+    } else if (item.type === 'post') {
+      metaLabel = 'posted a note';
+      body = `<div style="padding:0 14px 10px;font-size:13px;color:var(--gray-900);line-height:1.6">${item.content}</div>`;
+    } else if (item.type === 'activity') {
+      const sc = sportColors[item.sport] || sportColors.running;
+      badge = `<span style="margin-left:auto;font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;background:${sc.bg};color:${sc.color};border:0.5px solid ${sc.border};flex-shrink:0">${sc.icon} ${item.sport?.charAt(0).toUpperCase() + item.sport?.slice(1)}</span>`;
+      metaLabel = 'logged an activity';
+      const statCells = [];
+      if (item.distance) statCells.push(`<div style="background:var(--gray-50);border-radius:8px;padding:9px 12px;text-align:center"><div style="font-size:15px;font-weight:600;font-family:var(--mono);color:var(--gray-900)">${item.distance}</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;margin-top:2px">Distance</div></div>`);
+      if (item.duration) statCells.push(`<div style="background:var(--gray-50);border-radius:8px;padding:9px 12px;text-align:center"><div style="font-size:15px;font-weight:600;font-family:var(--mono);color:var(--gray-900)">${item.duration}</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;margin-top:2px">Duration</div></div>`);
+      if (item.pace) statCells.push(`<div style="background:var(--gray-50);border-radius:8px;padding:9px 12px;text-align:center"><div style="font-size:15px;font-weight:600;font-family:var(--mono);color:var(--gray-900)">${item.pace}</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;margin-top:2px">Pace</div></div>`);
+      body = `
+        ${item.content ? `<div style="padding:0 14px 10px;font-size:13px;color:var(--gray-900);line-height:1.6">${item.content}</div>` : ''}
+        ${statCells.length > 0 ? `<div style="display:grid;grid-template-columns:repeat(${statCells.length},1fr);gap:8px;margin:0 14px 10px">${statCells.join('')}</div>` : ''}
+        ${item.aiInsight ? `<div style="margin:0 14px 10px;background:var(--yellow-light);border:0.5px solid #fde68a;border-radius:8px;padding:9px 12px;display:flex;gap:8px;align-items:flex-start"><span style="font-size:13px;flex-shrink:0">✨</span><div style="font-size:11px;color:#633806;line-height:1.55">${item.aiInsight}</div></div>` : ''}`;
+    } else if (item.type === 'rsvp') {
+      badge = '<span style="margin-left:auto;font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;background:#EFF6FF;color:#1E40AF;border:0.5px solid #93C5FD;flex-shrink:0">📅 RSVP</span>';
+      metaLabel = 'is going to an event';
+      const d = new Date(item.eventDate);
+      const dateStr = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+      const timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      body = `
+        <div style="margin:0 14px 10px;background:var(--gray-50);border:var(--border);border-radius:8px;padding:10px 12px">
+          <div style="font-size:12px;font-weight:600;color:var(--gray-900);margin-bottom:2px">${item.eventTitle}</div>
+          <div style="font-size:11px;color:var(--gray-500)">📍 ${item.eventLocation} · ${dateStr} ${timeStr} · ${item.goingCount} going</div>
+        </div>`;
+    } else if (item.type === 'milestone') {
+      badge = '<span style="margin-left:auto;font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;background:#ECFDF5;color:#166534;border:0.5px solid #86EFAC;flex-shrink:0">🏆 Milestone</span>';
+      metaLabel = 'challenge milestone';
+      body = `
+        <div style="margin:0 14px 10px;background:#ECFDF5;border:0.5px solid #86EFAC;border-radius:8px;padding:10px 12px;display:flex;align-items:center;gap:9px">
+          <span style="font-size:20px">🏆</span>
+          <div>
+            <div style="font-size:12px;font-weight:600;color:#166534">Completed ${item.challengeTitle}!</div>
+            <div style="font-size:11px;color:#166534;opacity:.8">Hit the ${item.goalTarget} ${item.goalUnit} goal</div>
+          </div>
+        </div>`;
+    } else if (item.type === 'join') {
+      badge = '<span style="margin-left:auto;font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;background:#F5F3FF;color:#5B21B6;border:0.5px solid #C4B5FD;flex-shrink:0">👋 New member</span>';
+      metaLabel = 'joined the club';
+      const sportsStr = (item.sports || []).slice(0, 3).join(' and ');
+      body = `<div style="padding:0 14px 10px;font-size:13px;color:var(--gray-500);line-height:1.6">${item.name} just joined — say hello!${sportsStr ? ' Into ' + sportsStr + '.' : ''}</div>`;
+    }
+
+    // Like button only for posts/announcements (they have real post IDs)
+    const canLike = item.type === 'post' || item.type === 'announcement';
+    const likeBtn = canLike
+      ? `<button onclick="toggleClubFeedLike('${item.id}',this)" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:7px;font-size:12px;border:${item.likedByMe ? '0.5px solid #E6B800' : 'var(--border)'};background:${item.likedByMe ? 'var(--yellow-light)' : 'white'};color:${item.likedByMe ? '#633806' : 'var(--gray-600)'};cursor:pointer">👍 <span>${item.likeCount || 0}</span></button>`
+      : '';
+
+    return `
+      <div class="cf-card" style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:0 14px 10px;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 14px 8px">
+          <div style="width:36px;height:36px;border-radius:50%;${avStyle};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">${ini}</div>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--gray-900)">${item.name}</div>
+            <div style="font-size:11px;color:var(--gray-400)">@${item.handle} · ${metaLabel}</div>
+          </div>
+          ${badge}
+        </div>
+        ${body}
+        <div style="padding:8px 14px;border-top:var(--border);display:flex;align-items:center;gap:6px">
+          ${likeBtn}
+          <div style="margin-left:auto;font-size:11px;color:var(--gray-400)">${timeAgo(item.timestamp)}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+window.toggleClubFeedLike = async function(postId, btn) {
+  try {
+    const response = await fetch(`/api/posts/${postId}/like`, { method: 'POST' });
+    const result = await response.json();
+    if (result.error) { showToast('Error: ' + result.error); return; }
+    const countEl = btn.querySelector('span');
+    const isLiked = btn.style.background.includes('255') || btn.style.borderColor.includes('E6B800');
+    if (result.liked) {
+      btn.style.background = 'var(--yellow-light)';
+      btn.style.borderColor = '#E6B800';
+      btn.style.color = '#633806';
+      if (countEl) countEl.textContent = parseInt(countEl.textContent) + 1;
+    } else {
+      btn.style.background = 'white';
+      btn.style.borderColor = 'var(--gray-200)';
+      btn.style.color = 'var(--gray-600)';
+      if (countEl) countEl.textContent = Math.max(0, parseInt(countEl.textContent) - 1);
+    }
+  } catch (err) {
+    showToast('Something went wrong');
+  }
+};
+
+// Hook into tab switching
+const _cfOrigTabFn = window.switchTab || window.showTab || window.openTab;
+if (_cfOrigTabFn) {
+  const _cfTabName = window.switchTab ? 'switchTab' : window.showTab ? 'showTab' : 'openTab';
+  const _cfOrig = window[_cfTabName];
+  window[_cfTabName] = function(tabId) {
+    _cfOrig(tabId);
+    if (tabId === 'feed' || tabId === 'club-feed' || tabId === 'tab-feed' || tabId?.includes('feed')) {
+      loadClubFeed();
+    }
+  };
+}
+4. Check that a post like toggle route exists in server.js — if /api/posts/:id/like doesn't exist, add it:
+javascriptapp.post('/api/posts/:id/like', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const { data: existing } = await supabaseAdmin
+    .from('post_likes')
+    .select('id')
+    .eq('post_id', req.params.id)
+    .eq('user_id', req.user.id)
+    .single();
+  if (existing) {
+    await supabaseAdmin.from('post_likes').delete().eq('id', existing.id);
+    return res.json({ success: true, liked: false });
+  }
+  await supabaseAdmin.from('post_likes').insert({
+    post_id: req.params.id,
+    user_id: req.user.id
+  });
+  res.json({ success: true, liked: true });
+});
+If a like route already exists with a different shape, adapt the frontend call to match the existing route instead of duplicating.
+5. Make sure the Club feed sidebar nav item calls the tab switch function with the right tab ID, and the hash navigation map includes feed.
+6. Wait for checkpoint then push to GitHub main immediately.

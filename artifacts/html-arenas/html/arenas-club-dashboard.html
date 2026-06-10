@@ -730,45 +730,38 @@ button, select, input { font-family: var(--font); }
   </div>
 
   <!-- ═══ CLUB FEED TAB ═══ -->
-  <div class="tab-content" id="tab-feed">
-    <div class="page-hdr">
-      <div class="page-hdr-left"><h1>Club activity feed 🏃</h1><p>Recent activities from all 48 Hackney Running Club members</p></div>
+  <div class="tab-content" id="tab-feed" style="padding:0">
+    <!-- Header -->
+    <div style="padding:14px 20px;border-bottom:var(--border);background:white">
+      <div style="font-size:16px;font-weight:700;color:var(--gray-900)">Club feed</div>
+      <div style="font-size:12px;color:var(--gray-400);margin-top:2px" id="cf-sub">Everything happening at your club · post announcements to all members</div>
     </div>
-    <div class="card">
-      <div class="feed-item">
-        <div class="feed-av" style="background:#FEF9C3;color:#854D0E">SL</div>
-        <div class="feed-content">
-          <div class="feed-text"><strong>Sofia L.</strong> logged a morning long run</div>
-          <div class="feed-stats"><span class="feed-stat">88.2 km</span><span class="feed-stat">4:18/km</span><span class="feed-stat">142 bpm</span></div>
-          <div class="feed-ai"><div class="ai-icon">AI</div>Excellent aerobic session — HR well controlled throughout. Glycogen stores likely well managed given consistent fuelling strategy.</div>
-          <div class="feed-time">2h ago · Running · 9,840 pts this week</div>
+
+    <div style="max-width:660px">
+      <!-- Coach composer -->
+      <div style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:14px;overflow:hidden">
+        <div style="display:flex;gap:10px;padding:13px 14px">
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--yellow);color:var(--gray-900);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0" id="cf-comp-av">C</div>
+          <textarea id="cf-comp-text" placeholder="Post an announcement to all members…" style="flex:1;border:none;outline:none;font-size:13px;font-family:var(--font);color:var(--gray-900);background:transparent;resize:none;min-height:38px;padding-top:9px"></textarea>
+        </div>
+        <div style="padding:9px 14px;border-top:var(--border);display:flex;align-items:center;gap:8px;background:var(--gray-50)">
+          <div style="font-size:11px;color:var(--gray-400)">📣 Posts appear in all member feeds with a Coach badge</div>
+          <button onclick="postClubAnnouncement()" id="cf-post-btn" style="margin-left:auto;padding:6px 16px;border-radius:7px;font-size:12px;font-weight:600;background:var(--gray-900);color:white;border:none;cursor:pointer">Post →</button>
         </div>
       </div>
-      <div class="feed-item">
-        <div class="feed-av" style="background:#FCE7F3;color:#9D174D">YT</div>
-        <div class="feed-content">
-          <div class="feed-text"><strong>Yuki T.</strong> logged a hard tempo run</div>
-          <div class="feed-stats"><span class="feed-stat">15.0 km</span><span class="feed-stat">4:02/km</span><span class="feed-stat">171 bpm</span><span class="feed-stat" style="background:#FEF2F2;color:var(--red);border-color:#FECACA">⚠ HR very high</span></div>
-          <div class="feed-ai"><div class="ai-icon">AI</div><strong>⚠ Flag:</strong> Average HR 171bpm for this session is 8% above Yuki's threshold. Combined with 68km this week, rest day strongly recommended.</div>
-          <div class="feed-time">3h ago · Running · 7,610 pts this week</div>
-        </div>
+
+      <!-- Filters -->
+      <div style="padding:0 14px 10px;display:flex;gap:6px;flex-wrap:wrap">
+        <div class="cf-filter on-cf" data-type="all" onclick="setCfFilter(this,'all')" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid var(--yellow-dark);background:var(--yellow-light);color:#7a5c00;cursor:pointer">All</div>
+        <div class="cf-filter" data-type="activity" onclick="setCfFilter(this,'activity')" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Activities</div>
+        <div class="cf-filter" data-type="post" onclick="setCfFilter(this,'post')" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Posts</div>
+        <div class="cf-filter" data-type="rsvp" onclick="setCfFilter(this,'rsvp')" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">RSVPs</div>
+        <div class="cf-filter" data-type="milestone" onclick="setCfFilter(this,'milestone')" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Milestones</div>
       </div>
-      <div class="feed-item">
-        <div class="feed-av" style="background:#FFF7ED;color:#9A3412">JK</div>
-        <div class="feed-content">
-          <div class="feed-text"><strong>Jamie K.</strong> logged an easy recovery run</div>
-          <div class="feed-stats"><span class="feed-stat">12.4 km</span><span class="feed-stat">4:23/km</span><span class="feed-stat">148 bpm</span></div>
-          <div class="feed-ai"><div class="ai-icon">AI</div>Smart taper run ahead of Sunday's PB attempt. Pace was appropriate for zone 2. You're well set for the race.</div>
-          <div class="feed-time">7h ago · Running · 6,440 pts this week</div>
-        </div>
-      </div>
-      <div class="feed-item">
-        <div class="feed-av" style="background:#E0F2FE;color:#0369A1">AL</div>
-        <div class="feed-content">
-          <div class="feed-text"><strong>Alena L.</strong> completed a club challenge — 100km May Run goal hit!</div>
-          <div class="feed-stats"><span class="feed-stat" style="background:var(--green-light);color:#166534;border-color:#86EFAC">✓ Challenge complete</span><span class="feed-stat">71.4 km this week</span></div>
-          <div class="feed-time">1d ago · Running · 7,220 pts this week</div>
-        </div>
+
+      <!-- Feed -->
+      <div id="cf-feed-list">
+        <div style="padding:32px;text-align:center;font-size:13px;color:var(--gray-400)">Loading club feed…</div>
       </div>
     </div>
   </div>
@@ -2821,6 +2814,234 @@ document.addEventListener('DOMContentLoaded', function () {
       document.addEventListener('DOMContentLoaded', function () { renderClubOverview(); });
     } else {
       renderClubOverview();
+    }
+  })();
+
+  // ── CLUB FEED TAB ── wired to window.ARENAS_DATA + BASE+'/api/clubs/:id/feed'.
+  // Merged feed of announcements, posts, activities, RSVPs, milestones and joins.
+  // Coaches/admins can post announcements. Every DB-derived string is escaped
+  // (esc) before innerHTML; inline like handlers embed only escaped post IDs.
+  (function () {
+    var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
+    function initialsOf(name) {
+      return String(name || 'M').trim().split(/\s+/).map(function (n) { return n[0] || ''; }).join('').slice(0, 2).toUpperCase() || 'M';
+    }
+    function timeAgo(ts) {
+      var s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+      if (isNaN(s)) return '';
+      if (s < 3600) return Math.max(1, Math.floor(s / 60)) + 'm ago';
+      if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+      return Math.floor(s / 86400) + 'd ago';
+    }
+    var avColors = [
+      { bg: '#FEF9C3', c: '#854D0E' }, { bg: '#FCE7F3', c: '#9D174D' },
+      { bg: '#E0F2FE', c: '#0369A1' }, { bg: '#F5F3FF', c: '#5B21B6' },
+      { bg: '#ECFDF5', c: '#065F46' }, { bg: '#FAEEDA', c: '#633806' }
+    ];
+    var sportColors = {
+      running: { bg: '#FFF7ED', color: '#9A3412', border: '#FDBA74', icon: '🏃' },
+      cycling: { bg: '#EFF6FF', color: '#1E40AF', border: '#93C5FD', icon: '🚴' },
+      climbing: { bg: '#F5F3FF', color: '#5B21B6', border: '#C4B5FD', icon: '🧗' },
+      swimming: { bg: '#F0FDFA', color: '#134E4A', border: '#5EEAD4', icon: '🏊' },
+      football: { bg: '#ECFDF5', color: '#166534', border: '#86EFAC', icon: '⚽' },
+      weightlifting: { bg: '#FEF9C3', color: '#854D0E', border: '#FDE047', icon: '🏋️' },
+      hiking: { bg: '#FAEEDA', color: '#633806', border: '#EF9F27', icon: '🥾' },
+      yoga: { bg: '#FBEAF0', color: '#72243E', border: '#F4C0D1', icon: '🧘' }
+    };
+
+    var cfFilter = 'all';
+    var cfFeedItems = [];
+
+    window.setCfFilter = function (el, type) {
+      var chips = document.querySelectorAll('.cf-filter');
+      for (var i = 0; i < chips.length; i++) {
+        chips[i].style.background = 'white';
+        chips[i].style.borderColor = 'var(--gray-200)';
+        chips[i].style.color = 'var(--gray-600)';
+      }
+      if (el) { el.style.background = 'var(--yellow-light)'; el.style.borderColor = 'var(--yellow-dark)'; el.style.color = '#7a5c00'; }
+      cfFilter = type;
+      renderClubFeed();
+    };
+
+    window.postClubAnnouncement = async function () {
+      var data = window.ARENAS_DATA || {};
+      var clubId = data.club && data.club.id;
+      var textEl = document.getElementById('cf-comp-text');
+      var content = textEl && textEl.value ? textEl.value.trim() : '';
+      if (!clubId) { if (typeof showToast === 'function') showToast('No club found'); return; }
+      if (!content) { if (typeof showToast === 'function') showToast('Write something first'); return; }
+      var btn = document.getElementById('cf-post-btn');
+      if (btn) { btn.textContent = 'Posting…'; btn.disabled = true; }
+      try {
+        var response = await fetch(B + '/api/clubs/' + clubId + '/announce', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: content })
+        });
+        var result = await response.json();
+        if (result.error) {
+          if (typeof showToast === 'function') showToast('Error: ' + result.error);
+          if (btn) { btn.textContent = 'Post →'; btn.disabled = false; }
+          return;
+        }
+        if (typeof showToast === 'function') showToast('✓ Announcement posted — all members notified');
+        if (textEl) textEl.value = '';
+        if (btn) { btn.textContent = 'Post →'; btn.disabled = false; }
+        loadClubFeed();
+      } catch (err) {
+        if (typeof showToast === 'function') showToast('Something went wrong');
+        if (btn) { btn.textContent = 'Post →'; btn.disabled = false; }
+      }
+    };
+
+    window.toggleClubFeedLike = async function (postId, btn) {
+      try {
+        var response = await fetch(B + '/api/posts/' + postId + '/like', { method: 'POST' });
+        var result = await response.json();
+        if (result.error) { if (typeof showToast === 'function') showToast('Error: ' + result.error); return; }
+        var countEl = btn.querySelector('span');
+        if (result.liked) {
+          btn.style.background = 'var(--yellow-light)';
+          btn.style.borderColor = '#E6B800';
+          btn.style.color = '#633806';
+          if (countEl) countEl.textContent = (parseInt(countEl.textContent, 10) || 0) + 1;
+        } else {
+          btn.style.background = 'white';
+          btn.style.borderColor = 'var(--gray-200)';
+          btn.style.color = 'var(--gray-600)';
+          if (countEl) countEl.textContent = Math.max(0, (parseInt(countEl.textContent, 10) || 0) - 1);
+        }
+      } catch (err) {
+        if (typeof showToast === 'function') showToast('Something went wrong');
+      }
+    };
+
+    async function loadClubFeed() {
+      var data = window.ARENAS_DATA || {};
+      var clubId = data.club && data.club.id;
+      var container = document.getElementById('cf-feed-list');
+      if (!clubId) {
+        if (container) container.innerHTML = '<div style="padding:32px;text-align:center;font-size:13px;color:var(--gray-400)">No club found</div>';
+        return;
+      }
+      var coachName = (data.profile && data.profile.name) || '';
+      var avEl = document.getElementById('cf-comp-av');
+      if (avEl && coachName) avEl.textContent = initialsOf(coachName);
+      var subEl = document.getElementById('cf-sub');
+      if (subEl) subEl.textContent = 'Everything happening at ' + ((data.club && data.club.name) || 'your club') + ' · post announcements to all members';
+      try {
+        var response = await fetch(B + '/api/clubs/' + clubId + '/feed');
+        var result = await response.json();
+        if (result.error) {
+          if (container) container.innerHTML = '<div style="padding:32px;text-align:center;font-size:13px;color:var(--gray-400)">' + esc(result.error) + '</div>';
+          return;
+        }
+        cfFeedItems = result.feed || [];
+        renderClubFeed();
+      } catch (err) {
+        if (container) container.innerHTML = '<div style="padding:32px;text-align:center;font-size:13px;color:var(--gray-400)">Could not load club feed</div>';
+      }
+    }
+
+    function renderClubFeed() {
+      var container = document.getElementById('cf-feed-list');
+      if (!container) return;
+      var filtered = cfFilter === 'all'
+        ? cfFeedItems
+        : cfFeedItems.filter(function (item) {
+            if (cfFilter === 'post') return item.type === 'post' || item.type === 'announcement';
+            return item.type === cfFilter;
+          });
+      if (!filtered.length) {
+        container.innerHTML = '<div style="padding:32px;text-align:center;font-size:13px;color:var(--gray-400)">Nothing here yet — activity from your members will appear as it happens</div>';
+        return;
+      }
+      container.innerHTML = filtered.map(function (item, i) {
+        var av = avColors[i % avColors.length];
+        var ini = esc(initialsOf(item.name));
+        var isCoach = item.type === 'announcement';
+        var avStyle = isCoach ? 'background:var(--yellow);color:var(--gray-900)' : 'background:' + av.bg + ';color:' + av.c;
+        var safeName = esc(item.name || 'Member');
+        var safeHandle = esc(item.handle || 'member');
+
+        var badge = '';
+        var body = '';
+        var metaLabel = '';
+
+        if (item.type === 'announcement') {
+          badge = '<span style="margin-left:auto;font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;background:var(--yellow);color:var(--gray-900);border:0.5px solid var(--yellow-dark);flex-shrink:0">📣 Coach</span>';
+          metaLabel = 'Club ' + esc(item.role || 'coach');
+          body = '<div style="padding:0 14px 10px;font-size:13px;color:var(--gray-900);line-height:1.6">' + esc(item.content) + '</div>';
+        } else if (item.type === 'post') {
+          metaLabel = 'posted a note';
+          body = '<div style="padding:0 14px 10px;font-size:13px;color:var(--gray-900);line-height:1.6">' + esc(item.content) + '</div>';
+        } else if (item.type === 'activity') {
+          var sc = sportColors[item.sport] || sportColors.running;
+          badge = '<span style="margin-left:auto;font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;background:' + sc.bg + ';color:' + sc.color + ';border:0.5px solid ' + sc.border + ';flex-shrink:0">' + sc.icon + ' ' + esc(cap(item.sport)) + '</span>';
+          metaLabel = 'logged an activity';
+          var statCells = [];
+          if (item.distance) statCells.push('<div style="background:var(--gray-50);border-radius:8px;padding:9px 12px;text-align:center"><div style="font-size:15px;font-weight:600;font-family:var(--mono);color:var(--gray-900)">' + esc(item.distance) + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;margin-top:2px">Distance</div></div>');
+          if (item.duration) statCells.push('<div style="background:var(--gray-50);border-radius:8px;padding:9px 12px;text-align:center"><div style="font-size:15px;font-weight:600;font-family:var(--mono);color:var(--gray-900)">' + esc(item.duration) + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;margin-top:2px">Duration</div></div>');
+          if (item.pace) statCells.push('<div style="background:var(--gray-50);border-radius:8px;padding:9px 12px;text-align:center"><div style="font-size:15px;font-weight:600;font-family:var(--mono);color:var(--gray-900)">' + esc(item.pace) + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;margin-top:2px">Pace</div></div>');
+          body = (item.content ? '<div style="padding:0 14px 10px;font-size:13px;color:var(--gray-900);line-height:1.6">' + esc(item.content) + '</div>' : '')
+            + (statCells.length ? '<div style="display:grid;grid-template-columns:repeat(' + statCells.length + ',1fr);gap:8px;margin:0 14px 10px">' + statCells.join('') + '</div>' : '')
+            + (item.aiInsight ? '<div style="margin:0 14px 10px;background:var(--yellow-light);border:0.5px solid #fde68a;border-radius:8px;padding:9px 12px;display:flex;gap:8px;align-items:flex-start"><span style="font-size:13px;flex-shrink:0">✨</span><div style="font-size:11px;color:#633806;line-height:1.55">' + esc(item.aiInsight) + '</div></div>' : '');
+        } else if (item.type === 'rsvp') {
+          badge = '<span style="margin-left:auto;font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;background:#EFF6FF;color:#1E40AF;border:0.5px solid #93C5FD;flex-shrink:0">📅 RSVP</span>';
+          metaLabel = 'is going to an event';
+          var d = new Date(item.eventDate);
+          var dateStr = isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+          var timeStr = isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+          body = '<div style="margin:0 14px 10px;background:var(--gray-50);border:var(--border);border-radius:8px;padding:10px 12px">'
+            + '<div style="font-size:12px;font-weight:600;color:var(--gray-900);margin-bottom:2px">' + esc(item.eventTitle) + '</div>'
+            + '<div style="font-size:11px;color:var(--gray-500)">📍 ' + esc(item.eventLocation) + ' · ' + esc(dateStr) + ' ' + esc(timeStr) + ' · ' + (parseInt(item.goingCount, 10) || 1) + ' going</div>'
+            + '</div>';
+        } else if (item.type === 'milestone') {
+          badge = '<span style="margin-left:auto;font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;background:#ECFDF5;color:#166534;border:0.5px solid #86EFAC;flex-shrink:0">🏆 Milestone</span>';
+          metaLabel = 'challenge milestone';
+          body = '<div style="margin:0 14px 10px;background:#ECFDF5;border:0.5px solid #86EFAC;border-radius:8px;padding:10px 12px;display:flex;align-items:center;gap:9px">'
+            + '<span style="font-size:20px">🏆</span>'
+            + '<div><div style="font-size:12px;font-weight:600;color:#166534">Completed ' + esc(item.challengeTitle) + '!</div>'
+            + '<div style="font-size:11px;color:#166534;opacity:.8">Hit the ' + esc(item.goalTarget) + ' ' + esc(item.goalUnit) + ' goal</div></div>'
+            + '</div>';
+        } else if (item.type === 'join') {
+          badge = '<span style="margin-left:auto;font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;background:#F5F3FF;color:#5B21B6;border:0.5px solid #C4B5FD;flex-shrink:0">👋 New member</span>';
+          metaLabel = 'joined the club';
+          var sportsStr = (item.sports || []).slice(0, 3).map(function (s) { return esc(s); }).join(' and ');
+          body = '<div style="padding:0 14px 10px;font-size:13px;color:var(--gray-500);line-height:1.6">' + safeName + ' just joined — say hello!' + (sportsStr ? ' Into ' + sportsStr + '.' : '') + '</div>';
+        }
+
+        var canLike = item.type === 'post' || item.type === 'announcement';
+        var likeBtn = canLike
+          ? '<button onclick="toggleClubFeedLike(\'' + esc(item.id) + '\',this)" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:7px;font-size:12px;border:' + (item.likedByMe ? '0.5px solid #E6B800' : 'var(--border)') + ';background:' + (item.likedByMe ? 'var(--yellow-light)' : 'white') + ';color:' + (item.likedByMe ? '#633806' : 'var(--gray-600)') + ';cursor:pointer">👍 <span>' + (parseInt(item.likeCount, 10) || 0) + '</span></button>'
+          : '';
+
+        return '<div class="cf-card" style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:0 14px 10px;overflow:hidden">'
+          + '<div style="display:flex;align-items:center;gap:10px;padding:12px 14px 8px">'
+          + '<div style="width:36px;height:36px;border-radius:50%;' + avStyle + ';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">' + ini + '</div>'
+          + '<div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">' + safeName + '</div>'
+          + '<div style="font-size:11px;color:var(--gray-400)">@' + safeHandle + ' · ' + metaLabel + '</div></div>'
+          + badge
+          + '</div>'
+          + body
+          + '<div style="padding:8px 14px;border-top:var(--border);display:flex;align-items:center;gap:6px">'
+          + likeBtn
+          + '<div style="margin-left:auto;font-size:11px;color:var(--gray-400)">' + timeAgo(item.timestamp) + '</div>'
+          + '</div>'
+          + '</div>';
+      }).join('');
+    }
+
+    if (typeof window.setTab === 'function') {
+      var _setTabCf = window.setTab;
+      window.setTab = function (id, el) { _setTabCf(id, el); if (id === 'feed') loadClubFeed(); };
     }
   })();
   </script>

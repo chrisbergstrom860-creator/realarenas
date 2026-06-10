@@ -5,10 +5,11 @@
 - [html-arenas notifications](html-arenas-notifications.md) — like/comment/follow notifs; actor names from auth metadata (not profiles); syncUnread + esc() rules.
 - [html-arenas auth forms](html-arenas-auth-forms.md) — signup landing on /landing w/ no error = form never submitted (stub nav); requestSubmit; first+last→hidden name; disabled btn swallows clicks; error-code/banner pairing.
 - [html-arenas training load](html-arenas-training-load.md) — load from activities.duration; parse "45:00" as MM:SS when 1st seg>12 (60x bug); single check-in uses /checkin not nudge-atrisk.
-- [html-arenas club events tab](html-arenas-club-events.md) — coach dashboard Events tab: server rollups via window.ARENAS_DATA; event-mgmt routes need requireEventManager authz; DELETE allows creator OR coach + truthful success; esc() + unconditional handlers.
+- [html-arenas club events tab](html-arenas-club-events.md) — Events tab rollups via ARENAS_DATA; event-mgmt routes need requireEventManager; DELETE = creator OR coach.
 - [html-arenas club invites](html-arenas-invites.md) — open links (OPEN_INVITE_EMAIL) stay pending/reusable, personal invites single-use + email-bound; revoke=DELETE row.
 - [html-arenas events](html-arenas-events.md) — events/RSVP feature: club-scoped writes need membership gate; notif fan-out only on transition into "going"; events page hides mock chrome + injects real data.
 - [html-arenas activity logging](html-arenas-activities.md) — manual training log; `activities` table must be user-created via SQL (no DDL via service role); author from auth metadata; GET /api/activities/:userId is self-only (IDOR).
-- [html-arenas challenges](html-arenas-challenges.md) — join permissive; leaderboard auth-wide; duration=0; coach dashboard rollup + requireChallengeManager (needs club_id); create route lacks club-membership gate; same-route writes need hash+reload not nav().
+- [html-arenas challenges](html-arenas-challenges.md) — join permissive; leaderboard auth-wide; coach rollup + requireChallengeManager; same-route writes need hash+reload not nav().
 - [html-arenas leaderboards](html-arenas-leaderboards.md) — scoring is a SPORT_POINTS heuristic from raw activities; at-risk/nudge recomputed server-side (anti-spam); names from auth metadata; athlete scope-select = platform/following/club.
 - [html-arenas overview tab](html-arenas-overview.md) — default tab so render on load too; spec wrongly assumed pendingInvites injected; recent-activity orders by activities.date, names via buildUserProfileMap.
+- [html-arenas club feed tab](html-arenas-club-feed.md) — merged member feed (posts/activities/RSVPs/joins/milestones) + coach announce; guard milestones with goal_target>0; esc() initials too.

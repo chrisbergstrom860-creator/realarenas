@@ -1454,6 +1454,260 @@ app.get(BASE + '/api/clubs/:clubId/recent-activity', requireAuth, async (req, re
   }
 });
 
+// Club feed — merged content from every club member (posts, logged activities,
+// "going" RSVPs, recent joins, and challenge milestones). Adapted to this app's
+// real schema: there is NO `profiles` table (name/handle/sports resolved from
+// auth metadata via buildUserProfileMap), `memberships` has no `joined_at`
+// (joins use `created_at`), and `activities` have no `created_at` (ordered by
+// their `date` timestamp). Any member of the club may read its feed.
+app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ feed: [], memberCount: 0 });
+  const clubId = req.params.clubId;
+  try {
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('role')
+      .eq('user_id', req.user.id)
+      .eq('club_id', clubId)
+      .maybeSingle();
+    if (!membership) return res.status(403).json({ error: 'Not authorised' });
+
+    // Club members + roles. No `profiles` join — names come from auth metadata.
+    const { data: members } = await supabaseAdmin
+      .from('memberships')
+      .select('user_id, role, created_at')
+      .eq('club_id', clubId);
+    const memberIds = [...new Set((members || []).map((m) => m.user_id).filter(Boolean))];
+    const safeIds = memberIds.length ? memberIds : ['00000000-0000-0000-0000-000000000000'];
+    const roleMap = {};
+    (members || []).forEach((m) => { roleMap[m.user_id] = m.role; });
+    const profileMap = await buildUserProfileMap(memberIds);
+    const prof = (id) => profileMap[id] || {};
+
+    const feed = [];
+
+    // 1. Posts from members (with like counts + whether the viewer liked each).
+    // post_likes has no `id` column — it is keyed by (post_id, user_id).
+    const { data: posts } = await supabaseAdmin
+      .from('posts')
+      .select('id, user_id, content, sport, created_at')
+      .in('user_id', safeIds)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    const postIds = (posts || []).map((p) => p.id);
+    let likes = [];
+    if (postIds.length) {
+      const { data: likeRows } = await supabaseAdmin
+        .from('post_likes')
+        .select('post_id, user_id')
+        .in('post_id', postIds);
+      likes = likeRows || [];
+    }
+    (posts || []).forEach((p) => {
+      const postLikes = likes.filter((l) => l.post_id === p.id);
+      const isCoach = roleMap[p.user_id] === 'admin' || roleMap[p.user_id] === 'coach';
+      feed.push({
+        type: isCoach ? 'announcement' : 'post',
+        id: p.id,
+        userId: p.user_id,
+        name: prof(p.user_id).name || 'Member',
+        handle: prof(p.user_id).handle || 'member',
+        role: roleMap[p.user_id],
+        content: p.content,
+        sport: p.sport,
+        likeCount: postLikes.length,
+        likedByMe: postLikes.some((l) => l.user_id === req.user.id),
+        timestamp: p.created_at
+      });
+    });
+
+    // 2. Activities from members (ordered by `date` — no created_at column).
+    const { data: activities } = await supabaseAdmin
+      .from('activities')
+      .select('id, user_id, sport, title, notes, distance, duration, pace, ai_insight, date')
+      .in('user_id', safeIds)
+      .order('date', { ascending: false })
+      .limit(20);
+    (activities || []).forEach((a) => {
+      feed.push({
+        type: 'activity',
+        id: a.id,
+        userId: a.user_id,
+        name: prof(a.user_id).name || 'Member',
+        handle: prof(a.user_id).handle || 'member',
+        content: a.notes || a.title || '',
+        sport: a.sport,
+        distance: a.distance,
+        duration: a.duration,
+        pace: a.pace,
+        aiInsight: a.ai_insight,
+        timestamp: a.date
+      });
+    });
+
+    // 3. "Going" RSVPs to this club's upcoming events.
+    const { data: clubEvents } = await supabaseAdmin
+      .from('events')
+      .select('id, title, date, location')
+      .eq('club_id', clubId)
+      .gte('date', new Date().toISOString());
+    const eventMap = {};
+    (clubEvents || []).forEach((e) => { eventMap[e.id] = e; });
+    const eventIds = Object.keys(eventMap);
+    let rsvps = [];
+    if (eventIds.length) {
+      const { data: rsvpRows } = await supabaseAdmin
+        .from('event_rsvps')
+        .select('id, user_id, event_id, status, created_at')
+        .in('event_id', eventIds)
+        .eq('status', 'going')
+        .order('created_at', { ascending: false })
+        .limit(10);
+      rsvps = rsvpRows || [];
+    }
+    const goingCounts = {};
+    rsvps.forEach((r) => { goingCounts[r.event_id] = (goingCounts[r.event_id] || 0) + 1; });
+    rsvps.slice(0, 8).forEach((r) => {
+      const event = eventMap[r.event_id];
+      if (!event) return;
+      feed.push({
+        type: 'rsvp',
+        id: r.id,
+        userId: r.user_id,
+        name: prof(r.user_id).name || 'Member',
+        handle: prof(r.user_id).handle || 'member',
+        eventTitle: event.title,
+        eventDate: event.date,
+        eventLocation: event.location,
+        goingCount: goingCounts[r.event_id] || 1,
+        timestamp: r.created_at
+      });
+    });
+
+    // 4. New member joins in the last 14 days (memberships.created_at).
+    const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+    (members || [])
+      .filter((m) => m.created_at && (Date.now() - new Date(m.created_at).getTime()) < fourteenDaysMs)
+      .forEach((m) => {
+        feed.push({
+          type: 'join',
+          id: 'join-' + m.user_id,
+          userId: m.user_id,
+          name: prof(m.user_id).name || 'New member',
+          handle: prof(m.user_id).handle || 'member',
+          sports: prof(m.user_id).sports || [],
+          timestamp: m.created_at
+        });
+      });
+
+    // 5. Challenge milestones — members who crossed a club challenge goal in the
+    // recent window. Progress accumulates over each participant's matching
+    // activities; completion is timestamped at the crossing activity's `date`.
+    const { data: clubChallenges } = await supabaseAdmin
+      .from('challenges')
+      .select('id, title, goal_type, goal_target, goal_unit, sport, start_date, end_date')
+      .eq('club_id', clubId)
+      .gte('end_date', new Date(Date.now() - fourteenDaysMs).toISOString());
+    for (const challenge of (clubChallenges || [])) {
+      const { data: participants } = await supabaseAdmin
+        .from('challenge_participants')
+        .select('user_id')
+        .eq('challenge_id', challenge.id);
+      for (const participant of (participants || []).slice(0, 20)) {
+        const { data: acts } = await supabaseAdmin
+          .from('activities')
+          .select('sport, distance, date')
+          .eq('user_id', participant.user_id)
+          .gte('date', challenge.start_date)
+          .lte('date', challenge.end_date)
+          .order('date', { ascending: true });
+        let progress = 0;
+        let completedAt = null;
+        for (const a of (acts || [])) {
+          if (challenge.sport !== 'any' && a.sport !== challenge.sport) continue;
+          if (challenge.goal_type === 'distance') {
+            const dist = parseFloat(String(a.distance || '0').replace(/[^0-9.]/g, ''));
+            if (!isNaN(dist)) progress += dist;
+          } else if (challenge.goal_type === 'sessions' || challenge.goal_type === 'streak') {
+            progress += 1;
+          }
+          if (challenge.goal_target > 0 && progress >= challenge.goal_target && !completedAt) completedAt = a.date;
+        }
+        if (completedAt) {
+          feed.push({
+            type: 'milestone',
+            id: 'milestone-' + challenge.id + '-' + participant.user_id,
+            userId: participant.user_id,
+            name: prof(participant.user_id).name || 'Member',
+            handle: prof(participant.user_id).handle || 'member',
+            challengeTitle: challenge.title,
+            goalTarget: challenge.goal_target,
+            goalUnit: challenge.goal_unit,
+            timestamp: completedAt
+          });
+        }
+      }
+    }
+
+    feed.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    res.json({ feed: feed.slice(0, 30), memberCount: (members || []).length });
+  } catch (err) {
+    console.log('Club feed error:', err.message);
+    res.json({ feed: [], memberCount: 0 });
+  }
+});
+
+// Coach/admin posts an announcement to the whole club. The announcement is a
+// normal `posts` row (it renders with a Coach badge in the feed because the
+// author's club role is admin/coach), and every other member is notified.
+app.post(BASE + '/api/clubs/:clubId/announce', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for posting' });
+  const clubId = req.params.clubId;
+  const raw = (req.body && req.body.content) || '';
+  if (!raw.trim()) return res.json({ error: 'Announcement cannot be empty' });
+
+  const { data: membership } = await supabaseAdmin
+    .from('memberships')
+    .select('role')
+    .eq('user_id', req.user.id)
+    .eq('club_id', clubId)
+    .in('role', ['admin', 'coach'])
+    .maybeSingle();
+  if (!membership) return res.status(403).json({ error: 'Only coaches can post announcements' });
+
+  const content = raw.trim().slice(0, 280);
+  const { data: post, error } = await supabaseAdmin
+    .from('posts')
+    .insert({ user_id: req.user.id, content })
+    .select()
+    .single();
+  if (error) return res.json({ error: error.message });
+
+  // Notify every other club member. Actor name from auth metadata (no profiles).
+  try {
+    const actor = displayFromUser(req.user);
+    const { data: recipients } = await supabaseAdmin
+      .from('memberships')
+      .select('user_id')
+      .eq('club_id', clubId)
+      .neq('user_id', req.user.id);
+    for (const m of (recipients || [])) {
+      await createNotification({
+        userId: m.user_id,
+        type: 'club',
+        title: 'Coach announcement',
+        body: `${actor.name}: ${content.slice(0, 120)}${content.length > 120 ? '…' : ''}`,
+        link: '/feed',
+        actorId: req.user.id,
+        entityId: post.id
+      });
+    }
+  } catch (err) {
+    console.log('Announcement notification error:', err.message);
+  }
+  res.json({ success: true, post });
+});
+
 // ── CHALLENGES API ──
 // Compute a participant's progress toward a challenge goal from their logged
 // activities. `distance` sums numeric distance values; `sessions` counts
