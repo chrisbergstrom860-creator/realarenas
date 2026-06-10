@@ -31,6 +31,40 @@ helper (mirrors notification enrichment) — there is no usable `profiles` table
   filtered to users the caller actually follows and capped (50). **Why:** without
   this, the endpoint could spam notifications to arbitrary known user IDs.
 
+## Coach dashboard "Club Challenges" tab
+
+- The `/clubs/dashboard` route enriches `window.ARENAS_DATA` with
+  `activeChallenges` / `pastChallenges` / `challengeStats` (mirrors the Events
+  tab rollup). Per challenge: one batched activities query
+  (`.in('user_id', participantIds)` within the challenge date window), grouped by
+  user, fed through `computeChallengeProgress` to build top3/leaderboard,
+  participationPct/successRate/notJoinedCount/daysLeft/isPast. Wrap in try/catch
+  so a challenges failure never blanks the whole dashboard.
+- **Management routes need `requireChallengeManager(id, userId, columns)`** (the
+  challenge's club admin/coach). Like `requireEventManager`, the `columns` arg
+  **must include `club_id`** or the helper can't resolve the club and always
+  denies. Covers `POST /api/challenges/:id/{nudge-join,post-to-feed,duplicate}`
+  and `DELETE /api/challenges/:id`.
+- **DELETE /api/challenges/:id was added beyond the original 3-route spec** — the
+  coach Cancel button needs it; the spec wrongly assumed it already existed.
+- **Known gap (intentionally out of scope):** `POST /api/challenges/create`
+  inserts `club_id` from the body with NO club-membership check — any authed user
+  can create a challenge inside any club (it then renders on that club's coach
+  dashboard). Same class of bug as the events club-scoped-write rule. Add a
+  membership gate when `club_id` is supplied. **Why deferred:** task scope was
+  the Challenges tab; create route is pre-existing and shared with the main
+  challenges page.
+
+## Same-route refresh after a write (gotcha)
+
+After a write whose result must appear in **server-injected** `ARENAS_DATA` on a
+route the user is **already on** (e.g. create/duplicate a challenge while on
+`/clubs/dashboard`), use `window.location.hash = '<tab>'; window.location.reload();`
+— NOT `window.nav('/clubs/dashboard#<tab>')`. **Why:** `nav` sets `location.href`;
+when only the hash differs the browser does not reload, there is no `hashchange`
+listener, and `ARENAS_DATA` is baked in at render time, so the new row never
+shows until a manual refresh. The Events tab already uses the hash+reload form.
+
 ## Tab mapping (client)
 
 - mine → active myChallenges; completed (#completed-list) → finished myChallenges

@@ -588,73 +588,50 @@ button, select, input { font-family: var(--font); }
 
   <!-- ═══ CHALLENGES TAB ═══ -->
   <div class="tab-content" id="tab-challenges">
-    <div class="page-hdr">
-      <div class="page-hdr-left"><h1>Club challenges ⚡</h1><p>Private challenges for Hackney Running Club members</p></div>
-      <div class="page-hdr-right">
-        <button class="btn btn-yellow" onclick="openModal('challenge')">+ New challenge</button>
+    <!-- Header (populated/extended from window.ARENAS_DATA by renderClubChallenges) -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:var(--border);background:white">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:var(--gray-900)">Club challenges ⚡</div>
+        <div style="font-size:12px;color:var(--gray-400);margin-top:2px">Set goals, track progress, and motivate your members</div>
+      </div>
+      <button onclick="openCreateClubChallenge()" style="display:flex;align-items:center;gap:6px;padding:8px 16px;background:var(--yellow);color:var(--gray-900);border:1px solid var(--yellow-dark);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">⚡ Create challenge</button>
+    </div>
+
+    <!-- Stats bar -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);background:white;border-bottom:var(--border)">
+      <div style="padding:12px 16px;border-right:var(--border)">
+        <div style="font-size:20px;font-weight:700;color:var(--gray-900);font-family:var(--mono);line-height:1" id="ch-stat-active">0</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:3px;text-transform:uppercase;letter-spacing:.04em">Active</div>
+      </div>
+      <div style="padding:12px 16px;border-right:var(--border)">
+        <div style="font-size:20px;font-weight:700;color:var(--gray-900);font-family:var(--mono);line-height:1" id="ch-stat-participants">0</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:3px;text-transform:uppercase;letter-spacing:.04em">Total participants</div>
+      </div>
+      <div style="padding:12px 16px;border-right:var(--border)">
+        <div style="font-size:20px;font-weight:700;color:#EF4444;font-family:var(--mono);line-height:1" id="ch-stat-notjoined">0</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:3px;text-transform:uppercase;letter-spacing:.04em">Not joined</div>
+      </div>
+      <div style="padding:12px 16px">
+        <div style="font-size:20px;font-weight:700;color:var(--gray-900);font-family:var(--mono);line-height:1" id="ch-stat-completion">0%</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:3px;text-transform:uppercase;letter-spacing:.04em">Avg participation</div>
       </div>
     </div>
-    <div class="grid-2">
-      <div class="ch-card">
-        <div class="ch-card-body">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-            <div class="ch-icon" style="background:var(--orange-light);margin-bottom:0">🏃</div>
-            <span class="pill pill-active">Active</span>
-          </div>
-          <div class="ch-name">100km May Run</div>
-          <div class="ch-meta">Distance · Community · 44 joined · 9 days left</div>
-          <div class="ch-progress-label"><span>Club progress</span><span style="font-family:var(--mono)">32 / 44 completed</span></div>
-          <div class="prog-track"><div class="prog-fill" style="width:72%;background:var(--orange)"></div></div>
-          <div class="ch-lb-mini">
-            <div class="ch-lb-row"><span class="ch-lb-rank">1</span><div class="ch-lb-av" style="background:#FEF9C3;color:#854D0E">SL</div><span class="ch-lb-name">Sofia L.</span><span class="ch-lb-score">94.2 km</span></div>
-            <div class="ch-lb-row"><span class="ch-lb-rank">2</span><div class="ch-lb-av" style="background:#FCE7F3;color:#9D174D">YT</div><span class="ch-lb-name">Yuki T.</span><span class="ch-lb-score">68.0 km</span></div>
-            <div class="ch-lb-row"><span class="ch-lb-rank">3</span><div class="ch-lb-av" style="background:#E0F2FE;color:#0369A1">AL</div><span class="ch-lb-name">Alena L.</span><span class="ch-lb-score">71.4 km</span></div>
-          </div>
-        </div>
-        <div class="ch-card-footer"><span style="font-size:11px;color:var(--gray-500)">Ends May 31</span><div style="display:flex;gap:6px"><button class="btn btn-sm btn-ghost" onclick="showToast('Editing challenge…')">Edit</button><button class="btn btn-sm btn-ghost" onclick="showToast('Nudge sent to all incomplete members')">📢 Nudge all</button></div></div>
-      </div>
-      <div class="ch-card">
-        <div class="ch-card-body">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-            <div class="ch-icon" style="background:var(--purple-light);margin-bottom:0">🔥</div>
-            <span class="pill pill-active">Active</span>
-          </div>
-          <div class="ch-name">Club 7-day streak</div>
-          <div class="ch-meta">Streak · Private · 44 joined · Ongoing</div>
-          <div class="ch-progress-label"><span>Members on streak</span><span style="font-family:var(--mono)">39 / 44</span></div>
-          <div class="prog-track"><div class="prog-fill" style="width:89%;background:var(--purple)"></div></div>
-          <div class="ch-lb-mini">
-            <div class="ch-lb-row"><span class="ch-lb-rank">1</span><div class="ch-lb-av" style="background:#FEF9C3;color:#854D0E">SL</div><span class="ch-lb-name">Sofia L.</span><span class="ch-lb-score">21 days</span></div>
-            <div class="ch-lb-row"><span class="ch-lb-rank">2</span><div class="ch-lb-av" style="background:#FCE7F3;color:#9D174D">YT</div><span class="ch-lb-name">Yuki T.</span><span class="ch-lb-score">14 days</span></div>
-            <div class="ch-lb-row"><span class="ch-lb-rank">3</span><div class="ch-lb-av" style="background:#E0F2FE;color:#0369A1">AL</div><span class="ch-lb-name">Alena L.</span><span class="ch-lb-score">6 days</span></div>
-          </div>
-        </div>
-        <div class="ch-card-footer"><span style="font-size:11px;color:var(--gray-500)">Resets every Monday</span><div style="display:flex;gap:6px"><button class="btn btn-sm btn-ghost" onclick="showToast('Editing challenge…')">Edit</button></div></div>
-      </div>
-      <div class="ch-card">
-        <div class="ch-card-body">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-            <div class="ch-icon" style="background:var(--blue-light);margin-bottom:0">⚡</div>
-            <span class="pill pill-active">Active</span>
-          </div>
-          <div class="ch-name">Sub-25 5K club</div>
-          <div class="ch-meta">Performance · Open · 44 joined · Always open</div>
-          <div class="ch-progress-label"><span>Members achieved</span><span style="font-family:var(--mono)">17 / 44</span></div>
-          <div class="prog-track"><div class="prog-fill" style="width:38%;background:var(--blue)"></div></div>
-          <div class="ch-lb-mini">
-            <div class="ch-lb-row"><span class="ch-lb-rank">🥇</span><div class="ch-lb-av" style="background:#FEF9C3;color:#854D0E">SL</div><span class="ch-lb-name">Sofia L.</span><span class="ch-lb-score">24:12</span></div>
-            <div class="ch-lb-row"><span class="ch-lb-rank">🥈</span><div class="ch-lb-av" style="background:#FCE7F3;color:#9D174D">YT</div><span class="ch-lb-name">Yuki T.</span><span class="ch-lb-score">24:44</span></div>
-            <div class="ch-lb-row"><span class="ch-lb-rank">🥉</span><div class="ch-lb-av" style="background:#E0F2FE;color:#0369A1">AL</div><span class="ch-lb-name">Alena L.</span><span class="ch-lb-score">24:59</span></div>
-          </div>
-        </div>
-        <div class="ch-card-footer"><span style="font-size:11px;color:var(--gray-500)">+250 pts for each qualifying run</span><div style="display:flex;gap:6px"><button class="btn btn-sm btn-ghost" onclick="showToast('Editing challenge…')">Edit</button></div></div>
-      </div>
-      <div class="ch-card" style="border-style:dashed;background:var(--gray-50);cursor:pointer" onclick="openModal('challenge')">
-        <div class="ch-card-body" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px;text-align:center">
-          <div style="font-size:32px;margin-bottom:12px">+</div>
-          <div style="font-size:14px;font-weight:600;color:var(--gray-700);margin-bottom:4px">Create a new challenge</div>
-          <div style="font-size:12px;color:var(--gray-500)">Distance, streak, performance, or head-to-head</div>
-        </div>
+
+    <!-- Filter row -->
+    <div style="background:white;border-bottom:var(--border);padding:8px 16px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+      <div class="ch-filter-pill" onclick="filterClubChallenges(this,'all')" style="padding:4px 11px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid var(--yellow-dark);background:var(--yellow-light);color:#7a5c00;cursor:pointer">All challenges</div>
+      <div class="ch-filter-pill" onclick="filterClubChallenges(this,'running')" style="padding:4px 11px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🏃 Running</div>
+      <div class="ch-filter-pill" onclick="filterClubChallenges(this,'cycling')" style="padding:4px 11px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🚴 Cycling</div>
+      <div class="ch-filter-pill" onclick="filterClubChallenges(this,'any')" style="padding:4px 11px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Any sport</div>
+    </div>
+
+    <!-- Challenges list (populated from window.ARENAS_DATA by renderClubChallenges) -->
+    <div id="club-challenges-list" style="padding:14px">
+      <div style="text-align:center;padding:48px 24px;background:white;border:var(--border);border-radius:var(--radius-lg)">
+        <div style="font-size:36px;margin-bottom:12px">⚡</div>
+        <div style="font-size:15px;font-weight:700;color:var(--gray-900);margin-bottom:6px">No challenges yet</div>
+        <div style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:16px">Create your first club challenge and all members will be notified automatically.</div>
+        <button onclick="openCreateClubChallenge()" style="padding:9px 20px;background:var(--yellow);color:var(--gray-900);border:1px solid var(--yellow-dark);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">⚡ Create first challenge</button>
       </div>
     </div>
   </div>
@@ -1595,6 +1572,427 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   document.addEventListener('DOMContentLoaded', renderClubEvents);
   renderClubEvents();
+})();
+</script>
+<script>
+// ── CLUB CHALLENGES TAB ── wired to window.ARENAS_DATA injected by the server.
+// All DB-derived strings are escaped (esc) before being placed via innerHTML.
+(function () {
+  var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function set(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
+  function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
+  function initialsOf(name) {
+    return String(name || '?').trim().split(/\s+/).map(function (n) { return n[0] || ''; }).join('').slice(0, 2).toUpperCase() || '?';
+  }
+
+  var sportColors = {
+    running: { bg: '#FFF7ED', color: '#9A3412', border: '#FDBA74', icon: '🏃' },
+    cycling: { bg: '#EFF6FF', color: '#1E40AF', border: '#93C5FD', icon: '🚴' },
+    climbing: { bg: '#F5F3FF', color: '#5B21B6', border: '#C4B5FD', icon: '🧗' },
+    swimming: { bg: '#F0FDFA', color: '#134E4A', border: '#5EEAD4', icon: '🏊' },
+    football: { bg: '#ECFDF5', color: '#166534', border: '#86EFAC', icon: '⚽' },
+    weightlifting: { bg: '#FEF9C3', color: '#854D0E', border: '#FDE047', icon: '🏋️' },
+    hiking: { bg: '#FAEEDA', color: '#633806', border: '#EF9F27', icon: '🥾' },
+    yoga: { bg: '#FBEAF0', color: '#72243E', border: '#F4C0D1', icon: '🧘' },
+    any: { bg: 'var(--gray-100)', color: 'var(--gray-600)', border: 'var(--gray-200)', icon: '⚡' }
+  };
+  var avColors = [
+    { bg: '#FEF9C3', c: '#854D0E' }, { bg: '#FCE7F3', c: '#9D174D' },
+    { bg: '#E0F2FE', c: '#0369A1' }, { bg: '#F5F3FF', c: '#5B21B6' },
+    { bg: '#ECFDF5', c: '#065F46' }, { bg: '#FAEEDA', c: '#633806' }
+  ];
+
+  function goalLabel(ch) {
+    var unit = ch.goal_unit || '';
+    var icons = { distance: '📍', sessions: '📋', streak: '🔥', duration: '⏱' };
+    return (icons[ch.goal_type] || '🎯') + ' ' + cap(ch.goal_type) + ' · ' + ch.goal_target + ' ' + unit;
+  }
+  function fmtDate(s) {
+    return new Date(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  }
+
+  function buildLbRow(entry, i, ch) {
+    var av = avColors[i % avColors.length];
+    var rankColors = ['#E6B800', '#9CA3AF', '#CD7C39'];
+    var target = Number(ch.goal_target) || 0;
+    var pct = target > 0 ? Math.min(100, Math.round((entry.progress / target) * 100)) : 0;
+    var unit = esc(ch.goal_unit || '');
+    return '' +
+      '<div style="display:flex;align-items:center;gap:8px">' +
+        '<div style="font-size:12px;font-weight:500;font-family:var(--mono);color:' + (rankColors[i] || 'var(--gray-400)') + ';width:16px;text-align:center;flex-shrink:0">' + (i + 1) + '</div>' +
+        '<div style="width:22px;height:22px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:600;flex-shrink:0">' + esc(initialsOf(entry.name)) + '</div>' +
+        '<div style="font-size:12px;color:var(--gray-900);width:70px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(entry.name) + '</div>' +
+        '<div style="flex:1;height:4px;background:var(--gray-100);border-radius:2px;overflow:hidden">' +
+          '<div style="width:' + pct + '%;height:100%;background:' + (rankColors[i] || '#9CA3AF') + ';border-radius:2px"></div>' +
+        '</div>' +
+        '<div style="font-size:11px;font-family:var(--mono);color:var(--gray-600);flex-shrink:0;min-width:48px;text-align:right">' + entry.progress + ' ' + unit + '</div>' +
+        '<div style="font-size:10px;color:' + (entry.achieved ? '#10B981' : 'var(--gray-400)') + ';flex-shrink:0;width:32px;text-align:right">' + (entry.achieved ? '✓' : pct + '%') + '</div>' +
+      '</div>';
+  }
+
+  function buildChallengeCard(ch, isPast, totalMembers) {
+    var sc = sportColors[ch.sport] || sportColors.any;
+    var id = esc(ch.id);
+    var partColor = ch.participationPct >= 80 ? '#10B981' : ch.participationPct >= 50 ? '#FFD21E' : '#3B82F6';
+    var notJoinedColor = ch.notJoinedCount > 10 ? '#EF4444' : ch.notJoinedCount > 5 ? '#E6B800' : 'var(--gray-400)';
+    var sportLabel = ch.sport === 'any' ? 'Any sport' : cap(ch.sport);
+
+    if (isPast) {
+      return '' +
+        '<div class="club-challenge-card" data-sport="' + esc(ch.sport) + '" style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:10px;opacity:.7" id="club-challenge-' + id + '">' +
+          '<div style="display:flex;align-items:flex-start;gap:10px;padding:14px 16px">' +
+            '<div style="width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;background:var(--gray-100)">' + sc.icon + '</div>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="font-size:14px;font-weight:600;color:var(--gray-600);margin-bottom:3px">' + esc(ch.title) + '</div>' +
+              '<div style="font-size:11px;color:var(--gray-400);margin-bottom:6px">' + esc(goalLabel(ch)) + '</div>' +
+              '<div style="display:flex;gap:5px;flex-wrap:wrap">' +
+                '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:var(--gray-100);color:var(--gray-500);border:var(--border)">Completed</span>' +
+                '<span style="font-size:10px;color:#10B981;font-weight:500">✓ ' + ch.achievedCount + ' / ' + ch.participantCount + ' achieved goal</span>' +
+                '<span style="font-size:10px;color:var(--gray-400)">' + ch.successRate + '% success rate</span>' +
+              '</div>' +
+            '</div>' +
+            '<div style="text-align:right;flex-shrink:0">' +
+              '<div style="font-size:11px;color:#10B981;font-weight:500">Completed ✓</div>' +
+              '<div style="font-size:11px;color:var(--gray-400);margin-top:2px">' + ch.participantCount + ' participated</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="padding:10px 16px;border-top:var(--border);display:flex;gap:6px;background:var(--gray-50)">' +
+            '<button onclick="viewChallengeLeaderboard(\'' + id + '\')" style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Final leaderboard</button>' +
+            '<button onclick="duplicateChallenge(\'' + id + '\')" style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Duplicate for next month</button>' +
+          '</div>' +
+        '</div>';
+    }
+
+    var lb3 = (ch.top3 || []).map(function (e, i) { return buildLbRow(e, i, ch); }).join('');
+
+    return '' +
+      '<div class="club-challenge-card" data-sport="' + esc(ch.sport) + '" style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:10px" id="club-challenge-' + id + '">' +
+        '<div style="display:flex;align-items:flex-start;gap:10px;padding:14px 16px">' +
+          '<div style="width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;background:' + sc.bg + ';color:' + sc.color + '">' + sc.icon + '</div>' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:3px">' + esc(ch.title) + '</div>' +
+            '<div style="font-size:11px;color:var(--gray-500);margin-bottom:6px">' + esc(goalLabel(ch)) + ' · ' + esc(fmtDate(ch.start_date)) + ' → ' + esc(fmtDate(ch.end_date)) + '</div>' +
+            '<div style="display:flex;gap:5px;flex-wrap:wrap">' +
+              '<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:' + sc.bg + ';color:' + sc.color + ';border:0.5px solid ' + sc.border + '">' + sc.icon + ' ' + esc(sportLabel) + '</span>' +
+              '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:var(--gray-100);color:var(--gray-600);border:var(--border)">' + esc(cap(ch.goal_type)) + '</span>' +
+              '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:var(--gray-100);color:var(--gray-600);border:var(--border)">Individual goal</span>' +
+            '</div>' +
+          '</div>' +
+          '<div style="text-align:right;flex-shrink:0">' +
+            '<div style="font-size:11px;font-family:var(--mono);color:var(--gray-400)">' + ch.daysLeft + ' days left</div>' +
+            '<div style="font-size:13px;font-weight:600;color:var(--gray-900);margin-top:2px"><strong>' + ch.participantCount + '</strong> / ' + totalMembers + ' joined</div>' +
+            (ch.notJoinedCount > 0 ? '<div style="font-size:10px;color:' + notJoinedColor + ';margin-top:2px">' + ch.notJoinedCount + ' haven\'t joined</div>' : '<div style="font-size:10px;color:#10B981;margin-top:2px">All joined ✓</div>') +
+          '</div>' +
+        '</div>' +
+        '<div style="padding:0 16px 12px">' +
+          '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">' +
+            '<span style="font-size:11px;color:var(--gray-500)">Member participation</span>' +
+            '<span style="font-size:12px;font-weight:500;font-family:var(--mono);color:var(--gray-900)">' + ch.participantCount + ' / ' + totalMembers + ' members</span>' +
+          '</div>' +
+          '<div style="height:5px;background:var(--gray-100);border-radius:3px;overflow:hidden;margin-bottom:4px">' +
+            '<div style="width:' + ch.participationPct + '%;height:100%;background:' + partColor + ';border-radius:3px"></div>' +
+          '</div>' +
+          '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--gray-400)">' +
+            '<span>' + ch.participationPct + '% joined</span>' +
+            '<span style="color:' + (ch.notJoinedCount > 5 ? '#EF4444' : 'var(--gray-400)') + '">' + (ch.notJoinedCount > 0 ? ch.notJoinedCount + ' members haven\'t joined' : 'All members joined ✓') + '</span>' +
+          '</div>' +
+        '</div>' +
+        ((ch.top3 && ch.top3.length > 0) ?
+          '<div style="padding:10px 16px;border-top:var(--border);background:var(--gray-50)">' +
+            '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--gray-400);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">' +
+              '<span>Top 3 · progress toward ' + esc(ch.goal_target + ' ' + (ch.goal_unit || '')) + '</span>' +
+              '<span style="cursor:pointer;font-weight:400;text-transform:none;letter-spacing:0;color:var(--gray-500)" onclick="viewChallengeLeaderboard(\'' + id + '\')">View all →</span>' +
+            '</div>' +
+            '<div style="display:flex;flex-direction:column;gap:5px">' + lb3 + '</div>' +
+          '</div>' : '') +
+        (ch.notJoinedCount > 0 ?
+          '<div style="padding:8px 16px;border-top:var(--border);display:flex;align-items:center;gap:8px">' +
+            '<div style="font-size:11px;color:var(--gray-500);flex:1"><strong style="color:' + notJoinedColor + '">' + ch.notJoinedCount + ' members</strong> haven\'t joined this challenge yet</div>' +
+            '<button onclick="nudgeChallengeJoin(\'' + id + '\',this)" style="padding:5px 12px;border-radius:7px;font-size:12px;border:0.5px solid #fde68a;background:var(--yellow-light);color:#7a5c00;cursor:pointer">⚡ Nudge to join</button>' +
+          '</div>' : '') +
+        '<div style="padding:10px 16px;border-top:var(--border);display:flex;align-items:center;gap:6px;background:white">' +
+          '<button onclick="viewChallengeLeaderboard(\'' + id + '\')" style="padding:5px 12px;border-radius:7px;font-size:12px;font-weight:600;border:none;background:var(--gray-900);color:white;cursor:pointer">Full leaderboard</button>' +
+          '<div style="margin-left:auto;display:flex;gap:5px">' +
+            '<button onclick="postChallengeToFeed(\'' + id + '\',this)" style="padding:5px 10px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Post to feed</button>' +
+            '<button onclick="cancelClubChallenge(\'' + id + '\',this)" style="padding:5px 10px;border-radius:7px;font-size:12px;border:1px solid #FECACA;background:var(--red-light);color:#A32D2D;cursor:pointer">Cancel</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function renderClubChallenges() {
+    var data = window.ARENAS_DATA;
+    if (!data) return;
+    var stats = data.challengeStats || {};
+    set('ch-stat-active', stats.activeCount || 0);
+    set('ch-stat-participants', stats.totalParticipants || 0);
+    set('ch-stat-notjoined', stats.totalNotJoined || 0);
+    set('ch-stat-completion', (stats.avgCompletion || 0) + '%');
+
+    var container = document.getElementById('club-challenges-list');
+    if (!container) return;
+    var active = data.activeChallenges || [];
+    var past = data.pastChallenges || [];
+    var totalMembers = data.memberCount || 0;
+    if (active.length === 0 && past.length === 0) return; // keep the empty state
+
+    var html = '';
+    if (active.length > 0) {
+      html += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-400);padding:10px 2px 6px;display:flex;align-items:center;gap:8px">Active · ' + active.length + ' challenge' + (active.length !== 1 ? 's' : '') + '<div style="flex:1;height:0.5px;background:var(--gray-200)"></div></div>';
+      html += active.map(function (c) { return buildChallengeCard(c, false, totalMembers); }).join('');
+    }
+    if (past.length > 0) {
+      html += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-400);padding:10px 2px 6px;display:flex;align-items:center;gap:8px;margin-top:4px">Completed · ' + past.length + '<div style="flex:1;height:0.5px;background:var(--gray-200)"></div></div>';
+      html += past.map(function (c) { return buildChallengeCard(c, true, totalMembers); }).join('');
+    }
+    container.innerHTML = html;
+  }
+
+  // ── Actions ──
+  window.nudgeChallengeJoin = async function (challengeId, btn) {
+    btn.textContent = 'Sending…'; btn.disabled = true;
+    try {
+      var r = await fetch(B + '/api/challenges/' + challengeId + '/nudge-join', { method: 'POST' });
+      var result = await r.json();
+      if (result.error) { showToast('Error: ' + result.error); btn.textContent = '⚡ Nudge to join'; btn.disabled = false; return; }
+      showToast('✓ Nudge sent to ' + result.nudged + ' member' + (result.nudged !== 1 ? 's' : ''));
+      btn.textContent = '✓ Nudged'; btn.style.background = '#ECFDF5'; btn.style.color = '#166534'; btn.style.borderColor = '#86EFAC';
+    } catch (err) { showToast('Something went wrong'); btn.textContent = '⚡ Nudge to join'; btn.disabled = false; }
+  };
+
+  window.postChallengeToFeed = async function (challengeId, btn) {
+    btn.textContent = 'Posting…'; btn.disabled = true;
+    try {
+      var r = await fetch(B + '/api/challenges/' + challengeId + '/post-to-feed', { method: 'POST' });
+      var result = await r.json();
+      if (result.error) { showToast('Error: ' + result.error); btn.textContent = 'Post to feed'; btn.disabled = false; return; }
+      showToast('✓ Posted to club feed — members notified');
+      btn.textContent = '✓ Posted';
+    } catch (err) { showToast('Something went wrong'); btn.textContent = 'Post to feed'; btn.disabled = false; }
+  };
+
+  window.duplicateChallenge = async function (challengeId) {
+    try {
+      var r = await fetch(B + '/api/challenges/' + challengeId + '/duplicate', { method: 'POST' });
+      var result = await r.json();
+      if (result.error) { showToast('Error: ' + result.error); return; }
+      showToast('✓ Challenge duplicated for next month');
+      setTimeout(function () { window.location.hash = 'challenges'; window.location.reload(); }, 1200);
+    } catch (err) { showToast('Something went wrong'); }
+  };
+
+  window.cancelClubChallenge = async function (challengeId, btn) {
+    if (!confirm('Cancel this challenge? All participants will lose their progress.')) return;
+    try {
+      var r = await fetch(B + '/api/challenges/' + challengeId, { method: 'DELETE' });
+      var result = await r.json();
+      if (result.error) { showToast('Error: ' + result.error); return; }
+      var card = document.getElementById('club-challenge-' + challengeId);
+      if (card) { card.style.transition = 'opacity .25s'; card.style.opacity = '0'; setTimeout(function () { card.remove(); }, 250); }
+      showToast('Challenge cancelled');
+    } catch (err) { showToast('Something went wrong'); }
+  };
+
+  window.viewChallengeLeaderboard = async function (challengeId) {
+    try {
+      var r = await fetch(B + '/api/challenges/' + challengeId + '/leaderboard');
+      var result = await r.json();
+      if (result.error) { showToast('Could not load leaderboard'); return; }
+      var leaderboard = result.leaderboard || [];
+      var ch = result.challenge || {};
+      var target = Number(ch.goal_target) || 0;
+      var unit = esc(ch.goal_unit || '');
+      var rows = leaderboard.map(function (entry, i) {
+        var av = avColors[i % avColors.length];
+        var pct = target > 0 ? Math.min(100, Math.round((entry.progress / target) * 100)) : 0;
+        var rankColor = i === 0 ? '#E6B800' : i === 1 ? '#9CA3AF' : i === 2 ? '#CD7C39' : 'var(--gray-400)';
+        var achieved = entry.progress >= target && target > 0;
+        return '' +
+          '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:var(--border)">' +
+            '<div style="font-size:14px;font-weight:700;font-family:var(--mono);color:' + rankColor + ';width:24px;flex-shrink:0;text-align:center">' + entry.rank + '</div>' +
+            '<div style="width:32px;height:32px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0">' + esc(initialsOf(entry.name)) + '</div>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="font-size:13px;font-weight:500;color:var(--gray-900)">' + esc(entry.name) + '</div>' +
+              '<div style="height:4px;background:var(--gray-100);border-radius:2px;margin-top:4px;overflow:hidden"><div style="width:' + pct + '%;height:100%;background:' + (i === 0 ? '#FFD21E' : '#6B7280') + ';border-radius:2px"></div></div>' +
+            '</div>' +
+            '<div style="text-align:right;flex-shrink:0">' +
+              '<div style="font-size:13px;font-weight:600;font-family:var(--mono);color:var(--gray-900)">' + entry.progress + ' ' + unit + '</div>' +
+              '<div style="font-size:10px;color:' + (achieved ? '#10B981' : 'var(--gray-400)') + '">' + (achieved ? '✓ Goal achieved' : pct + '%') + '</div>' +
+            '</div>' +
+          '</div>';
+      }).join('');
+      var overlay = document.createElement('div');
+      overlay.id = 'ch-lb-overlay';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px';
+      overlay.innerHTML =
+        '<div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:480px;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:var(--shadow-lg)">' +
+          '<div style="padding:14px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">' +
+            '<div>' +
+              '<div style="font-size:15px;font-weight:700;color:var(--gray-900)">' + esc(ch.title) + '</div>' +
+              '<div style="font-size:12px;color:var(--gray-400);margin-top:2px">' + leaderboard.length + ' participants · ' + esc(ch.goal_target + ' ' + (ch.goal_unit || '')) + ' goal</div>' +
+            '</div>' +
+            '<button onclick="document.getElementById(\'ch-lb-overlay\').remove()" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>' +
+          '</div>' +
+          '<div style="overflow-y:auto;flex:1">' + (rows || '<div style="padding:24px;text-align:center;color:var(--gray-400)">No participants yet</div>') + '</div>' +
+        '</div>';
+      overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+      document.body.appendChild(overlay);
+    } catch (err) { showToast('Could not load leaderboard'); }
+  };
+
+  // ── Create challenge modal ──
+  var SPORTS = ['any', 'running', 'cycling', 'swimming', 'climbing', 'football', 'weightlifting', 'hiking', 'yoga'];
+  var GOALS = [
+    { type: 'distance', label: 'Distance', unit: 'km', icon: '📍' },
+    { type: 'sessions', label: 'Sessions', unit: 'sessions', icon: '📋' },
+    { type: 'streak', label: 'Streak', unit: 'days', icon: '🔥' }
+  ];
+
+  window.selectCchSport = function (btn) {
+    document.querySelectorAll('.cch-sport-chip').forEach(function (c) {
+      c.classList.remove('selected'); c.style.background = 'white'; c.style.borderColor = 'var(--gray-200)'; c.style.color = 'var(--gray-600)';
+    });
+    btn.classList.add('selected'); btn.style.background = 'var(--yellow-light)'; btn.style.borderColor = '#fde68a'; btn.style.color = '#7a5c00';
+  };
+  window.selectCchGoal = function (el) {
+    document.querySelectorAll('.cch-goal-type').forEach(function (g) {
+      g.classList.remove('selected'); g.style.background = 'white'; g.style.borderColor = 'var(--gray-200)';
+    });
+    el.classList.add('selected'); el.style.background = 'var(--yellow-light)'; el.style.borderColor = 'var(--yellow-dark)';
+    var unitInput = document.getElementById('cch-unit');
+    if (unitInput) unitInput.value = el.dataset.unit || '';
+  };
+
+  window.openCreateClubChallenge = function () {
+    var data = window.ARENAS_DATA || {};
+    var clubId = data.club && data.club.id;
+    if (document.getElementById('create-club-challenge-overlay')) return;
+    var sportChips = SPORTS.map(function (s) {
+      var sc = sportColors[s] || sportColors.any;
+      var sel = s === 'any';
+      var icon = s === 'any' ? '' : sc.icon + ' ';
+      var label = s === 'any' ? 'Any sport' : cap(s);
+      return '<button type="button" class="cch-sport-chip' + (sel ? ' selected' : '') + '" data-sport="' + s + '" onclick="selectCchSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;cursor:pointer;border:1px solid ' + (sel ? '#fde68a' : 'var(--gray-200)') + ';background:' + (sel ? 'var(--yellow-light)' : 'white') + ';color:' + (sel ? '#7a5c00' : 'var(--gray-600)') + '">' + icon + esc(label) + '</button>';
+    }).join('');
+    var goalCards = GOALS.map(function (g, i) {
+      var sel = i === 0;
+      return '<div class="cch-goal-type' + (sel ? ' selected' : '') + '" data-type="' + g.type + '" data-unit="' + g.unit + '" onclick="selectCchGoal(this)" style="flex:1;padding:10px;border-radius:10px;cursor:pointer;text-align:center;border:1px solid ' + (sel ? 'var(--yellow-dark)' : 'var(--gray-200)') + ';background:' + (sel ? 'var(--yellow-light)' : 'white') + '">' +
+        '<div style="font-size:18px">' + g.icon + '</div>' +
+        '<div style="font-size:11px;font-weight:600;margin-top:3px;color:var(--gray-700)">' + g.label + '</div>' +
+      '</div>';
+    }).join('');
+    var overlay = document.createElement('div');
+    overlay.id = 'create-club-challenge-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto';
+    overlay.innerHTML =
+      '<div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:540px;overflow:hidden;box-shadow:var(--shadow-lg);margin:auto">' +
+        '<div style="padding:14px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">' +
+          '<div style="font-size:15px;font-weight:700;color:var(--gray-900)">Create a club challenge</div>' +
+          '<button onclick="document.getElementById(\'create-club-challenge-overlay\').remove()" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>' +
+        '</div>' +
+        '<div style="padding:18px;max-height:70vh;overflow-y:auto">' +
+          '<div id="cch-error" style="display:none;background:var(--red-light);border:1px solid #FECACA;border-radius:8px;padding:10px 14px;font-size:13px;color:#A32D2D;margin-bottom:12px"></div>' +
+          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Challenge title *</div><input class="form-input" style="width:100%" type="text" id="cch-title" placeholder="e.g. June 100km Running Challenge…"></div>' +
+          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Description <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div><textarea class="form-textarea" id="cch-desc" placeholder="What\'s this challenge about? Tips for members…" style="width:100%;min-height:56px"></textarea></div>' +
+          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:8px">Sport</div><div style="display:flex;gap:5px;flex-wrap:wrap" id="cch-sports">' + sportChips + '</div></div>' +
+          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:8px">Goal type</div><div style="display:flex;gap:8px">' + goalCards + '</div></div>' +
+          '<div style="display:flex;gap:10px;margin-bottom:13px">' +
+            '<div style="flex:1"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Target *</div><input class="form-input" style="width:100%" type="number" min="1" id="cch-target" placeholder="100"></div>' +
+            '<div style="flex:1"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Unit</div><input class="form-input" style="width:100%" type="text" id="cch-unit" value="km"></div>' +
+          '</div>' +
+          '<div style="display:flex;gap:10px;margin-bottom:6px">' +
+            '<div style="flex:1"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Start date *</div><input class="form-input" style="width:100%" type="date" id="cch-start"></div>' +
+            '<div style="flex:1"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">End date *</div><input class="form-input" style="width:100%" type="date" id="cch-end"></div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="padding:14px 18px;border-top:var(--border);display:flex;justify-content:flex-end;gap:8px">' +
+          '<button onclick="document.getElementById(\'create-club-challenge-overlay\').remove()" style="padding:8px 16px;border-radius:8px;font-size:13px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Cancel</button>' +
+          '<button id="cch-submit" onclick="submitCreateClubChallenge(' + (clubId ? '\'' + esc(clubId) + '\'' : 'null') + ')" style="padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">Create &amp; notify members →</button>' +
+        '</div>' +
+      '</div>';
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+    var today = new Date().toISOString().split('T')[0];
+    var end = new Date(); end.setDate(end.getDate() + 30);
+    document.getElementById('cch-start').value = today;
+    document.getElementById('cch-end').value = end.toISOString().split('T')[0];
+  };
+
+  window.submitCreateClubChallenge = async function (clubId) {
+    var titleEl = document.getElementById('cch-title');
+    var title = titleEl && titleEl.value ? titleEl.value.trim() : '';
+    var descEl = document.getElementById('cch-desc');
+    var desc = descEl && descEl.value ? descEl.value.trim() : '';
+    var sportEl = document.querySelector('.cch-sport-chip.selected');
+    var sport = sportEl ? sportEl.dataset.sport : 'any';
+    var goalEl = document.querySelector('.cch-goal-type.selected');
+    var goalType = goalEl ? goalEl.dataset.type : 'distance';
+    var goalTarget = (document.getElementById('cch-target') || {}).value;
+    var goalUnit = (document.getElementById('cch-unit') || {}).value;
+    var startDate = (document.getElementById('cch-start') || {}).value;
+    var endDate = (document.getElementById('cch-end') || {}).value;
+    var errorEl = document.getElementById('cch-error');
+    function showErr(m) { if (errorEl) { errorEl.textContent = m; errorEl.style.display = 'block'; } }
+    if (!title) { showErr('Please enter a challenge title.'); return; }
+    if (!goalTarget || parseFloat(goalTarget) < 1) { showErr('Please enter a valid target.'); return; }
+    if (!startDate || !endDate) { showErr('Please set a start and end date.'); return; }
+    if (new Date(endDate) <= new Date(startDate)) { showErr('End date must be after start date.'); return; }
+    var submitBtn = document.getElementById('cch-submit');
+    if (submitBtn) { submitBtn.textContent = 'Creating…'; submitBtn.disabled = true; }
+    try {
+      var r = await fetch(B + '/api/challenges/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: title, description: desc, sport: sport,
+          goal_type: goalType, goal_target: parseFloat(goalTarget), goal_unit: goalUnit,
+          start_date: new Date(startDate + 'T00:00:00').toISOString(),
+          end_date: new Date(endDate + 'T23:59:59').toISOString(),
+          visibility: 'club', club_id: clubId, invitees: []
+        })
+      });
+      var result = await r.json();
+      if (result.error) {
+        showErr('Error: ' + result.error);
+        if (submitBtn) { submitBtn.textContent = 'Create & notify members →'; submitBtn.disabled = false; }
+        return;
+      }
+      if (clubId && result.challenge && result.challenge.id) {
+        try { await fetch(B + '/api/challenges/' + result.challenge.id + '/nudge-join', { method: 'POST' }); } catch (e) {}
+      }
+      var ov = document.getElementById('create-club-challenge-overlay'); if (ov) ov.remove();
+      showToast('✓ Challenge created — all club members notified!');
+      setTimeout(function () { window.location.hash = 'challenges'; window.location.reload(); }, 1200);
+    } catch (err) {
+      showErr('Something went wrong — please try again.');
+      if (submitBtn) { submitBtn.textContent = 'Create & notify members →'; submitBtn.disabled = false; }
+    }
+  };
+
+  window.filterClubChallenges = function (btn, sport) {
+    document.querySelectorAll('.ch-filter-pill').forEach(function (p) {
+      p.style.background = 'white'; p.style.borderColor = 'var(--gray-200)'; p.style.color = 'var(--gray-600)';
+    });
+    btn.style.background = 'var(--yellow-light)'; btn.style.borderColor = 'var(--yellow-dark)'; btn.style.color = '#7a5c00';
+    document.querySelectorAll('.club-challenge-card').forEach(function (card) {
+      var cardSport = card.dataset.sport;
+      card.style.display = (sport === 'all' || cardSport === sport) ? 'block' : 'none';
+    });
+  };
+
+  // Render now, on load, and whenever the Challenges tab is opened via setTab.
+  if (typeof window.setTab === 'function') {
+    var _setTabC = window.setTab;
+    window.setTab = function (id, el) { _setTabC(id, el); if (id === 'challenges') renderClubChallenges(); };
+  }
+  document.addEventListener('DOMContentLoaded', renderClubChallenges);
+  renderClubChallenges();
 })();
 </script>
 </body>

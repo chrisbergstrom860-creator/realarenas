@@ -1106,6 +1106,115 @@ app.get(BASE + '/api/challenges/:id/leaderboard', requireAuth, async (req, res) 
   }
 });
 
+// Authorize a club challenge action: the caller must be an admin/coach of the
+// challenge's club. Mirrors requireEventManager. Returns the challenge row (with
+// the requested columns) when authorized, otherwise null.
+async function requireChallengeManager(challengeId, userId, columns = '*') {
+  if (!supabaseAdmin) return null;
+  const { data: challenge } = await supabaseAdmin
+    .from('challenges').select(columns).eq('id', challengeId).maybeSingle();
+  if (!challenge || !challenge.club_id) return null;
+  const { data: mgr } = await supabaseAdmin
+    .from('memberships').select('role')
+    .eq('club_id', challenge.club_id).eq('user_id', userId)
+    .in('role', ['admin', 'coach']).maybeSingle();
+  return mgr ? challenge : null;
+}
+
+// Nudge club members who haven't joined a challenge yet (coach/admin only).
+app.post(BASE + '/api/challenges/:id/nudge-join', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
+  const challenge = await requireChallengeManager(req.params.id, req.user.id, '*');
+  if (!challenge) return res.json({ error: 'Challenge not found' });
+
+  const { data: members } = await supabaseAdmin
+    .from('memberships').select('user_id').eq('club_id', challenge.club_id);
+  const { data: participants } = await supabaseAdmin
+    .from('challenge_participants').select('user_id').eq('challenge_id', req.params.id);
+  const joinedIds = new Set((participants || []).map(p => p.user_id));
+  const actor = displayFromUser(req.user);
+  const notJoined = (members || []).filter(m => !joinedIds.has(m.user_id) && m.user_id !== req.user.id);
+  const daysLeft = Math.max(0, Math.ceil((new Date(challenge.end_date) - new Date()) / (1000 * 60 * 60 * 24)));
+  for (const member of notJoined) {
+    await createNotification({
+      userId: member.user_id, type: 'challenge', title: 'Challenge reminder',
+      body: `${actor.name} wants you to join "${challenge.title}" — ${daysLeft} days left to join and start tracking your progress!`,
+      link: '/challenges', actorId: req.user.id, entityId: challenge.id
+    });
+  }
+  res.json({ success: true, nudged: notJoined.length });
+});
+
+// Post a challenge to the club feed and notify members (coach/admin only).
+app.post(BASE + '/api/challenges/:id/post-to-feed', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
+  const challenge = await requireChallengeManager(req.params.id, req.user.id, '*');
+  if (!challenge) return res.json({ error: 'Challenge not found' });
+
+  const actor = displayFromUser(req.user);
+  const daysLeft = Math.max(0, Math.ceil((new Date(challenge.end_date) - new Date()) / (1000 * 60 * 60 * 24)));
+  const { error: postErr } = await supabaseAdmin.from('posts').insert({
+    user_id: req.user.id,
+    content: `⚡ Club challenge: ${challenge.title} — ${challenge.goal_target} ${challenge.goal_unit || ''} ${challenge.goal_type} goal. ${daysLeft} days left to join! Find it in the Challenges tab.`.replace(/\s+/g, ' ').trim(),
+    sport: challenge.sport === 'any' ? null : challenge.sport
+  });
+  if (postErr) return res.json({ error: postErr.message });
+
+  const { data: members } = await supabaseAdmin
+    .from('memberships').select('user_id').eq('club_id', challenge.club_id).neq('user_id', req.user.id);
+  for (const m of (members || [])) {
+    await createNotification({
+      userId: m.user_id, type: 'challenge', title: 'Challenge reminder',
+      body: `${actor.name} posted about "${challenge.title}" — check the feed for details`,
+      link: '/feed', actorId: req.user.id, entityId: challenge.id
+    });
+  }
+  res.json({ success: true });
+});
+
+// Duplicate a challenge one month later, auto-joining the creator (coach/admin only).
+app.post(BASE + '/api/challenges/:id/duplicate', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
+  const challenge = await requireChallengeManager(req.params.id, req.user.id, '*');
+  if (!challenge) return res.json({ error: 'Challenge not found' });
+
+  const startDate = new Date(challenge.start_date);
+  const endDate = new Date(challenge.end_date);
+  startDate.setMonth(startDate.getMonth() + 1);
+  endDate.setMonth(endDate.getMonth() + 1);
+  const { data: newChallenge, error } = await supabaseAdmin
+    .from('challenges').insert({
+      created_by: req.user.id,
+      club_id: challenge.club_id,
+      title: challenge.title,
+      description: challenge.description,
+      sport: challenge.sport,
+      goal_type: challenge.goal_type,
+      goal_target: challenge.goal_target,
+      goal_unit: challenge.goal_unit,
+      start_date: startDate.toISOString(),
+      end_date: endDate.toISOString(),
+      visibility: challenge.visibility
+    }).select().single();
+  if (error) return res.json({ error: error.message });
+  await supabaseAdmin.from('challenge_participants').insert({ challenge_id: newChallenge.id, user_id: req.user.id });
+  res.json({ success: true, challenge: newChallenge });
+});
+
+// Cancel/delete a challenge and its participants (coach/admin only). The
+// Challenges tab exposes this via each active card's "Cancel" button. There is
+// no separate DELETE route in the original spec, but the client UI depends on
+// it, so it's added here with the same admin/coach authorization.
+app.delete(BASE + '/api/challenges/:id', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
+  const challenge = await requireChallengeManager(req.params.id, req.user.id, 'id, club_id');
+  if (!challenge) return res.json({ error: 'Challenge not found' });
+  await supabaseAdmin.from('challenge_participants').delete().eq('challenge_id', req.params.id);
+  const { error } = await supabaseAdmin.from('challenges').delete().eq('id', req.params.id);
+  if (error) return res.json({ error: error.message });
+  res.json({ success: true });
+});
+
 // Root: send new visitors to the landing page, logged-in users to their feed.
 app.get(BASE === '' ? '/' : BASE, async (req, res) => {
   const token = req.signedCookies && req.signedCookies.sb_access_token;
@@ -1932,6 +2041,9 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
     let upcomingEvents = [];
     let pastEvents = [];
     let eventStats = { upcomingCount: 0, totalRsvps: 0, totalNotResponded: 0, avgAttendance: 0 };
+    let activeChallenges = [];
+    let pastChallenges = [];
+    let challengeStats = { activeCount: 0, totalParticipants: 0, totalNotJoined: 0, avgCompletion: 0 };
 
     if (clubId) {
       const { count } = await supabaseAdmin
@@ -2041,6 +2153,104 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
       } catch (e) {
         // Non-fatal: dashboard renders without the events rollup.
       }
+
+      // ── Club challenges + participant rollups for the Challenges tab. As with
+      // events, the snippet's `profiles:user_id(name,handle)` embed doesn't work
+      // here (no usable profiles table) — participant names come from auth
+      // metadata via buildUserDisplayMap, and progress reuses
+      // computeChallengeProgress (the same helper the leaderboard route uses).
+      try {
+        const { data: clubChallenges } = await supabaseAdmin
+          .from('challenges')
+          .select('*')
+          .eq('club_id', clubId)
+          .order('created_at', { ascending: false });
+
+        const challengeIds = (clubChallenges || []).map(c => c.id);
+        let challengeParticipants = [];
+        if (challengeIds.length) {
+          const { data: cpRows } = await supabaseAdmin
+            .from('challenge_participants')
+            .select('challenge_id, user_id')
+            .in('challenge_id', challengeIds);
+          challengeParticipants = cpRows || [];
+        }
+
+        // One batched auth lookup for every distinct participant.
+        const chNameMap = await buildUserDisplayMap(challengeParticipants.map(p => p.user_id));
+
+        const nowMs = Date.now();
+        const enrichedChallenges = [];
+        for (const challenge of (clubChallenges || [])) {
+          const parts = challengeParticipants.filter(p => p.challenge_id === challenge.id);
+          const partIds = parts.map(p => p.user_id);
+          const target = Number(challenge.goal_target) || 0;
+
+          // Pull every participant's in-window activities in one query, then
+          // group by user so each gets its own computeChallengeProgress pass.
+          let acts = [];
+          if (partIds.length) {
+            const { data: actRows } = await supabaseAdmin
+              .from('activities')
+              .select('user_id, distance, duration, sport, date')
+              .in('user_id', partIds)
+              .gte('date', challenge.start_date)
+              .lte('date', challenge.end_date);
+            acts = actRows || [];
+          }
+          const actsByUser = {};
+          acts.forEach(a => { (actsByUser[a.user_id] = actsByUser[a.user_id] || []).push(a); });
+
+          const leaderboard = partIds.map(uid => {
+            const progress = computeChallengeProgress(challenge, actsByUser[uid] || []);
+            const disp = chNameMap[uid] || {};
+            return {
+              userId: uid,
+              name: disp.name || 'Athlete',
+              handle: disp.handle || 'athlete',
+              progress,
+              pct: target ? Math.min(100, Math.round((progress / target) * 100)) : 0,
+              achieved: target > 0 && progress >= target
+            };
+          });
+          leaderboard.sort((a, b) => b.progress - a.progress);
+          leaderboard.forEach((entry, i) => { entry.rank = i + 1; });
+
+          const participantCount = parts.length;
+          const notJoinedCount = Math.max(0, memberCount - participantCount);
+          const achievedCount = leaderboard.filter(e => e.achieved).length;
+          const endMs = new Date(challenge.end_date).getTime();
+          enrichedChallenges.push({
+            ...challenge,
+            participantCount,
+            notJoinedCount,
+            leaderboard,
+            top3: leaderboard.slice(0, 3),
+            achievedCount,
+            successRate: participantCount > 0 ? Math.round((achievedCount / participantCount) * 100) : 0,
+            isPast: endMs < nowMs,
+            daysLeft: Math.max(0, Math.ceil((endMs - nowMs) / (1000 * 60 * 60 * 24))),
+            participationPct: memberCount > 0 ? Math.round((participantCount / memberCount) * 100) : 0
+          });
+        }
+
+        activeChallenges = enrichedChallenges.filter(c => !c.isPast);
+        pastChallenges = enrichedChallenges.filter(c => c.isPast);
+
+        const totalParticipants = activeChallenges.reduce((s, c) => s + c.participantCount, 0);
+        const totalNotJoined = activeChallenges.reduce((s, c) => s + c.notJoinedCount, 0);
+        const avgCompletion = activeChallenges.length > 0
+          ? Math.round(activeChallenges.reduce((s, c) => s + c.participationPct, 0) / activeChallenges.length)
+          : 0;
+        challengeStats = {
+          activeCount: activeChallenges.length,
+          totalParticipants,
+          totalNotJoined,
+          avgCompletion
+        };
+      } catch (e) {
+        // Non-fatal: dashboard renders without the challenges rollup.
+      }
     }
 
     const clubData = {
@@ -2052,6 +2262,9 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
       upcomingEvents,
       pastEvents: pastEvents.slice(0, 5),
       eventStats,
+      activeChallenges,
+      pastChallenges: pastChallenges.slice(0, 5),
+      challengeStats,
       userEmail: req.user.email
     };
 

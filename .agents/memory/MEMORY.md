@@ -8,4 +8,4 @@
 - [html-arenas club invites](html-arenas-invites.md) — open links (OPEN_INVITE_EMAIL) stay pending/reusable, personal invites single-use + email-bound; revoke=DELETE row.
 - [html-arenas events](html-arenas-events.md) — events/RSVP feature: club-scoped writes need membership gate; notif fan-out only on transition into "going"; events page hides mock chrome + injects real data.
 - [html-arenas activity logging](html-arenas-activities.md) — manual training log; `activities` table must be user-created via SQL (no DDL via service role); author from auth metadata; GET /api/activities/:userId is self-only (IDOR).
-- [html-arenas challenges](html-arenas-challenges.md) — join permissive by design; leaderboard auth-wide; duration goal_type=0; invitees validated ⊆ follows; progress from activities; tab mapping.
+- [html-arenas challenges](html-arenas-challenges.md) — join permissive; leaderboard auth-wide; duration=0; coach dashboard rollup + requireChallengeManager (needs club_id); create route lacks club-membership gate; same-route writes need hash+reload not nav().
