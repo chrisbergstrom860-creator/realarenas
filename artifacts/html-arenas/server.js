@@ -1155,6 +1155,195 @@ app.post(BASE + '/api/clubs/:clubId/nudge-atrisk', requireAuth, async (req, res)
   }
 });
 
+// ── TRAINING LOAD ──
+// Parse an activity's logged duration into hours. Handles "45", "45 min",
+// "1h 30m" and "1:30" formats. A bare number > 12 is treated as minutes,
+// otherwise as hours (members tend to log short sessions in minutes).
+function parseDurationHours(duration) {
+  if (!duration) return 0;
+  const str = String(duration).toLowerCase().trim();
+  if (str.includes(':')) {
+    const parts = str.split(':');
+    const a = parseFloat(parts[0]) || 0;
+    const b = parseFloat(parts[1]) || 0;
+    // The log form steers users to "45:00" (MM:SS) for short sessions, but "1:30"
+    // means 1h30m. Treat a first segment > 12 as minutes:seconds, else hours:minutes.
+    return a > 12 ? a / 60 + b / 3600 : a + b / 60;
+  }
+  const hMatch = str.match(/(\d+(?:\.\d+)?)\s*h/);
+  const mMatch = str.match(/(\d+(?:\.\d+)?)\s*m/);
+  if (hMatch || mMatch) {
+    return (parseFloat(hMatch && hMatch[1]) || 0) + (parseFloat(mMatch && mMatch[1]) || 0) / 60;
+  }
+  const num = parseFloat(str.replace(/[^0-9.]/g, ''));
+  if (isNaN(num)) return 0;
+  return num > 12 ? num / 60 : num;
+}
+
+// Monday 00:00 of the week `weeksAgo` weeks before the current week (0 = this week).
+function getWeekStart(weeksAgo) {
+  const now = new Date();
+  const day = now.getDay() || 7;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - day + 1 - weeksAgo * 7);
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
+
+// Weekly training-load breakdown for a coach's club dashboard. Load is derived
+// from logged activity duration (there is no wearable/HR data). Names/handles/
+// sports come from auth metadata (no `profiles` table). Admin/coach of the
+// :clubId only.
+app.get(BASE + '/api/clubs/:clubId/training-load', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured' });
+  const clubId = req.params.clubId;
+  const weeks = Math.min(Math.max(parseInt(req.query.weeks, 10) || 6, 1), 26);
+  try {
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('club_id')
+      .eq('user_id', req.user.id)
+      .eq('club_id', clubId)
+      .in('role', ['admin', 'coach'])
+      .maybeSingle();
+    if (!membership) return res.status(403).json({ error: 'Not authorised' });
+
+    const { data: members } = await supabaseAdmin
+      .from('memberships').select('user_id').eq('club_id', clubId);
+    const memberIds = [...new Set((members || []).map((m) => m.user_id).filter(Boolean))];
+    const profileMap = await buildUserProfileMap(memberIds);
+
+    // Week boundaries, oldest first.
+    const weekStarts = [];
+    for (let i = weeks - 1; i >= 0; i--) weekStarts.push(getWeekStart(i));
+    const periodStart = weekStarts[0];
+    const thisWeekStart = weekStarts[weekStarts.length - 1];
+
+    // Every activity in the window in one query (need `duration` for load).
+    let activities = [];
+    if (memberIds.length) {
+      const { data, error } = await supabaseAdmin
+        .from('activities')
+        .select('user_id, sport, distance, duration, date')
+        .in('user_id', memberIds)
+        .gte('date', periodStart.toISOString());
+      if (!error) activities = data || [];
+    }
+    const byUser = bucketActivities(activities);
+
+    const memberData = memberIds.map((id) => {
+      const acts = byUser[id] || [];
+      const weeklyHours = weekStarts.map((weekStart) => {
+        const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 7);
+        const sum = acts
+          .filter((a) => { const d = new Date(a.date); return d >= weekStart && d < weekEnd; })
+          .reduce((s, a) => s + parseDurationHours(a.duration), 0);
+        return Math.round(sum * 10) / 10;
+      });
+      const thisWeek = weeklyHours[weeklyHours.length - 1];
+      const prevWeeks = weeklyHours.slice(Math.max(0, weeklyHours.length - 5), weeklyHours.length - 1);
+      const avg = prevWeeks.length
+        ? Math.round((prevWeeks.reduce((s, h) => s + h, 0) / prevWeeks.length) * 10) / 10
+        : 0;
+      const thisWeekActs = acts.filter((a) => new Date(a.date) >= thisWeekStart);
+      const kmThisWeek = Math.round(thisWeekActs.reduce((s, a) => s + parseDistanceKm(a.distance), 0) * 10) / 10;
+      const activeDays = new Set(thisWeekActs.map((a) => new Date(a.date).toDateString())).size;
+      const restDays = Math.max(0, Math.min(7, (new Date().getDay() || 7)) - activeDays);
+
+      let status, trend;
+      if (thisWeek === 0 && avg === 0) { status = 'inactive'; trend = 0; }
+      else if (thisWeek === 0) { status = 'inactive'; trend = -100; }
+      else if (avg === 0) { status = 'ontrack'; trend = 0; }
+      else {
+        trend = Math.round(((thisWeek - avg) / avg) * 100);
+        if (trend >= 50) status = 'overdoing';
+        else if (trend <= -40) status = 'behind';
+        else status = 'ontrack';
+      }
+      const prof = profileMap[id] || {};
+      return {
+        userId: id,
+        name: prof.name || 'Member',
+        handle: prof.handle || 'member',
+        sports: Array.isArray(prof.sports) ? prof.sports : [],
+        weeklyHours, thisWeek, avg, trend, status,
+        sessionsThisWeek: thisWeekActs.length,
+        kmThisWeek, restDays
+      };
+    });
+
+    const statusOrder = { overdoing: 0, behind: 1, ontrack: 2, inactive: 3 };
+    memberData.sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || b.thisWeek - a.thisWeek);
+
+    const clubWeekly = weekStarts.map((_, i) =>
+      Math.round(memberData.reduce((s, m) => s + (m.weeklyHours[i] || 0), 0) * 10) / 10);
+    const clubThisWeek = clubWeekly[clubWeekly.length - 1];
+    const clubPrev = clubWeekly.slice(Math.max(0, clubWeekly.length - 5), clubWeekly.length - 1);
+    const clubAvg = clubPrev.length
+      ? Math.round((clubPrev.reduce((s, h) => s + h, 0) / clubPrev.length) * 10) / 10
+      : 0;
+
+    res.json({
+      members: memberData,
+      clubWeekly,
+      weekLabels: weekStarts.map((d) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })),
+      stats: {
+        clubThisWeek,
+        clubAvg,
+        clubDelta: Math.round((clubThisWeek - clubAvg) * 10) / 10,
+        activeCount: memberData.filter((m) => m.thisWeek > 0).length,
+        totalMembers: memberData.length,
+        overdoingCount: memberData.filter((m) => m.status === 'overdoing').length,
+        behindCount: memberData.filter((m) => m.status === 'behind').length
+      }
+    });
+  } catch (err) {
+    console.log('Training load error:', err.message);
+    res.json({ error: 'Could not load training load' });
+  }
+});
+
+// Send a personal check-in to ONE club member. The target must belong to the
+// :clubId and the caller must be its admin/coach — so this can't notify
+// arbitrary users (same anti-spam stance as nudge-atrisk).
+app.post(BASE + '/api/clubs/:clubId/checkin', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured' });
+  const clubId = req.params.clubId;
+  const targetId = req.body && req.body.userId;
+  if (!targetId) return res.status(400).json({ error: 'Missing member' });
+  try {
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('club_id')
+      .eq('user_id', req.user.id)
+      .eq('club_id', clubId)
+      .in('role', ['admin', 'coach'])
+      .maybeSingle();
+    if (!membership) return res.status(403).json({ error: 'Not authorised' });
+    const { data: target } = await supabaseAdmin
+      .from('memberships')
+      .select('user_id')
+      .eq('club_id', clubId)
+      .eq('user_id', targetId)
+      .maybeSingle();
+    if (!target) return res.status(404).json({ error: 'Member not found' });
+    const coach = displayFromUser(req.user);
+    await createNotification({
+      userId: targetId,
+      type: 'club',
+      title: 'Check-in from your coach',
+      body: `${coach.name} checked in on your training — keep it going, and reach out any time.`,
+      link: '/profile',
+      actorId: req.user.id,
+      entityId: clubId
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.log('Check-in error:', err.message);
+    res.json({ error: 'Could not send check-in' });
+  }
+});
+
 // ── CHALLENGES API ──
 // Compute a participant's progress toward a challenge goal from their logged
 // activities. `distance` sums numeric distance values; `sessions` counts

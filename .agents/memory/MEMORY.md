@@ -4,6 +4,7 @@
 - [Arenas Supabase schema reality](html-arenas-supabase-schema.md) — profiles table exists but unused (names from auth user_metadata); memberships has no status/joined_at; clubs has no plan, sport is scalar.
 - [html-arenas notifications](html-arenas-notifications.md) — like/comment/follow notifs; actor names from auth metadata (not profiles); syncUnread + esc() rules.
 - [html-arenas auth forms](html-arenas-auth-forms.md) — signup landing on /landing w/ no error = form never submitted (stub nav); requestSubmit; first+last→hidden name; disabled btn swallows clicks; error-code/banner pairing.
+- [html-arenas training load](html-arenas-training-load.md) — load from activities.duration; parse "45:00" as MM:SS when 1st seg>12 (60x bug); single check-in uses /checkin not nudge-atrisk.
 - [html-arenas club events tab](html-arenas-club-events.md) — coach dashboard Events tab: server rollups via window.ARENAS_DATA; event-mgmt routes need requireEventManager authz; DELETE allows creator OR coach + truthful success; esc() + unconditional handlers.
 - [html-arenas club invites](html-arenas-invites.md) — open links (OPEN_INVITE_EMAIL) stay pending/reusable, personal invites single-use + email-bound; revoke=DELETE row.
 - [html-arenas events](html-arenas-events.md) — events/RSVP feature: club-scoped writes need membership gate; notif fan-out only on transition into "going"; events page hides mock chrome + injects real data.

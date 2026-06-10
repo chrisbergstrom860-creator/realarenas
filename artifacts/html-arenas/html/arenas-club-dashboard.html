@@ -333,7 +333,7 @@ button, select, input { font-family: var(--font); }
   <div class="nav-section-label">Club management</div>
   <div class="nav-item active" onclick="setTab('overview',this)"><span class="nav-icon">📊</span> Overview</div>
   <div class="nav-item" onclick="setTab('members',this)"><span class="nav-icon">👥</span> Members <span class="nav-badge member-count">48</span></div>
-  <div class="nav-item" onclick="setTab('training',this)"><span class="nav-icon">📈</span> Training load <span class="nav-badge alert">3</span></div>
+  <div class="nav-item" onclick="setTab('training',this)"><span class="nav-icon">📈</span> Training load <span class="nav-badge alert" style="display:none"></span></div>
   <div class="nav-item" onclick="setTab('leaderboard',this)"><span class="nav-icon">🏆</span> Leaderboard</div>
   <div class="nav-item" onclick="setTab('challenges',this)"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">4</span></div>
   <div class="nav-item" onclick="setTab('events',this)"><span class="nav-icon">📅</span> Events <span class="nav-badge">3</span></div>
@@ -517,35 +517,74 @@ button, select, input { font-family: var(--font); }
 
   <!-- ═══ TRAINING LOAD TAB ═══ -->
   <div class="tab-content" id="tab-training">
-    <div class="page-hdr">
-      <div class="page-hdr-left"><h1>Training load 📈</h1><p>Weekly load, streaks, and injury risk monitoring for all 48 members</p></div>
-      <div class="page-hdr-right">
-        <select style="padding:7px 12px;border:var(--border);border-radius:7px;font-size:13px;background:white;outline:none;cursor:pointer"><option>This week</option><option>Last week</option><option>Last 4 weeks</option></select>
-        <button class="btn btn-ghost" onclick="showToast('Exporting load report…')">📋 Export</button>
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:var(--border);background:white">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:var(--gray-900)">Training load</div>
+        <div style="font-size:12px;color:var(--gray-400);margin-top:2px">Weekly training hours per member · based on logged activity duration</div>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button class="tl-period-btn" data-weeks="6" onclick="setTlPeriod(this,6)" style="padding:5px 12px;border-radius:6px;font-size:12px;font-weight:500;border:none;background:var(--gray-900);color:white;cursor:pointer">Last 6 weeks</button>
+        <button class="tl-period-btn" data-weeks="12" onclick="setTlPeriod(this,12)" style="padding:5px 12px;border-radius:6px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Last 12 weeks</button>
       </div>
     </div>
-    <!-- Risk flags -->
-    <div style="margin-bottom:16px">
-      <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--gray-500);margin-bottom:10px">⚠️ Injury risk flags (3)</div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <div class="risk-card"><div class="risk-icon">🔴</div><div class="risk-content"><div class="risk-name">Yuki T. — High risk</div><div class="risk-desc">Load spike +42% above 4-week average. HR elevated across last 3 sessions. Recommending 2 rest days minimum before next hard session.</div><div class="risk-actions"><button class="btn btn-sm btn-primary" onclick="showToast('Message sent to Yuki')">Message</button><button class="btn btn-sm btn-ghost" onclick="showToast('Flagged for follow-up')">Flag</button><button class="btn btn-sm btn-ghost" onclick="showToast('Dismissed')">Dismiss</button></div></div></div>
-        <div class="risk-card" style="border-color:#FCD34D;background:#FEFCE8"><div class="risk-icon" style="background:#FEF3C7">🟡</div><div class="risk-content"><div class="risk-name">Priya R. — Medium risk</div><div class="risk-desc">Training load 28% above average. Sleep quality declining (from connected wearable). Suggest easy session tomorrow.</div><div class="risk-actions"><button class="btn btn-sm btn-primary" onclick="showToast('Message sent to Priya')">Message</button><button class="btn btn-sm btn-ghost" onclick="showToast('Dismissed')">Dismiss</button></div></div></div>
-        <div class="risk-card" style="border-color:#FCD34D;background:#FEFCE8"><div class="risk-icon" style="background:#FEF3C7">🟡</div><div class="risk-content"><div class="risk-name">Rachel W. — Medium risk</div><div class="risk-desc">4 consecutive days of running without a rest day. Load is within normal range but rest day recommended this week.</div><div class="risk-actions"><button class="btn btn-sm btn-primary" onclick="showToast('Message sent to Rachel')">Message</button><button class="btn btn-sm btn-ghost" onclick="showToast('Dismissed')">Dismiss</button></div></div></div>
+
+    <!-- Stats bar -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);background:white;border-bottom:var(--border)">
+      <div style="padding:12px 16px;border-right:var(--border)">
+        <div style="font-size:20px;font-weight:700;font-family:var(--mono);line-height:1;color:var(--gray-900)" id="tl-stat-hours">—</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:3px;text-transform:uppercase;letter-spacing:.04em">Club hours this week</div>
+        <div style="font-size:10px;margin-top:2px" id="tl-stat-delta"></div>
+      </div>
+      <div style="padding:12px 16px;border-right:var(--border)">
+        <div style="font-size:20px;font-weight:700;font-family:var(--mono);line-height:1;color:var(--gray-900)" id="tl-stat-active">—</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:3px;text-transform:uppercase;letter-spacing:.04em">Active members</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:2px" id="tl-stat-total"></div>
+      </div>
+      <div style="padding:12px 16px;border-right:var(--border)">
+        <div style="font-size:20px;font-weight:700;font-family:var(--mono);line-height:1;color:#A32D2D" id="tl-stat-over">—</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:3px;text-transform:uppercase;letter-spacing:.04em">Overdoing it</div>
+        <div style="font-size:10px;color:#A32D2D;margin-top:2px">load spike detected</div>
+      </div>
+      <div style="padding:12px 16px">
+        <div style="font-size:20px;font-weight:700;font-family:var(--mono);line-height:1;color:#854D0E" id="tl-stat-behind">—</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:3px;text-transform:uppercase;letter-spacing:.04em">Falling behind</div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:2px">below their average</div>
       </div>
     </div>
-    <!-- Load overview table -->
-    <div class="card">
-      <div class="card-header"><div class="card-header-left"><span>📊</span><span class="card-title">All member loads — this week</span></div><span class="card-subtitle">Sorted by load level</span></div>
-      <table class="member-table">
-        <thead><tr><th>Member</th><th>This week</th><th>4-wk avg</th><th>Load vs avg</th><th>Risk level</th><th>Streak</th><th>AI insight</th></tr></thead>
-        <tbody>
-          <tr class="at-risk"><td><div class="member-name-cell"><div class="member-av" style="background:#FCE7F3;color:#9D174D">YT</div><div class="member-name">Yuki T.</div></div></td><td style="font-family:var(--mono)">68.0 km</td><td style="font-family:var(--mono)">48.0 km</td><td style="font-family:var(--mono);color:var(--red);font-weight:600">+42%</td><td><span class="risk-flag risk-high">🔴 High</span></td><td style="font-family:var(--mono)">14 days</td><td style="font-size:11px;color:var(--gray-600);max-width:160px">Glycogen depletion likely. HR drift in long sessions.</td></tr>
-          <tr><td><div class="member-name-cell"><div class="member-av" style="background:#FBEAF0;color:#72243E">PR</div><div class="member-name">Priya R.</div></div></td><td style="font-family:var(--mono)">62.0 km</td><td style="font-family:var(--mono)">48.5 km</td><td style="font-family:var(--mono);color:#D97706;font-weight:600">+28%</td><td><span class="risk-flag risk-med">🟡 Medium</span></td><td style="font-family:var(--mono)">6 days</td><td style="font-size:11px;color:var(--gray-600);max-width:160px">Sleep quality declining. Easy session recommended.</td></tr>
-          <tr><td><div class="member-name-cell"><div class="member-av" style="background:#FEF9C3;color:#854D0E">SL</div><div class="member-name">Sofia L.</div></div></td><td style="font-family:var(--mono)">88.2 km</td><td style="font-family:var(--mono)">80.0 km</td><td style="font-family:var(--mono);color:var(--green);font-weight:600">+10%</td><td><span class="risk-flag risk-low">🟢 Low</span></td><td style="font-family:var(--mono)">21 days</td><td style="font-size:11px;color:var(--gray-600);max-width:160px">Consistent pacing. Heart rate zones well managed.</td></tr>
-          <tr><td><div class="member-name-cell"><div class="member-av" style="background:#E0F2FE;color:#0369A1">AL</div><div class="member-name">Alena L.</div></div></td><td style="font-family:var(--mono)">71.4 km</td><td style="font-family:var(--mono)">68.0 km</td><td style="font-family:var(--mono);color:var(--green);font-weight:600">+5%</td><td><span class="risk-flag risk-low">🟢 Low</span></td><td style="font-family:var(--mono)">6 days</td><td style="font-size:11px;color:var(--gray-600);max-width:160px">Good aerobic base building. Pace very consistent.</td></tr>
-          <tr><td><div class="member-name-cell"><div class="member-av" style="background:#FFF7ED;color:#9A3412">JK</div><div class="member-name">Jamie K.</div></div></td><td style="font-family:var(--mono)">12.4 km</td><td style="font-family:var(--mono)">24.0 km</td><td style="font-family:var(--mono);color:var(--blue);font-weight:600">−48%</td><td><span class="risk-flag risk-low">🟢 Low</span></td><td style="font-family:var(--mono)">6 days</td><td style="font-size:11px;color:var(--gray-600);max-width:160px">Deliberately low week. PB attempt planned Sunday.</td></tr>
-        </tbody>
-      </table>
+
+    <!-- Club volume chart -->
+    <div style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:14px;overflow:hidden">
+      <div style="padding:11px 14px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--gray-50)">
+        <div style="font-size:12px;font-weight:600;color:var(--gray-900)">📊 Club training volume · total hours per week</div>
+        <div style="font-size:11px;color:var(--gray-400)" id="tl-chart-sub">All members combined</div>
+      </div>
+      <div style="padding:16px 14px 10px">
+        <div style="display:flex;align-items:flex-end;gap:10px;height:120px;padding:0 4px" id="tl-chart-bars">
+          <div style="flex:1;text-align:center;color:var(--gray-400);font-size:13px;align-self:center">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Member load list -->
+    <div style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:0 14px 14px;overflow:hidden">
+      <div style="padding:11px 14px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--gray-50)">
+        <div style="font-size:12px;font-weight:600;color:var(--gray-900)">👥 Member load · this week vs 4-week average</div>
+        <div style="display:flex;gap:5px">
+          <div class="tl-filter-pill" data-filter="all" onclick="setTlFilter(this,'all')" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid var(--yellow-dark);background:var(--yellow-light);color:#7a5c00;cursor:pointer">All</div>
+          <div class="tl-filter-pill" data-filter="overdoing" onclick="setTlFilter(this,'overdoing')" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Overdoing it</div>
+          <div class="tl-filter-pill" data-filter="behind" onclick="setTlFilter(this,'behind')" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Falling behind</div>
+          <div class="tl-filter-pill" data-filter="inactive" onclick="setTlFilter(this,'inactive')" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Inactive</div>
+        </div>
+      </div>
+      <div id="tl-member-rows">
+        <div style="padding:24px;text-align:center;font-size:13px;color:var(--gray-400)">Loading…</div>
+      </div>
+    </div>
+
+    <!-- Info note -->
+    <div style="margin:0 14px 14px;background:var(--gray-50);border:var(--border);border-radius:var(--radius-lg);padding:11px 14px;font-size:11px;color:var(--gray-500);line-height:1.6">
+      ℹ️ Load is based on logged activity duration. <strong>Overdoing it</strong> = this week is 50%+ above their 4-week average. <strong>Falling behind</strong> = 40%+ below average. Connect Strava later for automatic, richer load data including heart rate and intensity.
     </div>
   </div>
 
@@ -2270,6 +2309,250 @@ document.addEventListener('DOMContentLoaded', function () {
   if (typeof window.setTab === 'function') {
     var _setTabLb = window.setTab;
     window.setTab = function (id, el) { _setTabLb(id, el); if (id === 'leaderboard') loadClubLeaderboard(); };
+  }
+})();
+</script>
+<script>
+// ── TRAINING LOAD TAB ──
+(function () {
+  var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
+  var data = window.ARENAS_DATA || {};
+  var clubId = (data.club && data.club.id) || null;
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  var tlWeeks = 6;
+  var tlFilter = 'all';
+  var tlMembers = [];
+  var tlExpandedUserId = null;
+
+  window.setTlPeriod = function (btn, weeks) {
+    document.querySelectorAll('.tl-period-btn').forEach(function (b) {
+      b.style.background = 'white'; b.style.color = 'var(--gray-600)'; b.style.border = 'var(--border)';
+    });
+    btn.style.background = 'var(--gray-900)'; btn.style.color = 'white'; btn.style.border = 'none';
+    tlWeeks = weeks;
+    loadTrainingLoad();
+  };
+
+  window.setTlFilter = function (el, filter) {
+    document.querySelectorAll('.tl-filter-pill').forEach(function (p) {
+      p.style.background = 'white'; p.style.borderColor = 'var(--gray-200)'; p.style.color = 'var(--gray-600)';
+    });
+    el.style.background = 'var(--yellow-light)'; el.style.borderColor = 'var(--yellow-dark)'; el.style.color = '#7a5c00';
+    tlFilter = filter;
+    renderTlMembers();
+  };
+
+  function loadTrainingLoad() {
+    if (!clubId) return;
+    fetch(B + '/api/clubs/' + clubId + '/training-load?weeks=' + tlWeeks)
+      .then(function (r) { return r.json(); })
+      .then(function (result) {
+        if (!result || result.error) return;
+        tlMembers = result.members || [];
+
+        var s = result.stats || {};
+        var setEl = function (id, val) { var el = document.getElementById(id); if (el) el.textContent = val; };
+        setEl('tl-stat-hours', (s.clubThisWeek || 0) + 'h');
+        setEl('tl-stat-active', s.activeCount || 0);
+        setEl('tl-stat-total', 'of ' + (s.totalMembers || 0) + ' total');
+        setEl('tl-stat-over', s.overdoingCount || 0);
+        setEl('tl-stat-behind', s.behindCount || 0);
+        var deltaEl = document.getElementById('tl-stat-delta');
+        if (deltaEl) {
+          var d = s.clubDelta || 0;
+          deltaEl.textContent = d >= 0 ? ('↑ +' + d + 'h vs 4-week avg') : ('↓ ' + d + 'h vs 4-week avg');
+          deltaEl.style.color = d >= 0 ? '#10B981' : '#854D0E';
+        }
+
+        // Reflect real risk counts on the sidebar nav badge (was a static "3").
+        var navBadge = document.querySelector('.nav-item[onclick*="setTab(\'training\'"] .nav-badge');
+        if (navBadge) {
+          var flagged = (s.overdoingCount || 0) + (s.behindCount || 0);
+          if (flagged > 0) { navBadge.textContent = flagged; navBadge.style.display = ''; }
+          else { navBadge.style.display = 'none'; }
+        }
+
+        var chartEl = document.getElementById('tl-chart-bars');
+        if (chartEl) {
+          var weekly = result.clubWeekly || [];
+          var labels = result.weekLabels || [];
+          var maxVal = Math.max.apply(null, weekly.concat([1]));
+          chartEl.innerHTML = weekly.map(function (hours, i) {
+            var isCurrent = i === weekly.length - 1;
+            var heightPct = Math.max(4, Math.round((hours / maxVal) * 88));
+            return '' +
+              '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end">' +
+                '<div style="font-size:10px;font-family:var(--mono);color:' + (isCurrent ? 'var(--gray-900)' : 'var(--gray-500)') + ';font-weight:' + (isCurrent ? '600' : '400') + '">' + hours + 'h</div>' +
+                '<div style="width:100%;max-width:44px;height:' + heightPct + '%;border-radius:4px 4px 0 0;background:' + (isCurrent ? '#E6B800' : '#FFD21E') + '"></div>' +
+                '<div style="font-size:10px;color:' + (isCurrent ? 'var(--gray-600)' : 'var(--gray-400)') + ';font-weight:' + (isCurrent ? '600' : '400') + '">' + (isCurrent ? 'This week' : esc(labels[i])) + '</div>' +
+              '</div>';
+          }).join('');
+        }
+
+        renderTlMembers();
+      })
+      .catch(function (err) { console.log('Could not load training load:', err); });
+  }
+
+  function renderTlMembers() {
+    var container = document.getElementById('tl-member-rows');
+    if (!container) return;
+    var avColors = [
+      { bg: '#FEF9C3', c: '#854D0E' }, { bg: '#FCE7F3', c: '#9D174D' },
+      { bg: '#E0F2FE', c: '#0369A1' }, { bg: '#F5F3FF', c: '#5B21B6' },
+      { bg: '#ECFDF5', c: '#065F46' }, { bg: '#FAEEDA', c: '#633806' }
+    ];
+    var statusConfig = {
+      ontrack: { label: '✓ On track', style: 'background:#ECFDF5;color:#166534;border:0.5px solid #86EFAC' },
+      overdoing: { label: '⚠ Overdoing it', style: 'background:#FEF2F2;color:#A32D2D;border:0.5px solid #FECACA' },
+      behind: { label: '↓ Falling behind', style: 'background:var(--yellow-light);color:#633806;border:0.5px solid #fde68a' },
+      inactive: { label: 'No activity', style: 'background:var(--gray-100);color:var(--gray-400);border:var(--border)' }
+    };
+    var filtered = tlFilter === 'all' ? tlMembers : tlMembers.filter(function (m) { return m.status === tlFilter; });
+    if (filtered.length === 0) {
+      container.innerHTML = '<div style="padding:24px;text-align:center;font-size:13px;color:var(--gray-400)">No members match this filter</div>';
+      return;
+    }
+    var sportIcons = { running: '🏃', cycling: '🚴', climbing: '🧗', swimming: '🏊', football: '⚽', weightlifting: '🏋️', hiking: '🥾', yoga: '🧘' };
+    container.innerHTML = filtered.map(function (m, i) {
+      var av = avColors[i % avColors.length];
+      var ini = (m.name || '').split(' ').map(function (n) { return n[0]; }).join('').slice(0, 2).toUpperCase();
+      var sc = statusConfig[m.status] || statusConfig.ontrack;
+      var maxH = Math.max.apply(null, (m.weeklyHours || []).concat([0.5]));
+      var sparkBars = (m.weeklyHours || []).map(function (h, j) {
+        var isLast = j === m.weeklyHours.length - 1;
+        var pct = Math.max(8, Math.round((h / maxH) * 100));
+        return '<div style="flex:1;height:' + pct + '%;border-radius:2px 2px 0 0;background:' + (isLast ? '#FFD21E' : 'var(--gray-200)') + ';min-height:3px"></div>';
+      }).join('');
+      var trendStr = (m.status === 'inactive' && m.thisWeek === 0) ? '—' : ((m.trend >= 0 ? '+' : '') + m.trend + '%');
+      var trendColor = m.status === 'overdoing' ? '#A32D2D'
+        : m.status === 'behind' ? '#854D0E'
+        : m.status === 'inactive' ? 'var(--gray-400)' : '#10B981';
+      var sportsStr = (m.sports || []).slice(0, 2).map(function (sp) {
+        return sportIcons[sp] ? (sportIcons[sp] + ' ' + sp.charAt(0).toUpperCase() + sp.slice(1)) : sp;
+      }).join(' · ') || 'No sports set';
+      var isExpanded = tlExpandedUserId === m.userId;
+      var detailDrawer = isExpanded ? buildTlDetail(m) : '';
+      return '' +
+        '<div onclick="toggleTlDetail(\'' + esc(m.userId) + '\')" style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:var(--border);cursor:pointer;transition:background .1s;' + (m.status === 'inactive' ? 'opacity:.6;' : '') + (isExpanded ? 'background:#FFFDF0;' : '') + '"' +
+        ' onmouseenter="this.style.background=\'var(--gray-50)\'"' +
+        ' onmouseleave="this.style.background=\'' + (isExpanded ? '#FFFDF0' : 'white') + '\'">' +
+          '<div style="width:32px;height:32px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0">' + esc(ini) + '</div>' +
+          '<div style="width:120px;flex-shrink:0">' +
+            '<div style="font-size:13px;font-weight:600;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(m.name) + '</div>' +
+            '<div style="font-size:10px;color:var(--gray-400);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(sportsStr) + '</div>' +
+          '</div>' +
+          '<div style="flex:1;display:flex;align-items:flex-end;gap:3px;height:28px;padding:0 8px">' + sparkBars + '</div>' +
+          '<div style="text-align:right;flex-shrink:0;width:72px">' +
+            '<div style="font-size:13px;font-weight:600;font-family:var(--mono);color:var(--gray-900)">' + m.thisWeek + 'h</div>' +
+            '<div style="font-size:10px;color:var(--gray-400)">avg ' + m.avg + 'h</div>' +
+          '</div>' +
+          '<div style="font-size:11px;font-family:var(--mono);width:48px;text-align:right;flex-shrink:0;color:' + trendColor + '">' + trendStr + '</div>' +
+          '<div style="font-size:10px;font-weight:500;padding:2px 9px;border-radius:10px;flex-shrink:0;width:96px;text-align:center;' + sc.style + '">' + sc.label + '</div>' +
+        '</div>' +
+        detailDrawer;
+    }).join('') +
+      '<div style="padding:8px 14px;border-top:var(--border);font-size:11px;color:var(--gray-400)">' +
+        'Showing ' + filtered.length + ' of ' + tlMembers.length + ' members · sorted by status priority' +
+      '</div>';
+  }
+
+  function buildTlDetail(m) {
+    var maxH = Math.max.apply(null, (m.weeklyHours || []).concat([0.5]));
+    var weekLabels = [];
+    for (var i = m.weeklyHours.length - 1; i >= 0; i--) {
+      var dd = new Date();
+      var day = dd.getDay() || 7;
+      dd.setDate(dd.getDate() - day + 1 - i * 7);
+      weekLabels.push(i === 0 ? 'This wk' : dd.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
+    }
+    var bars = (m.weeklyHours || []).map(function (h, j) {
+      var isLast = j === m.weeklyHours.length - 1;
+      var pct = Math.max(6, Math.round((h / maxH) * 88));
+      var isSpike = isLast && m.status === 'overdoing';
+      return '' +
+        '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end">' +
+          '<div style="font-size:10px;font-family:var(--mono);color:' + (isSpike ? '#A32D2D' : 'var(--gray-500)') + ';font-weight:' + (isLast ? '600' : '400') + '">' + h + 'h</div>' +
+          '<div style="width:100%;max-width:38px;height:' + pct + '%;border-radius:3px 3px 0 0;background:' + (isSpike ? '#E24B4A' : '#FFD21E') + '"></div>' +
+          '<div style="font-size:9px;color:var(--gray-400);font-weight:' + (isLast ? '600' : '400') + '">' + esc(weekLabels[j]) + '</div>' +
+        '</div>';
+    }).join('');
+    var statusNote = m.status === 'overdoing'
+      ? ('This week is ' + m.trend + '% above their 4-week average — worth checking they\'re not ramping too fast')
+      : m.status === 'behind'
+      ? ('This week is ' + Math.abs(m.trend) + '% below their average — might be worth a check-in')
+      : m.status === 'inactive'
+      ? 'No activity logged this week'
+      : 'Training load is consistent with their recent average';
+    var noteColor = m.status === 'overdoing' ? '#A32D2D' : m.status === 'behind' ? '#854D0E' : 'var(--gray-500)';
+    return '' +
+      '<div onclick="event.stopPropagation()" style="margin:0;background:white;border-bottom:var(--border);border-left:3px solid #E6B800">' +
+        '<div style="padding:10px 14px;display:flex;align-items:center;gap:10px;background:#FFFDF0;border-bottom:var(--border)">' +
+          '<div style="flex:1">' +
+            '<div style="font-size:12px;font-weight:600;color:var(--gray-900)">' + esc(m.name) + ' — week by week</div>' +
+            '<div style="font-size:10px;color:' + noteColor + '">' + statusNote + '</div>' +
+          '</div>' +
+          '<button onclick="event.stopPropagation();sendTlCheckin(\'' + esc(m.userId) + '\',this)" style="padding:4px 12px;border-radius:6px;background:var(--yellow);border:1px solid var(--yellow-dark);font-size:11px;font-weight:600;color:var(--gray-900);cursor:pointer;flex-shrink:0">Send check-in</button>' +
+        '</div>' +
+        '<div style="display:flex;align-items:flex-end;gap:8px;height:100px;padding:14px">' + bars + '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(3,1fr);border-top:var(--border)">' +
+          '<div style="padding:10px 14px;border-right:var(--border);text-align:center">' +
+            '<div style="font-size:13px;font-weight:600;font-family:var(--mono);color:var(--gray-900)">' + m.sessionsThisWeek + '</div>' +
+            '<div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px">Sessions this week</div>' +
+          '</div>' +
+          '<div style="padding:10px 14px;border-right:var(--border);text-align:center">' +
+            '<div style="font-size:13px;font-weight:600;font-family:var(--mono);color:var(--gray-900)">' + m.kmThisWeek + ' km</div>' +
+            '<div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px">Distance logged</div>' +
+          '</div>' +
+          '<div style="padding:10px 14px;text-align:center">' +
+            '<div style="font-size:13px;font-weight:600;font-family:var(--mono);color:' + ((m.restDays === 0 && m.status === 'overdoing') ? '#A32D2D' : 'var(--gray-900)') + '">' + m.restDays + '</div>' +
+            '<div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px">Rest days</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  window.toggleTlDetail = function (userId) {
+    tlExpandedUserId = tlExpandedUserId === userId ? null : userId;
+    renderTlMembers();
+  };
+
+  window.sendTlCheckin = function (userId, btn) {
+    if (!clubId) return;
+    var member = tlMembers.filter(function (m) { return m.userId === userId; })[0];
+    var name = (member && member.name) || 'member';
+    btn.textContent = 'Sending…';
+    btn.disabled = true;
+    fetch(B + '/api/clubs/' + clubId + '/checkin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: userId })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (result) {
+        if (!result || result.error) {
+          if (typeof showToast === 'function') showToast('Error: ' + ((result && result.error) || 'Something went wrong'));
+          btn.textContent = 'Send check-in'; btn.disabled = false; return;
+        }
+        if (typeof showToast === 'function') showToast('✓ Check-in sent to ' + name);
+        btn.textContent = '✓ Sent';
+      })
+      .catch(function () {
+        if (typeof showToast === 'function') showToast('Something went wrong');
+        btn.textContent = 'Send check-in'; btn.disabled = false;
+      });
+  };
+
+  // Load when the Training load tab opens (chain onto the existing setTab wrap).
+  if (typeof window.setTab === 'function') {
+    var _setTabTl = window.setTab;
+    window.setTab = function (id, el) { _setTabTl(id, el); if (id === 'training') loadTrainingLoad(); };
   }
 })();
 </script>
