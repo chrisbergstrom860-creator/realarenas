@@ -328,15 +328,13 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
     <div style="flex:1"></div>
     <div class="sport-bar-right">
       <select class="scope-select" onchange="setScope(this.value)">
-        <option value="local">📍 Local — London</option>
-        <option value="national">🇬🇧 National</option>
-        <option value="global">🌍 Global</option>
+        <option value="platform">🌍 Everyone</option>
+        <option value="following">👥 People you follow</option>
+        <option value="club">🏠 My club</option>
       </select>
       <select class="metric-select" id="metric-select" onchange="setMetric(this.value)">
         <option value="pts">Ranked by: Points</option>
-        <option value="dist">Ranked by: Distance</option>
         <option value="acts">Ranked by: Activities</option>
-        <option value="streak">Ranked by: Streak</option>
       </select>
     </div>
   </div>
@@ -594,206 +592,245 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 <div class="toast" id="toast"></div>
 
 <script>
-// ── DATA ──
-const sportMeta = {
-  running:  { icon:'🏃', iconBg:'#FFF7ED', label:'Running',          metrics:['Points','Distance','Pace','Activities'] },
-  cycling:  { icon:'🚴', iconBg:'#EFF6FF', label:'Cycling',          metrics:['Points','Distance','Avg Watts','Activities'] },
-  climbing: { icon:'🧗', iconBg:'#F5F3FF', label:'Climbing',         metrics:['Points','Grade','Sessions','Streak'] },
-  all:      { icon:'🏅', iconBg:'#FFF9E0', label:'All my sports',    metrics:['Points','Activities','Streak'] },
-};
+// ── ATHLETE LEADERBOARD (live data) ──
+// Replaces the previous mock dataset. Reuses the exact same DOM ids / CSS classes
+// the static markup expected, but renders rankings fetched from the server.
+// Scope select is repurposed into Platform / Following / My club (3 endpoints);
+// period + sport drive query params; metric (Points / Activities) re-sorts client
+// side. There are no historical rank snapshots, so the Change column is always "—".
+(function () {
+  var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
+  var data = window.ARENAS_DATA || {};
+  var myId = data.userId || null;
 
-const leaderboards = {
-  all: {
-    banner: { rank:'#4', pts:'16,980', acts:'8', progressLabel:'Progress to rank #3', progressFrac:'16,980 / 18,410', fill:92, next:'1,430 pts to overtake Alena L. — log one more ride to get there.', sportLabel:'Running · Cycling · Climbing · Advanced' },
-    podium: [
-      { init:'SL', bg:'#FEF9C3', c:'#854D0E', name:'Sofia L.',   loc:'Prague',  score:'24,660', stat:'Running + Cycling',  rank:'gold'   },
-      { init:'MC', bg:'#FEF9C3', c:'#854D0E', name:'Marco C.',   loc:'Milan',   score:'21,330', stat:'Cycling + Running',  rank:'silver' },
-      { init:'AL', bg:'#E0F2FE', c:'#0369A1', name:'Alena L.',   loc:'London',  score:'18,410', stat:'Running + Climbing', rank:'bronze' },
-    ],
-    rows: [
-      { rank:1, init:'SL', bg:'#FEF9C3', c:'#854D0E', name:'Sofia L.',   sub:'Prague · 3 sports',    score:'24,660', pct:100, trend:'up',   isYou:false },
-      { rank:2, init:'MC', bg:'#FEF9C3', c:'#854D0E', name:'Marco C.',   sub:'Milan · 2 sports',     score:'21,330', pct:86,  trend:'up',   isYou:false },
-      { rank:3, init:'AL', bg:'#E0F2FE', c:'#0369A1', name:'Alena L.',   sub:'London · 2 sports',    score:'18,410', pct:75,  trend:'dn',   isYou:false },
-      { rank:4, init:'JK', bg:'#FFF7ED', c:'#9A3412', name:'Jamie K.',   sub:'London · 3 sports',    score:'16,980', pct:69,  trend:'up',   isYou:true  },
-      { rank:5, init:'TR', bg:'#F0FDF4', c:'#166534', name:'Tom R.',     sub:'London · 2 sports',    score:'14,760', pct:60,  trend:'eq',   isYou:false },
-      { rank:6, init:'OB', bg:'#F0FDF4', c:'#166534', name:'Omar B.',    sub:'Dubai · 2 sports',     score:'13,440', pct:54,  trend:'dn',   isYou:false },
-      { rank:7, init:'YT', bg:'#FCE7F3', c:'#9D174D', name:'Yuki T.',    sub:'Tokyo · 2 sports',     score:'12,110', pct:49,  trend:'up',   isYou:false },
-      { rank:8, init:'PR', bg:'#FBEAF0', c:'#9D174D', name:'Priya R.',   sub:'Mumbai · 3 sports',    score:'10,880', pct:44,  trend:'eq',   isYou:false },
-    ],
-  },
-  running: {
-    banner: { rank:'#5', pts:'6,440', acts:'3', progressLabel:'Progress to rank #4', progressFrac:'6,440 / 6,980', fill:85, next:'540 pts to overtake Priya R. — one solid long run does it.', sportLabel:'Running · Advanced · 12.4 km this week' },
-    podium: [
-      { init:'SL', bg:'#FEF9C3', c:'#854D0E', name:'Sofia L.',   loc:'Prague', score:'9,840', stat:'88.2 km', rank:'gold'   },
-      { init:'AL', bg:'#E0F2FE', c:'#0369A1', name:'Alena L.',   loc:'London', score:'7,610', stat:'71.4 km', rank:'silver' },
-      { init:'YT', bg:'#FCE7F3', c:'#9D174D', name:'Yuki T.',    loc:'Tokyo',  score:'7,610', stat:'68.0 km', rank:'bronze' },
-    ],
-    rows: [
-      { rank:1, init:'SL', bg:'#FEF9C3', c:'#854D0E', name:'Sofia L.',  sub:'Prague · 88.2 km',   score:'9,840', pct:100, trend:'up', isYou:false },
-      { rank:2, init:'AL', bg:'#E0F2FE', c:'#0369A1', name:'Alena L.',  sub:'London · 71.4 km',   score:'7,610', pct:77,  trend:'dn', isYou:false },
-      { rank:3, init:'YT', bg:'#FCE7F3', c:'#9D174D', name:'Yuki T.',   sub:'Tokyo · 68.0 km',    score:'7,610', pct:77,  trend:'up', isYou:false },
-      { rank:4, init:'PR', bg:'#FBEAF0', c:'#9D174D', name:'Priya R.',  sub:'Mumbai · 62.0 km',   score:'6,980', pct:71,  trend:'up', isYou:false },
-      { rank:5, init:'JK', bg:'#FFF7ED', c:'#9A3412', name:'Jamie K.',  sub:'London · 12.4 km',   score:'6,440', pct:65,  trend:'up', isYou:true  },
-      { rank:6, init:'TR', bg:'#F0FDF4', c:'#166534', name:'Tom R.',    sub:'London · 58.0 km',   score:'5,880', pct:60,  trend:'dn', isYou:false },
-      { rank:7, init:'MC', bg:'#FEF9C3', c:'#854D0E', name:'Marco C.',  sub:'Milan · 44.0 km',    score:'5,220', pct:53,  trend:'eq', isYou:false },
-      { rank:8, init:'OB', bg:'#F0FDF4', c:'#166534', name:'Omar B.',   sub:'Dubai · 38.0 km',    score:'4,100', pct:42,  trend:'up', isYou:false },
-    ],
-  },
-  cycling: {
-    banner: { rank:'#7', pts:'3,210', acts:'1', progressLabel:'Progress to rank #6', progressFrac:'3,210 / 3,660', fill:46, next:'450 pts to overtake Priya R. — one group ride this weekend closes the gap.', sportLabel:'Cycling · Intermediate · 41 km this week' },
-    podium: [
-      { init:'MC', bg:'#FEF9C3', c:'#854D0E', name:'Marco C.',  loc:'Milan',  score:'8,120', stat:'88 km / 241W', rank:'gold'   },
-      { init:'OB', bg:'#F0FDF4', c:'#166534', name:'Omar B.',   loc:'Dubai',  score:'6,990', stat:'74 km / 228W', rank:'silver' },
-      { init:'TR', bg:'#F5F3FF', c:'#6D28D9', name:'Tom R.',    loc:'London', score:'5,440', stat:'61 km / 210W', rank:'bronze' },
-    ],
-    rows: [
-      { rank:1, init:'MC', bg:'#FEF9C3', c:'#854D0E', name:'Marco C.',  sub:'Milan · 88 km this week',   score:'8,120', pct:100, trend:'up', isYou:false },
-      { rank:2, init:'OB', bg:'#F0FDF4', c:'#166534', name:'Omar B.',   sub:'Dubai · 74 km this week',   score:'6,990', pct:86,  trend:'eq', isYou:false },
-      { rank:3, init:'TR', bg:'#F5F3FF', c:'#6D28D9', name:'Tom R.',    sub:'London · 61 km this week',  score:'5,440', pct:67,  trend:'up', isYou:false },
-      { rank:4, init:'AL', bg:'#E0F2FE', c:'#0369A1', name:'Alena L.',  sub:'Prague · 52 km this week',  score:'4,880', pct:60,  trend:'up', isYou:false },
-      { rank:5, init:'SL', bg:'#FEF9C3', c:'#854D0E', name:'Sofia L.',  sub:'Prague · 48 km this week',  score:'4,210', pct:52,  trend:'dn', isYou:false },
-      { rank:6, init:'PR', bg:'#FBEAF0', c:'#9D174D', name:'Priya R.',  sub:'Mumbai · 43 km this week',  score:'3,660', pct:45,  trend:'eq', isYou:false },
-      { rank:7, init:'JK', bg:'#FFF7ED', c:'#9A3412', name:'Jamie K.',  sub:'London · 41 km this week',  score:'3,210', pct:40,  trend:'up', isYou:true  },
-      { rank:8, init:'YT', bg:'#FCE7F3', c:'#9D174D', name:'Yuki T.',   sub:'Tokyo · 30 km this week',   score:'2,440', pct:30,  trend:'dn', isYou:false },
-    ],
-  },
-  climbing: {
-    banner: { rank:'#3', pts:'4,890', acts:'4', progressLabel:'Progress to rank #2', progressFrac:'4,890 / 5,990', fill:72, next:'1,100 pts to overtake Sofia R. — send one more project this week.', sportLabel:'Climbing · Advanced · V6 × 4 this week' },
-    podium: [
-      { init:'AM', bg:'#ECFDF5', c:'#065F46', name:'Alena M.',  loc:'Barcelona', score:'6,810', stat:'V8 sent',  rank:'gold'   },
-      { init:'SR', bg:'#F5F3FF', c:'#6D28D9', name:'Sofia R.',  loc:'Barcelona', score:'5,990', stat:'V7 sent',  rank:'silver' },
-      { init:'JK', bg:'#FFF7ED', c:'#9A3412', name:'Jamie K.',  loc:'London',    score:'4,890', stat:'V6 × 4', rank:'bronze', isYou:true },
-    ],
-    rows: [
-      { rank:1, init:'AM', bg:'#ECFDF5', c:'#065F46', name:'Alena M.',  sub:'Barcelona · 4 sessions',  score:'6,810', pct:100, trend:'up', isYou:false },
-      { rank:2, init:'SR', bg:'#F5F3FF', c:'#6D28D9', name:'Sofia R.',  sub:'Barcelona · 3 sessions',  score:'5,990', pct:88,  trend:'up', isYou:false },
-      { rank:3, init:'JK', bg:'#FFF7ED', c:'#9A3412', name:'Jamie K.',  sub:'London · 4 sessions',     score:'4,890', pct:72,  trend:'up', isYou:true  },
-      { rank:4, init:'TR', bg:'#F0FDF4', c:'#166534', name:'Tom R.',    sub:'London · 3 sessions',     score:'3,880', pct:57,  trend:'up', isYou:false },
-      { rank:5, init:'OB', bg:'#FEF9C3', c:'#854D0E', name:'Omar B.',   sub:'Dubai · 2 sessions',      score:'2,990', pct:44,  trend:'dn', isYou:false },
-      { rank:6, init:'PK', bg:'#FBEAF0', c:'#9D174D', name:'Priya K.',  sub:'Mumbai · 2 sessions',     score:'2,110', pct:31,  trend:'eq', isYou:false },
-    ],
-  },
-};
+  var avColors = [
+    { bg: '#FEF9C3', c: '#854D0E' }, { bg: '#FCE7F3', c: '#9D174D' },
+    { bg: '#E0F2FE', c: '#0369A1' }, { bg: '#F5F3FF', c: '#5B21B6' },
+    { bg: '#ECFDF5', c: '#065F46' }, { bg: '#FAEEDA', c: '#633806' },
+    { bg: '#FFF7ED', c: '#9A3412' }, { bg: '#FBEAF0', c: '#72243E' }
+  ];
+  var sportIcons = { running: '🏃', cycling: '🚴', climbing: '🧗', swimming: '🏊', football: '⚽', weightlifting: '🏋️', hiking: '🥾', yoga: '🧘' };
+  var periodLabel = { week: 'Weekly', month: 'Monthly', alltime: 'All time' };
+  var scopeLabel = { platform: 'Everyone', following: 'People you follow', club: (data.clubName || 'Your club') };
 
-const periodLabel = { week:'Weekly', month:'Monthly', alltime:'All time' };
-let currentSport = 'all';
-let currentPeriod = 'week';
+  var state = { scope: 'platform', period: 'week', sport: 'all', metric: 'points' };
+  var cache = [];
 
-function render(sport) {
-  const d = leaderboards[sport];
-  const meta = sportMeta[sport];
-  if (!d || !meta) return;
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function initials(name) {
+    return String(name || 'A').trim().split(/\s+/).map(function (w) { return w[0]; }).join('').slice(0, 2).toUpperCase();
+  }
+  function cap(s) { return String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1); }
+  function apiPeriod(p) { return p === 'alltime' ? 'all' : p; }
+  function fmt(n) { return (Number(n) || 0).toLocaleString(); }
 
-  // Banner
-  const b = d.banner;
-  document.getElementById('yb-rank').textContent = b.rank;
-  document.getElementById('yb-pts').textContent = b.pts;
-  document.getElementById('yb-acts').textContent = b.acts;
-  document.getElementById('yb-sport-label').textContent = b.sportLabel;
-  document.getElementById('yb-progress-label').textContent = b.progressLabel;
-  document.getElementById('yb-progress-frac').textContent = b.progressFrac;
-  document.getElementById('yb-fill').style.width = b.fill + '%';
-  document.getElementById('yb-next').textContent = b.next;
+  function metricKey() { return state.metric === 'activities' ? 'activityCount' : 'points'; }
+  function metricName() { return state.metric === 'activities' ? 'Activities' : 'Points'; }
 
-  // Podium header
-  document.getElementById('podium-icon').textContent = meta.icon;
-  document.getElementById('podium-icon').style.background = meta.iconBg;
-  document.getElementById('podium-title').textContent = meta.label + ' — ' + periodLabel[currentPeriod] + ' top 3';
-  document.getElementById('podium-sub').textContent =
-    sport === 'all'
-      ? 'Combined score across Running, Cycling & Climbing · Local'
-      : meta.label + ' · Local — London';
+  function sorted() {
+    var key = metricKey();
+    return cache.slice().sort(function (a, b) {
+      return (b[key] || 0) - (a[key] || 0);
+    }).map(function (u, i) {
+      var copy = {};
+      for (var k in u) copy[k] = u[k];
+      copy._rank = i + 1;
+      copy._val = u[key] || 0;
+      return copy;
+    });
+  }
 
-  // Podium stage (2nd left, 1st centre, 3rd right)
-  const p = d.podium;
-  const order = [p[1], p[0], p[2]];
-  const places = ['🥈','🥇','🥉'];
-  const blocks = ['block-silver','block-gold','block-bronze'];
-  const rankCls = ['silver','gold','bronze'];
-  document.getElementById('podium-stage').innerHTML = order.map((a, i) => `
-    <div class="podium-col fade-in">
-      <div class="place-emoji">${places[i]}</div>
-      <div class="podium-avatar ${rankCls[i]}" style="background:${a.bg};color:${a.c}">${a.init}${a.isYou?' *':''}</div>
-      <div class="podium-pname">${a.name}${a.isYou?' (you)':''}</div>
-      <div class="podium-ploc">${a.loc}</div>
-      <div class="podium-pscore">${a.score}</div>
-      <div class="podium-pstat">${a.stat}</div>
-      <div class="podium-block ${blocks[i]}"></div>
-    </div>
-  `).join('');
+  function load() {
+    var ep = state.scope === 'platform' ? '/api/leaderboard/platform'
+      : state.scope === 'following' ? '/api/leaderboard/following'
+        : '/api/leaderboard/club';
+    var qs = 'period=' + encodeURIComponent(apiPeriod(state.period)) + '&sport=' + encodeURIComponent(state.sport);
+    fetch(B + ep + '?' + qs)
+      .then(function (r) { return r.json(); })
+      .then(function (j) { cache = (j && j.leaderboard) || []; renderAll(); })
+      .catch(function () { cache = []; renderAll(); });
+  }
 
-  // Metric select options
-  const msel = document.getElementById('metric-select');
-  msel.innerHTML = meta.metrics.map((m, i) =>
-    `<option value="${m.toLowerCase().replace(' ','_')}"${i===0?' selected':''}>Ranked by: ${m}</option>`
-  ).join('');
+  function renderAll() {
+    var rows = sorted();
+    renderBanner(rows);
+    renderPodium(rows);
+    renderRows(rows);
 
-  // Table column header
-  document.getElementById('col-header').textContent = meta.metrics[0];
+    var ch = document.getElementById('col-header');
+    if (ch) ch.textContent = metricName();
 
-  // Rows
-  const trendIcon = { up:'↑ +2', dn:'↓ −1', eq:'—' };
-  const trendCls  = { up:'trend-up', dn:'trend-dn', eq:'trend-eq' };
-  const rankCls2  = { 1:'top-1', 2:'top-2', 3:'top-3' };
-  document.getElementById('lb-rows').innerHTML = d.rows.map(r => `
-    <div class="lb-row${r.isYou?' is-you':''} fade-in">
-      <div class="lb-rank ${rankCls2[r.rank]||''}">${r.rank}</div>
-      <div class="lb-athlete">
-        <div class="lb-av" style="background:${r.bg};color:${r.c}">${r.init}</div>
-        <div>
-          <div class="lb-name">${r.name}${r.isYou?' <span style="font-size:10px;color:var(--gray-400);font-weight:400">(you)</span>':''}</div>
-          <div class="lb-detail">${r.sub}</div>
-          <div class="lb-activity-bar"><div class="lb-activity-fill" style="width:${r.pct}%;background:${r.isYou?'#F59E0B':'var(--gray-300)'}"></div></div>
-        </div>
-      </div>
-      <div class="lb-score-cell">
-        <div class="lb-score-num">${r.score}</div>
-        <div class="lb-score-lbl">${meta.metrics[0].toLowerCase()}</div>
-      </div>
-      <div class="lb-trend-cell"><span class="trend-chip ${trendCls[r.trend]}">${trendIcon[r.trend]}</span></div>
-      <div>${r.isYou?'<span class="you-tag">you</span>':''}</div>
-    </div>
-  `).join('');
-}
+    var meta = state.sport === 'all'
+      ? { icon: '🏅', bg: '#FFF9E0', label: 'All sports' }
+      : { icon: sportIcons[state.sport] || '🏅', bg: '#FFF9E0', label: cap(state.sport) };
+    var pi = document.getElementById('podium-icon');
+    if (pi) { pi.textContent = meta.icon; pi.style.background = meta.bg; }
+    var pt = document.getElementById('podium-title');
+    if (pt) pt.textContent = meta.label + ' — ' + periodLabel[state.period] + ' top 3';
+    var ps = document.getElementById('podium-sub');
+    if (ps) ps.textContent = scopeLabel[state.scope] + ' · ranked by ' + metricName().toLowerCase();
+  }
 
-function setSport(sport, el) {
-  currentSport = sport;
-  document.querySelectorAll('.sport-nav-tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  render(sport);
-}
+  function renderBanner(rows) {
+    var set = function (id, v) { var e = document.getElementById(id); if (e) e.textContent = v; };
+    var nameEl = document.querySelector('.yb-name');
+    if (nameEl && data.profile) nameEl.textContent = data.profile.name || 'You';
+    var avEl = document.querySelector('.yb-avatar');
+    if (avEl && data.profile) avEl.textContent = initials(data.profile.name);
 
-function setPeriod(period, el) {
-  currentPeriod = period;
-  document.querySelectorAll('.period-tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  render(currentSport);
-  showToast('Showing ' + periodLabel[period].toLowerCase() + ' rankings');
-}
+    var me = null;
+    for (var i = 0; i < rows.length; i++) { if (myId && rows[i].userId === myId) { me = rows[i]; break; } }
 
-function setScope(val) {
-  const labels = { local:'Local — London', national:'National — UK', global:'Global' };
-  showToast('Switched to ' + labels[val] + ' rankings');
-  render(currentSport);
-}
+    if (!me) {
+      set('yb-rank', '—'); set('yb-pts', '0'); set('yb-acts', '0');
+      set('yb-sport-label', data.profile && data.profile.handle ? '@' + data.profile.handle : '');
+      set('yb-progress-label', 'No ranking yet'); set('yb-progress-frac', '');
+      var f0 = document.getElementById('yb-fill'); if (f0) f0.style.width = '0%';
+      set('yb-next', 'Log an activity to join the leaderboard.');
+      return;
+    }
+    set('yb-rank', '#' + me._rank);
+    set('yb-pts', fmt(state.metric === 'activities' ? me.activityCount : me.points));
+    set('yb-acts', me.activityCount || 0);
+    set('yb-sport-label', (me.sports && me.sports.length)
+      ? me.sports.map(cap).join(' · ')
+      : (data.profile && data.profile.handle ? '@' + data.profile.handle : ''));
 
-function setMetric(val) {
-  showToast('Ranked by ' + val.replace('_',' '));
-  render(currentSport);
-}
+    var ahead = null;
+    for (var j = 0; j < rows.length; j++) { if (rows[j]._rank === me._rank - 1) { ahead = rows[j]; break; } }
+    if (ahead) {
+      var gap = ahead._val - me._val;
+      var pct = ahead._val > 0 ? Math.round((me._val / ahead._val) * 100) : 0;
+      set('yb-progress-label', 'Progress to rank #' + ahead._rank);
+      set('yb-progress-frac', fmt(me._val) + ' / ' + fmt(ahead._val));
+      var f1 = document.getElementById('yb-fill'); if (f1) f1.style.width = Math.min(100, pct) + '%';
+      set('yb-next', gap > 0
+        ? fmt(gap) + ' ' + (state.metric === 'activities' ? 'activities' : 'points') + ' to overtake ' + ahead.name + '.'
+        : "You're tied — one more push takes the spot.");
+    } else {
+      set('yb-progress-label', 'Top of the leaderboard');
+      set('yb-progress-frac', '');
+      var f2 = document.getElementById('yb-fill'); if (f2) f2.style.width = '100%';
+      set('yb-next', "You're #1 — nobody ahead of you. 🏆");
+    }
+  }
 
-function loadMore() {
-  showToast('All athletes loaded for this scope');
-}
+  function renderPodium(rows) {
+    var wrap = document.getElementById('podium-wrap');
+    var stage = document.getElementById('podium-stage');
+    if (!stage) return;
+    if (rows.length < 3) { if (wrap) wrap.style.display = 'none'; stage.innerHTML = ''; return; }
+    if (wrap) wrap.style.display = '';
+    var top3 = rows.slice(0, 3);
+    var order = [top3[1], top3[0], top3[2]];
+    var places = ['🥈', '🥇', '🥉'];
+    var blocks = ['block-silver', 'block-gold', 'block-bronze'];
+    var rankCls = ['silver', 'gold', 'bronze'];
+    var colors = [{ bg: '#FCE7F3', c: '#9D174D' }, { bg: '#FEF9C3', c: '#854D0E' }, { bg: '#E0F2FE', c: '#0369A1' }];
+    stage.innerHTML = order.map(function (a, i) {
+      if (!a) return '';
+      var isYou = myId && a.userId === myId;
+      var val = state.metric === 'activities' ? (a._val + ' acts') : fmt(a._val);
+      return '' +
+        '<div class="podium-col fade-in">' +
+        '<div class="place-emoji">' + places[i] + '</div>' +
+        '<div class="podium-avatar ' + rankCls[i] + '" style="background:' + colors[i].bg + ';color:' + colors[i].c + '">' + esc(initials(a.name)) + (isYou ? ' *' : '') + '</div>' +
+        '<div class="podium-pname">' + esc(a.name) + (isYou ? ' (you)' : '') + '</div>' +
+        '<div class="podium-ploc">' + (a.location ? esc(a.location) : '—') + '</div>' +
+        '<div class="podium-pscore">' + val + '</div>' +
+        '<div class="podium-pstat">' + (a.activityCount || 0) + ' ' + ((a.activityCount === 1) ? 'activity' : 'activities') + '</div>' +
+        '<div class="podium-block ' + blocks[i] + '"></div>' +
+        '</div>';
+    }).join('');
+  }
 
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2800);
-}
+  function renderRows(rows) {
+    var el = document.getElementById('lb-rows');
+    if (!el) return;
+    if (!rows.length) {
+      var msg = state.scope === 'following'
+        ? "The people you follow haven't logged anything this period."
+        : state.scope === 'club'
+          ? (data.clubName ? "Your club hasn't logged anything this period." : "You're not part of a club yet.")
+          : 'No activities logged for this period yet.';
+      el.innerHTML = '<div style="text-align:center;padding:48px 24px">' +
+        '<div style="font-size:34px;margin-bottom:10px">🏆</div>' +
+        '<div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:4px">No activity yet</div>' +
+        '<div style="font-size:13px;color:var(--gray-500)">' + msg + '</div></div>';
+      return;
+    }
+    var max = rows[0]._val || 1;
+    var rankCls = { 1: 'top-1', 2: 'top-2', 3: 'top-3' };
+    var label = state.metric === 'activities' ? 'activities' : 'points';
+    el.innerHTML = rows.map(function (r, i) {
+      var av = avColors[i % avColors.length];
+      var isYou = myId && r.userId === myId;
+      var pct = Math.round((r._val / max) * 100);
+      var sportTags = (r.sports || []).slice(0, 3).map(function (s) {
+        return sportIcons[s] || '';
+      }).filter(Boolean).join(' ');
+      var detailParts = [];
+      if (r.location) detailParts.push(esc(r.location));
+      detailParts.push((r.activityCount || 0) + ' ' + ((r.activityCount === 1) ? 'activity' : 'activities'));
+      var detail = detailParts.join(' · ') + (sportTags ? ' · ' + sportTags : '');
+      return '' +
+        '<div class="lb-row' + (isYou ? ' is-you' : '') + ' fade-in">' +
+        '<div class="lb-rank ' + (rankCls[r._rank] || '') + '">' + r._rank + '</div>' +
+        '<div class="lb-athlete">' +
+        '<div class="lb-av" style="background:' + av.bg + ';color:' + av.c + '">' + esc(initials(r.name)) + '</div>' +
+        '<div>' +
+        '<div class="lb-name">' + esc(r.name) + (isYou ? ' <span style="font-size:10px;color:var(--gray-400);font-weight:400">(you)</span>' : '') + '</div>' +
+        '<div class="lb-detail">' + detail + '</div>' +
+        '<div class="lb-activity-bar"><div class="lb-activity-fill" style="width:' + pct + '%;background:' + (isYou ? '#F59E0B' : 'var(--gray-300)') + '"></div></div>' +
+        '</div>' +
+        '</div>' +
+        '<div class="lb-score-cell">' +
+        '<div class="lb-score-num">' + fmt(r._val) + '</div>' +
+        '<div class="lb-score-lbl">' + label + '</div>' +
+        '</div>' +
+        '<div class="lb-trend-cell"><span class="trend-chip trend-eq">—</span></div>' +
+        '<div>' + (isYou ? '<span class="you-tag">you</span>' : '') + '</div>' +
+        '</div>';
+    }).join('');
+  }
 
-render('all');
+  window.setPeriod = function (period, el) {
+    state.period = period;
+    document.querySelectorAll('.period-tab').forEach(function (t) { t.classList.remove('active'); });
+    if (el) el.classList.add('active');
+    load();
+    showToast('Showing ' + (periodLabel[period] || period).toLowerCase() + ' rankings');
+  };
+  window.setSport = function (sport, el) {
+    state.sport = sport;
+    document.querySelectorAll('.sport-nav-tab').forEach(function (t) { t.classList.remove('active'); });
+    if (el) el.classList.add('active');
+    load();
+  };
+  window.setScope = function (val) {
+    state.scope = val;
+    load();
+    showToast('Showing ' + (scopeLabel[val] || val) + ' rankings');
+  };
+  window.setMetric = function (val) {
+    state.metric = (val === 'acts' || val === 'activities') ? 'activities' : 'points';
+    renderAll();
+  };
+  window.loadMore = function () { showToast('All athletes are shown.'); };
+  window.showToast = function (msg) {
+    var t = document.getElementById('toast');
+    if (!t) return;
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(function () { t.classList.remove('show'); }, 2800);
+  };
+
+  load();
+})();
 </script>
 </div>
 <script>

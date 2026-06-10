@@ -847,6 +847,314 @@ app.get(BASE + '/api/feed/activities', requireAuth, async (req, res) => {
   res.json({ activities });
 });
 
+// ── LEADERBOARDS ──
+// Points per sport. Distance-based sports score per km; the rest score per
+// session. The numeric `rate` is points awarded per unit.
+const SPORT_POINTS = {
+  running: { per: 'km', rate: 10 },
+  cycling: { per: 'km', rate: 6 },
+  climbing: { per: 'session', rate: 50 },
+  swimming: { per: 'session', rate: 40 },
+  football: { per: 'session', rate: 30 },
+  hiking: { per: 'session', rate: 30 },
+  weightlifting: { per: 'session', rate: 20 },
+  yoga: { per: 'session', rate: 20 }
+};
+
+// `distance` is a free-form string (e.g. "12.4 km"); units are ignored app-wide,
+// so we only extract the numeral — same pattern used elsewhere in this file.
+function parseDistanceKm(distance) {
+  const n = parseFloat(String(distance == null ? '0' : distance).replace(/[^0-9.]/g, ''));
+  return isNaN(n) ? 0 : n;
+}
+
+// Total leaderboard points for a set of activities.
+function calculatePoints(activities) {
+  let total = 0;
+  (activities || []).forEach((a) => {
+    const cfg = SPORT_POINTS[a.sport];
+    if (!cfg) { total += 20; return; } // unknown sport: flat per-session credit
+    if (cfg.per === 'km') {
+      const dist = parseDistanceKm(a.distance);
+      total += dist > 0 ? dist * cfg.rate : cfg.rate * 2; // logged-but-no-distance fallback
+    } else {
+      total += cfg.rate;
+    }
+  });
+  return Math.round(total);
+}
+
+// ISO bounds for a leaderboard period. 'all' returns a null start (no lower
+// bound) — callers must branch on it and skip the `.gte` filter.
+function getDateRange(period) {
+  const now = new Date();
+  if (period === 'week') {
+    const s = new Date(); s.setDate(now.getDate() - 7);
+    return { start: s.toISOString(), end: now.toISOString() };
+  }
+  if (period === 'month') {
+    const s = new Date(); s.setDate(now.getDate() - 30);
+    return { start: s.toISOString(), end: now.toISOString() };
+  }
+  return { start: null, end: now.toISOString() };
+}
+
+// Fetch activities for a set of users within a period (one query — callers
+// bucket by user_id; never query per-user). Sport is optional.
+async function fetchActivitiesForUsers(userIds, period, sport) {
+  if (!supabaseAdmin || !userIds.length) return [];
+  const { start } = getDateRange(period);
+  let q = supabaseAdmin
+    .from('activities')
+    .select('user_id, sport, distance, date')
+    .in('user_id', userIds);
+  if (start) q = q.gte('date', start);
+  if (sport && sport !== 'all') q = q.eq('sport', sport);
+  const { data, error } = await q;
+  if (error) return [];
+  return data || [];
+}
+
+// Group an activity list by user_id.
+function bucketActivities(activities) {
+  const byUser = {};
+  (activities || []).forEach((a) => {
+    (byUser[a.user_id] = byUser[a.user_id] || []).push(a);
+  });
+  return byUser;
+}
+
+// Resolve user IDs to richer display info (name/handle/sports/location) from auth
+// metadata. There is no `profiles` table, so this mirrors buildUserDisplayMap but
+// also returns sports/location. One getUserById per unique id (small sets only).
+async function buildUserProfileMap(ids) {
+  const map = {};
+  if (!supabaseAdmin) return map;
+  const unique = [...new Set((ids || []).filter(Boolean))];
+  await Promise.all(unique.map(async (id) => {
+    try {
+      const { data: u } = await supabaseAdmin.auth.admin.getUserById(id);
+      if (u && u.user) {
+        const m = u.user.user_metadata || {};
+        const disp = displayFromUser(u.user);
+        map[id] = {
+          name: disp.name,
+          handle: disp.handle,
+          sports: Array.isArray(m.sports) ? m.sports : [],
+          location: m.location || null
+        };
+      }
+    } catch (err) {
+      // Ignore individual lookup failures; callers fall back to defaults.
+    }
+  }));
+  return map;
+}
+
+// Platform-wide leaderboard. Enumerates all auth users (name/handle/sports read
+// straight from metadata — no per-user lookups) and scores their activities in
+// the period. Only users with activity are shown.
+app.get(BASE + '/api/leaderboard/platform', requireAuth, async (req, res) => {
+  const period = req.query.period || 'week';
+  const sport = req.query.sport || 'all';
+  if (!supabaseAdmin) return res.json({ leaderboard: [], period, sport });
+  try {
+    const users = await listAllAuthUsers();
+    const userIds = users.map((u) => u.id);
+    const byUser = bucketActivities(await fetchActivitiesForUsers(userIds, period, sport));
+    const leaderboard = users.map((u) => {
+      const m = u.user_metadata || {};
+      const disp = displayFromUser(u);
+      const acts = byUser[u.id] || [];
+      return {
+        userId: u.id,
+        name: disp.name,
+        handle: disp.handle,
+        sports: Array.isArray(m.sports) ? m.sports : [],
+        location: m.location || null,
+        points: calculatePoints(acts),
+        activityCount: acts.length,
+        isMe: u.id === req.user.id
+      };
+    })
+      .filter((u) => u.activityCount > 0)
+      .sort((a, b) => b.points - a.points)
+      .map((u, i) => ({ ...u, rank: i + 1 }));
+    res.json({ leaderboard, period, sport });
+  } catch (err) {
+    console.log('Platform leaderboard error:', err.message);
+    res.json({ leaderboard: [], period, sport });
+  }
+});
+
+// Leaderboard across the people the viewer follows (plus themselves). The full
+// curated set is shown even at zero points so the viewer always sees their circle.
+app.get(BASE + '/api/leaderboard/following', requireAuth, async (req, res) => {
+  const period = req.query.period || 'week';
+  const sport = req.query.sport || 'all';
+  if (!supabaseAdmin) return res.json({ leaderboard: [], period, sport });
+  try {
+    const { data: following } = await supabaseAdmin
+      .from('follows').select('following_id').eq('follower_id', req.user.id);
+    const userIds = [...new Set([...(following || []).map((f) => f.following_id), req.user.id].filter(Boolean))];
+    const byUser = bucketActivities(await fetchActivitiesForUsers(userIds, period, sport));
+    const profileMap = await buildUserProfileMap(userIds);
+    const leaderboard = userIds.map((id) => {
+      const p = profileMap[id] || { name: 'Athlete', handle: 'athlete', sports: [], location: null };
+      const acts = byUser[id] || [];
+      return {
+        userId: id, name: p.name, handle: p.handle, sports: p.sports, location: p.location,
+        points: calculatePoints(acts), activityCount: acts.length, isMe: id === req.user.id
+      };
+    })
+      .sort((a, b) => b.points - a.points)
+      .map((u, i) => ({ ...u, rank: i + 1 }));
+    res.json({ leaderboard, period, sport });
+  } catch (err) {
+    console.log('Following leaderboard error:', err.message);
+    res.json({ leaderboard: [], period, sport });
+  }
+});
+
+// Leaderboard across the viewer's club members. Returns an empty board (no club)
+// for athletes without a membership.
+app.get(BASE + '/api/leaderboard/club', requireAuth, async (req, res) => {
+  const period = req.query.period || 'week';
+  const sport = req.query.sport || 'all';
+  if (!supabaseAdmin) return res.json({ leaderboard: [], clubName: null, period, sport });
+  try {
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('club_id, clubs:club_id (name)')
+      .eq('user_id', req.user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!membership || !membership.club_id) return res.json({ leaderboard: [], clubName: null, period, sport });
+    const club = Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs;
+    const { data: members } = await supabaseAdmin
+      .from('memberships').select('user_id').eq('club_id', membership.club_id);
+    const memberIds = [...new Set((members || []).map((m) => m.user_id).filter(Boolean))];
+    const byUser = bucketActivities(await fetchActivitiesForUsers(memberIds, period, sport));
+    const profileMap = await buildUserProfileMap(memberIds);
+    const leaderboard = memberIds.map((id) => {
+      const p = profileMap[id] || { name: 'Member', handle: 'member', sports: [], location: null };
+      const acts = byUser[id] || [];
+      return {
+        userId: id, name: p.name, handle: p.handle, sports: p.sports, location: p.location,
+        points: calculatePoints(acts), activityCount: acts.length, isMe: id === req.user.id
+      };
+    })
+      .sort((a, b) => b.points - a.points)
+      .map((u, i) => ({ ...u, rank: i + 1 }));
+    res.json({ leaderboard, clubName: (club && club.name) || 'Your club', period, sport });
+  } catch (err) {
+    console.log('Club leaderboard error:', err.message);
+    res.json({ leaderboard: [], clubName: null, period, sport });
+  }
+});
+
+// Club dashboard leaderboard (coach/admin only): distance & session rankings plus
+// at-risk members (no activity in 5+ days, computed from the full roster so
+// zero-activity members are included).
+app.get(BASE + '/api/leaderboard/club-dashboard', requireAuth, async (req, res) => {
+  const period = req.query.period || 'week';
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured' });
+  try {
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('club_id')
+      .eq('user_id', req.user.id)
+      .in('role', ['admin', 'coach'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!membership || !membership.club_id) return res.json({ error: 'Not authorised' });
+    const { data: members } = await supabaseAdmin
+      .from('memberships').select('user_id').eq('club_id', membership.club_id);
+    const memberIds = [...new Set((members || []).map((m) => m.user_id).filter(Boolean))];
+    const acts = await fetchActivitiesForUsers(memberIds, period, 'all');
+    const byUser = bucketActivities(acts);
+    const profileMap = await buildUserProfileMap(memberIds);
+
+    // At-risk: no activity in the last 5 days, regardless of the selected period.
+    const recent = period === 'week' ? acts : await fetchActivitiesForUsers(memberIds, 'week', 'all');
+    const fiveDaysAgo = new Date(); fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+    const recentUserIds = new Set((recent || []).filter((a) => new Date(a.date) >= fiveDaysAgo).map((a) => a.user_id));
+    const atRisk = memberIds
+      .filter((id) => !recentUserIds.has(id) && id !== req.user.id) // exclude the viewing coach (matches the nudge recipient set)
+      .map((id) => ({ userId: id, name: (profileMap[id] && profileMap[id].name) || 'Member', daysInactive: 5 }));
+
+    const stats = memberIds.map((id) => {
+      const a = byUser[id] || [];
+      let totalKm = 0; a.forEach((x) => { totalKm += parseDistanceKm(x.distance); });
+      return {
+        userId: id,
+        name: (profileMap[id] && profileMap[id].name) || 'Member',
+        handle: (profileMap[id] && profileMap[id].handle) || 'member',
+        totalKm,
+        sessionCount: a.length
+      };
+    });
+    const byDistance = [...stats].sort((a, b) => b.totalKm - a.totalKm);
+    const bySessions = [...stats].sort((a, b) => b.sessionCount - a.sessionCount);
+    const totalKm = Math.round(stats.reduce((s, u) => s + u.totalKm, 0));
+    const totalSessions = stats.reduce((s, u) => s + u.sessionCount, 0);
+    const activeCount = stats.filter((u) => u.sessionCount > 0).length;
+    res.json({
+      byDistance,
+      bySessions,
+      atRisk,
+      stats: { totalMembers: memberIds.length, activeCount, totalKm, totalSessions, atRiskCount: atRisk.length },
+      period
+    });
+  } catch (err) {
+    console.log('Club dashboard leaderboard error:', err.message);
+    res.json({ error: 'Could not load leaderboard' });
+  }
+});
+
+// Send a check-in nudge to the club's at-risk members. The recipient set is
+// recomputed SERVER-SIDE from memberships + recent activity — never trust
+// client-supplied IDs, so this can't spam arbitrary users.
+app.post(BASE + '/api/clubs/:clubId/nudge-atrisk', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured' });
+  const clubId = req.params.clubId;
+  try {
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('club_id')
+      .eq('user_id', req.user.id)
+      .eq('club_id', clubId)
+      .in('role', ['admin', 'coach'])
+      .maybeSingle();
+    if (!membership) return res.status(403).json({ error: 'Not authorised' });
+    const { data: members } = await supabaseAdmin
+      .from('memberships').select('user_id').eq('club_id', clubId);
+    const memberIds = [...new Set((members || []).map((m) => m.user_id).filter(Boolean))];
+    const recent = await fetchActivitiesForUsers(memberIds, 'week', 'all');
+    const fiveDaysAgo = new Date(); fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+    const recentUserIds = new Set((recent || []).filter((a) => new Date(a.date) >= fiveDaysAgo).map((a) => a.user_id));
+    const atRiskIds = memberIds.filter((id) => !recentUserIds.has(id) && id !== req.user.id);
+    const coach = displayFromUser(req.user);
+    for (const userId of atRiskIds) {
+      await createNotification({
+        userId,
+        type: 'club',
+        title: 'Check-in from your coach',
+        body: `${coach.name} noticed you haven't logged any activity recently — how are you getting on? Jump back in when you're ready.`,
+        link: '/profile',
+        actorId: req.user.id,
+        entityId: clubId
+      });
+    }
+    res.json({ success: true, nudged: atRiskIds.length });
+  } catch (err) {
+    console.log('Nudge at-risk error:', err.message);
+    res.json({ error: 'Could not send nudges' });
+  }
+});
+
 // ── CHALLENGES API ──
 // Compute a participant's progress toward a challenge goal from their logged
 // activities. `distance` sums numeric distance values; `sessions` counts
@@ -1858,7 +2166,33 @@ app.get(BASE + '/events', requirePageAuth, async (req, res) => {
     res.sendFile(path.join(HTML, 'arenas-events.html'));
   }
 });
-app.get(BASE + '/leaderboards', (req, res) => res.sendFile(path.join(HTML, 'arenas-leaderboards.html')));
+// Leaderboards page. Injects the viewer's identity + club name so the client can
+// highlight "you" and label the club scope. There is no `profiles` table, so the
+// name comes from auth metadata.
+app.get(BASE + '/leaderboards', requirePageAuth, async (req, res) => {
+  const servePlain = () => res.sendFile(path.join(HTML, 'arenas-leaderboards.html'));
+  try {
+    if (!supabaseAdmin) return servePlain();
+    let clubName = null;
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('clubs:club_id (name)')
+      .eq('user_id', req.user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (membership && membership.clubs) {
+      const c = Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs;
+      clubName = (c && c.name) || null;
+    }
+    const lbData = { userId: req.user.id, profile: displayFromUser(req.user), clubName };
+    const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-leaderboards.html'), 'utf8'), lbData);
+    res.type('html').send(html);
+  } catch (err) {
+    console.log('Leaderboards page error:', err.message);
+    servePlain();
+  }
+});
 app.get(BASE + '/challenges', requirePageAuth, async (req, res) => {
   try {
     const userId = req.user.id;

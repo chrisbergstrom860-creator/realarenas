@@ -552,51 +552,68 @@ button, select, input { font-family: var(--font); }
   <!-- ═══ LEADERBOARD TAB ═══ -->
   <div class="tab-content" id="tab-leaderboard">
     <div class="page-hdr">
-      <div class="page-hdr-left"><h1>Club leaderboard 🏆</h1><p>Private rankings for Hackney Running Club members only</p></div>
+      <div class="page-hdr-left"><h1>Leaderboard 🏆</h1><p>Member rankings auto-tracked from logged activities</p></div>
       <div class="page-hdr-right">
-        <select style="padding:7px 12px;border:var(--border);border-radius:7px;font-size:13px;background:white;outline:none;cursor:pointer" onchange="showToast('Leaderboard updated')"><option>This week</option><option>This month</option><option>All time</option></select>
-        <select style="padding:7px 12px;border:var(--border);border-radius:7px;font-size:13px;background:white;outline:none;cursor:pointer" onchange="showToast('Metric updated')"><option>Points</option><option>Distance (km)</option><option>Activities</option><option>Streak (days)</option></select>
+        <div id="lb-period-toggle" style="display:flex;gap:4px">
+          <button class="lb-period-btn" onclick="setLbPeriod(this,'week')" style="padding:7px 12px;border-radius:7px;font-size:13px;cursor:pointer;background:var(--gray-900);color:white;border:none">This week</button>
+          <button class="lb-period-btn" onclick="setLbPeriod(this,'month')" style="padding:7px 12px;border-radius:7px;font-size:13px;cursor:pointer;background:white;color:var(--gray-600);border:var(--border)">This month</button>
+          <button class="lb-period-btn" onclick="setLbPeriod(this,'all')" style="padding:7px 12px;border-radius:7px;font-size:13px;cursor:pointer;background:white;color:var(--gray-600);border:var(--border)">All time</button>
+        </div>
       </div>
     </div>
-    <!-- Podium -->
+
+    <!-- Stats bar -->
     <div class="card" style="margin-bottom:14px">
-      <div style="padding:20px;display:grid;grid-template-columns:1fr 1fr 1fr;align-items:end;gap:10px">
-        <div style="text-align:center;padding:10px">
-          <div style="font-size:20px;margin-bottom:6px">🥈</div>
-          <div style="width:52px;height:52px;border-radius:50%;background:#FCE7F3;color:#9D174D;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;margin:0 auto 6px;border:3px solid #9CA3AF;box-shadow:0 0 0 3px #F9FAFB">YT</div>
-          <div style="font-size:13px;font-weight:600;color:var(--gray-900)">Yuki T.</div>
-          <div style="font-size:11px;color:var(--gray-500)">Tokyo</div>
-          <div style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--gray-900);margin-top:4px">7,610</div>
-          <div style="height:36px;background:linear-gradient(180deg,#F3F4F6,#D1D5DB);border-radius:4px 4px 0 0;margin-top:8px"></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr)">
+        <div style="padding:16px 18px;border-right:var(--border)">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--gray-900)" id="lb-stat-members">—</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-top:2px">Members</div>
         </div>
-        <div style="text-align:center;padding:10px">
-          <div style="font-size:20px;margin-bottom:6px">🥇</div>
-          <div style="width:56px;height:56px;border-radius:50%;background:#FEF9C3;color:#854D0E;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;margin:0 auto 6px;border:3px solid #F59E0B;box-shadow:0 0 0 3px #FFFBEB">SL</div>
-          <div style="font-size:14px;font-weight:700;color:var(--gray-900)">Sofia L.</div>
-          <div style="font-size:11px;color:var(--gray-500)">Prague</div>
-          <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--gray-900);margin-top:4px">9,840</div>
-          <div style="height:56px;background:linear-gradient(180deg,#FEF9C3,#FDE68A);border-radius:4px 4px 0 0;margin-top:8px;border:1px solid #FCD34D"></div>
+        <div style="padding:16px 18px;border-right:var(--border)">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--gray-900)" id="lb-stat-km">—</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-top:2px">Distance logged</div>
         </div>
-        <div style="text-align:center;padding:10px">
-          <div style="font-size:20px;margin-bottom:6px">🥉</div>
-          <div style="width:48px;height:48px;border-radius:50%;background:#E0F2FE;color:#0369A1;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;margin:0 auto 6px;border:3px solid #B45309;box-shadow:0 0 0 3px #FFFBEB">AL</div>
-          <div style="font-size:13px;font-weight:600;color:var(--gray-900)">Alena L.</div>
-          <div style="font-size:11px;color:var(--gray-500)">London</div>
-          <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--gray-900);margin-top:4px">7,220</div>
-          <div style="height:24px;background:linear-gradient(180deg,#FEF3C7,#D97706);border-radius:4px 4px 0 0;margin-top:8px"></div>
+        <div style="padding:16px 18px;border-right:var(--border)">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--gray-900)" id="lb-stat-sessions">—</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-top:2px">Activities</div>
+        </div>
+        <div style="padding:16px 18px">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:#A32D2D" id="lb-stat-atrisk">—</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-top:2px">At risk (5+ days)</div>
         </div>
       </div>
     </div>
-    <!-- Full table -->
-    <div class="card">
-      <div class="lb-header"><div>Rank</div><div>Athlete</div><div>Score</div><div>Change</div><div></div></div>
-      <div class="lb-table-row"><div class="lb-rank r1">1</div><div class="lb-athlete"><div class="lb-av" style="background:#FEF9C3;color:#854D0E">SL</div><div><div class="lb-name">Sofia L.</div><div class="lb-detail">Prague · 88.2 km · 7 activities</div></div></div><div class="lb-score-cell"><div class="lb-score">9,840</div><div class="lb-score-sub">pts</div></div><div><span class="lb-trend lt-up">↑ +1</span></div><div></div></div>
-      <div class="lb-table-row"><div class="lb-rank r2">2</div><div class="lb-athlete"><div class="lb-av" style="background:#FCE7F3;color:#9D174D">YT</div><div><div class="lb-name">Yuki T.</div><div class="lb-detail">Tokyo · 68.0 km · 6 activities</div></div></div><div class="lb-score-cell"><div class="lb-score">7,610</div><div class="lb-score-sub">pts</div></div><div><span class="lb-trend lt-up">↑ +2</span></div><div><span class="pill pill-risk" style="font-size:10px">⚠ Risk</span></div></div>
-      <div class="lb-table-row"><div class="lb-rank r3">3</div><div class="lb-athlete"><div class="lb-av" style="background:#E0F2FE;color:#0369A1">AL</div><div><div class="lb-name">Alena L.</div><div class="lb-detail">London · 71.4 km · 5 activities</div></div></div><div class="lb-score-cell"><div class="lb-score">7,220</div><div class="lb-score-sub">pts</div></div><div><span class="lb-trend lt-eq">—</span></div><div></div></div>
-      <div class="lb-table-row"><div class="lb-rank">4</div><div class="lb-athlete"><div class="lb-av" style="background:#FBEAF0;color:#72243E">PR</div><div><div class="lb-name">Priya R.</div><div class="lb-detail">Mumbai · 62.0 km · 5 activities</div></div></div><div class="lb-score-cell"><div class="lb-score">6,980</div><div class="lb-score-sub">pts</div></div><div><span class="lb-trend lt-up">↑ +3</span></div><div></div></div>
-      <div class="lb-table-row is-you"><div class="lb-rank">5</div><div class="lb-athlete"><div class="lb-av" style="background:#FFF7ED;color:#9A3412">JK</div><div><div class="lb-name">Jamie K.</div><div class="lb-detail">London · 12.4 km · 3 activities</div></div></div><div class="lb-score-cell"><div class="lb-score">6,440</div><div class="lb-score-sub">pts</div></div><div><span class="lb-trend lt-up">↑ +3</span></div><div><span class="you-tag">you</span></div></div>
-      <div class="lb-table-row"><div class="lb-rank">6</div><div class="lb-athlete"><div class="lb-av" style="background:#F5F3FF;color:#5B21B6">TR</div><div><div class="lb-name">Tom R.</div><div class="lb-detail">London · 21.3 km · 4 activities</div></div></div><div class="lb-score-cell"><div class="lb-score">5,880</div><div class="lb-score-sub">pts</div></div><div><span class="lb-trend lt-dn">↓ −1</span></div><div></div></div>
-      <div style="padding:10px 14px;border-top:var(--border);background:var(--gray-50);font-size:12px;color:var(--gray-500);display:flex;justify-content:space-between"><span>Showing 6 of 48 members</span><button class="btn btn-sm btn-ghost" onclick="showToast('Loading full leaderboard…')">Load all</button></div>
+
+    <!-- Distance + sessions rankings -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="card">
+        <div style="padding:14px 16px;border-bottom:var(--border)">
+          <div style="font-size:14px;font-weight:600;color:var(--gray-900)">📍 Distance ranking</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-top:2px" id="lb-dist-period">km logged · this week</div>
+        </div>
+        <div id="lb-distance-rows"><div style="padding:24px;text-align:center;font-size:13px;color:var(--gray-400)">Loading…</div></div>
+      </div>
+      <div class="card">
+        <div style="padding:14px 16px;border-bottom:var(--border)">
+          <div style="font-size:14px;font-weight:600;color:var(--gray-900)">⚡ Sessions ranking</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-top:2px" id="lb-sess-period">activities logged · this week</div>
+        </div>
+        <div id="lb-sessions-rows"><div style="padding:24px;text-align:center;font-size:13px;color:var(--gray-400)">Loading…</div></div>
+      </div>
+    </div>
+
+    <!-- At-risk panel -->
+    <div class="card" id="lb-atrisk-panel" style="display:none;margin-top:14px;border:0.5px solid #FECACA;background:#FEF6F6">
+      <div style="padding:16px 18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:14px;font-weight:600;color:#A32D2D" id="lb-atrisk-title">Members at risk</div>
+            <div style="font-size:12px;color:#B45454;margin-top:2px">Inactive members may need a check-in to stay engaged.</div>
+          </div>
+          <button class="btn btn-sm" onclick="nudgeAtRiskMembers()" style="background:#A32D2D;color:white;border:none;padding:8px 14px;border-radius:7px;font-size:13px;cursor:pointer">Send check-in nudge</button>
+        </div>
+        <div id="lb-atrisk-names" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px"></div>
+      </div>
     </div>
   </div>
 
@@ -2114,6 +2131,146 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   document.addEventListener('DOMContentLoaded', renderClubChallenges);
   renderClubChallenges();
+})();
+</script>
+<script>
+// ── CLUB LEADERBOARD TAB (live data) ──
+// Distance + sessions rankings and an at-risk panel, loaded when the Leaderboard
+// tab opens. Names/points come from the server (auth metadata — no profiles
+// table). The nudge button recomputes the at-risk set server-side.
+(function () {
+  var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
+  var data = window.ARENAS_DATA || {};
+  var clubId = (data.club && data.club.id) || null;
+  var lbPeriod = 'week';
+
+  var avColors = [
+    { bg: '#FEF9C3', c: '#854D0E' }, { bg: '#FCE7F3', c: '#9D174D' },
+    { bg: '#E0F2FE', c: '#0369A1' }, { bg: '#F5F3FF', c: '#5B21B6' },
+    { bg: '#ECFDF5', c: '#065F46' }, { bg: '#FFF7ED', c: '#9A3412' }
+  ];
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function initials(n) {
+    return String(n || 'M').trim().split(/\s+/).map(function (w) { return w[0]; }).join('').slice(0, 2).toUpperCase();
+  }
+
+  function statusBadge(val, max) {
+    var pct = max > 0 ? (val / max) * 100 : 0;
+    if (val === 0) return { label: '⚠ Risk', style: 'background:#FEF2F2;color:#A32D2D;border:0.5px solid #FECACA' };
+    if (pct >= 75) return { label: 'Peak', style: 'background:#ECFDF5;color:#166534;border:0.5px solid #86EFAC' };
+    if (pct >= 40) return { label: 'Good', style: 'background:#EFF6FF;color:#1E40AF;border:0.5px solid #93C5FD' };
+    return { label: 'Low', style: 'background:var(--gray-100);color:var(--gray-500);border:var(--border)' };
+  }
+
+  function buildRows(rows, valueKey, maxRows) {
+    if (!rows || !rows.length) {
+      return '<div style="padding:24px;text-align:center;font-size:13px;color:var(--gray-400)">No activity logged this period.</div>';
+    }
+    var maxVal = rows[0] ? (rows[0][valueKey] || 0) : 0;
+    var body = rows.slice(0, maxRows).map(function (e, i) {
+      var av = avColors[i % avColors.length];
+      var val = e[valueKey] || 0;
+      var barW = maxVal > 0 ? Math.round((val / maxVal) * 100) : 0;
+      var badge = statusBadge(val, maxVal);
+      var rankColor = i === 0 ? '#E6B800' : i === 1 ? '#9CA3AF' : i === 2 ? '#CD7C39' : 'var(--gray-600)';
+      var barColor = i === 0 ? '#E6B800' : i === 1 ? '#9CA3AF' : i === 2 ? '#CD7C39' : '#6B7280';
+      var disp = valueKey === 'totalKm'
+        ? ((Math.round(val * 10) / 10) + ' km')
+        : (val + ' session' + (val !== 1 ? 's' : ''));
+      return '' +
+        '<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:var(--border)' + (val === 0 ? ';opacity:.55' : '') + '">' +
+        '<div style="font-size:12px;font-weight:500;font-family:var(--mono);color:' + rankColor + ';width:18px;text-align:center;flex-shrink:0">' + (i + 1) + '</div>' +
+        '<div style="width:26px;height:26px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0">' + esc(initials(e.name)) + '</div>' +
+        '<div style="font-size:12px;font-weight:500;color:var(--gray-900);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(e.name) + '</div>' +
+        '<div style="width:60px;height:4px;background:var(--gray-100);border-radius:2px;overflow:hidden;flex-shrink:0"><div style="width:' + barW + '%;height:100%;background:' + barColor + ';border-radius:2px"></div></div>' +
+        '<div style="font-size:11px;font-family:var(--mono);color:var(--gray-600);text-align:right;flex-shrink:0;min-width:58px">' + disp + '</div>' +
+        '<span style="font-size:9px;font-weight:500;padding:1px 6px;border-radius:10px;flex-shrink:0;' + badge.style + '">' + badge.label + '</span>' +
+        '</div>';
+    }).join('');
+    var footer = '<div style="padding:8px 14px;border-top:var(--border);font-size:11px;color:var(--gray-400)">Showing ' + Math.min(rows.length, maxRows) + ' of ' + rows.length + ' members</div>';
+    return body + footer;
+  }
+
+  function loadClubLeaderboard() {
+    var set = function (id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };
+    fetch(B + '/api/leaderboard/club-dashboard?period=' + encodeURIComponent(lbPeriod))
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || j.error) {
+          var distEl0 = document.getElementById('lb-distance-rows');
+          if (distEl0) distEl0.innerHTML = '<div style="padding:24px;text-align:center;font-size:13px;color:var(--gray-400)">Leaderboard unavailable.</div>';
+          return;
+        }
+        var stats = j.stats || {};
+        var periodText = lbPeriod === 'week' ? 'this week' : lbPeriod === 'month' ? 'this month' : 'all time';
+        set('lb-stat-members', stats.totalMembers || 0);
+        set('lb-stat-km', (stats.totalKm || 0) + ' km');
+        set('lb-stat-sessions', stats.totalSessions || 0);
+        set('lb-stat-atrisk', stats.atRiskCount || 0);
+        set('lb-dist-period', 'km logged · ' + periodText);
+        set('lb-sess-period', 'activities logged · ' + periodText);
+        var distEl = document.getElementById('lb-distance-rows');
+        if (distEl) distEl.innerHTML = buildRows(j.byDistance || [], 'totalKm', 8);
+        var sessEl = document.getElementById('lb-sessions-rows');
+        if (sessEl) sessEl.innerHTML = buildRows(j.bySessions || [], 'sessionCount', 8);
+
+        var atRisk = j.atRisk || [];
+        var panel = document.getElementById('lb-atrisk-panel');
+        var title = document.getElementById('lb-atrisk-title');
+        var names = document.getElementById('lb-atrisk-names');
+        if (panel && atRisk.length) {
+          panel.style.display = '';
+          if (title) title.textContent = atRisk.length + ' member' + (atRisk.length !== 1 ? 's' : '') + " haven't logged activity in 5+ days";
+          if (names) {
+            names.innerHTML = atRisk.slice(0, 12).map(function (m) {
+              return '<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:white;border:0.5px solid #FECACA;color:#A32D2D">' + esc(m.name) + ' · ' + m.daysInactive + '+ days</span>';
+            }).join('') + (atRisk.length > 12 ? '<span style="font-size:11px;padding:3px 10px;border-radius:20px;background:white;border:0.5px solid #FECACA;color:#A32D2D">+' + (atRisk.length - 12) + ' more</span>' : '');
+          }
+        } else if (panel) {
+          panel.style.display = 'none';
+        }
+      })
+      .catch(function () {
+        var distEl = document.getElementById('lb-distance-rows');
+        if (distEl) distEl.innerHTML = '<div style="padding:24px;text-align:center;font-size:13px;color:var(--gray-400)">Could not load leaderboard.</div>';
+      });
+  }
+
+  window.setLbPeriod = function (btn, period) {
+    document.querySelectorAll('.lb-period-btn').forEach(function (b) {
+      b.style.background = 'white'; b.style.color = 'var(--gray-600)'; b.style.border = 'var(--border)';
+    });
+    if (btn) { btn.style.background = 'var(--gray-900)'; btn.style.color = 'white'; btn.style.border = 'none'; }
+    lbPeriod = period;
+    loadClubLeaderboard();
+  };
+
+  window.nudgeAtRiskMembers = function () {
+    if (!clubId) { if (typeof showToast === 'function') showToast('No club found'); return; }
+    fetch(B + '/api/clubs/' + clubId + '/nudge-atrisk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}'
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j && j.error) { if (typeof showToast === 'function') showToast('Error: ' + j.error); return; }
+        var n = (j && j.nudged) || 0;
+        if (typeof showToast === 'function') showToast('✓ Check-in nudge sent to ' + n + ' member' + (n !== 1 ? 's' : ''));
+      })
+      .catch(function () { if (typeof showToast === 'function') showToast('Something went wrong'); });
+  };
+
+  // Load when the Leaderboard tab opens (chain onto the existing setTab wrap).
+  if (typeof window.setTab === 'function') {
+    var _setTabLb = window.setTab;
+    window.setTab = function (id, el) { _setTabLb(id, el); if (id === 'leaderboard') loadClubLeaderboard(); };
+  }
 })();
 </script>
 </body>
