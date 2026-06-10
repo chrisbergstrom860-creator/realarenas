@@ -26,3 +26,11 @@ description: How notifications are produced/read in artifacts/html-arenas and wh
 - All notification API routes are BASE-prefixed and owner-scoped
   (`.eq('user_id', req.user.id)`). Client fetches must use `window.BASE` — bare
   `/api/...` hits the separate api-server on Replit (BASE=`/html`).
+- GET `/api/notifications` returns `{ notifications, unreadCount }`; each notif
+  has `read` (bool), `created_at`, `type`, `body`. There is NO numeric badge
+  element — unread state is shown only by the `.notif-dot` indicator.
+- Coach dashboard bell opens an **inline** `#notifications-panel` dropdown
+  (`toggleNotificationsPanel`) instead of navigating to `/notifications`; it
+  reuses `.notif-dot` for the unread indicator and a "See all →" link still
+  routes to the full page via `nav('/notifications')`. **Why:** navigating away
+  pulled the coach out of the dashboard. Other pages may still use the full page.
