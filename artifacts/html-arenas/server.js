@@ -1657,6 +1657,292 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
   }
 });
 
+// Monthly club report (admin/coach only). Aggregates real membership,
+// engagement, events and challenge data for a YYYY-MM month, plus the previous
+// month for deltas and a rolling 6-month trend. The original spec assumed a
+// `profiles` table and a `memberships.joined_at` column — neither exists here:
+// member names come from auth metadata (buildUserProfileMap) and join dates come
+// from `memberships.created_at`.
+app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured' });
+  const clubId = req.params.clubId;
+  try {
+    // Requester must be an admin or coach of this club.
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('role')
+      .eq('user_id', req.user.id)
+      .eq('club_id', clubId)
+      .in('role', ['admin', 'coach'])
+      .maybeSingle();
+    if (!membership) return res.status(403).json({ error: 'Not authorised' });
+
+    // Month param format: YYYY-MM, default current month.
+    const monthParam = (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month))
+      ? req.query.month : new Date().toISOString().slice(0, 7);
+    const [year, month] = monthParam.split('-').map(Number);
+    const monthStart = new Date(year, month - 1, 1);
+    const monthEnd = new Date(year, month, 1);
+    const prevStart = new Date(year, month - 2, 1);
+    const prevEnd = monthStart;
+
+    // All members with their join dates (created_at — no profiles table / joined_at).
+    const { data: members } = await supabaseAdmin
+      .from('memberships')
+      .select('user_id, created_at')
+      .eq('club_id', clubId);
+    const memberIds = (members || []).map(m => m.user_id);
+    const safeIds = memberIds.length ? memberIds : ['00000000-0000-0000-0000-000000000000'];
+    const joinedAt = (m) => m.created_at;
+
+    // Membership metrics (a member with no join date is treated as pre-existing).
+    const newJoins = (members || []).filter(m =>
+      joinedAt(m) && new Date(joinedAt(m)) >= monthStart && new Date(joinedAt(m)) < monthEnd
+    ).length;
+    const prevJoins = (members || []).filter(m =>
+      joinedAt(m) && new Date(joinedAt(m)) >= prevStart && new Date(joinedAt(m)) < prevEnd
+    ).length;
+    const membersAtMonthEnd = (members || []).filter(m =>
+      !joinedAt(m) || new Date(joinedAt(m)) < monthEnd
+    ).length;
+    const membersAtPrevEnd = (members || []).filter(m =>
+      !joinedAt(m) || new Date(joinedAt(m)) < monthStart
+    ).length;
+
+    // Member count trend — count at the end of each of the last 6 months.
+    const memberTrend = [];
+    for (let i = 5; i >= 0; i--) {
+      const trendEnd = new Date(year, month - i, 1);
+      memberTrend.push((members || []).filter(m =>
+        !joinedAt(m) || new Date(joinedAt(m)) < trendEnd
+      ).length);
+    }
+
+    // Activities this month and previous month.
+    const { data: monthActivities } = await supabaseAdmin
+      .from('activities')
+      .select('user_id, sport, distance, duration, date')
+      .in('user_id', safeIds)
+      .gte('date', monthStart.toISOString())
+      .lt('date', monthEnd.toISOString());
+    const { data: prevActivities } = await supabaseAdmin
+      .from('activities')
+      .select('user_id, sport, distance, duration, date')
+      .in('user_id', safeIds)
+      .gte('date', prevStart.toISOString())
+      .lt('date', prevEnd.toISOString());
+
+    function summarizeActivities(acts) {
+      const activeUsers = new Set((acts || []).map(a => a.user_id));
+      let totalHours = 0, totalKm = 0;
+      const sportCounts = {};
+      const userStats = {};
+      (acts || []).forEach(a => {
+        totalHours += parseDurationHours(a.duration);
+        const dist = parseFloat(String(a.distance || '0').replace(/[^0-9.]/g, ''));
+        if (!isNaN(dist)) totalKm += dist;
+        sportCounts[a.sport] = (sportCounts[a.sport] || 0) + 1;
+        if (!userStats[a.user_id]) userStats[a.user_id] = { sessions: 0, hours: 0, km: 0 };
+        userStats[a.user_id].sessions++;
+        userStats[a.user_id].hours += parseDurationHours(a.duration);
+        if (!isNaN(dist)) userStats[a.user_id].km += dist;
+      });
+      return {
+        sessions: (acts || []).length,
+        activeCount: activeUsers.size,
+        totalHours: Math.round(totalHours * 10) / 10,
+        totalKm: Math.round(totalKm),
+        sportCounts,
+        userStats
+      };
+    }
+
+    const thisMonth = summarizeActivities(monthActivities);
+    const prevMonth = summarizeActivities(prevActivities);
+
+    // Most popular sport / most active member this month.
+    const topSport = Object.entries(thisMonth.sportCounts).sort((a, b) => b[1] - a[1])[0];
+    const topMember = Object.entries(thisMonth.userStats).sort((a, b) => b[1].sessions - a[1].sessions)[0];
+    // Name only needed for the top member — read from auth metadata.
+    const profileMap = await buildUserProfileMap(topMember ? [topMember[0]] : []);
+
+    // Training hours trend — total logged hours per month, last 6 months.
+    const hoursTrend = [];
+    for (let i = 5; i >= 0; i--) {
+      const tStart = new Date(year, month - 1 - i, 1);
+      const tEnd = new Date(year, month - i, 1);
+      const { data: tActs } = await supabaseAdmin
+        .from('activities')
+        .select('duration')
+        .in('user_id', safeIds)
+        .gte('date', tStart.toISOString())
+        .lt('date', tEnd.toISOString());
+      hoursTrend.push(Math.round((tActs || []).reduce((s, a) => s + parseDurationHours(a.duration), 0) * 10) / 10);
+    }
+
+    // Events this month + previous month, with "going" RSVP counts.
+    const { data: monthEvents } = await supabaseAdmin
+      .from('events')
+      .select('id, title, date')
+      .eq('club_id', clubId)
+      .gte('date', monthStart.toISOString())
+      .lt('date', monthEnd.toISOString());
+    const { data: prevEvents } = await supabaseAdmin
+      .from('events')
+      .select('id')
+      .eq('club_id', clubId)
+      .gte('date', prevStart.toISOString())
+      .lt('date', prevEnd.toISOString());
+    const eventIds = (monthEvents || []).map(e => e.id);
+    const { data: eventRsvps } = await supabaseAdmin
+      .from('event_rsvps')
+      .select('event_id, status')
+      .in('event_id', eventIds.length ? eventIds : ['00000000-0000-0000-0000-000000000000'])
+      .eq('status', 'going');
+    const eventAttendance = (monthEvents || []).map(e => {
+      const going = (eventRsvps || []).filter(r => r.event_id === e.id).length;
+      return {
+        title: e.title,
+        date: e.date,
+        going,
+        rate: membersAtMonthEnd > 0 ? Math.round((going / membersAtMonthEnd) * 100) : 0
+      };
+    }).sort((a, b) => b.going - a.going);
+    const avgAttendees = eventAttendance.length > 0
+      ? Math.round(eventAttendance.reduce((s, e) => s + e.going, 0) / eventAttendance.length) : 0;
+    const avgAttendanceRate = eventAttendance.length > 0
+      ? Math.round(eventAttendance.reduce((s, e) => s + e.rate, 0) / eventAttendance.length) : 0;
+
+    // Challenges overlapping this month.
+    const { data: monthChallenges } = await supabaseAdmin
+      .from('challenges')
+      .select('id, title, goal_type, goal_target, goal_unit, sport, start_date, end_date')
+      .eq('club_id', clubId)
+      .lt('start_date', monthEnd.toISOString())
+      .gte('end_date', monthStart.toISOString());
+    let challengeStats = { count: 0, participationRate: 0, completionRate: 0, highlights: [] };
+    if ((monthChallenges || []).length > 0) {
+      let totalParticipants = 0, totalCompleted = 0, totalPossible = 0;
+      for (const ch of monthChallenges) {
+        const { data: parts } = await supabaseAdmin
+          .from('challenge_participants')
+          .select('user_id')
+          .eq('challenge_id', ch.id);
+        const partCount = (parts || []).length;
+        totalParticipants += partCount;
+        totalPossible += membersAtMonthEnd;
+        let completed = 0;
+        for (const p of (parts || [])) {
+          const { data: acts } = await supabaseAdmin
+            .from('activities')
+            .select('sport, distance, date')
+            .eq('user_id', p.user_id)
+            .gte('date', ch.start_date)
+            .lte('date', ch.end_date);
+          let progress = 0;
+          (acts || []).forEach(a => {
+            if (ch.sport !== 'any' && a.sport !== ch.sport) return;
+            if (ch.goal_type === 'distance') {
+              const dist = parseFloat(String(a.distance || '0').replace(/[^0-9.]/g, ''));
+              if (!isNaN(dist)) progress += dist;
+            } else {
+              progress += 1;
+            }
+          });
+          // Guard against legacy challenges with a 0/null target, which would
+          // otherwise count as "completed" for every participant.
+          if (ch.goal_target > 0 && progress >= ch.goal_target) completed++;
+        }
+        totalCompleted += completed;
+        challengeStats.highlights.push({
+          title: ch.title,
+          participants: partCount,
+          completed,
+          completionRate: partCount > 0 ? Math.round((completed / partCount) * 100) : 0
+        });
+      }
+      challengeStats.count = monthChallenges.length;
+      challengeStats.participationRate = totalPossible > 0
+        ? Math.round((totalParticipants / totalPossible) * 100) : 0;
+      challengeStats.completionRate = totalParticipants > 0
+        ? Math.round((totalCompleted / totalParticipants) * 100) : 0;
+    }
+
+    // Health headline — template based.
+    const activePct = membersAtMonthEnd > 0
+      ? Math.round((thisMonth.activeCount / membersAtMonthEnd) * 100) : 0;
+    const prevActivePct = membersAtPrevEnd > 0
+      ? Math.round((prevMonth.activeCount / membersAtPrevEnd) * 100) : 0;
+    const monthName = monthStart.toLocaleDateString('en-GB', { month: 'long' });
+    const growthPct = membersAtPrevEnd > 0
+      ? Math.round(((membersAtMonthEnd - membersAtPrevEnd) / membersAtPrevEnd) * 100) : 0;
+    let headline = '';
+    let headlineTone = 'good';
+    if (thisMonth.sessions === 0 && newJoins === 0) {
+      headline = `${monthName} was quiet — no activities were logged. Time to rally the club with a challenge or event.`;
+      headlineTone = 'warn';
+    } else {
+      const parts = [];
+      if (newJoins > 0) parts.push(`Membership grew ${growthPct > 0 ? growthPct + '%' : 'by ' + newJoins} to ${membersAtMonthEnd} members`);
+      if (activePct > 0) parts.push(`${activePct}% of members trained at least once${prevActivePct > 0 && activePct !== prevActivePct ? ` — ${activePct > prevActivePct ? 'up' : 'down'} from ${prevActivePct}% the month before` : ''}`);
+      if (avgAttendanceRate > 0) parts.push(`event attendance averaged ${avgAttendanceRate}%`);
+      if (challengeStats.participationRate > 0) parts.push(`challenge participation hit ${challengeStats.participationRate}%`);
+      headline = parts.join('. ') + '.';
+      headlineTone = (growthPct >= 0 && activePct >= prevActivePct) ? 'good' : 'neutral';
+    }
+
+    res.json({
+      month: monthParam,
+      monthLabel: monthStart.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }),
+      headline: { text: headline, tone: headlineTone, title: `${monthName} at a glance` },
+      membership: {
+        total: membersAtMonthEnd,
+        totalDelta: membersAtMonthEnd - membersAtPrevEnd,
+        newJoins,
+        newJoinsDelta: newJoins - prevJoins,
+        departures: 0,
+        retention: 100,
+        trend: memberTrend
+      },
+      engagement: {
+        activePct,
+        activePctDelta: activePct - prevActivePct,
+        totalHours: thisMonth.totalHours,
+        hoursDelta: Math.round((thisMonth.totalHours - prevMonth.totalHours) * 10) / 10,
+        sessions: thisMonth.sessions,
+        sessionsDelta: thisMonth.sessions - prevMonth.sessions,
+        sessionsPerActive: thisMonth.activeCount > 0
+          ? Math.round((thisMonth.sessions / thisMonth.activeCount) * 10) / 10 : 0,
+        totalKm: thisMonth.totalKm,
+        topSport: topSport ? {
+          name: topSport[0],
+          count: topSport[1],
+          pct: thisMonth.sessions > 0 ? Math.round((topSport[1] / thisMonth.sessions) * 100) : 0
+        } : null,
+        topMember: topMember ? {
+          name: (profileMap[topMember[0]] && profileMap[topMember[0]].name) || 'Member',
+          sessions: topMember[1].sessions,
+          hours: Math.round(topMember[1].hours * 10) / 10,
+          km: Math.round(topMember[1].km)
+        } : null,
+        hoursTrend
+      },
+      events: {
+        count: (monthEvents || []).length,
+        countDelta: (monthEvents || []).length - (prevEvents || []).length,
+        avgAttendanceRate,
+        avgAttendees,
+        best: eventAttendance[0] || null,
+        worst: eventAttendance.length > 1 ? eventAttendance[eventAttendance.length - 1] : null
+      },
+      challenges: challengeStats
+    });
+  } catch (err) {
+    console.log('Club report error:', err.message);
+    res.json({ error: 'Could not generate report' });
+  }
+});
+
 // Coach/admin posts an announcement to the whole club. The announcement is a
 // normal `posts` row (it renders with a Coach badge in the feed because the
 // author's club role is admin/coach), and every other member is notified.

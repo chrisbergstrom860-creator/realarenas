@@ -282,6 +282,20 @@ button, select, input { font-family: var(--font); }
 
 @keyframes fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .fade-in { animation: fade-in 0.22s ease forwards; }
+
+/* Export PDF (Reports tab): print only the report, hiding chrome and buttons. */
+@media print {
+  body.printing-report .topbar,
+  body.printing-report .sidebar,
+  body.printing-report .toast,
+  body.printing-report button,
+  body.printing-report .btn { display: none !important; }
+  body.printing-report .tab-content { display: none !important; }
+  body.printing-report #tab-reports { display: block !important; }
+  body.printing-report main { padding: 0 !important; }
+  body.printing-report { background: white !important; }
+  @page { margin: 1.5cm; }
+}
 </style>
 </head>
 <body>
@@ -768,60 +782,24 @@ button, select, input { font-family: var(--font); }
 
   <!-- ═══ REPORTS TAB ═══ -->
   <div class="tab-content" id="tab-reports">
-    <div class="page-hdr">
-      <div class="page-hdr-left"><h1>Club reports 📋</h1><p>Monthly summaries, individual member reports, and performance trends</p></div>
-      <div class="page-hdr-right">
-        <select style="padding:7px 12px;border:var(--border);border-radius:7px;font-size:13px;background:white;outline:none;cursor:pointer"><option>May 2026</option><option>April 2026</option><option>March 2026</option></select>
-        <button class="btn btn-yellow" onclick="showToast('Generating club report PDF…')">📥 Export PDF</button>
+    <!-- Header -->
+    <div style="padding:14px 20px;border-bottom:var(--border);background:white;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:var(--gray-900)">Monthly club report</div>
+        <div style="font-size:12px;color:var(--gray-400);margin-top:2px" id="rp-sub">Ready to share with your committee or sponsors</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <button onclick="rpChangeMonth(-1)" style="width:28px;height:28px;border-radius:7px;border:var(--border);background:white;cursor:pointer;color:var(--gray-600);font-size:14px">‹</button>
+          <div style="font-size:13px;font-weight:600;min-width:120px;text-align:center" id="rp-month-label">—</div>
+          <button onclick="rpChangeMonth(1)" id="rp-next-btn" style="width:28px;height:28px;border-radius:7px;border:var(--border);background:white;cursor:pointer;color:var(--gray-600);font-size:14px">›</button>
+        </div>
+        <button onclick="exportReport()" style="display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;background:var(--gray-900);color:white;border:none;cursor:pointer">⬇ Export PDF</button>
       </div>
     </div>
-    <div class="grid-4" style="margin-bottom:16px">
-      <div class="report-stat"><div class="rs-label">Total club distance</div><div class="rs-val">1,248 km</div><div class="rs-delta">↑ +192km vs April</div></div>
-      <div class="report-stat"><div class="rs-label">Activities logged</div><div class="rs-val">312</div><div class="rs-delta">↑ +44 vs April</div></div>
-      <div class="report-stat"><div class="rs-label">Avg member distance</div><div class="rs-val">26.0 km</div><div class="rs-delta">↑ +4km vs April</div></div>
-      <div class="report-stat"><div class="rs-label">Challenge completion</div><div class="rs-val">84%</div><div class="rs-delta">↑ +6% vs April</div></div>
-    </div>
-    <div class="grid-2">
-      <div class="card">
-        <div class="card-header"><div class="card-header-left"><span>📈</span><span class="card-title">Member performance reports</span></div></div>
-        <div style="padding:6px 0">
-          <div class="feed-item" style="align-items:center">
-            <div class="feed-av" style="background:#FEF9C3;color:#854D0E">SL</div>
-            <div class="feed-content">
-              <div class="feed-text"><strong>Sofia L.</strong> — May report ready</div>
-              <div style="font-size:11px;color:var(--gray-500)">88.2 km/wk avg · 9,840 pts · 14 activities</div>
-            </div>
-            <button class="btn btn-sm btn-ghost" onclick="showToast('Generating Sofia\'s May report PDF…')">📥 PDF</button>
-          </div>
-          <div class="feed-item" style="align-items:center">
-            <div class="feed-av" style="background:#FCE7F3;color:#9D174D">YT</div>
-            <div class="feed-content">
-              <div class="feed-text"><strong>Yuki T.</strong> — May report ready</div>
-              <div style="font-size:11px;color:var(--gray-500)">68.0 km/wk avg · 7,610 pts · ⚠ overtraining flagged</div>
-            </div>
-            <button class="btn btn-sm btn-ghost" onclick="showToast('Generating Yuki\'s May report PDF…')">📥 PDF</button>
-          </div>
-          <div class="feed-item" style="align-items:center">
-            <div class="feed-av" style="background:#FFF7ED;color:#9A3412">JK</div>
-            <div class="feed-content">
-              <div class="feed-text"><strong>Jamie K.</strong> — May report ready</div>
-              <div style="font-size:11px;color:var(--gray-500)">12.4 km/wk avg · 6,440 pts · Taper week</div>
-            </div>
-            <button class="btn btn-sm btn-ghost" onclick="showToast('Generating Jamie\'s May report PDF…')">📥 PDF</button>
-          </div>
-          <div style="padding:10px 16px;border-top:var(--border)"><button class="btn btn-ghost btn-full" onclick="showToast('Generating all 48 member reports…')">📥 Export all member reports</button></div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header"><div class="card-header-left"><span>🗓</span><span class="card-title">Monthly club summary</span></div></div>
-        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
-          <div style="background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:12px"><div style="font-size:11px;color:var(--gray-500);margin-bottom:3px">Most active member</div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Sofia L. · 88.2 km avg</div></div>
-          <div style="background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:12px"><div style="font-size:11px;color:var(--gray-500);margin-bottom:3px">Most improved</div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Alena L. · +14km vs April</div></div>
-          <div style="background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:12px"><div style="font-size:11px;color:var(--gray-500);margin-bottom:3px">Longest streak</div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Sofia L. · 21 consecutive days</div></div>
-          <div style="background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:12px"><div style="font-size:11px;color:var(--gray-500);margin-bottom:3px">Events attended</div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">3 events · 34 member attendances</div></div>
-          <button class="btn btn-primary btn-full" onclick="showToast('Generating full club PDF report…')">📥 Download full club report</button>
-        </div>
-      </div>
+
+    <div id="rp-report-body">
+      <div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Loading report…</div>
     </div>
   </div>
 
@@ -3042,6 +3020,180 @@ document.addEventListener('DOMContentLoaded', function () {
     if (typeof window.setTab === 'function') {
       var _setTabCf = window.setTab;
       window.setTab = function (id, el) { _setTabCf(id, el); if (id === 'feed') loadClubFeed(); };
+    }
+  })();
+  </script>
+  <script>
+  // ── REPORTS TAB ── Monthly club report rendered from real data
+  // (GET /api/clubs/:id/report; admin/coach only). All DB/user-derived strings
+  // are escaped before innerHTML; the Export PDF button prints just the report.
+  (function () {
+    var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    var rpCurrentMonth = new Date().toISOString().slice(0, 7);
+
+    var sportNames = { running: 'Running', cycling: 'Cycling', climbing: 'Climbing', swimming: 'Swimming', football: 'Football', weightlifting: 'Weightlifting', hiking: 'Hiking', yoga: 'Yoga' };
+    var sportIcons2 = { running: '🏃', cycling: '🚴', climbing: '🧗', swimming: '🏊', football: '⚽', weightlifting: '🏋️', hiking: '🥾', yoga: '🧘' };
+
+    window.rpChangeMonth = function (dir) {
+      // Pure integer month math — avoid a Date/toISOString round-trip, which in
+      // UTC+ timezones (e.g. London/BST) shifts local-midnight back a month.
+      var parts = rpCurrentMonth.split('-').map(Number);
+      var total = parts[0] * 12 + (parts[1] - 1) + dir;
+      var newMonth = Math.floor(total / 12) + '-' + String((total % 12) + 1).padStart(2, '0');
+      var nowMonth = new Date().toISOString().slice(0, 7);
+      if (newMonth > nowMonth) return;
+      rpCurrentMonth = newMonth;
+      loadClubReport();
+    };
+
+    window.exportReport = function () {
+      document.body.classList.add('printing-report');
+      window.print();
+      setTimeout(function () { document.body.classList.remove('printing-report'); }, 500);
+    };
+
+    function delta(val, suffix, invert) {
+      suffix = suffix || '';
+      if (val === 0 || val === null || val === undefined) {
+        return '<div style="font-size:10px;margin-top:3px;font-family:var(--mono);color:var(--gray-400)">— same as last month</div>';
+      }
+      var isUp = val > 0;
+      var good = invert ? !isUp : isUp;
+      var color = good ? '#10B981' : '#A32D2D';
+      var arrow = isUp ? '↑ +' : '↓ ';
+      return '<div style="font-size:10px;margin-top:3px;font-family:var(--mono);color:' + color + '">' + arrow + Math.abs(val) + suffix + ' vs last month</div>';
+    }
+
+    function metric(val, label, deltaHtml) {
+      return '<div style="padding:14px 16px;border-right:var(--border)">'
+        + '<div style="font-size:21px;font-weight:700;font-family:var(--mono);line-height:1;color:var(--gray-900)">' + val + '</div>'
+        + '<div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">' + label + '</div>'
+        + (deltaHtml || '') + '</div>';
+    }
+
+    function trendBars(values, currentVal, label) {
+      var maxV = Math.max.apply(null, values.concat([1]));
+      var bars = values.map(function (v, i) {
+        var isLast = i === values.length - 1;
+        var h = Math.max(8, Math.round((v / maxV) * 100));
+        return '<div style="flex:1;height:' + h + '%;border-radius:2px 2px 0 0;background:' + (isLast ? '#FFD21E' : 'var(--gray-200)') + '"></div>';
+      }).join('');
+      return '<div style="padding:12px 16px;border-top:var(--border);display:flex;align-items:center;gap:14px">'
+        + '<div style="font-size:11px;color:var(--gray-500);width:140px;flex-shrink:0">' + label + '</div>'
+        + '<div style="flex:1;display:flex;align-items:flex-end;gap:5px;height:36px">' + bars + '</div>'
+        + '<div style="font-size:12px;font-weight:600;font-family:var(--mono);width:60px;text-align:right;flex-shrink:0">' + currentVal + '</div></div>';
+    }
+
+    function hlRow(icon, text, val) {
+      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:var(--border)">'
+        + '<div style="font-size:14px;flex-shrink:0">' + icon + '</div>'
+        + '<div style="flex:1;font-size:12px;color:var(--gray-500)">' + text + '</div>'
+        + '<div style="font-size:12px;font-weight:600;font-family:var(--mono);color:var(--gray-900)">' + val + '</div></div>';
+    }
+
+    async function loadClubReport() {
+      var data = window.ARENAS_DATA;
+      var clubId = data && data.club && data.club.id;
+      if (!clubId) return;
+      var body = document.getElementById('rp-report-body');
+      if (body) body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Loading report…</div>';
+      try {
+        var response = await fetch(B + '/api/clubs/' + encodeURIComponent(clubId) + '/report?month=' + encodeURIComponent(rpCurrentMonth));
+        var r = await response.json();
+        if (!body) return;
+        if (r.error) {
+          body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">' + esc(r.error) + '</div>';
+          return;
+        }
+        var labelEl = document.getElementById('rp-month-label');
+        if (labelEl) labelEl.textContent = r.monthLabel;
+        var subEl = document.getElementById('rp-sub');
+        if (subEl) subEl.textContent = ((data.club && data.club.name) || 'Your club') + ' · ready to share with your committee or sponsors';
+        var nextBtn = document.getElementById('rp-next-btn');
+        if (nextBtn) nextBtn.style.opacity = rpCurrentMonth >= new Date().toISOString().slice(0, 7) ? '.3' : '1';
+
+        var m = r.membership, e = r.engagement, ev = r.events, ch = r.challenges;
+        var toneColors = {
+          good: { border: '#86EFAC', bg: '#ECFDF5', icon: '💚' },
+          neutral: { border: 'var(--gray-200)', bg: 'var(--gray-50)', icon: '📊' },
+          warn: { border: '#fde68a', bg: 'var(--yellow-light)', icon: '💡' }
+        };
+        var tone = toneColors[r.headline.tone] || toneColors.neutral;
+
+        var topSportHtml = '';
+        if (e.topSport) {
+          var sportLabel = sportNames[e.topSport.name] || esc(e.topSport.name);
+          topSportHtml = hlRow(sportIcons2[e.topSport.name] || '🏅',
+            'Most popular sport — <strong style="color:var(--gray-900)">' + sportLabel + '</strong> · ' + e.topSport.pct + '% of all sessions',
+            e.topSport.count + ' sessions');
+        }
+        var topMemberHtml = e.topMember ? hlRow('⭐',
+          'Most active member — <strong style="color:var(--gray-900)">' + esc(e.topMember.name) + '</strong> · ' + e.topMember.sessions + ' sessions, ' + e.topMember.hours + ' hours',
+          e.topMember.km + ' km') : '';
+
+        body.innerHTML =
+          '<div style="margin:14px;background:white;border:0.5px solid ' + tone.border + ';border-radius:var(--radius-lg);padding:14px 16px;display:flex;align-items:flex-start;gap:12px">'
+          + '<div style="width:40px;height:40px;border-radius:10px;background:' + tone.bg + ';display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">' + tone.icon + '</div>'
+          + '<div><div style="font-size:13px;font-weight:600;color:var(--gray-900);margin-bottom:3px">' + esc(r.headline.title) + '</div>'
+          + '<div style="font-size:12px;color:var(--gray-500);line-height:1.6">' + esc(r.headline.text) + '</div></div></div>'
+
+          + '<div style="margin:0 14px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">'
+          + '<div style="padding:11px 16px;border-bottom:var(--border);background:var(--gray-50);font-size:12px;font-weight:600">👥 Membership</div>'
+          + '<div style="display:grid;grid-template-columns:repeat(4,1fr)">'
+          + metric(m.total, 'Total members', delta(m.totalDelta))
+          + metric(m.newJoins, 'New joins', delta(m.newJoinsDelta))
+          + metric(m.departures, 'Departures', delta(0))
+          + metric(m.retention + '%', 'Retention', delta(0))
+          + '</div>' + trendBars(m.trend, m.total, 'Member count · 6 months') + '</div>'
+
+          + '<div style="margin:0 14px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">'
+          + '<div style="padding:11px 16px;border-bottom:var(--border);background:var(--gray-50);font-size:12px;font-weight:600">⚡ Engagement & training</div>'
+          + '<div style="display:grid;grid-template-columns:repeat(4,1fr)">'
+          + metric(e.activePct + '%', 'Active members', delta(e.activePctDelta, 'pts'))
+          + metric(e.totalHours + 'h', 'Training hours', delta(e.hoursDelta, 'h'))
+          + metric(e.sessions, 'Sessions logged', delta(e.sessionsDelta))
+          + metric(e.sessionsPerActive, 'Sessions / active member', '')
+          + '</div>' + trendBars(e.hoursTrend, e.totalHours + 'h', 'Training hours · 6 months')
+          + hlRow('📍', 'Total distance logged across all sports', e.totalKm.toLocaleString() + ' km')
+          + topSportHtml + topMemberHtml + '</div>'
+
+          + '<div style="margin:0 14px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">'
+          + '<div style="padding:11px 16px;border-bottom:var(--border);background:var(--gray-50);font-size:12px;font-weight:600">📅 Events</div>'
+          + '<div style="display:grid;grid-template-columns:repeat(3,1fr)">'
+          + metric(ev.count, 'Events held', delta(ev.countDelta))
+          + metric(ev.avgAttendanceRate + '%', 'Avg attendance rate', '')
+          + metric(ev.avgAttendees, 'Avg attendees / event', '')
+          + '</div>'
+          + (ev.best ? hlRow('🏆', 'Best attended — <strong style="color:var(--gray-900)">' + esc(ev.best.title) + '</strong>', ev.best.going + ' going · ' + ev.best.rate + '%') : '')
+          + (ev.worst ? hlRow('📉', 'Lowest attended — <strong style="color:var(--gray-900)">' + esc(ev.worst.title) + '</strong>', ev.worst.going + ' going · ' + ev.worst.rate + '%') : '')
+          + (ev.count === 0 ? '<div style="padding:16px;text-align:center;font-size:12px;color:var(--gray-400)">No events were held this month</div>' : '') + '</div>'
+
+          + '<div style="margin:0 14px 14px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">'
+          + '<div style="padding:11px 16px;border-bottom:var(--border);background:var(--gray-50);font-size:12px;font-weight:600">⚡ Challenges</div>'
+          + '<div style="display:grid;grid-template-columns:repeat(3,1fr)">'
+          + metric(ch.count, 'Challenges run', '')
+          + metric(ch.participationRate + '%', 'Participation rate', '')
+          + metric(ch.completionRate + '%', 'Goal completion rate', '')
+          + '</div>'
+          + (ch.highlights || []).map(function (h) {
+            return hlRow('🔥', '<strong style="color:var(--gray-900)">' + esc(h.title) + '</strong> — ' + h.participants + ' joined, ' + h.completed + ' hit the goal', h.completionRate + '% completed');
+          }).join('')
+          + (ch.count === 0 ? '<div style="padding:16px;text-align:center;font-size:12px;color:var(--gray-400)">No challenges ran this month</div>' : '') + '</div>';
+      } catch (err) {
+        console.log('Could not load report:', err);
+        if (body) body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Could not load report.</div>';
+      }
+    }
+
+    // Load when the Reports tab opens (chain onto the existing setTab wrap).
+    if (typeof window.setTab === 'function') {
+      var _setTabRp = window.setTab;
+      window.setTab = function (id, el) { _setTabRp(id, el); if (id === 'reports') loadClubReport(); };
     }
   })();
   </script>

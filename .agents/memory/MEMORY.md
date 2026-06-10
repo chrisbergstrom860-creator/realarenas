@@ -11,5 +11,6 @@
 - [html-arenas activity logging](html-arenas-activities.md) — manual training log; `activities` table must be user-created via SQL (no DDL via service role); author from auth metadata; GET /api/activities/:userId is self-only (IDOR).
 - [html-arenas challenges](html-arenas-challenges.md) — join permissive; leaderboard auth-wide; coach rollup + requireChallengeManager; same-route writes need hash+reload not nav().
 - [html-arenas leaderboards](html-arenas-leaderboards.md) — scoring is a SPORT_POINTS heuristic from raw activities; at-risk/nudge recomputed server-side (anti-spam); names from auth metadata; athlete scope-select = platform/following/club.
+- [html-arenas reports tab](html-arenas-reports.md) — monthly club report (admin/coach); month nav must use integer YYYY-MM math (Date→toISOString skews in UTC+); reuses created_at + buildUserProfileMap + goal_target>0 guard.
 - [html-arenas overview tab](html-arenas-overview.md) — default tab so render on load too; spec wrongly assumed pendingInvites injected; recent-activity orders by activities.date, names via buildUserProfileMap.
 - [html-arenas club feed tab](html-arenas-club-feed.md) — merged member feed (posts/activities/RSVPs/joins/milestones) + coach announce; guard milestones with goal_target>0; esc() initials too.
