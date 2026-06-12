@@ -2229,6 +2229,165 @@ app.get(BASE + '/api/profile/achievements', requireAuth, async (req, res) => {
   }
 });
 
+// Profile overview — consolidated "this week" summary, day strip, current
+// streak, recent activities, active challenges, and upcoming RSVPs for the
+// logged-in athlete. Reuses the shared scoring/duration/progress helpers so the
+// numbers agree with the leaderboard and challenges pages. Self-only via
+// req.user.id. FK embeds aren't used in this codebase, so joined challenge/event
+// rows are fetched separately via .in(); activities have no created_at column,
+// so recent activities are ordered by their `date` timestamp.
+app.get(BASE + '/api/profile/overview', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server is not configured for overview' });
+  try {
+    const userId = req.user.id;
+    const now = new Date();
+    const day = now.getDay() || 7;
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - day + 1);
+    weekStart.setHours(0, 0, 0, 0);
+
+    // This week's activities.
+    const { data: weekActs } = await supabaseAdmin
+      .from('activities')
+      .select('sport, distance, duration, date')
+      .eq('user_id', userId)
+      .gte('date', weekStart.toISOString());
+    const acts = weekActs || [];
+    const weekKm = Math.round(acts.reduce((s, a) => s + parseDistanceKm(a.distance), 0) * 10) / 10;
+    const weekHours = Math.round(acts.reduce((s, a) => s + parseDurationHours(a.duration), 0) * 10) / 10;
+    const weekPoints = calculatePoints(acts);
+
+    // Day strip — which weekdays (Mon=0) had activity this week.
+    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const activeDaySet = new Set(acts.map(a => (new Date(a.date).getDay() || 7) - 1));
+    const todayIdx = day - 1;
+    const dayStrip = dayLabels.map((label, i) => ({
+      label,
+      state: i === todayIdx && !activeDaySet.has(i) ? 'today'
+        : activeDaySet.has(i) ? 'active'
+        : i < todayIdx ? 'rest' : 'future'
+    }));
+
+    // Current streak — consecutive active days ending today or yesterday.
+    const { data: allActs } = await supabaseAdmin
+      .from('activities').select('date').eq('user_id', userId);
+    const days = [...new Set((allActs || []).map(a => new Date(a.date).toDateString()))]
+      .map(d => new Date(d)).sort((a, b) => a - b);
+    let currentStreak = 0;
+    if (days.length > 0) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const last = new Date(days[days.length - 1]); last.setHours(0, 0, 0, 0);
+      if (Math.round((today - last) / 86400000) <= 1) {
+        currentStreak = 1;
+        for (let i = days.length - 1; i > 0; i--) {
+          if (Math.round((days[i] - days[i - 1]) / 86400000) === 1) currentStreak++;
+          else break;
+        }
+      }
+    }
+
+    // Recent activities (last 3) — ordered by `date` (no created_at column).
+    const { data: recentActs } = await supabaseAdmin
+      .from('activities')
+      .select('id, sport, title, distance, duration, pace, date')
+      .eq('user_id', userId)
+      .order('date', { ascending: false })
+      .limit(3);
+
+    // My active challenges. Fetch joined challenge rows via .in() (no FK embeds),
+    // then compute progress with the shared helper so it matches the rest of the
+    // app. Each per-challenge query is sequential but bounded by joined count.
+    const { data: parts } = await supabaseAdmin
+      .from('challenge_participants').select('challenge_id').eq('user_id', userId);
+    const challengeIds = [...new Set((parts || []).map(p => p.challenge_id).filter(Boolean))];
+    const activeChallenges = [];
+    if (challengeIds.length) {
+      const { data: chRows } = await supabaseAdmin
+        .from('challenges')
+        .select('id, title, sport, goal_type, goal_target, goal_unit, start_date, end_date')
+        .in('id', challengeIds);
+      for (const ch of (chRows || [])) {
+        if (new Date(ch.end_date) < now) continue;
+        const { data: chActs } = await supabaseAdmin
+          .from('activities')
+          .select('sport, distance, date')
+          .eq('user_id', userId)
+          .gte('date', ch.start_date)
+          .lte('date', ch.end_date);
+        const progress = computeChallengeProgress(ch, chActs || []);
+        const { count: totalParticipants } = await supabaseAdmin
+          .from('challenge_participants')
+          .select('*', { count: 'exact', head: true })
+          .eq('challenge_id', ch.id);
+        const target = Number(ch.goal_target) || 0;
+        const daysLeft = Math.max(0, Math.ceil((new Date(ch.end_date) - now) / 86400000));
+        const pct = target > 0 ? Math.min(100, Math.round((progress / target) * 100)) : 0;
+        const totalDays = Math.max(1, (new Date(ch.end_date) - new Date(ch.start_date)) / 86400000);
+        const elapsedDays = Math.max(0, (now - new Date(ch.start_date)) / 86400000);
+        const expectedPct = Math.round((elapsedDays / totalDays) * 100);
+        let statusText, statusColor;
+        if (pct >= 100) { statusText = 'Goal achieved ✓'; statusColor = '#10B981'; }
+        else if (ch.goal_type === 'streak') {
+          const remaining = target - progress;
+          statusText = remaining <= 2 ? `${remaining} more day${remaining !== 1 ? 's' : ''} — don't break it!` : `${remaining} days to go`;
+          statusColor = '#854D0E';
+        }
+        else if (pct >= expectedPct) { statusText = 'On pace'; statusColor = '#10B981'; }
+        else { statusText = 'Behind pace — push on'; statusColor = '#854D0E'; }
+        activeChallenges.push({
+          id: ch.id, title: ch.title, sport: ch.sport,
+          progress, target, unit: ch.goal_unit || '',
+          pct, daysLeft, statusText, statusColor,
+          totalParticipants: totalParticipants || 0
+        });
+      }
+    }
+
+    // My upcoming RSVPs (going/interested). Fetch event rows separately, then
+    // the going-count per upcoming event.
+    const { data: rsvps } = await supabaseAdmin
+      .from('event_rsvps')
+      .select('event_id, status')
+      .eq('user_id', userId)
+      .in('status', ['going', 'interested']);
+    const statusByEvent = {};
+    (rsvps || []).forEach(r => { statusByEvent[r.event_id] = r.status; });
+    const eventIds = [...new Set((rsvps || []).map(r => r.event_id).filter(Boolean))];
+    let upcomingRsvps = [];
+    if (eventIds.length) {
+      const { data: evRows } = await supabaseAdmin
+        .from('events')
+        .select('id, title, date, location')
+        .in('id', eventIds);
+      upcomingRsvps = (evRows || [])
+        .filter(ev => new Date(ev.date) >= now)
+        .sort((a, b) => new Date(a.date) - new Date(b.date))
+        .slice(0, 3)
+        .map(ev => ({ status: statusByEvent[ev.id], ...ev }));
+      for (const ev of upcomingRsvps) {
+        const { count } = await supabaseAdmin
+          .from('event_rsvps')
+          .select('*', { count: 'exact', head: true })
+          .eq('event_id', ev.id)
+          .eq('status', 'going');
+        ev.goingCount = count || 0;
+      }
+    }
+
+    res.json({
+      week: { activities: acts.length, km: weekKm, hours: weekHours, points: weekPoints },
+      dayStrip,
+      currentStreak,
+      recentActivities: recentActs || [],
+      activeChallenges,
+      upcomingRsvps
+    });
+  } catch (err) {
+    console.log('Overview error:', err.message);
+    res.status(500).json({ error: 'Could not load overview' });
+  }
+});
+
 // All challenges relevant to the logged-in user: ones they created or joined,
 // challenges from clubs they belong to, and public challenges to discover.
 // Creator/club names are resolved from auth metadata + the clubs table (no

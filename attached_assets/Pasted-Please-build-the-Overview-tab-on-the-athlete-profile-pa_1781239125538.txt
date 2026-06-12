@@ -1,0 +1,371 @@
+Please build the Overview tab on the athlete profile page. Most data comes from APIs that already exist (/api/profile/stats, /api/profile/achievements, /api/challenges, /api/events). We need one small consolidated route plus the rendering. Here is everything to do:
+1. Add a profile overview API route to server.js (reuses existing helpers parseDurationHours and calculatePoints):
+javascript// Profile overview — this week summary + day strip
+app.get('/api/profile/overview', requireAuth, async (req, res) => {
+  const supabaseAdmin = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const userId = req.user.id;
+  const now = new Date();
+  const day = now.getDay() || 7;
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - day + 1);
+  weekStart.setHours(0, 0, 0, 0);
+
+  // This week's activities
+  const { data: weekActs } = await supabaseAdmin
+    .from('activities')
+    .select('sport, distance, duration, date')
+    .eq('user_id', userId)
+    .gte('date', weekStart.toISOString());
+  const acts = weekActs || [];
+  function km(a) {
+    const d = parseFloat((a.distance || '0').replace(/[^0-9.]/g, ''));
+    return isNaN(d) ? 0 : d;
+  }
+  const weekKm = Math.round(acts.reduce((s, a) => s + km(a), 0) * 10) / 10;
+  const weekHours = Math.round(acts.reduce((s, a) => s + parseDurationHours(a.duration), 0) * 10) / 10;
+  const weekPoints = calculatePoints(acts);
+
+  // Day strip — which days this week had activity
+  const dayLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const activeDaySet = new Set(acts.map(a => {
+    const d = new Date(a.date);
+    return (d.getDay() || 7) - 1; // 0=Mon
+  }));
+  const todayIdx = day - 1;
+  const dayStrip = dayLabels.map((label, i) => ({
+    label,
+    state: i === todayIdx && !activeDaySet.has(i) ? 'today'
+      : activeDaySet.has(i) ? 'active'
+      : i < todayIdx ? 'rest' : 'future'
+  }));
+
+  // Current streak (all-time activities for streak calc)
+  const { data: allActs } = await supabaseAdmin
+    .from('activities')
+    .select('date')
+    .eq('user_id', userId);
+  const days = [...new Set((allActs || []).map(a => new Date(a.date).toDateString()))]
+    .map(d => new Date(d)).sort((a, b) => a - b);
+  let currentStreak = 0;
+  if (days.length > 0) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const last = new Date(days[days.length - 1]); last.setHours(0,0,0,0);
+    if (Math.round((today - last) / 86400000) <= 1) {
+      currentStreak = 1;
+      for (let i = days.length - 1; i > 0; i--) {
+        if (Math.round((days[i] - days[i-1]) / 86400000) === 1) currentStreak++;
+        else break;
+      }
+    }
+  }
+
+  // Recent activities (last 3)
+  const { data: recentActs } = await supabaseAdmin
+    .from('activities')
+    .select('id, sport, title, distance, duration, pace, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(3);
+
+  // My active challenges with progress + rank
+  const { data: myParticipations } = await supabaseAdmin
+    .from('challenge_participants')
+    .select('challenge_id, challenges(id, title, sport, goal_type, goal_target, goal_unit, start_date, end_date)')
+    .eq('user_id', userId);
+  const activeChallenges = [];
+  for (const cp of (myParticipations || [])) {
+    const ch = cp.challenges;
+    if (!ch || new Date(ch.end_date) < now) continue;
+    // My progress
+    const { data: chActs } = await supabaseAdmin
+      .from('activities')
+      .select('sport, distance, date')
+      .eq('user_id', userId)
+      .gte('date', ch.start_date)
+      .lte('date', ch.end_date);
+    let progress = 0;
+    const uniqueDays = new Set();
+    (chActs || []).forEach(a => {
+      if (ch.sport !== 'any' && a.sport !== ch.sport) return;
+      if (ch.goal_type === 'distance') progress += km(a);
+      else if (ch.goal_type === 'streak') uniqueDays.add(new Date(a.date).toDateString());
+      else progress += 1;
+    });
+    if (ch.goal_type === 'streak') progress = uniqueDays.size;
+    progress = Math.round(progress * 10) / 10;
+    // My rank — count participants with more progress (lightweight: total participants only)
+    const { count: totalParticipants } = await supabaseAdmin
+      .from('challenge_participants')
+      .select('*', { count: 'exact', head: true })
+      .eq('challenge_id', ch.id);
+    const daysLeft = Math.max(0, Math.ceil((new Date(ch.end_date) - now) / 86400000));
+    const pct = ch.goal_target > 0 ? Math.min(100, Math.round((progress / ch.goal_target) * 100)) : 0;
+    // Pace check: expected pct based on elapsed time
+    const totalDays = Math.max(1, (new Date(ch.end_date) - new Date(ch.start_date)) / 86400000);
+    const elapsedDays = Math.max(0, (now - new Date(ch.start_date)) / 86400000);
+    const expectedPct = Math.round((elapsedDays / totalDays) * 100);
+    let statusText, statusColor;
+    if (pct >= 100) { statusText = 'Goal achieved ✓'; statusColor = '#10B981'; }
+    else if (ch.goal_type === 'streak') {
+      const remaining = ch.goal_target - progress;
+      statusText = remaining <= 2 ? `${remaining} more day${remaining !== 1 ? 's' : ''} — don't break it!` : `${remaining} days to go`;
+      statusColor = '#854D0E';
+    }
+    else if (pct >= expectedPct) { statusText = 'On pace'; statusColor = '#10B981'; }
+    else { statusText = 'Behind pace — push on'; statusColor = '#854D0E'; }
+    activeChallenges.push({
+      id: ch.id, title: ch.title, sport: ch.sport,
+      progress, target: ch.goal_target, unit: ch.goal_unit,
+      pct, daysLeft, statusText, statusColor,
+      totalParticipants: totalParticipants || 0
+    });
+  }
+
+  // My upcoming RSVPs
+  const { data: myRsvps } = await supabaseAdmin
+    .from('event_rsvps')
+    .select('status, events(id, title, date, location)')
+    .eq('user_id', userId)
+    .in('status', ['going', 'interested']);
+  const upcomingRsvps = (myRsvps || [])
+    .filter(r => r.events && new Date(r.events.date) >= now)
+    .sort((a, b) => new Date(a.events.date) - new Date(b.events.date))
+    .slice(0, 3)
+    .map(r => ({ status: r.status, ...r.events }));
+  // Going counts for those events
+  for (const ev of upcomingRsvps) {
+    const { count } = await supabaseAdmin
+      .from('event_rsvps')
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', ev.id)
+      .eq('status', 'going');
+    ev.goingCount = count || 0;
+  }
+
+  res.json({
+    week: { activities: acts.length, km: weekKm, hours: weekHours, points: weekPoints },
+    dayStrip,
+    currentStreak,
+    recentActivities: recentActs || [],
+    activeChallenges,
+    upcomingRsvps
+  });
+});
+2. Add the Overview tab content in arenas-my-profile.html. Find the Overview tab panel (likely the default tab) and replace its hardcoded content with:
+html<div id="po-body">
+  <div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Loading overview…</div>
+</div>
+3. Add this JavaScript to arenas-my-profile.html before </body>:
+javascript// ── PROFILE OVERVIEW TAB ──
+async function loadProfileOverview() {
+  const body = document.getElementById('po-body');
+  if (!body) return;
+  try {
+    // Fetch overview + achievements in parallel
+    const [ovRes, achRes] = await Promise.all([
+      fetch('/api/profile/overview'),
+      fetch('/api/profile/achievements')
+    ]);
+    const r = await ovRes.json();
+    const ach = await achRes.json();
+    if (r.error) return;
+
+    const sportIcons = { running:'🏃',cycling:'🚴',climbing:'🧗',swimming:'🏊',football:'⚽',weightlifting:'🏋️',hiking:'🥾',yoga:'🧘',any:'⚡' };
+    const sportBgs = { running:'#FFF7ED',cycling:'#EFF6FF',climbing:'#F5F3FF',swimming:'#F0FDFA',football:'#ECFDF5',weightlifting:'#FEF9C3',hiking:'#FAEEDA',yoga:'#FBEAF0' };
+
+    // Day strip
+    const dayStripHtml = (r.dayStrip || []).map(d => {
+      const styles = {
+        active: 'background:var(--yellow);color:var(--gray-900)',
+        rest: 'background:var(--gray-100);color:var(--gray-400)',
+        today: 'border:1.5px dashed var(--yellow-dark);background:#FFFDF0;color:#854D0E',
+        future: 'background:var(--gray-50);color:var(--gray-300)'
+      };
+      return `<div style="flex:1;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;${styles[d.state]}">${d.label}</div>`;
+    }).join('');
+
+    // Challenges
+    let challengesHtml = '';
+    if ((r.activeChallenges || []).length > 0) {
+      challengesHtml = `
+        <div style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:12px;overflow:hidden">
+          <div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between">
+            <div style="font-size:12px;font-weight:600">⚡ My challenges · ${r.activeChallenges.length} active</div>
+            <span onclick="window.location.href='/challenges'" style="font-size:11px;color:var(--gray-400);cursor:pointer">View all →</span>
+          </div>
+          ${r.activeChallenges.map(c => {
+            const fillColor = c.pct >= 100 ? '#10B981' : c.statusColor === '#10B981' ? '#10B981' : 'var(--yellow)';
+            return `
+              <div onclick="window.location.href='/challenges'" style="padding:10px 14px;border-bottom:var(--border);cursor:pointer" onmouseenter="this.style.background='var(--gray-50)'" onmouseleave="this.style.background='white'">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+                  <span style="font-size:13px">${sportIcons[c.sport] || '⚡'}</span>
+                  <div style="font-size:12px;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.title}</div>
+                  <div style="font-size:10px;font-family:var(--mono);color:var(--gray-400)">${c.daysLeft}d left</div>
+                </div>
+                <div style="height:6px;background:var(--gray-100);border-radius:3px;overflow:hidden;margin-bottom:4px">
+                  <div style="width:${c.pct}%;height:100%;background:${fillColor};border-radius:3px"></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;font-size:10px">
+                  <span style="color:var(--gray-500);font-family:var(--mono)">${c.progress} / ${c.target} ${c.unit}</span>
+                  <span style="color:${c.statusColor}">${c.statusText}${c.totalParticipants > 1 ? ' · ' + c.totalParticipants + ' competing' : ''}</span>
+                </div>
+              </div>`;
+          }).join('')}
+        </div>`;
+    }
+
+    // Events
+    let eventsHtml = '';
+    if ((r.upcomingRsvps || []).length > 0) {
+      eventsHtml = `
+        <div style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:12px;overflow:hidden">
+          <div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between">
+            <div style="font-size:12px;font-weight:600">📅 My upcoming events · ${r.upcomingRsvps.length}</div>
+            <span onclick="window.location.href='/events'" style="font-size:11px;color:var(--gray-400);cursor:pointer">View all →</span>
+          </div>
+          ${r.upcomingRsvps.map(ev => {
+            const d = new Date(ev.date);
+            const month = d.toLocaleDateString('en-GB', { month: 'short' });
+            const dayN = d.getDate();
+            const diff = Math.ceil((d - new Date()) / 86400000);
+            const when = diff <= 0 ? 'Today' : diff === 1 ? 'Tomorrow' : d.toLocaleDateString('en-GB', { weekday: 'short' });
+            const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+            const statusBadge = ev.status === 'going'
+              ? '<span style="font-size:9px;font-weight:600;padding:2px 8px;border-radius:10px;background:#ECFDF5;color:#166534;border:0.5px solid #86EFAC;flex-shrink:0">Going ✓</span>'
+              : '<span style="font-size:9px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--yellow-light);color:#633806;border:0.5px solid #fde68a;flex-shrink:0">Interested</span>';
+            return `
+              <div onclick="window.location.href='/events'" style="display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:var(--border);cursor:pointer" onmouseenter="this.style.background='var(--gray-50)'" onmouseleave="this.style.background='white'">
+                <div style="width:34px;height:38px;border-radius:6px;background:#FFF7ED;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0">
+                  <div style="font-size:8px;font-weight:600;text-transform:uppercase;color:#9A3412">${month}</div>
+                  <div style="font-size:15px;font-weight:700;font-family:var(--mono);line-height:1;color:#9A3412">${dayN}</div>
+                </div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ev.title}</div>
+                  <div style="font-size:10px;color:var(--gray-400)">${when} ${time} · ${ev.location} · ${ev.goingCount} going</div>
+                </div>
+                ${statusBadge}
+              </div>`;
+          }).join('')}
+        </div>`;
+    }
+
+    // Achievements strip
+    let achHtml = '';
+    if (ach && !ach.error && ach.earnedCount > 0) {
+      const recentBadges = ach.badges.filter(b => b.earned)
+        .sort((a, b) => new Date(b.earnedAt) - new Date(a.earnedAt)).slice(0, 3);
+      // Closest locked badge by pct
+      const nextBadge = ach.badges.filter(b => !b.earned && b.current > 0)
+        .sort((a, b) => (b.current / b.target) - (a.current / a.target))[0];
+      achHtml = `
+        <div style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:12px;overflow:hidden">
+          <div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between">
+            <div style="font-size:12px;font-weight:600">🏅 Achievements · ${ach.earnedCount} of ${ach.totalCount}</div>
+            <span onclick="openAchievementsTab()" style="font-size:11px;color:var(--gray-400);cursor:pointer">View all →</span>
+          </div>
+          <div style="display:flex;gap:12px;padding:12px 14px;align-items:center">
+            ${recentBadges.map(b => `<div title="${b.name}" style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#FFE566,var(--yellow));border:2px solid var(--yellow-dark);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;box-shadow:0 2px 6px rgba(230,184,0,.25)">${b.icon}</div>`).join('')}
+            <div style="flex:1;font-size:11px;color:var(--gray-500);line-height:1.5">
+              ${ach.thisMonthCount > 0 ? `<strong style="font-weight:600;color:var(--gray-900)">${ach.thisMonthCount} badge${ach.thisMonthCount !== 1 ? 's' : ''} this month.</strong>` : ''}
+              ${nextBadge ? ` Next up: <span style="color:#854D0E">${nextBadge.name}</span> — ${nextBadge.current}/${nextBadge.target}${nextBadge.unit ? ' ' + nextBadge.unit : ''}` : ''}
+            </div>
+            ${nextBadge ? `<div title="${nextBadge.name}" style="width:42px;height:42px;border-radius:50%;background:var(--gray-50);border:2px dashed var(--gray-300);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;filter:grayscale(1);opacity:.6">${nextBadge.icon}</div>` : ''}
+          </div>
+        </div>`;
+    }
+
+    // Recent activities
+    let actsHtml = '';
+    if ((r.recentActivities || []).length > 0) {
+      function timeAgo(ts) {
+        const days = Math.floor((new Date() - new Date(ts)) / 86400000);
+        if (days === 0) return 'Today';
+        if (days === 1) return 'Yesterday';
+        return days + 'd ago';
+      }
+      actsHtml = `
+        <div style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:12px 12px 14px;overflow:hidden">
+          <div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between">
+            <div style="font-size:12px;font-weight:600">🏃 Recent activities</div>
+            <span onclick="openActivitiesTab()" style="font-size:11px;color:var(--gray-400);cursor:pointer">View all →</span>
+          </div>
+          ${r.recentActivities.map(a => {
+            const stats = [a.distance, a.duration, a.pace].filter(Boolean).join(' · ');
+            return `
+              <div style="display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:var(--border)">
+                <div style="width:30px;height:30px;border-radius:7px;background:${sportBgs[a.sport] || 'var(--gray-100)'};display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">${sportIcons[a.sport] || '🏅'}</div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:12px;font-weight:600">${a.title || a.sport.charAt(0).toUpperCase() + a.sport.slice(1)}</div>
+                  ${stats ? `<div style="font-size:10px;color:var(--gray-400)">${stats}</div>` : ''}
+                </div>
+                <div style="font-size:10px;color:var(--gray-400)">${timeAgo(a.created_at)}</div>
+              </div>`;
+          }).join('')}
+        </div>`;
+    }
+
+    body.innerHTML = `
+      <!-- This week -->
+      <div style="background:white;border-bottom:var(--border);padding:14px 16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:600">This week</div>
+          ${r.currentStreak > 0 ? `<div style="font-size:11px;color:#E6B800;font-weight:600">🔥 ${r.currentStreak}-day streak — keep it going</div>` : ''}
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+          <div style="background:var(--gray-50);border-radius:8px;padding:10px 12px;text-align:center">
+            <div style="font-size:16px;font-weight:700;font-family:var(--mono);line-height:1">${r.week.activities}</div>
+            <div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Activities</div>
+          </div>
+          <div style="background:var(--gray-50);border-radius:8px;padding:10px 12px;text-align:center">
+            <div style="font-size:16px;font-weight:700;font-family:var(--mono);line-height:1">${r.week.km} km</div>
+            <div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Distance</div>
+          </div>
+          <div style="background:var(--gray-50);border-radius:8px;padding:10px 12px;text-align:center">
+            <div style="font-size:16px;font-weight:700;font-family:var(--mono);line-height:1">${r.week.hours}h</div>
+            <div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Time</div>
+          </div>
+          <div style="background:var(--gray-50);border-radius:8px;padding:10px 12px;text-align:center">
+            <div style="font-size:16px;font-weight:700;font-family:var(--mono);line-height:1;color:#E6B800">${r.week.points}</div>
+            <div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Points</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:4px;margin-top:10px">${dayStripHtml}</div>
+      </div>
+      ${challengesHtml}
+      ${eventsHtml}
+      ${achHtml}
+      ${actsHtml}
+      ${(r.activeChallenges || []).length === 0 && (r.upcomingRsvps || []).length === 0 && (r.recentActivities || []).length === 0 ? `
+        <div style="text-align:center;padding:40px 24px">
+          <div style="font-size:32px;margin-bottom:10px">👋</div>
+          <div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:6px">Your overview is waiting</div>
+          <div style="font-size:12px;color:var(--gray-500);line-height:1.6">Log an activity, join a challenge, or RSVP to an event and this page comes alive.</div>
+        </div>` : ''}`;
+  } catch (err) {
+    console.log('Could not load overview:', err);
+  }
+}
+
+// Helpers to switch to other profile tabs from the overview links
+window.openAchievementsTab = function() {
+  const tab = [...document.querySelectorAll('.tab, .ftab, [data-tab]')].find(t =>
+    t.textContent?.toLowerCase().includes('achievement'));
+  if (tab) tab.click();
+};
+window.openActivitiesTab = function() {
+  const tab = [...document.querySelectorAll('.tab, .ftab, [data-tab]')].find(t =>
+    t.textContent?.toLowerCase().includes('activit'));
+  if (tab) tab.click();
+};
+
+// Load on page open (overview is the default tab) and on tab click
+document.addEventListener('DOMContentLoaded', function() {
+  loadProfileOverview();
+  const ovTab = [...document.querySelectorAll('.tab, .ftab, [data-tab]')].find(t =>
+    t.textContent?.toLowerCase().includes('overview'));
+  if (ovTab) ovTab.addEventListener('click', loadProfileOverview);
+});
+4. Wait for checkpoint then push to GitHub main immediately.
