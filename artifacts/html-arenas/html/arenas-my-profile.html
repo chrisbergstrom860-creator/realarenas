@@ -734,20 +734,17 @@ button,select,input,textarea{font-family:var(--font)}
 <!-- ═══ ACHIEVEMENTS TAB ═══ -->
 <div class="tab-content" id="tab-achievements">
   <div class="content-cols-full">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px"><div><h2 style="font-size:17px;font-weight:700;color:var(--gray-900)">Achievements</h2><p style="font-size:13px;color:var(--gray-500)">18 earned · 14 locked · 6,440 points total</p></div></div>
-    <div class="achievement-grid">
-      <div class="ach-card gold"><span class="ach-icon">🏃</span><div class="ach-name">First 10km</div><div class="ach-desc">Complete your first 10km activity</div><div class="ach-date">Jan 4, 2026</div></div>
-      <div class="ach-card gold"><span class="ach-icon">🔥</span><div class="ach-name">7-day streak</div><div class="ach-desc">Log activities 7 days in a row</div><div class="ach-date">Feb 12, 2026</div></div>
-      <div class="ach-card gold"><span class="ach-icon">🚴</span><div class="ach-name">Century rider</div><div class="ach-desc">Log 100km of cycling in a week</div><div class="ach-date">Mar 15, 2026</div></div>
-      <div class="ach-card silver"><span class="ach-icon">🧗</span><div class="ach-name">V4 climber</div><div class="ach-desc">Send your first V4 boulder problem</div><div class="ach-date">Mar 28, 2026</div></div>
-      <div class="ach-card silver"><span class="ach-icon">⚡</span><div class="ach-name">Challenge finisher</div><div class="ach-desc">Complete your first club challenge</div><div class="ach-date">Apr 30, 2026</div></div>
-      <div class="ach-card bronze"><span class="ach-icon">🤝</span><div class="ach-name">Club member</div><div class="ach-desc">Join your first club on Arenas</div><div class="ach-date">Apr 2, 2026</div></div>
-      <div class="ach-card gold"><span class="ach-icon">📅</span><div class="ach-name">Event starter</div><div class="ach-desc">Register for your first event through Arenas</div><div class="ach-date">Apr 5, 2026</div></div>
-      <div class="ach-card silver"><span class="ach-icon">✦</span><div class="ach-name">AI coached ×50</div><div class="ach-desc">Receive 50 AI coach analyses</div><div class="ach-date">May 10, 2026</div></div>
-      <div class="ach-card gold"><span class="ach-icon">🏅</span><div class="ach-name">Podium finisher</div><div class="ach-desc">Reach the top 3 on a club leaderboard</div><div class="ach-date">Apr 28, 2026</div></div>
-      <div class="ach-card locked"><span class="ach-icon">🏃</span><div class="ach-name">Half marathon PB</div><div class="ach-desc">Beat your half marathon personal best</div><div class="ach-date" style="color:var(--orange)">In progress</div></div>
-      <div class="ach-card locked"><span class="ach-icon">🔥</span><div class="ach-name">30-day streak</div><div class="ach-desc">Log activities 30 days in a row</div><div class="ach-date">Best: 14 days</div></div>
-      <div class="ach-card locked"><span class="ach-icon">🏔️</span><div class="ach-name">Everest climber</div><div class="ach-desc">Accumulate 8,848m of elevation</div><div class="ach-date">48,200m total</div></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:var(--border);background:white">
+      <div style="font-size:13px;font-weight:600">Achievements</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:120px;height:6px;background:var(--gray-100);border-radius:3px;overflow:hidden">
+          <div id="ach-progress-fill" style="height:100%;background:var(--yellow);border-radius:3px;width:0%"></div>
+        </div>
+        <div style="font-size:12px;font-family:var(--mono);color:var(--gray-500)" id="ach-count">—</div>
+      </div>
+    </div>
+    <div id="ach-body">
+      <div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Loading achievements…</div>
     </div>
   </div>
 </div>
@@ -1943,6 +1940,113 @@ if (window.location.hash === '#activities') {
   if (window.location.hash === '#stats') {
     if (typeof setTab === 'function') setTab('stats');
     loadProfileStats();
+  }
+})();
+</script>
+<script>
+// ── ACHIEVEMENTS TAB ──
+// Real badge system backed by /api/profile/achievements. Badge names/descs are
+// server-side constants (no user input), so no HTML escaping is needed here.
+// All fetches are window.BASE-prefixed for the /html vs root deployments.
+(function () {
+  var ACH_BASE = window.BASE || '';
+
+  function fmtDate(d) {
+    return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  }
+
+  function badgeHtml(b) {
+    if (b.earned) {
+      return '' +
+        '<div onclick="showToast(\'' + b.name + ' — ' + b.desc + ' · earned ' + fmtDate(b.earnedAt) + '\')" style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;cursor:pointer">' +
+          '<div style="width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;background:linear-gradient(135deg,#FFE566,var(--yellow));box-shadow:0 2px 8px rgba(230,184,0,.3);border:2px solid var(--yellow-dark)">' + b.icon + '</div>' +
+          '<div style="font-size:10px;font-weight:600;color:var(--gray-900);line-height:1.3">' + b.name + '</div>' +
+          '<div style="font-size:8px;color:var(--gray-400)">' + fmtDate(b.earnedAt) + '</div>' +
+        '</div>';
+    }
+    var pct = b.target > 0 ? Math.round((b.current / b.target) * 100) : 0;
+    var progText = b.current > 0
+      ? b.current.toLocaleString() + ' / ' + b.target.toLocaleString() + (b.unit ? ' ' + b.unit : '')
+      : 'Not yet';
+    return '' +
+      '<div onclick="showToast(\'' + b.name + ' — ' + b.desc + '\')" style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;cursor:pointer">' +
+        '<div style="width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;background:var(--gray-50);border:2px solid var(--gray-200);filter:grayscale(1);opacity:.55">' + b.icon + '</div>' +
+        '<div style="font-size:10px;font-weight:600;color:var(--gray-400);line-height:1.3">' + b.name + '</div>' +
+        (b.current > 0
+          ? '<div style="width:48px;height:3px;background:var(--gray-200);border-radius:2px;overflow:hidden"><div style="width:' + pct + '%;height:100%;background:var(--yellow);border-radius:2px"></div></div>'
+          : '') +
+        '<div style="font-size:8px;font-family:var(--mono);color:var(--gray-400)">' + progText + '</div>' +
+      '</div>';
+  }
+
+  async function loadAchievements() {
+    var body = document.getElementById('ach-body');
+    if (!body) return;
+    try {
+      var response = await fetch(ACH_BASE + '/api/profile/achievements');
+      var r = await response.json();
+      if (r.error) {
+        body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Could not load achievements.</div>';
+        return;
+      }
+      var fill = document.getElementById('ach-progress-fill');
+      if (fill) fill.style.width = Math.round((r.earnedCount / r.totalCount) * 100) + '%';
+      var countEl = document.getElementById('ach-count');
+      if (countEl) countEl.textContent = r.earnedCount + ' / ' + r.totalCount + ' earned';
+      var navCount = document.querySelector('#htab-achievements .tab-count');
+      if (navCount) navCount.textContent = r.earnedCount;
+
+      var cats = [
+        { id: 'starter', title: '🚀 Getting started' },
+        { id: 'volume', title: '📋 Volume' },
+        { id: 'distance', title: '📍 Distance' },
+        { id: 'streak', title: '🔥 Streaks' },
+        { id: 'feat', title: '🏅 Sport feats' },
+        { id: 'community', title: '🤝 Community' }
+      ];
+
+      var html = '';
+      if (r.latest) {
+        html +=
+          '<div style="margin:12px;background:linear-gradient(135deg,#FFFDF0,var(--yellow-light));border:0.5px solid var(--yellow-dark);border-radius:var(--radius-lg);padding:13px 16px;display:flex;align-items:center;gap:12px">' +
+            '<div style="width:46px;height:46px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;box-shadow:0 2px 8px rgba(230,184,0,.35)">' + r.latest.icon + '</div>' +
+            '<div style="flex:1">' +
+              '<div style="font-size:13px;font-weight:600;color:#633806">Latest unlock — ' + r.latest.name + '</div>' +
+              '<div style="font-size:11px;color:#854D0E;margin-top:2px">' + r.latest.desc + ' · earned ' + fmtDate(r.latest.earnedAt) + '</div>' +
+            '</div>' +
+            (r.thisMonthCount > 0 ? '<div style="font-size:10px;color:#854D0E;background:white;border:0.5px solid var(--yellow-dark);border-radius:20px;padding:3px 10px;flex-shrink:0">' + r.thisMonthCount + ' badge' + (r.thisMonthCount !== 1 ? 's' : '') + ' this month</div>' : '') +
+          '</div>';
+      }
+      cats.forEach(function (cat) {
+        var catBadges = r.badges.filter(function (b) { return b.cat === cat.id; });
+        if (catBadges.length === 0) return;
+        var earnedInCat = catBadges.filter(function (b) { return b.earned; }).length;
+        html +=
+          '<div style="margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
+            '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between">' +
+              '<div style="font-size:12px;font-weight:600">' + cat.title + '</div>' +
+              '<div style="font-size:11px;font-family:var(--mono);color:var(--gray-400)">' + earnedInCat + ' / ' + catBadges.length + '</div>' +
+            '</div>' +
+            '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:14px">' +
+              catBadges.map(badgeHtml).join('') +
+            '</div>' +
+          '</div>';
+      });
+      body.innerHTML = html || '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">No achievements yet — log an activity to get started.</div>';
+    } catch (err) {
+      body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Could not load achievements.</div>';
+    }
+  }
+
+  // Load on tab open (mirrors the Stats hook); reloading each time keeps it
+  // current and lets the server award any newly earned badges.
+  var achHtab = document.getElementById('htab-achievements');
+  if (achHtab) achHtab.addEventListener('click', loadAchievements);
+
+  // Deep link: /profile#achievements opens the Achievements tab.
+  if (window.location.hash === '#achievements') {
+    if (typeof setTab === 'function') setTab('achievements');
+    loadAchievements();
   }
 })();
 </script>

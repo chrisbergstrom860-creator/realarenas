@@ -495,6 +495,8 @@ app.post(BASE + '/api/posts/:id/like', requireAuth, async (req, res) => {
   } catch (err) {
     console.log('Like notification error:', err.message);
   }
+  // Award any newly earned badges (e.g. "Good Sport") without blocking.
+  checkAchievements(req.user.id).catch(() => {});
   res.json({ liked: true });
 });
 
@@ -570,6 +572,8 @@ app.post(BASE + '/api/follow/:userId', requireAuth, async (req, res) => {
       console.log('Follow notification error:', err.message);
     }
   }
+  // Award any newly earned badges (e.g. "Social Starter") without blocking.
+  checkAchievements(req.user.id).catch(() => {});
   res.json({ success: true, following: true });
 });
 
@@ -807,6 +811,8 @@ app.post(BASE + '/api/activities/create', requireAuth, async (req, res) => {
   } catch (err) {
     console.log('Activity notification error:', err.message);
   }
+  // Award any newly earned badges (volume/distance/streak/feats) without blocking.
+  checkAchievements(req.user.id).catch(() => {});
   res.json({ success: true, activity: data });
 });
 
@@ -2018,6 +2024,211 @@ function computeChallengeProgress(challenge, activities) {
   return Math.round(progress * 10) / 10;
 }
 
+// ── ACHIEVEMENTS ──
+// Real badge system for the athlete profile. Stats are derived from the user's
+// own activities plus social/community counts; earned badges persist one row per
+// user+badge in the `achievements` table. That table is created out of band via
+// SQL, so every read/write here degrades gracefully if it is missing — the tab
+// still shows live progress before the table exists.
+const BADGES = [
+  // Getting started
+  { id: 'first_steps', cat: 'starter', icon: '👟', name: 'First Steps', desc: 'Log your first activity', check: s => s.activityCount >= 1, progress: s => [Math.min(s.activityCount, 1), 1] },
+  { id: 'joined_club', cat: 'starter', icon: '🏟', name: 'Joined the Club', desc: 'Become a club member', check: s => s.clubCount >= 1, progress: s => [Math.min(s.clubCount, 1), 1] },
+  { id: 'social_starter', cat: 'starter', icon: '👥', name: 'Social Starter', desc: 'Follow your first athlete', check: s => s.followingCount >= 1, progress: s => [Math.min(s.followingCount, 1), 1] },
+  { id: 'good_sport', cat: 'starter', icon: '👍', name: 'Good Sport', desc: 'Give your first kudos', check: s => s.kudosGiven >= 1, progress: s => [Math.min(s.kudosGiven, 1), 1] },
+  // Volume
+  { id: 'ten_spot', cat: 'volume', icon: '🔟', name: 'Ten Spot', desc: 'Log 10 activities', check: s => s.activityCount >= 10, progress: s => [s.activityCount, 10] },
+  { id: 'half_century', cat: 'volume', icon: '⭐', name: 'Half Century', desc: 'Log 50 activities', check: s => s.activityCount >= 50, progress: s => [s.activityCount, 50] },
+  { id: 'centurion', cat: 'volume', icon: '💯', name: 'Centurion', desc: 'Log 100 activities', check: s => s.activityCount >= 100, progress: s => [s.activityCount, 100] },
+  { id: 'club_250', cat: 'volume', icon: '🎖', name: '250 Club', desc: 'Log 250 activities', check: s => s.activityCount >= 250, progress: s => [s.activityCount, 250] },
+  { id: 'machine', cat: 'volume', icon: '🤖', name: 'Machine', desc: 'Log 500 activities', check: s => s.activityCount >= 500, progress: s => [s.activityCount, 500] },
+  // Distance
+  { id: 'first_100', cat: 'distance', icon: '🗺', name: 'First 100', desc: '100km lifetime distance', check: s => s.totalKm >= 100, progress: s => [Math.round(s.totalKm), 100], unit: 'km' },
+  { id: 'club_500', cat: 'distance', icon: '🛣', name: '500 Club', desc: '500km lifetime distance', check: s => s.totalKm >= 500, progress: s => [Math.round(s.totalKm), 500], unit: 'km' },
+  { id: 'thousand', cat: 'distance', icon: '🌍', name: 'Thousand', desc: '1,000km lifetime distance', check: s => s.totalKm >= 1000, progress: s => [Math.round(s.totalKm), 1000], unit: 'km' },
+  // Streaks
+  { id: 'hat_trick', cat: 'streak', icon: '3️⃣', name: 'Hat Trick', desc: '3-day training streak', check: s => s.longestStreak >= 3, progress: s => [s.longestStreak, 3], unit: 'days' },
+  { id: 'week_warrior', cat: 'streak', icon: '🔥', name: 'Week Warrior', desc: '7-day training streak', check: s => s.longestStreak >= 7, progress: s => [s.longestStreak, 7], unit: 'days' },
+  { id: 'fortnight', cat: 'streak', icon: '⚡', name: 'Fortnight', desc: '14-day training streak', check: s => s.longestStreak >= 14, progress: s => [s.longestStreak, 14], unit: 'days' },
+  { id: 'iron_month', cat: 'streak', icon: '🛡', name: 'Iron Month', desc: '30-day training streak', check: s => s.longestStreak >= 30, progress: s => [s.longestStreak, 30], unit: 'days' },
+  // Sport feats
+  { id: 'half_hero', cat: 'feat', icon: '🏃', name: 'Half Hero', desc: 'Run 21.1km+ in one activity', check: s => s.longestRun >= 21.1, progress: s => [Math.round(s.longestRun * 10) / 10, 21.1], unit: 'km' },
+  { id: 'century_rider', cat: 'feat', icon: '🚴', name: 'Century Rider', desc: 'Ride 100km+ in one activity', check: s => s.longestRide >= 100, progress: s => [Math.round(s.longestRide), 100], unit: 'km' },
+  { id: 'multi_athlete', cat: 'feat', icon: '🎯', name: 'Multi-Athlete', desc: 'Log 3+ different sports', check: s => s.sportCount >= 3, progress: s => [s.sportCount, 3], unit: 'sports' },
+  { id: 'early_bird', cat: 'feat', icon: '🌅', name: 'Early Bird', desc: 'Log an activity before 6am', check: s => s.hasEarlyBird, progress: s => [s.hasEarlyBird ? 1 : 0, 1] },
+  // Community
+  { id: 'challenger', cat: 'community', icon: '⚡', name: 'Challenger', desc: 'Complete your first challenge', check: s => s.challengesCompleted >= 1, progress: s => [s.challengesCompleted, 1] },
+  { id: 'serial_challenger', cat: 'community', icon: '🏆', name: 'Serial Challenger', desc: 'Complete 5 challenges', check: s => s.challengesCompleted >= 5, progress: s => [s.challengesCompleted, 5] },
+  { id: 'regular', cat: 'community', icon: '📅', name: 'Regular', desc: 'RSVP going to 10 events', check: s => s.eventsAttended >= 10, progress: s => [s.eventsAttended, 10] },
+  { id: 'popular', cat: 'community', icon: '🌟', name: 'Popular', desc: 'Reach 25 followers', check: s => s.followerCount >= 25, progress: s => [s.followerCount, 25] }
+];
+
+// Parse a distance string ("12.3 km") into a number of kilometres.
+function badgeKm(a) {
+  const d = parseFloat((a.distance || '0').replace(/[^0-9.]/g, ''));
+  return isNaN(d) ? 0 : d;
+}
+
+// Gather every stat the badge checks need for one user, via the global
+// service-role client. NOTE: the `activities` table has no `created_at` column,
+// so all time-based logic reads the activity `date`.
+async function gatherBadgeStats(userId) {
+  const { data: acts } = await supabaseAdmin
+    .from('activities')
+    .select('sport, distance, duration, date')
+    .eq('user_id', userId);
+  const activities = acts || [];
+  const totalKm = activities.reduce((s, a) => s + badgeKm(a), 0);
+  const runs = activities.filter(a => a.sport === 'running');
+  const rides = activities.filter(a => a.sport === 'cycling');
+  const longestRun = runs.length ? Math.max(...runs.map(badgeKm)) : 0;
+  const longestRide = rides.length ? Math.max(...rides.map(badgeKm)) : 0;
+  const sportCount = new Set(activities.map(a => a.sport).filter(Boolean)).size;
+  // Early bird only counts when the stored date carries a real time component
+  // (an ISO timestamp). Date-only values are skipped so midnight can't qualify.
+  const hasEarlyBird = activities.some(a => {
+    const ds = String(a.date || '');
+    if (ds.length <= 10 || !ds.includes('T')) return false;
+    const dt = new Date(ds);
+    return !isNaN(dt.getTime()) && dt.getHours() < 6;
+  });
+  // Longest streak of consecutive active days.
+  const days = [...new Set(activities.map(a => new Date(a.date).toDateString()))]
+    .map(d => new Date(d)).sort((a, b) => a - b);
+  let longestStreak = 0, run = 0;
+  for (let i = 0; i < days.length; i++) {
+    if (i === 0) run = 1;
+    else run = Math.round((days[i] - days[i - 1]) / 86400000) === 1 ? run + 1 : 1;
+    if (run > longestStreak) longestStreak = run;
+  }
+  // Social + community counts (head:true → count only, no rows transferred).
+  const { count: followingCount } = await supabaseAdmin
+    .from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId);
+  const { count: followerCount } = await supabaseAdmin
+    .from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId);
+  const { count: kudosGiven } = await supabaseAdmin
+    .from('post_likes').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+  const { count: clubCount } = await supabaseAdmin
+    .from('memberships').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+  const { count: eventsAttended } = await supabaseAdmin
+    .from('event_rsvps').select('*', { count: 'exact', head: true })
+    .eq('user_id', userId).eq('status', 'going');
+  // Challenges completed: reuse computeChallengeProgress so the badge agrees
+  // with the leaderboard's notion of completion. Avoid PostgREST FK embeds by
+  // fetching the joined challenge rows directly.
+  let challengesCompleted = 0;
+  const { data: cps } = await supabaseAdmin
+    .from('challenge_participants').select('challenge_id').eq('user_id', userId);
+  const challengeIds = [...new Set((cps || []).map(c => c.challenge_id).filter(Boolean))];
+  if (challengeIds.length) {
+    const { data: chs } = await supabaseAdmin
+      .from('challenges')
+      .select('id, goal_type, goal_target, sport, start_date, end_date')
+      .in('id', challengeIds);
+    for (const ch of (chs || [])) {
+      if (!(Number(ch.goal_target) > 0)) continue;
+      const inRange = activities.filter(a => {
+        const d = new Date(a.date);
+        return d >= new Date(ch.start_date) && d <= new Date(ch.end_date);
+      });
+      if (computeChallengeProgress(ch, inRange) >= Number(ch.goal_target)) challengesCompleted++;
+    }
+  }
+  return {
+    activityCount: activities.length,
+    totalKm, longestRun, longestRide, sportCount, hasEarlyBird, longestStreak,
+    followingCount: followingCount || 0,
+    followerCount: followerCount || 0,
+    kudosGiven: kudosGiven || 0,
+    clubCount: clubCount || 0,
+    eventsAttended: eventsAttended || 0,
+    challengesCompleted
+  };
+}
+
+// Check the user's stats against every badge and award newly earned ones,
+// notifying the user once per badge. Safe to call fire-and-forget from action
+// routes; no-ops cleanly if the `achievements` table is missing/unreadable.
+async function checkAchievements(userId) {
+  if (!supabaseAdmin || !userId) return [];
+  try {
+    const stats = await gatherBadgeStats(userId);
+    const { data: earned, error: earnedErr } = await supabaseAdmin
+      .from('achievements').select('badge_id').eq('user_id', userId);
+    if (earnedErr) return [];
+    const earnedIds = new Set((earned || []).map(e => e.badge_id));
+    const newBadges = [];
+    for (const badge of BADGES) {
+      if (earnedIds.has(badge.id)) continue;
+      if (!badge.check(stats)) continue;
+      const { error } = await supabaseAdmin
+        .from('achievements')
+        .insert({ user_id: userId, badge_id: badge.id });
+      if (!error) {
+        newBadges.push(badge);
+        await createNotification({
+          userId,
+          type: 'achievement',
+          title: 'Achievement unlocked!',
+          body: `🏅 You earned "${badge.name}" — ${badge.desc}`,
+          link: '/profile'
+        });
+      }
+    }
+    return newBadges;
+  } catch (err) {
+    console.log('checkAchievements error:', err.message);
+    return [];
+  }
+}
+
+// Achievements data for the profile tab. Runs a fresh check first, then returns
+// every badge with earned/progress state. Stays functional (earned 0, progress
+// shown) even before the `achievements` table is created.
+app.get(BASE + '/api/profile/achievements', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server is not configured for achievements' });
+  try {
+    await checkAchievements(req.user.id);
+    const stats = await gatherBadgeStats(req.user.id);
+    let earned = [];
+    const { data: earnedRows, error: earnedErr } = await supabaseAdmin
+      .from('achievements')
+      .select('badge_id, earned_at')
+      .eq('user_id', req.user.id)
+      .order('earned_at', { ascending: false });
+    if (!earnedErr && earnedRows) earned = earnedRows;
+    const earnedMap = {};
+    earned.forEach(e => { earnedMap[e.badge_id] = e.earned_at; });
+    const badges = BADGES.map(b => {
+      const [current, target] = b.progress(stats);
+      return {
+        id: b.id, cat: b.cat, icon: b.icon, name: b.name, desc: b.desc,
+        earned: !!earnedMap[b.id],
+        earnedAt: earnedMap[b.id] || null,
+        current: Math.min(current, target),
+        target,
+        unit: b.unit || ''
+      };
+    });
+    const latestBadge = earned.length > 0 ? badges.find(b => b.id === earned[0].badge_id) : null;
+    const now = new Date();
+    const thisMonthCount = earned.filter(e => {
+      const d = new Date(e.earned_at);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }).length;
+    res.json({
+      badges,
+      earnedCount: earned.length,
+      totalCount: BADGES.length,
+      latest: latestBadge ? { ...latestBadge, earnedAt: earned[0].earned_at } : null,
+      thisMonthCount
+    });
+  } catch (err) {
+    console.log('Achievements error:', err.message);
+    res.status(500).json({ error: 'Could not load achievements' });
+  }
+});
+
 // All challenges relevant to the logged-in user: ones they created or joined,
 // challenges from clubs they belong to, and public challenges to discover.
 // Creator/club names are resolved from auth metadata + the clubs table (no
@@ -2204,6 +2415,8 @@ app.post(BASE + '/api/challenges/:id/join', requireAuth, async (req, res) => {
   const { error } = await supabaseAdmin
     .from('challenge_participants').insert({ challenge_id: req.params.id, user_id: req.user.id });
   if (error) return res.json({ error: error.message });
+  // Award any newly earned challenge badges without blocking.
+  checkAchievements(req.user.id).catch(() => {});
   res.json({ success: true });
 });
 
@@ -2795,6 +3008,8 @@ app.post(BASE + '/api/events/:id/rsvp', requireAuth, async (req, res) => {
       console.log('RSVP notification error:', err.message);
     }
   }
+  // Award community badges (e.g. "Regular") on a going RSVP, without blocking.
+  if (status === 'going') checkAchievements(req.user.id).catch(() => {});
   res.json({ success: true, status });
 });
 
@@ -4117,6 +4332,8 @@ app.post(BASE + '/api/clubs/:clubId/accept-invite', requireAuth, async (req, res
       }));
     } catch (err) { /* notifications are best-effort */ }
 
+    // Award any newly earned badges (e.g. "Joined the Club") without blocking.
+    checkAchievements(req.user.id).catch(() => {});
     return res.json({ success: true, message: 'Welcome to the club!' });
   } catch (err) {
     console.log('Accept invite error:', err.message);

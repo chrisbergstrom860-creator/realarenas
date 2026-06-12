@@ -15,3 +15,4 @@
 - [html-arenas reports tab](html-arenas-reports.md) — monthly club report (admin/coach); month nav must use integer YYYY-MM math (Date→toISOString skews in UTC+); reuses created_at + buildUserProfileMap + goal_target>0 guard.
 - [html-arenas overview tab](html-arenas-overview.md) — default tab so render on load too; spec wrongly assumed pendingInvites injected; recent-activity orders by activities.date, names via buildUserProfileMap.
 - [html-arenas club feed tab](html-arenas-club-feed.md) — merged member feed (posts/activities/RSVPs/joins/milestones) + coach announce; guard milestones with goal_target>0; esc() initials too.
+- [html-arenas achievements tab](html-arenas-achievements.md) — real badges; NEW user-SQL `achievements` table; degrade before it exists; early_bird uses activity date (no created_at); fire-and-forget idempotent awards in 6 routes.
