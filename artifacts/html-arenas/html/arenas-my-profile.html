@@ -718,56 +718,16 @@ button,select,input,textarea{font-family:var(--font)}
 
 <!-- ═══ STATS & PRs TAB ═══ -->
 <div class="tab-content" id="tab-stats">
-  <div class="content-cols-full">
-    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:start">
-      <div style="flex:1;min-width:300px;display:flex;flex-direction:column;gap:14px">
-        <div class="card">
-          <div class="card-hdr"><span class="card-title">🏃 Running personal bests</span></div>
-          <div class="pb-grid">
-            <div class="pb-card"><div class="pb-event">5 km</div><div class="pb-time">25:48</div><div class="pb-date">Apr 19, 2026 · Parkrun</div><div class="pb-delta">↑ −23s vs prev PB</div></div>
-            <div class="pb-card"><div class="pb-event">10 km</div><div class="pb-time">53:14</div><div class="pb-date">Mar 2, 2026</div><div class="pb-delta">↑ −1:12 vs prev PB</div></div>
-            <div class="pb-card"><div class="pb-event">Half marathon</div><div class="pb-time">1:54:22</div><div class="pb-date">Jan 12, 2026</div><div class="pb-delta">↑ −4:08 vs prev PB</div></div>
-            <div class="pb-card" style="border:1px dashed var(--gray-200);background:var(--gray-50)"><div class="pb-event">Marathon</div><div class="pb-time" style="color:var(--gray-400)">No result yet</div><div class="pb-date">Target: sub 3:30</div><div style="font-size:11px;color:var(--orange);margin-top:4px">London Marathon Oct '26</div></div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-hdr"><span class="card-title">🚴 Cycling bests</span></div>
-          <div class="pb-grid">
-            <div class="pb-card"><div class="pb-event">FTP</div><div class="pb-time">241 W</div><div class="pb-date">Apr 28, 2026</div><div class="pb-delta">↑ +18W vs prev test</div></div>
-            <div class="pb-card"><div class="pb-event">W/kg</div><div class="pb-time">3.2</div><div class="pb-date">Based on 75.4kg</div><div class="pb-delta">↑ +0.2 vs prev</div></div>
-            <div class="pb-card"><div class="pb-event">Max power</div><div class="pb-time">842 W</div><div class="pb-date">Apr 14, 2026</div><div class="pb-delta">Peak sprint effort</div></div>
-            <div class="pb-card"><div class="pb-event">Longest ride</div><div class="pb-time">88 km</div><div class="pb-date">Mar 15, 2026</div><div style="font-size:11px;color:var(--gray-400);margin-top:3px">5:20 ride time</div></div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-hdr"><span class="card-title">🧗 Climbing grades</span></div>
-          <div class="pb-grid">
-            <div class="pb-card"><div class="pb-event">Bouldering</div><div class="pb-time">V5</div><div class="pb-date">May 18, 2026</div><div class="pb-delta">Working V6 next</div></div>
-            <div class="pb-card"><div class="pb-event">Lead</div><div class="pb-time">6b+</div><div class="pb-date">Feb 4, 2026</div><div class="pb-delta">Projecting 6c</div></div>
-          </div>
-        </div>
-      </div>
-      <div style="width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:14px">
-        <div class="card">
-          <div class="card-hdr"><span class="card-title">📊 All-time totals</span></div>
-          <div style="padding:14px 18px;display:flex;flex-direction:column;gap:10px">
-            <div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:var(--border)"><span style="font-size:13px;color:var(--gray-600)">Total distance</span><span style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">4,820 km</span></div>
-            <div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:var(--border)"><span style="font-size:13px;color:var(--gray-600)">Total time</span><span style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">412 hrs</span></div>
-            <div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:var(--border)"><span style="font-size:13px;color:var(--gray-600)">Elevation gained</span><span style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">48,200 m</span></div>
-            <div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:var(--border)"><span style="font-size:13px;color:var(--gray-600)">Calories burned</span><span style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">142,400</span></div>
-            <div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0"><span style="font-size:13px;color:var(--gray-600)">Total activities</span><span style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">312</span></div>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-hdr"><span class="card-title">🎯 Goals</span><button class="btn btn-sm btn-ghost" onclick="openModal('goal')">+ Add</button></div>
-          <div style="padding:14px 18px;display:flex;flex-direction:column;gap:12px">
-            <div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span style="font-weight:600;color:var(--gray-900)">Sub-3:30 marathon</span><span style="color:var(--orange);font-family:var(--mono)">Oct 2026</span></div><div style="height:5px;background:var(--gray-100);border-radius:3px;overflow:hidden"><div style="width:62%;height:100%;background:var(--orange)"></div></div><div style="font-size:11px;color:var(--gray-500);margin-top:3px">Current PB: 1:54 HM → projected ~3:52 full</div></div>
-            <div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span style="font-weight:600;color:var(--gray-900)">FTP 260W</span><span style="color:var(--blue);font-family:var(--mono)">Aug 2026</span></div><div style="height:5px;background:var(--gray-100);border-radius:3px;overflow:hidden"><div style="width:93%;height:100%;background:var(--blue)"></div></div><div style="font-size:11px;color:var(--gray-500);margin-top:3px">Current: 241W · 19W to go</div></div>
-            <div><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span style="font-weight:600;color:var(--gray-900)">V6 bouldering</span><span style="color:var(--purple);font-family:var(--mono)">Jul 2026</span></div><div style="height:5px;background:var(--gray-100);border-radius:3px;overflow:hidden"><div style="width:75%;height:100%;background:var(--purple)"></div></div><div style="font-size:11px;color:var(--gray-500);margin-top:3px">Projecting V6 compression problem</div></div>
-          </div>
-        </div>
-      </div>
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:var(--border);background:white">
+    <div style="font-size:13px;font-weight:600">Stats &amp; PRs</div>
+    <div style="display:flex;gap:5px">
+      <div class="sp-period" data-p="month" onclick="setStatsPeriod(this,'month')" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">This month</div>
+      <div class="sp-period" data-p="year" onclick="setStatsPeriod(this,'year')" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">This year</div>
+      <div class="sp-period" data-p="all" onclick="setStatsPeriod(this,'all')" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid var(--yellow-dark);background:var(--yellow-light);color:#7a5c00;cursor:pointer">All time</div>
     </div>
+  </div>
+  <div id="sp-stats-body">
+    <div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Loading stats…</div>
   </div>
 </div>
 
@@ -1853,6 +1813,138 @@ if (window.location.hash === '#activities') {
   if (typeof setTab === 'function') setTab('activities');
   setTimeout(function(){ toggleActivityForm(); }, 50);
 }
+</script>
+
+<script>
+// ── STATS & PRs TAB ── real data computed from the user's own activities.
+(function () {
+  var spPeriod = 'all';
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  window.setStatsPeriod = function (el, period) {
+    document.querySelectorAll('.sp-period').forEach(function (p) {
+      p.style.background = 'white'; p.style.color = 'var(--gray-600)'; p.style.border = 'var(--border)';
+    });
+    el.style.background = 'var(--yellow-light)'; el.style.border = '1px solid var(--yellow-dark)'; el.style.color = '#7a5c00';
+    spPeriod = period;
+    loadProfileStats();
+  };
+
+  async function loadProfileStats() {
+    var body = document.getElementById('sp-stats-body');
+    if (!body) return;
+    try {
+      var response = await fetch(window.BASE + '/api/profile/stats?period=' + encodeURIComponent(spPeriod));
+      var r = await response.json();
+      if (r.error) {
+        body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Could not load stats.</div>';
+        return;
+      }
+
+      if (r.hero.activities === 0 && r.prs.length === 0) {
+        body.innerHTML =
+          '<div style="text-align:center;padding:48px 24px">' +
+          '<div style="font-size:36px;margin-bottom:12px">📊</div>' +
+          '<div style="font-size:15px;font-weight:600;color:var(--gray-900);margin-bottom:6px">No stats yet</div>' +
+          '<div style="font-size:13px;color:var(--gray-500);line-height:1.6">Log your first activity and your stats, streaks, and personal records will appear here.</div>' +
+          '</div>';
+        return;
+      }
+
+      var sportColors = {
+        running:{bg:'#FFF7ED',bar:'#9A3412',icon:'🏃',name:'Running'},
+        cycling:{bg:'#EFF6FF',bar:'#1E40AF',icon:'🚴',name:'Cycling'},
+        climbing:{bg:'#F5F3FF',bar:'#5B21B6',icon:'🧗',name:'Climbing'},
+        swimming:{bg:'#F0FDFA',bar:'#134E4A',icon:'🏊',name:'Swimming'},
+        football:{bg:'#ECFDF5',bar:'#166534',icon:'⚽',name:'Football'},
+        weightlifting:{bg:'#FEF9C3',bar:'#854D0E',icon:'🏋️',name:'Weights'},
+        hiking:{bg:'#FAEEDA',bar:'#633806',icon:'🥾',name:'Hiking'},
+        yoga:{bg:'#FBEAF0',bar:'#72243E',icon:'🧘',name:'Yoga'}
+      };
+
+      var maxWeekH = Math.max.apply(null, r.weeklyChart.map(function (w) { return w.hours; }).concat([0.5]));
+      var chartBars = r.weeklyChart.map(function (w, i) {
+        var isLast = i === r.weeklyChart.length - 1;
+        var h = Math.max(5, Math.round((w.hours / maxWeekH) * 100));
+        return '' +
+          '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end">' +
+            '<div style="width:100%;max-width:26px;height:' + h + '%;border-radius:3px 3px 0 0;background:' + (isLast ? '#E6B800' : '#FFD21E') + '"></div>' +
+            '<div style="font-size:8px;color:' + (isLast ? 'var(--gray-600)' : 'var(--gray-400)') + ';font-weight:' + (isLast ? '600' : '400') + '">' + (isLast ? 'Now' : esc(w.label)) + '</div>' +
+          '</div>';
+      }).join('');
+
+      var maxSportPct = Math.max.apply(null, r.sportBreakdown.map(function (s) { return s.pct; }).concat([1]));
+      var sportRows = r.sportBreakdown.map(function (s) {
+        var sc = sportColors[s.sport] || { bg:'var(--gray-100)', bar:'#6B7280', icon:'🏅', name:s.sport };
+        var barW = Math.round((s.pct / maxSportPct) * 100);
+        var distStr = s.km > 0 ? s.km + ' km' : '—';
+        return '' +
+          '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:var(--border)">' +
+            '<div style="width:32px;height:32px;border-radius:8px;background:' + sc.bg + ';display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">' + sc.icon + '</div>' +
+            '<div style="font-size:12px;font-weight:600;width:84px;flex-shrink:0">' + esc(sc.name) + '</div>' +
+            '<div style="flex:1;height:5px;background:var(--gray-100);border-radius:3px;overflow:hidden">' +
+              '<div style="width:' + barW + '%;height:100%;background:' + sc.bar + ';border-radius:3px"></div>' +
+            '</div>' +
+            '<div style="font-size:11px;font-family:var(--mono);color:var(--gray-500);flex-shrink:0;text-align:right;min-width:130px">' + s.sessions + ' sessions · ' + distStr + ' · ' + s.hours + 'h</div>' +
+          '</div>';
+      }).join('');
+
+      var prCards = r.prs.map(function (pr) {
+        return '' +
+          '<div style="border:' + (pr.isNew ? '0.5px solid #E6B800' : 'var(--border)') + ';border-radius:10px;padding:12px;position:relative;overflow:hidden;' + (pr.isNew ? 'background:linear-gradient(135deg,#FFFDF0,#FFF9E0)' : 'background:white') + '">' +
+            (pr.isNew ? '<div style="position:absolute;top:8px;right:8px;font-size:8px;font-weight:700;padding:2px 7px;border-radius:10px;background:var(--yellow);color:var(--gray-900);text-transform:uppercase;letter-spacing:.05em">New</div>' : '') +
+            '<div style="font-size:16px;margin-bottom:6px">' + esc(pr.icon) + '</div>' +
+            '<div style="font-size:10px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">' + esc(pr.label) + '</div>' +
+            '<div style="font-size:17px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">' + esc(pr.value) + '</div>' +
+            '<div style="font-size:10px;color:var(--gray-400);margin-top:3px">' + esc(pr.meta) + '</div>' +
+          '</div>';
+      }).join('');
+
+      body.innerHTML =
+        '<div style="display:grid;grid-template-columns:repeat(4,1fr);background:white;border-bottom:var(--border)">' +
+          '<div style="padding:14px 16px;border-right:var(--border);text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1">' + r.hero.activities + '</div><div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Activities</div></div>' +
+          '<div style="padding:14px 16px;border-right:var(--border);text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1">' + r.hero.totalKm.toLocaleString() + '</div><div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Total km</div></div>' +
+          '<div style="padding:14px 16px;border-right:var(--border);text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1">' + r.hero.totalHours + 'h</div><div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Total time</div></div>' +
+          '<div style="padding:14px 16px;text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1">' + r.hero.totalPoints.toLocaleString() + '</div><div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Points earned</div></div>' +
+        '</div>' +
+        '<div style="margin:12px;background:white;border:var(--border);border-radius:var(--radius-lg);display:grid;grid-template-columns:1fr 1fr 1fr;overflow:hidden">' +
+          '<div style="padding:12px 14px;border-right:var(--border);display:flex;align-items:center;gap:10px"><div style="font-size:18px">🔥</div><div><div style="font-size:15px;font-weight:700;font-family:var(--mono);line-height:1;color:#E6B800">' + r.streaks.current + ' day' + (r.streaks.current !== 1 ? 's' : '') + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px">Current streak</div></div></div>' +
+          '<div style="padding:12px 14px;border-right:var(--border);display:flex;align-items:center;gap:10px"><div style="font-size:18px">🏆</div><div><div style="font-size:15px;font-weight:700;font-family:var(--mono);line-height:1">' + r.streaks.longest + ' day' + (r.streaks.longest !== 1 ? 's' : '') + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px">Longest streak</div></div></div>' +
+          '<div style="padding:12px 14px;display:flex;align-items:center;gap:10px"><div style="font-size:18px">📅</div><div><div style="font-size:15px;font-weight:700;font-family:var(--mono);line-height:1">' + r.streaks.avgPerWeek + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px">Avg sessions / week</div></div></div>' +
+        '</div>' +
+        '<div style="margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
+          '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between"><div style="font-size:12px;font-weight:600">📊 Weekly activity · last 12 weeks</div><div style="font-size:11px;color:var(--gray-400)">hours per week</div></div>' +
+          '<div style="display:flex;align-items:flex-end;gap:5px;height:80px;padding:14px 14px 8px">' + chartBars + '</div>' +
+        '</div>' +
+        (r.sportBreakdown.length > 0 ?
+          '<div style="margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
+            '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between"><div style="font-size:12px;font-weight:600">🏅 By sport</div><div style="font-size:11px;color:var(--gray-400)">sessions · distance · time</div></div>' +
+            sportRows +
+          '</div>' : '') +
+        (r.prs.length > 0 ?
+          '<div style="margin:0 12px 14px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
+            '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between"><div style="font-size:12px;font-weight:600">🏆 Personal records</div><div style="font-size:11px;color:var(--gray-400)">from logged activities · all time</div></div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px 14px">' + prCards + '</div>' +
+          '</div>' : '');
+    } catch (err) {
+      body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Could not load stats.</div>';
+    }
+  }
+
+  // Load the stats when the Stats & PRs tab is opened (mirrors the Activities hook).
+  var statsHtab = document.getElementById('htab-stats');
+  if (statsHtab) statsHtab.addEventListener('click', loadProfileStats);
+
+  // Deep link: /profile#stats opens the Stats & PRs tab.
+  if (window.location.hash === '#stats') {
+    if (typeof setTab === 'function') setTab('stats');
+    loadProfileStats();
+  }
+})();
 </script>
 </body>
 </html>

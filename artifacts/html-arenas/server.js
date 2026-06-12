@@ -3148,6 +3148,171 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
     servePlain();
   }
 });
+// Profile stats & PRs computed from the signed-in user's own `activities`.
+// Hero stats and the sport breakdown respect the `period` filter; streaks,
+// the 12-week chart, and personal records are always all-time (per spec).
+app.get(BASE + '/api/profile/stats', requireAuth, async (req, res) => {
+  try {
+    if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+    const period = req.query.period === 'month' || req.query.period === 'year' ? req.query.period : 'all';
+    const now = new Date();
+    let periodStart = new Date(2020, 0, 1);
+    if (period === 'month') periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    if (period === 'year') periodStart = new Date(now.getFullYear(), 0, 1);
+
+    // All activities for streaks + PRs (PRs are always all-time).
+    const { data: allActivities, error } = await supabaseAdmin
+      .from('activities')
+      .select('id, sport, title, distance, duration, date')
+      .eq('user_id', req.user.id)
+      .order('date', { ascending: true });
+    if (error) {
+      console.log('Profile stats query error:', error.message);
+      return res.status(500).json({ error: 'Could not load stats' });
+    }
+    const acts = allActivities || [];
+    // Period-filtered activities for hero stats and breakdowns.
+    const periodActs = acts.filter((a) => new Date(a.date) >= periodStart);
+
+    const km = (a) => parseDistanceKm(a.distance);
+
+    // ── Hero stats (period) ──
+    const totalKm = Math.round(periodActs.reduce((s, a) => s + km(a), 0));
+    const totalHours = Math.round(periodActs.reduce((s, a) => s + parseDurationHours(a.duration), 0) * 10) / 10;
+    const totalPoints = calculatePoints(periodActs);
+
+    // ── Streaks (always all-time) ──
+    const activeDays = [...new Set(acts.map((a) => new Date(a.date).toDateString()))]
+      .map((d) => new Date(d)).sort((a, b) => a - b);
+    let longestStreak = 0, run = 0;
+    for (let i = 0; i < activeDays.length; i++) {
+      if (i === 0) { run = 1; }
+      else {
+        const diff = Math.round((activeDays[i] - activeDays[i - 1]) / 86400000);
+        run = diff === 1 ? run + 1 : 1;
+      }
+      if (run > longestStreak) longestStreak = run;
+    }
+    let currentStreak = 0;
+    if (activeDays.length > 0) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const lastActive = new Date(activeDays[activeDays.length - 1]); lastActive.setHours(0, 0, 0, 0);
+      const gap = Math.round((today - lastActive) / 86400000);
+      if (gap <= 1) {
+        currentStreak = 1;
+        for (let i = activeDays.length - 1; i > 0; i--) {
+          const diff = Math.round((activeDays[i] - activeDays[i - 1]) / 86400000);
+          if (diff === 1) currentStreak++;
+          else break;
+        }
+      }
+    }
+    // Avg sessions per week over the period (or since first activity in period).
+    const firstDate = periodActs.length > 0 ? new Date(periodActs[0].date) : now;
+    const weeksSpan = Math.max(1, (now - firstDate) / (7 * 86400000));
+    const avgPerWeek = Math.round((periodActs.length / weeksSpan) * 10) / 10;
+
+    // ── Weekly chart (last 12 weeks, always recent regardless of period) ──
+    const weeklyChart = [];
+    for (let i = 11; i >= 0; i--) {
+      const day = now.getDay() || 7;
+      const wStart = new Date(now); wStart.setDate(now.getDate() - day + 1 - i * 7); wStart.setHours(0, 0, 0, 0);
+      const wEnd = new Date(wStart); wEnd.setDate(wStart.getDate() + 7);
+      const wActs = acts.filter((a) => { const d = new Date(a.date); return d >= wStart && d < wEnd; });
+      weeklyChart.push({
+        label: wStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).replace(' ', ''),
+        hours: Math.round(wActs.reduce((s, a) => s + parseDurationHours(a.duration), 0) * 10) / 10
+      });
+    }
+
+    // ── Sport breakdown (period) ──
+    const sportMap = {};
+    periodActs.forEach((a) => {
+      const sport = a.sport || 'other';
+      if (!sportMap[sport]) sportMap[sport] = { sessions: 0, km: 0, hours: 0 };
+      sportMap[sport].sessions++;
+      sportMap[sport].km += km(a);
+      sportMap[sport].hours += parseDurationHours(a.duration);
+    });
+    const sportBreakdown = Object.entries(sportMap).map(([sport, s]) => ({
+      sport,
+      sessions: s.sessions,
+      km: Math.round(s.km),
+      hours: Math.round(s.hours * 10) / 10,
+      pct: periodActs.length > 0 ? Math.round((s.sessions / periodActs.length) * 100) : 0
+    })).sort((a, b) => b.sessions - a.sessions);
+
+    // ── Personal records (always all-time) ──
+    const prs = [];
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000);
+    const isNew = (dateStr) => new Date(dateStr) >= fourteenDaysAgo;
+    const fmtDate = (d) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+    const runs = acts.filter((a) => a.sport === 'running' && km(a) > 0);
+    if (runs.length) {
+      const best = runs.reduce((m, a) => km(a) > km(m) ? a : m);
+      prs.push({ icon: '🏃', label: 'Longest run', value: km(best) + ' km', meta: fmtDate(best.date) + (best.title ? ' · ' + best.title : ''), isNew: isNew(best.date) });
+    }
+    const pacedRuns = runs.filter((a) => km(a) >= 3 && parseDurationHours(a.duration) > 0);
+    if (pacedRuns.length) {
+      const withPace = pacedRuns.map((a) => ({ a, pace: (parseDurationHours(a.duration) * 60) / km(a) }));
+      const best = withPace.reduce((m, x) => x.pace < m.pace ? x : m);
+      const mins = Math.floor(best.pace);
+      const secs = Math.round((best.pace - mins) * 60);
+      prs.push({ icon: '⚡', label: 'Fastest pace · run', value: `${mins}:${String(secs).padStart(2, '0')} /km`, meta: fmtDate(best.a.date) + (best.a.title ? ' · ' + best.a.title : ''), isNew: isNew(best.a.date) });
+    }
+    const rides = acts.filter((a) => a.sport === 'cycling' && km(a) > 0);
+    if (rides.length) {
+      const best = rides.reduce((m, a) => km(a) > km(m) ? a : m);
+      prs.push({ icon: '🚴', label: 'Longest ride', value: km(best) + ' km', meta: fmtDate(best.date) + (best.title ? ' · ' + best.title : ''), isNew: isNew(best.date) });
+    }
+    const timed = acts.filter((a) => parseDurationHours(a.duration) > 0);
+    if (timed.length) {
+      const best = timed.reduce((m, a) => parseDurationHours(a.duration) > parseDurationHours(m.duration) ? a : m);
+      const h = parseDurationHours(best.duration);
+      const hh = Math.floor(h), mm = Math.round((h - hh) * 60);
+      const sportName = best.sport ? best.sport.charAt(0).toUpperCase() + best.sport.slice(1) : 'Activity';
+      prs.push({ icon: '⏱', label: 'Longest activity', value: `${hh}h ${mm}m`, meta: fmtDate(best.date) + ' · ' + sportName, isNew: isNew(best.date) });
+    }
+    if (acts.length) {
+      const weekTotals = {};
+      acts.forEach((a) => {
+        const d = new Date(a.date);
+        const day = d.getDay() || 7;
+        const wStart = new Date(d); wStart.setDate(d.getDate() - day + 1); wStart.setHours(0, 0, 0, 0);
+        const key = `${wStart.getFullYear()}-${String(wStart.getMonth() + 1).padStart(2, '0')}-${String(wStart.getDate()).padStart(2, '0')}`;
+        if (!weekTotals[key]) weekTotals[key] = { hours: 0, count: 0 };
+        weekTotals[key].hours += parseDurationHours(a.duration);
+        weekTotals[key].count++;
+      });
+      const bestWeek = Object.entries(weekTotals).reduce((m, x) => x[1].hours > m[1].hours ? x : m);
+      prs.push({ icon: '📅', label: 'Biggest week', value: Math.round(bestWeek[1].hours * 10) / 10 + 'h', meta: 'Week of ' + new Date(bestWeek[0]).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' · ' + bestWeek[1].count + ' activities', isNew: isNew(bestWeek[0]) });
+
+      const monthTotals = {};
+      acts.forEach((a) => {
+        const d = new Date(a.date);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        monthTotals[key] = (monthTotals[key] || 0) + km(a);
+      });
+      const bestMonth = Object.entries(monthTotals).reduce((m, x) => x[1] > m[1] ? x : m);
+      const [bmYear, bmMonth] = bestMonth[0].split('-').map(Number);
+      prs.push({ icon: '📍', label: 'Biggest month', value: Math.round(bestMonth[1]) + ' km', meta: new Date(bmYear, bmMonth - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) + ' · across all sports', isNew: false });
+    }
+
+    res.json({
+      period,
+      hero: { activities: periodActs.length, totalKm, totalHours, totalPoints },
+      streaks: { current: currentStreak, longest: longestStreak, avgPerWeek },
+      weeklyChart,
+      sportBreakdown,
+      prs
+    });
+  } catch (err) {
+    console.log('Profile stats error:', err.message);
+    res.status(500).json({ error: 'Could not load stats' });
+  }
+});
+
 // Persist profile edits. There is no `profiles` table, so changes are written to
 // the user's auth metadata (name/handle/bio/location), merged over any existing
 // metadata so unrelated keys are preserved. Returns JSON for the edit form fetch.
