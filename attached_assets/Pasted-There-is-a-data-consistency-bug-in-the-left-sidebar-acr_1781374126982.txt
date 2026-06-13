@@ -1,0 +1,36 @@
+There is a data consistency bug in the left sidebar across the athlete-facing pages. The "My Clubs" section in the sidebar shows different clubs depending on which page I'm on. On the Feed page it correctly shows "Test Club 10". But on the Events page it shows "Hackney RC" (wrong/old data), and on My Profile the logo is different. Every page should show the exact same club memberships in the sidebar, pulled from the real memberships table in Supabase.
+Please do the following:
+
+Search across ALL athlete-facing HTML files in artifacts/html-arenas/html/ for any hardcoded club names — specifically search for "Hackney RC", "Hackney", and any other hardcoded club names in the sidebar markup. List every file and line where you find hardcoded club data in the sidebar.
+For each athlete-facing page route in server.js (/feed, /profile, /events, /challenges, /leaderboards, /athletes, /notifications), confirm that it fetches the user's real club memberships and injects them into the page. The fetch should be identical everywhere:
+
+javascriptconst { data: userClubs } = await supabaseAdmin
+  .from('memberships')
+  .select('role, clubs:club_id(id, name, handle, sport)')
+  .eq('user_id', req.user.id)
+  .eq('status', 'active');
+const sidebarClubs = (userClubs || []).map(m => ({ ...m.clubs, role: m.role })).filter(Boolean);
+// inject into the page data object, e.g. pageData.sidebarClubs = sidebarClubs;
+
+In every athlete-facing HTML file, find the "My Clubs" sidebar section. Remove ALL hardcoded club entries from the HTML and instead render the clubs from the injected sidebarClubs data using a shared rendering approach. The sidebar club section should be empty in the static HTML and populated by JavaScript from the real data:
+
+javascriptconst clubs = (window.ARENAS_DATA && window.ARENAS_DATA.sidebarClubs) || [];
+const clubContainer = document.querySelector('.sidebar-clubs, .my-clubs-nav, [data-sidebar-clubs]');
+if (clubContainer) {
+  const sportIcons = { running:'🏃', cycling:'🚴', climbing:'🧗', swimming:'🏊', football:'⚽', triathlon:'🔱', hiking:'🥾', yoga:'🧘' };
+  if (clubs.length === 0) {
+    clubContainer.innerHTML = '';
+  } else {
+    clubContainer.innerHTML = clubs.map(c => `
+      <div class="nav-item" onclick="window.location.href='/clubs/member'" style="display:flex;align-items:center;gap:10px;padding:8px 14px;cursor:pointer">
+        <span style="font-size:16px">${sportIcons[c.sport] || '🏟'}</span>
+        <span style="font-size:13px;color:var(--gray-700)">${c.name}</span>
+      </div>`
+    ).join('');
+  }
+}
+
+The key fix is that NO page should have a hardcoded club name in its sidebar HTML. Every single one must render from window.ARENAS_DATA.sidebarClubs which comes from the same Supabase query on every route. This guarantees the sidebar is identical everywhere.
+Please first report back what hardcoded club data you found and in which files BEFORE making changes, so I can confirm the scope.
+
+Wait for my confirmation, then make the changes, wait for checkpoint, and push to GitHub main.
