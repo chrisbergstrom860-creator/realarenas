@@ -4062,6 +4062,215 @@ app.get(BASE + '/clubs/member/:clubId', requirePageAuth, async (req, res) => {
   }
 });
 
+// ── CLUB MEMBER HOME DATA (API) ──
+// Everything a member sees about ONE club, in a single payload: hero stats,
+// their weekly leaderboard standing, recent coach announcements, upcoming
+// events (with the viewer's RSVP), active challenges (with the viewer's
+// progress), and the roster. Membership-gated. Display names come from auth
+// metadata via buildUserProfileMap (there is no profiles table); points reuse
+// the shared calculatePoints/parseDistanceKm heuristic.
+app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Service unavailable' });
+  const { clubId } = req.params;
+  const userId = req.user.id;
+  const PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
+  try {
+    // Membership gate — non-members get a soft error the client renders inline.
+    const { data: myMembership } = await supabaseAdmin
+      .from('memberships')
+      .select('role')
+      .eq('user_id', userId)
+      .eq('club_id', clubId)
+      .maybeSingle();
+    if (!myMembership) return res.json({ error: 'Not a member of this club' });
+
+    // Club details.
+    const { data: club } = await supabaseAdmin
+      .from('clubs')
+      .select('id, name, handle, sport, city')
+      .eq('id', clubId)
+      .maybeSingle();
+
+    // Full roster, ordered by join time. Names resolved from auth metadata.
+    const { data: members } = await supabaseAdmin
+      .from('memberships')
+      .select('user_id, role, created_at')
+      .eq('club_id', clubId)
+      .order('created_at', { ascending: true });
+    const memberRows = members || [];
+    const memberIds = memberRows.map((m) => m.user_id);
+    const safeIds = memberIds.length ? memberIds : [PLACEHOLDER];
+    const profileMap = await buildUserProfileMap(memberIds);
+    const nameOf = (id) => (profileMap[id] && profileMap[id].name) || 'Member';
+    const handleOf = (id) => (profileMap[id] && profileMap[id].handle) || 'member';
+    const roleOf = (id) => (memberRows.find((m) => m.user_id === id) || {}).role || 'coach';
+
+    // Roster: admins, then coaches, then members alphabetically.
+    const roleOrder = { admin: 0, coach: 1, member: 2 };
+    const roster = memberRows.map((m) => ({
+      userId: m.user_id,
+      name: nameOf(m.user_id),
+      handle: handleOf(m.user_id),
+      role: m.role,
+      isMe: m.user_id === userId
+    })).sort((a, b) => ((roleOrder[a.role] ?? 3) - (roleOrder[b.role] ?? 3)) || a.name.localeCompare(b.name));
+
+    // Coach announcements — recent posts by this club's admins/coaches.
+    const coachIds = memberRows.filter((m) => m.role === 'admin' || m.role === 'coach').map((m) => m.user_id);
+    const { data: announcements } = await supabaseAdmin
+      .from('posts')
+      .select('id, user_id, content, created_at')
+      .in('user_id', coachIds.length ? coachIds : [PLACEHOLDER])
+      .order('created_at', { ascending: false })
+      .limit(5);
+    const annRows = announcements || [];
+    const annIds = annRows.map((a) => a.id);
+    const { data: annLikes } = await supabaseAdmin
+      .from('post_likes')
+      .select('post_id, user_id')
+      .in('post_id', annIds.length ? annIds : [PLACEHOLDER]);
+    const likeRows = annLikes || [];
+    const announcementsOut = annRows.map((a) => {
+      const likes = likeRows.filter((l) => l.post_id === a.id);
+      return {
+        id: a.id,
+        coachName: nameOf(a.user_id),
+        role: roleOf(a.user_id),
+        content: a.content,
+        createdAt: a.created_at,
+        likeCount: likes.length,
+        likedByMe: likes.some((l) => l.user_id === userId)
+      };
+    });
+
+    // Upcoming club events with the viewer's RSVP status.
+    const nowIso = new Date().toISOString();
+    const { data: clubEvents } = await supabaseAdmin
+      .from('events')
+      .select('id, title, date, location, sport')
+      .eq('club_id', clubId)
+      .gte('date', nowIso)
+      .order('date', { ascending: true })
+      .limit(5);
+    const eventRows = clubEvents || [];
+    const eventIds = eventRows.map((e) => e.id);
+    const { data: allEventRsvps } = await supabaseAdmin
+      .from('event_rsvps')
+      .select('event_id, user_id, status')
+      .in('event_id', eventIds.length ? eventIds : [PLACEHOLDER]);
+    const rsvpRows = allEventRsvps || [];
+    const eventsOut = eventRows.map((e) => {
+      const rsvps = rsvpRows.filter((r) => r.event_id === e.id);
+      const myRsvp = rsvps.find((r) => r.user_id === userId);
+      return {
+        id: e.id, title: e.title, date: e.date, location: e.location, sport: e.sport,
+        goingCount: rsvps.filter((r) => r.status === 'going').length,
+        myStatus: myRsvp ? myRsvp.status : null
+      };
+    });
+
+    // Active club challenges with the viewer's progress.
+    const { data: clubChallenges } = await supabaseAdmin
+      .from('challenges')
+      .select('id, title, sport, goal_type, goal_target, goal_unit, start_date, end_date')
+      .eq('club_id', clubId)
+      .gte('end_date', nowIso)
+      .order('end_date', { ascending: true });
+    const { data: myActs } = await supabaseAdmin
+      .from('activities')
+      .select('sport, distance, date')
+      .eq('user_id', userId);
+    const myActRows = myActs || [];
+    const challengesOut = [];
+    for (const ch of (clubChallenges || [])) {
+      const { data: myPart } = await supabaseAdmin
+        .from('challenge_participants')
+        .select('id')
+        .eq('challenge_id', ch.id)
+        .eq('user_id', userId)
+        .maybeSingle();
+      const { count: participantCount } = await supabaseAdmin
+        .from('challenge_participants')
+        .select('*', { count: 'exact', head: true })
+        .eq('challenge_id', ch.id);
+      let progress = 0;
+      const streakDays = new Set();
+      const chStart = new Date(ch.start_date);
+      const chEnd = new Date(ch.end_date);
+      myActRows.forEach((a) => {
+        const d = new Date(a.date);
+        if (d < chStart || d > chEnd) return;
+        if (ch.sport !== 'any' && a.sport !== ch.sport) return;
+        if (ch.goal_type === 'distance') progress += parseDistanceKm(a.distance);
+        else if (ch.goal_type === 'streak') streakDays.add(d.toDateString());
+        else progress += 1;
+      });
+      if (ch.goal_type === 'streak') progress = streakDays.size;
+      progress = Math.round(progress * 10) / 10;
+      // Guard every completion check with goal_target > 0 — a 0/null target
+      // would make pct/"achieved" fire with no real progress.
+      const pct = ch.goal_target > 0 ? Math.min(100, Math.round((progress / ch.goal_target) * 100)) : 0;
+      const totalDays = Math.max(1, (chEnd - chStart) / 86400000);
+      const elapsed = Math.max(0, (new Date() - chStart) / 86400000);
+      const expectedPct = Math.round((elapsed / totalDays) * 100);
+      const daysLeft = Math.max(0, Math.ceil((chEnd - new Date()) / 86400000));
+      let statusText, statusColor;
+      if (!myPart) { statusText = 'Not joined — tap to join'; statusColor = '#854D0E'; }
+      else if (ch.goal_target > 0 && pct >= 100) { statusText = 'Goal achieved ✓'; statusColor = '#10B981'; }
+      else if (ch.goal_type === 'streak') {
+        const rem = Math.max(0, (ch.goal_target || 0) - progress);
+        statusText = rem <= 2 ? `${rem} more day${rem !== 1 ? 's' : ''} — don't break it!` : `${rem} days to go`;
+        statusColor = '#854D0E';
+      }
+      else if (pct >= expectedPct) { statusText = 'On pace'; statusColor = '#10B981'; }
+      else { statusText = 'Behind pace — push on'; statusColor = '#854D0E'; }
+      challengesOut.push({
+        id: ch.id, title: ch.title, sport: ch.sport,
+        goalTarget: ch.goal_target, goalUnit: ch.goal_unit,
+        joined: !!myPart, progress, pct, daysLeft, statusText, statusColor,
+        participantCount: participantCount || 0
+      });
+    }
+
+    // The viewer's standing in the club's weekly points leaderboard.
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() - 7);
+    const { data: weekActs } = await supabaseAdmin
+      .from('activities')
+      .select('user_id, sport, distance, duration, date')
+      .in('user_id', safeIds)
+      .gte('date', weekStart.toISOString());
+    const ptsByUser = {};
+    memberIds.forEach((id) => { ptsByUser[id] = []; });
+    (weekActs || []).forEach((a) => { if (ptsByUser[a.user_id]) ptsByUser[a.user_id].push(a); });
+    const standings = memberIds.map((id) => ({ userId: id, points: calculatePoints(ptsByUser[id]) }))
+      .sort((a, b) => b.points - a.points);
+    const myRankIdx = standings.findIndex((s) => s.userId === userId);
+    const myRank = myRankIdx >= 0 ? myRankIdx + 1 : null;
+    const myPoints = myRankIdx >= 0 ? standings[myRankIdx].points : 0;
+    const myActiveChallenges = challengesOut.filter((c) => c.joined).length;
+
+    res.json({
+      club,
+      stats: {
+        memberCount: memberRows.length,
+        eventCount: eventsOut.length,
+        challengeCount: challengesOut.length,
+        myRank, myPoints
+      },
+      standing: { rank: myRank, total: memberRows.length, points: myPoints, activeChallenges: myActiveChallenges },
+      announcements: announcementsOut,
+      events: eventsOut,
+      challenges: challengesOut,
+      roster,
+      myRole: myMembership.role
+    });
+  } catch (err) {
+    console.log('Club member-home error:', err.message);
+    res.json({ error: 'Could not load club' });
+  }
+});
+
 // ── CLUB INVITE ADMIN PAGE ──
 // Renders the invite console with the manager's real club, pending invites, and
 // members injected as window.INVITE_DATA. Falls back to the static mockup if the

@@ -369,592 +369,8 @@ button,select,input,textarea{font-family:var(--font)}
 <!-- MAIN CONTENT -->
 <main class="main">
 
-<!-- ═══ OVERVIEW TAB ═══ -->
-<div class="tab-content active" id="tab-overview">
-  <div class="welcome-banner">
-    <div class="wb-icon">🎉</div>
-    <div class="wb-text">
-      <div class="wb-title">Welcome to Hackney Running Club, Jamie!</div>
-      <div class="wb-sub">You joined 2 days ago. Connect Strava to start logging activities and appear on the leaderboard.</div>
-    </div>
-    <div class="wb-actions">
-      <button class="btn btn-yellow" onclick="showToast('Connecting Strava…')">Connect Strava →</button>
-      <button class="btn btn-ghost" style="color:var(--gray-300);border-color:rgba(255,255,255,0.2)" onclick="this.parentElement.parentElement.parentElement.style.display='none'">Dismiss</button>
-    </div>
-  </div>
-
-  <div class="page-hdr">
-    <div><h1>Club overview 👋</h1><p>Hackney Running Club · Week of May 15–22, 2026</p></div>
-    <div class="page-hdr-right">
-      <button class="btn btn-ghost" onclick="setTab('events',document.getElementById('nav-events'))">📅 View events</button>
-      <button class="btn btn-yellow" onclick="openModal('challenge-browse')">⚡ Join a challenge</button>
-    </div>
-  </div>
-
-  <!-- Your club stats -->
-  <div class="grid-4" style="margin-bottom:16px">
-    <div class="stat-card">
-      <div class="sc-label">Your club rank</div>
-      <div class="sc-value">#5</div>
-      <div class="sc-delta up">↑ +3 this week</div>
-    </div>
-    <div class="stat-card">
-      <div class="sc-label">Your points</div>
-      <div class="sc-value">6,440</div>
-      <div class="sc-delta neutral">540 to rank #4</div>
-    </div>
-    <div class="stat-card">
-      <div class="sc-label">Activities this week</div>
-      <div class="sc-value">3</div>
-      <div class="sc-delta up">↑ +1 vs last week</div>
-    </div>
-    <div class="stat-card">
-      <div class="sc-label">Current streak</div>
-      <div class="sc-value">6</div>
-      <div class="sc-delta neutral">days · best: 14</div>
-    </div>
-  </div>
-
-  <div class="grid-3">
-    <!-- Club leaderboard snippet -->
-    <div class="card">
-      <div class="card-header">
-        <span style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--gray-900)">🏆 Club leaderboard</span>
-        <button class="btn btn-sm btn-ghost" onclick="setTab('leaderboard',document.getElementById('nav-leaderboard'))">Full board →</button>
-      </div>
-      <div>
-        <div class="lb-row">
-          <div class="lb-rank r1">1</div>
-          <div class="lb-athlete"><div class="lb-av" style="background:#FEF9C3;color:#854D0E">SL</div><div><div class="lb-name">Sofia L.</div><div class="lb-detail">88.2 km</div></div></div>
-          <div class="lb-score-cell"><div class="lb-score">9,840</div></div>
-          <div><span class="trend t-up">↑+1</span></div>
-          <div></div>
-        </div>
-        <div class="lb-row">
-          <div class="lb-rank r2">2</div>
-          <div class="lb-athlete"><div class="lb-av" style="background:#FCE7F3;color:#9D174D">YT</div><div><div class="lb-name">Yuki T.</div><div class="lb-detail">68.0 km</div></div></div>
-          <div class="lb-score-cell"><div class="lb-score">7,610</div></div>
-          <div><span class="trend t-up">↑+2</span></div>
-          <div></div>
-        </div>
-        <div class="lb-row">
-          <div class="lb-rank r3">3</div>
-          <div class="lb-athlete"><div class="lb-av" style="background:#E0F2FE;color:#0369A1">AL</div><div><div class="lb-name">Alena L.</div><div class="lb-detail">71.4 km</div></div></div>
-          <div class="lb-score-cell"><div class="lb-score">7,220</div></div>
-          <div><span class="trend t-eq">—</span></div>
-          <div></div>
-        </div>
-        <div class="lb-row is-you">
-          <div class="lb-rank">5</div>
-          <div class="lb-athlete"><div class="lb-av" style="background:#FFF7ED;color:#9A3412">JK</div><div><div class="lb-name">Jamie K.</div><div class="lb-detail">12.4 km</div></div></div>
-          <div class="lb-score-cell"><div class="lb-score">6,440</div></div>
-          <div><span class="trend t-up">↑+3</span></div>
-          <div><span class="you-tag">you</span></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Active challenge -->
-    <div class="card">
-      <div class="card-header">
-        <span style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--gray-900)">⚡ 100km May Run</span>
-        <button class="btn btn-sm btn-ghost" onclick="setTab('challenges',document.getElementById('nav-challenges'))">All →</button>
-      </div>
-      <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
-        <div>
-          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;color:var(--gray-600)"><span>Your progress</span><span style="font-family:var(--mono);font-weight:600;color:var(--gray-900)">62 / 100 km</span></div>
-          <div class="prog-track"><div class="prog-fill" style="width:62%;background:var(--orange)"></div></div>
-          <div style="font-size:11px;color:var(--gray-400);margin-top:4px">38 km remaining · 9 days left · you're rank #5</div>
-        </div>
-        <div style="font-size:12px;font-weight:600;color:var(--gray-700);margin-bottom:4px">Your activity log</div>
-        <div class="streak-row">
-          <div class="s-dot sd-done">✓</div><div class="s-dot sd-done">✓</div><div class="s-dot sd-done">✓</div>
-          <div class="s-dot sd-miss">✗</div><div class="s-dot sd-done">✓</div><div class="s-dot sd-done">✓</div>
-          <div class="s-dot sd-today">T</div><div class="s-dot sd-fut"></div><div class="s-dot sd-fut"></div>
-        </div>
-        <div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:6px;padding:8px 10px;font-size:12px;color:#7a5c00">
-          💡 Log a 5km run today to hit 67km — that puts you past Tom R. for rank #4.
-        </div>
-      </div>
-    </div>
-
-    <!-- Next event -->
-    <div class="card">
-      <div class="card-header">
-        <span style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--gray-900)">📅 Next club event</span>
-        <button class="btn btn-sm btn-ghost" onclick="setTab('events',document.getElementById('nav-events'))">All →</button>
-      </div>
-      <div style="padding:14px 16px">
-        <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:12px">
-          <div class="ev-date-box" style="width:44px;height:44px;flex-shrink:0"><div class="ed" style="font-size:16px">13</div><div class="em">Apr</div></div>
-          <div>
-            <div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:2px">London Half Marathon</div>
-            <div style="font-size:12px;color:var(--gray-500)">Blackheath · 7:00 AM · £45</div>
-            <div style="display:flex;gap:4px;margin-top:6px">
-              <span class="pill pill-run">Running</span>
-              <span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;background:var(--green-light);color:#166534;border:1px solid #86EFAC">34 going</span>
-            </div>
-          </div>
-        </div>
-        <div style="background:var(--gray-50);border:var(--border);border-radius:6px;padding:8px 10px;font-size:12px;color:var(--gray-600);margin-bottom:12px">
-          <strong style="color:var(--gray-900)">Coach Rachel says:</strong> Great flat course for a PB. We'll meet at the start village at 6:30 AM.
-        </div>
-        <div style="display:flex;gap:7px">
-          <button class="btn btn-yellow btn-sm" onclick="rsvpGoing(this)">✓ I'm going</button>
-          <button class="btn btn-ghost btn-sm" onclick="showToast('You declined this event')">Can't make it</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ CLUB FEED TAB ═══ -->
-<div class="tab-content" id="tab-feed">
-  <div class="page-hdr">
-    <div><h1>Club feed 🏃</h1><p>Activities from your 48 Hackney Running Club teammates</p></div>
-    <div class="page-hdr-right">
-      <select style="padding:7px 12px;border:var(--border);border-radius:7px;font-size:13px;background:white;outline:none;cursor:pointer">
-        <option>All sports</option><option>Running</option><option>Cycling</option>
-      </select>
-    </div>
-  </div>
-  <div style="display:flex;flex-direction:column;gap:12px">
-
-    <div class="activity-card">
-      <div class="ac-body">
-        <div class="ac-head">
-          <div class="ac-av" style="background:#FEF9C3;color:#854D0E">SL</div>
-          <div><div class="ac-user">Sofia L.</div><div class="ac-time">2h ago · London</div></div>
-          <div class="ac-sport-tag" style="background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74">🏃 Running</div>
-        </div>
-        <div class="ac-stats">
-          <div class="ac-stat"><div class="sv">88.2</div><div class="sl">km</div></div>
-          <div class="ac-stat"><div class="sv">4:18</div><div class="sl">/km</div></div>
-          <div class="ac-stat"><div class="sv">142</div><div class="sl">bpm</div></div>
-          <div class="ac-stat"><div class="sv">+420</div><div class="sl">elev m</div></div>
-        </div>
-        <div class="ac-desc">Weekly long run done — that's 94.2km for the month. One more big effort and I'll hit 100km before May 31. Anyone else pushing for it this weekend?</div>
-        <div class="ac-ai">
-          <div class="ai-icon">AI</div>
-          <div class="ac-ai-text"><strong>AI Coach:</strong> Excellent aerobic base run — HR held steady throughout which suggests great fat adaptation. A good taper day tomorrow before any hard work this week.</div>
-        </div>
-      </div>
-      <div class="ac-footer">
-        <button class="ac-action-btn liked" onclick="toggleLike(this)">👍 24 kudos</button>
-        <button class="ac-action-btn" onclick="openModal('comment')">💬 8 comments</button>
-        <button class="ac-action-btn" onclick="showToast('Route saved to your library')">📍 Save route</button>
-        <span style="font-size:11px;color:var(--gray-400);margin-left:auto">🏆 Rank #1 this week</span>
-      </div>
-    </div>
-
-    <div class="activity-card">
-      <div class="ac-body">
-        <div class="ac-head">
-          <div class="ac-av" style="background:#FFF7ED;color:#9A3412">JK</div>
-          <div><div class="ac-user">Jamie K. <span style="font-size:11px;font-weight:400;color:var(--gray-400)">(you)</span></div><div class="ac-time">7h ago · London</div></div>
-          <div class="ac-sport-tag" style="background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74">🏃 Running</div>
-        </div>
-        <div class="ac-stats">
-          <div class="ac-stat"><div class="sv">12.4</div><div class="sl">km</div></div>
-          <div class="ac-stat"><div class="sv">54:22</div><div class="sl">time</div></div>
-          <div class="ac-stat"><div class="sv">4:23</div><div class="sl">/km</div></div>
-          <div class="ac-stat"><div class="sv">148</div><div class="sl">bpm</div></div>
-        </div>
-        <div class="ac-desc">Morning long run ✓ Legs felt heavy in miles 8–10 but pushed through. PB attempt this Sunday — anyone in London want to pace the last 5km?</div>
-        <div class="ac-ai">
-          <div class="ai-icon">AI</div>
-          <div class="ac-ai-text"><strong>AI Coach:</strong> HR spiked 12 bpm in the final 3km — classic glycogen depletion. Keep tomorrow easy and you'll be fresh for Sunday's PB attempt. Consider fuelling at km 8 next long run.</div>
-        </div>
-      </div>
-      <div class="ac-footer">
-        <button class="ac-action-btn liked">👍 6 kudos</button>
-        <button class="ac-action-btn" onclick="openModal('comment')">💬 3 comments</button>
-        <button class="ac-action-btn" onclick="showToast('Editing activity…')">✏️ Edit</button>
-      </div>
-    </div>
-
-    <div class="activity-card">
-      <div class="ac-body">
-        <div class="ac-head">
-          <div class="ac-av" style="background:#E0F2FE;color:#0369A1">AL</div>
-          <div><div class="ac-user">Alena L.</div><div class="ac-time">1d ago · London</div></div>
-          <div class="ac-sport-tag" style="background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74">🏃 Running</div>
-        </div>
-        <div class="ac-stats">
-          <div class="ac-stat"><div class="sv">71.4</div><div class="sl">km</div></div>
-          <div class="ac-stat"><div class="sv">4:30</div><div class="sl">/km</div></div>
-          <div class="ac-stat"><div class="sv">138</div><div class="sl">bpm</div></div>
-        </div>
-        <div class="ac-desc">Smashed the 100km May Run target early! 🎉 Thanks everyone in Hackney RC for the motivation — the private leaderboard kept me honest every single day this month.</div>
-      </div>
-      <div class="ac-footer">
-        <button class="ac-action-btn" onclick="toggleLike(this)">👍 31 kudos</button>
-        <button class="ac-action-btn" onclick="openModal('comment')">💬 14 comments</button>
-        <span style="font-size:11px;color:var(--green);font-weight:600;margin-left:auto">⚡ Challenge complete!</span>
-      </div>
-    </div>
-
-  </div>
-</div>
-
-<!-- ═══ LEADERBOARD TAB ═══ -->
-<div class="tab-content" id="tab-leaderboard">
-  <div class="page-hdr">
-    <div><h1>Club leaderboard 🏆</h1><p>Private rankings — Hackney Running Club only · Updated every Monday</p></div>
-    <div class="page-hdr-right">
-      <select style="padding:7px 12px;border:var(--border);border-radius:7px;font-size:13px;background:white;outline:none;cursor:pointer" onchange="showToast('Leaderboard updated')"><option>This week</option><option>This month</option><option>All time</option></select>
-      <select style="padding:7px 12px;border:var(--border);border-radius:7px;font-size:13px;background:white;outline:none;cursor:pointer" onchange="showToast('Metric updated')"><option>Points</option><option>Distance (km)</option><option>Activities</option><option>Streak (days)</option></select>
-    </div>
-  </div>
-
-  <!-- Your position banner -->
-  <div style="background:var(--gray-900);border-radius:var(--radius-lg);padding:18px 22px;display:flex;align-items:center;gap:18px;margin-bottom:16px;position:relative;overflow:hidden">
-    <div style="position:absolute;top:-60px;right:-60px;width:200px;height:200px;background:radial-gradient(circle,rgba(255,210,30,0.12) 0%,transparent 70%);pointer-events:none"></div>
-    <div style="width:44px;height:44px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--gray-900);flex-shrink:0;position:relative;z-index:1">JK</div>
-    <div style="flex:1;position:relative;z-index:1">
-      <div style="font-size:14px;font-weight:600;color:white;margin-bottom:2px">Your ranking — Jamie K.</div>
-      <div style="font-size:12px;color:var(--gray-400)">Running · Advanced · London</div>
-    </div>
-    <div style="display:flex;gap:20px;position:relative;z-index:1">
-      <div style="text-align:center"><div style="font-size:24px;font-weight:700;color:white;font-family:var(--mono)">#5</div><div style="font-size:11px;color:var(--gray-500)">Club rank</div></div>
-      <div style="text-align:center"><div style="font-size:24px;font-weight:700;color:white;font-family:var(--mono)">6,440</div><div style="font-size:11px;color:var(--gray-500)">Points</div></div>
-      <div style="text-align:center"><div style="font-size:24px;font-weight:700;color:white;font-family:var(--mono)">12.4</div><div style="font-size:11px;color:var(--gray-500)">km this week</div></div>
-    </div>
-    <div style="flex:1;min-width:180px;position:relative;z-index:1">
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-400);margin-bottom:6px"><span>Progress to rank #4</span><span style="font-family:var(--mono)">6,440 / 6,980</span></div>
-      <div style="height:5px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden"><div style="width:92%;height:100%;background:var(--yellow);border-radius:3px"></div></div>
-      <div style="font-size:11px;color:var(--gray-500);margin-top:5px">540 pts to overtake Priya R. — log one more run this week.</div>
-    </div>
-  </div>
-
-  <!-- Podium -->
-  <div class="card" style="margin-bottom:14px">
-    <div style="padding:20px;display:grid;grid-template-columns:1fr 1fr 1fr;align-items:end;gap:8px">
-      <div style="text-align:center;padding:8px"><div style="font-size:20px;margin-bottom:5px">🥈</div><div class="lb-av" style="background:#FCE7F3;color:#9D174D;width:48px;height:48px;font-size:15px;margin:0 auto 6px;border:3px solid #9CA3AF;box-shadow:0 0 0 3px #F9FAFB">YT</div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Yuki T.</div><div style="font-size:11px;color:var(--gray-500)">Tokyo</div><div style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--gray-900);margin-top:3px">7,610</div><div style="height:36px;background:linear-gradient(180deg,#F3F4F6,#D1D5DB);border-radius:4px 4px 0 0;margin-top:8px"></div></div>
-      <div style="text-align:center;padding:8px"><div style="font-size:20px;margin-bottom:5px">🥇</div><div class="lb-av" style="background:#FEF9C3;color:#854D0E;width:54px;height:54px;font-size:17px;margin:0 auto 6px;border:3px solid #F59E0B;box-shadow:0 0 0 3px #FFFBEB">SL</div><div style="font-size:14px;font-weight:700;color:var(--gray-900)">Sofia L.</div><div style="font-size:11px;color:var(--gray-500)">Prague</div><div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--gray-900);margin-top:3px">9,840</div><div style="height:54px;background:linear-gradient(180deg,#FEF9C3,#FDE68A);border-radius:4px 4px 0 0;margin-top:8px;border:1px solid #FCD34D"></div></div>
-      <div style="text-align:center;padding:8px"><div style="font-size:20px;margin-bottom:5px">🥉</div><div class="lb-av" style="background:#E0F2FE;color:#0369A1;width:44px;height:44px;font-size:14px;margin:0 auto 6px;border:3px solid #B45309;box-shadow:0 0 0 3px #FFFBEB">AL</div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Alena L.</div><div style="font-size:11px;color:var(--gray-500)">London</div><div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--gray-900);margin-top:3px">7,220</div><div style="height:24px;background:linear-gradient(180deg,#FEF3C7,#D97706);border-radius:4px 4px 0 0;margin-top:8px"></div></div>
-    </div>
-  </div>
-
-  <!-- Full leaderboard -->
-  <div class="card">
-    <div class="lb-header-row"><div>Rank</div><div>Athlete</div><div>Score</div><div>Change</div><div></div></div>
-    <div class="lb-row"><div class="lb-rank r1">1</div><div class="lb-athlete"><div class="lb-av" style="background:#FEF9C3;color:#854D0E">SL</div><div><div class="lb-name">Sofia L.</div><div class="lb-detail">Prague · 88.2 km · 7 acts</div></div></div><div class="lb-score-cell"><div class="lb-score">9,840</div><div class="lb-score-sub">pts</div></div><div><span class="trend t-up">↑+1</span></div><div></div></div>
-    <div class="lb-row"><div class="lb-rank r2">2</div><div class="lb-athlete"><div class="lb-av" style="background:#FCE7F3;color:#9D174D">YT</div><div><div class="lb-name">Yuki T.</div><div class="lb-detail">Tokyo · 68.0 km · 6 acts</div></div></div><div class="lb-score-cell"><div class="lb-score">7,610</div><div class="lb-score-sub">pts</div></div><div><span class="trend t-up">↑+2</span></div><div></div></div>
-    <div class="lb-row"><div class="lb-rank r3">3</div><div class="lb-athlete"><div class="lb-av" style="background:#E0F2FE;color:#0369A1">AL</div><div><div class="lb-name">Alena L.</div><div class="lb-detail">London · 71.4 km · 5 acts</div></div></div><div class="lb-score-cell"><div class="lb-score">7,220</div><div class="lb-score-sub">pts</div></div><div><span class="trend t-eq">—</span></div><div></div></div>
-    <div class="lb-row"><div class="lb-rank">4</div><div class="lb-athlete"><div class="lb-av" style="background:#FBEAF0;color:#72243E">PR</div><div><div class="lb-name">Priya R.</div><div class="lb-detail">Mumbai · 62.0 km · 5 acts</div></div></div><div class="lb-score-cell"><div class="lb-score">6,980</div><div class="lb-score-sub">pts</div></div><div><span class="trend t-up">↑+3</span></div><div></div></div>
-    <div class="lb-row is-you"><div class="lb-rank">5</div><div class="lb-athlete"><div class="lb-av" style="background:#FFF7ED;color:#9A3412">JK</div><div><div class="lb-name">Jamie K.</div><div class="lb-detail">London · 12.4 km · 3 acts</div></div></div><div class="lb-score-cell"><div class="lb-score">6,440</div><div class="lb-score-sub">pts</div></div><div><span class="trend t-up">↑+3</span></div><div><span class="you-tag">you</span></div></div>
-    <div class="lb-row"><div class="lb-rank">6</div><div class="lb-athlete"><div class="lb-av" style="background:#F5F3FF;color:#5B21B6">TR</div><div><div class="lb-name">Tom R.</div><div class="lb-detail">London · 21.3 km · 4 acts</div></div></div><div class="lb-score-cell"><div class="lb-score">5,880</div><div class="lb-score-sub">pts</div></div><div><span class="trend t-dn">↓−1</span></div><div></div></div>
-    <div style="padding:10px 16px;border-top:var(--border);background:var(--gray-50);font-size:12px;color:var(--gray-500);display:flex;justify-content:space-between"><span>Showing 6 of 48 members</span><button class="btn btn-sm btn-ghost" onclick="showToast('Loading full leaderboard…')">Load all</button></div>
-  </div>
-</div>
-
-<!-- ═══ CHALLENGES TAB ═══ -->
-<div class="tab-content" id="tab-challenges">
-  <div class="page-hdr">
-    <div><h1>Club challenges ⚡</h1><p>Private challenges — Hackney Running Club members only</p></div>
-    <div class="page-hdr-right">
-      <button class="btn btn-yellow" onclick="openModal('challenge-browse')">Browse all challenges</button>
-    </div>
-  </div>
-  <div class="grid-2">
-
-    <div class="ch-card">
-      <div class="ch-head">
-        <div class="ch-icon" style="background:var(--orange-light)">🏃</div>
-        <div>
-          <div class="ch-name">100km May Run</div>
-          <div class="ch-meta">Distance · Community · 44 joined · 9 days left</div>
-          <div class="ch-tags"><span class="pill pill-run">Running</span><span class="pill pill-active">✓ Joined</span><span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;background:#FAEEDA;color:#633806;border:1px solid #EF9F27">+500 pts</span></div>
-        </div>
-      </div>
-      <div class="ch-body">
-        <div class="ch-prog-label"><span>Your progress</span><span style="font-family:var(--mono);font-weight:600;color:var(--gray-900)">62 / 100 km</span></div>
-        <div class="prog-track"><div class="prog-fill" style="width:62%;background:var(--orange)"></div></div>
-        <div class="ch-prog-note">38 km remaining · ~4.2 km/day to finish · you're rank #5 of 44</div>
-        <div style="font-size:12px;font-weight:600;color:var(--gray-700);margin-top:10px;margin-bottom:5px">Your activity streak</div>
-        <div class="streak-row">
-          <div class="s-dot sd-done">✓</div><div class="s-dot sd-done">✓</div><div class="s-dot sd-done">✓</div>
-          <div class="s-dot sd-miss">✗</div><div class="s-dot sd-done">✓</div><div class="s-dot sd-done">✓</div>
-          <div class="s-dot sd-done">✓</div><div class="s-dot sd-today">T</div><div class="s-dot sd-fut"></div>
-        </div>
-        <div class="ch-mini-lb" style="margin-top:12px">
-          <div class="ch-lb-row"><span class="ch-lb-rank">1</span><div class="ch-lb-av" style="background:#FEF9C3;color:#854D0E">SL</div><span class="ch-lb-name">Sofia L.</span><span class="ch-lb-score">94.2 km</span></div>
-          <div class="ch-lb-row"><span class="ch-lb-rank">2</span><div class="ch-lb-av" style="background:#FCE7F3;color:#9D174D">YT</div><span class="ch-lb-name">Yuki T.</span><span class="ch-lb-score">68.0 km</span></div>
-          <div class="ch-lb-row"><span class="ch-lb-rank">5</span><div class="ch-lb-av" style="background:#FFF7ED;color:#9A3412">JK</div><span class="ch-lb-name">You</span><span class="ch-lb-score">62.4 km</span><span class="ch-lb-you">you</span></div>
-        </div>
-      </div>
-      <div class="ch-footer"><span class="ch-days">9 days left · ends May 31</span><button class="btn btn-sm btn-ghost" onclick="setTab('feed',document.getElementById('nav-feed'))">Log activity →</button></div>
-    </div>
-
-    <div class="ch-card">
-      <div class="ch-head">
-        <div class="ch-icon" style="background:var(--purple-light)">🔥</div>
-        <div>
-          <div class="ch-name">Club 7-day streak</div>
-          <div class="ch-meta">Streak · Private · 44 joined · Resets Monday</div>
-          <div class="ch-tags"><span class="pill pill-run">Running</span><span class="pill pill-active">✓ Joined</span><span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;background:#FAEEDA;color:#633806;border:1px solid #EF9F27">+100 pts/week</span></div>
-        </div>
-      </div>
-      <div class="ch-body">
-        <div class="ch-prog-label"><span>Your current streak</span><span style="font-family:var(--mono);font-weight:600;color:var(--gray-900)">6 / 7 days</span></div>
-        <div class="prog-track"><div class="prog-fill" style="width:86%;background:var(--purple)"></div></div>
-        <div class="ch-prog-note">Run today to complete this week's streak! Don't break it now.</div>
-        <div class="streak-row" style="margin-top:8px">
-          <div class="s-dot sd-done">M</div><div class="s-dot sd-done">T</div><div class="s-dot sd-done">W</div>
-          <div class="s-dot sd-done">T</div><div class="s-dot sd-done">F</div><div class="s-dot sd-done">S</div>
-          <div class="s-dot sd-today">S</div>
-        </div>
-        <div class="ch-mini-lb" style="margin-top:12px">
-          <div class="ch-lb-row"><span class="ch-lb-rank">1</span><div class="ch-lb-av" style="background:#FEF9C3;color:#854D0E">SL</div><span class="ch-lb-name">Sofia L.</span><span class="ch-lb-score">21 days</span></div>
-          <div class="ch-lb-row"><span class="ch-lb-rank">3</span><div class="ch-lb-av" style="background:#FFF7ED;color:#9A3412">JK</div><span class="ch-lb-name">You</span><span class="ch-lb-score">6 days</span><span class="ch-lb-you">you</span></div>
-        </div>
-      </div>
-      <div class="ch-footer"><span class="ch-days">Resets next Monday</span><button class="btn btn-sm btn-yellow" onclick="showToast('Opening activity log…')">Log today's run</button></div>
-    </div>
-
-    <div class="ch-card">
-      <div class="ch-head">
-        <div class="ch-icon" style="background:var(--blue-light)">⚡</div>
-        <div>
-          <div class="ch-name">Sub-25 5K club</div>
-          <div class="ch-meta">Performance · Open · 44 joined · Always open</div>
-          <div class="ch-tags"><span class="pill pill-run">Running</span><span class="pill pill-active">✓ Joined</span><span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;background:#FAEEDA;color:#633806;border:1px solid #EF9F27">+250 pts</span></div>
-        </div>
-      </div>
-      <div class="ch-body">
-        <div style="background:var(--gray-50);border:var(--border);border-radius:7px;padding:12px 14px;margin-bottom:10px">
-          <div style="font-size:12px;font-weight:600;color:var(--gray-700);margin-bottom:3px">Your best 5K this month</div>
-          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">25:48</div>
-          <div style="font-size:11px;color:var(--gray-500);margin-top:2px">48 seconds to go — target: 24:59</div>
-          <div class="prog-track" style="margin-top:8px"><div class="prog-fill" style="width:87%;background:var(--blue)"></div></div>
-        </div>
-        <div class="ch-mini-lb">
-          <div class="ch-lb-row"><span class="ch-lb-rank">🥇</span><div class="ch-lb-av" style="background:#FEF9C3;color:#854D0E">SL</div><span class="ch-lb-name">Sofia L.</span><span class="ch-lb-score">24:12</span></div>
-          <div class="ch-lb-row"><span class="ch-lb-rank">🥈</span><div class="ch-lb-av" style="background:#FCE7F3;color:#9D174D">YT</div><span class="ch-lb-name">Yuki T.</span><span class="ch-lb-score">24:44</span></div>
-          <div class="ch-lb-row"><span class="ch-lb-rank">—</span><div class="ch-lb-av" style="background:#FFF7ED;color:#9A3412">JK</div><span class="ch-lb-name">You</span><span class="ch-lb-score">25:48 · not yet</span><span class="ch-lb-you">you</span></div>
-        </div>
-        <div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:6px;padding:8px 10px;font-size:12px;color:#7a5c00;margin-top:10px">
-          💡 Parkrun Saturday is your best shot — flat course, pacing groups, and 3 clubmates also targeting sub-25.
-        </div>
-      </div>
-      <div class="ch-footer"><span class="ch-days">Always open · +250 pts on completion</span></div>
-    </div>
-
-    <div class="ch-card" style="border-style:dashed;background:var(--gray-50)" onclick="openModal('challenge-browse')">
-      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px;text-align:center;padding:24px">
-        <div style="font-size:32px;margin-bottom:12px">🔍</div>
-        <div style="font-size:14px;font-weight:600;color:var(--gray-700);margin-bottom:4px">Browse more challenges</div>
-        <div style="font-size:12px;color:var(--gray-500)">Discover club-only and community challenges across all your sports</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ EVENTS TAB ═══ -->
-<div class="tab-content" id="tab-events">
-  <div class="page-hdr">
-    <div><h1>Club events 📅</h1><p>Events organised by Hackney Running Club · Your coach notifies you of each one</p></div>
-    <div class="page-hdr-right">
-      <button class="btn btn-ghost" onclick="showToast('Opening Arenas event directory…')">🔍 Find more events</button>
-    </div>
-  </div>
-  <div style="display:flex;flex-direction:column;gap:14px">
-
-    <div class="ev-card">
-      <div style="background:var(--orange-light);padding:6px 18px;border-bottom:1px solid #FDBA74;display:flex;align-items:center;justify-content:space-between">
-        <span style="font-size:12px;font-weight:600;color:#9A3412">📣 Your coach added you to this event — RSVP by Apr 6</span>
-        <span style="font-size:11px;font-family:var(--mono);color:#9A3412">8 days to decide</span>
-      </div>
-      <div class="ev-head">
-        <div class="ev-date-box"><div class="ed">13</div><div class="em">Apr</div></div>
-        <div class="ev-info">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
-            <div class="ev-name">London Half Marathon</div>
-            <span class="pill pill-run">Running</span>
-          </div>
-          <div class="ev-meta">📍 Blackheath, London · ⏱ 7:00 AM start · 13.1 miles</div>
-          <div class="ev-meta" style="margin-top:2px">💷 Entry fee: £45/member · Club covers registration admin</div>
-          <div class="ev-tags">
-            <span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;background:var(--green-light);color:#166634;border:1px solid #86EFAC">34 clubmates going</span>
-            <span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74">8 pending response</span>
-          </div>
-        </div>
-      </div>
-      <div class="ev-coach-note">
-        <div class="ai-icon" style="background:var(--yellow)">RC</div>
-        <div><strong>Coach Rachel:</strong> Great flat course — perfect for a PB attempt. We'll meet at the start village at 6:30 AM. If you're entering, use the club code HRC2026 for the group booking. Bring your club vest!</div>
-      </div>
-      <div class="ev-rsvp-section">
-        <div class="ev-rsvp-title">Who's going</div>
-        <div class="rsvp-counts">
-          <div class="rsvp-count-item"><div class="rsvp-dot" style="background:var(--green)"></div><span style="color:var(--green);font-weight:600">34 going</span></div>
-          <div class="rsvp-count-item"><div class="rsvp-dot" style="background:var(--orange)"></div><span style="color:var(--orange)">8 pending</span></div>
-          <div class="rsvp-count-item"><div class="rsvp-dot" style="background:var(--gray-300)"></div><span style="color:var(--gray-500)">6 declined</span></div>
-        </div>
-        <div class="ev-member-row">
-          <div class="em-avs">
-            <div class="em-av" style="background:#FEF9C3;color:#854D0E">SL</div>
-            <div class="em-av" style="background:#FCE7F3;color:#9D174D">YT</div>
-            <div class="em-av" style="background:#E0F2FE;color:#0369A1">AL</div>
-            <div class="em-av" style="background:#FBEAF0;color:#72243E">PR</div>
-            <div class="em-av" style="background:var(--gray-100);color:var(--gray-500);font-size:7px">+30</div>
-          </div>
-          <span style="font-size:12px;color:var(--gray-500)">Sofia, Yuki, Alena, Priya and 30 more confirmed</span>
-        </div>
-      </div>
-      <div class="ev-footer">
-        <div class="ev-my-rsvp">Your RSVP: <strong style="color:var(--orange)">Pending — respond by Apr 6</strong></div>
-        <div class="ev-rsvp-btns">
-          <button class="btn btn-yellow" onclick="rsvpGoing(this)">✓ I'm going</button>
-          <button class="btn btn-ghost" onclick="showToast('You declined — Rachel has been notified')">Can't make it</button>
-          <button class="btn btn-ghost btn-sm" onclick="openModal('event-detail')">More info</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="ev-card">
-      <div class="ev-head">
-        <div class="ev-date-box" style="background:var(--gray-100)"><div class="ed" style="color:var(--gray-700)">19</div><div class="em" style="color:var(--gray-600)">Apr</div></div>
-        <div class="ev-info">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
-            <div class="ev-name">Saturday Parkrun Club Takeover</div>
-            <span class="pill pill-run">Running</span>
-            <span class="pill pill-active">Free</span>
-          </div>
-          <div class="ev-meta">📍 Victoria Park, London · ⏱ 9:00 AM · Free · All paces welcome</div>
-          <div class="ev-tags">
-            <span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;background:var(--green-light);color:#166634;border:1px solid #86EFAC">22 going</span>
-            <span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74">14 pending</span>
-          </div>
-        </div>
-      </div>
-      <div class="ev-coach-note">
-        <div class="ai-icon" style="background:var(--yellow)">RC</div>
-        <div><strong>Coach Rachel:</strong> No registration needed — just show up in your club vest. We'll do a group photo at the finish. Great way to meet other members if you're new to HRC!</div>
-      </div>
-      <div class="ev-footer">
-        <div class="ev-my-rsvp">Your RSVP: <strong style="color:var(--green)">✓ Going</strong></div>
-        <div class="ev-rsvp-btns">
-          <button class="btn btn-green btn-sm" onclick="showToast('Already confirmed — see you there!')">✓ Going</button>
-          <button class="btn btn-ghost btn-sm" onclick="showToast('Removed from going — Rachel notified')">Change RSVP</button>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ MEMBERS TAB ═══ -->
-<div class="tab-content" id="tab-members">
-  <div class="page-hdr">
-    <div><h1>Club members 👥</h1><p>48 members in Hackney Running Club · Follow to see their activities in your personal feed</p></div>
-    <div class="page-hdr-right">
-      <input type="text" placeholder="Search members…" style="padding:7px 12px;border:var(--border);border-radius:7px;font-size:13px;outline:none;width:200px">
-      <select style="padding:7px 12px;border:var(--border);border-radius:7px;font-size:13px;background:white;outline:none;cursor:pointer"><option>All levels</option><option>Beginner</option><option>Intermediate</option><option>Advanced</option></select>
-    </div>
-  </div>
-  <div class="grid-3">
-    <div class="member-card">
-      <div class="mc-head"><div class="mc-av" style="background:#FEF9C3;color:#854D0E">SL</div><div><div class="mc-name">Sofia L.</div><div class="mc-handle">@sofialopes</div><div class="mc-location">📍 Prague, CZ · Coach</div></div></div>
-      <div class="mc-tags"><span class="pill pill-run">Running</span><span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;background:#FAEEDA;color:#633806;border:1px solid #EF9F27">Advanced</span><span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;background:var(--green-light);color:#166534;border:1px solid #86EFAC">Coach</span></span></div>
-      <div class="mc-stats"><div class="mc-stat"><div class="msv">9,840</div><div class="msl">pts</div></div><div class="mc-stat"><div class="msv">88km</div><div class="msl">this wk</div></div><div class="mc-stat"><div class="msv">21d</div><div class="msl">streak</div></div></div>
-      <div class="mc-footer"><div class="mc-streak"><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--yellow)"></div></div><button class="follow-btn following" onclick="toggleFollow(this)">Following</button></div>
-    </div>
-    <div class="member-card">
-      <div class="mc-head"><div class="mc-av" style="background:#FCE7F3;color:#9D174D">YT</div><div><div class="mc-name">Yuki T.</div><div class="mc-handle">@yukitri</div><div class="mc-location">📍 Tokyo, JP</div></div></div>
-      <div class="mc-tags"><span class="pill pill-run">Running</span><span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;background:#FAEEDA;color:#633806;border:1px solid #EF9F27">Advanced</span></div>
-      <div class="mc-stats"><div class="mc-stat"><div class="msv">7,610</div><div class="msl">pts</div></div><div class="mc-stat"><div class="msv">68km</div><div class="msl">this wk</div></div><div class="mc-stat"><div class="msv">14d</div><div class="msl">streak</div></div></div>
-      <div class="mc-footer"><div class="mc-streak"><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--yellow)"></div></div><button class="follow-btn following" onclick="toggleFollow(this)">Following</button></div>
-    </div>
-    <div class="member-card">
-      <div class="mc-head"><div class="mc-av" style="background:#E0F2FE;color:#0369A1">AL</div><div><div class="mc-name">Alena L.</div><div class="mc-handle">@alenaprague</div><div class="mc-location">📍 London, UK</div></div></div>
-      <div class="mc-tags"><span class="pill pill-run">Running</span><span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;background:#FAEEDA;color:#633806;border:1px solid #EF9F27">Advanced</span></div>
-      <div class="mc-stats"><div class="mc-stat"><div class="msv">7,220</div><div class="msl">pts</div></div><div class="mc-stat"><div class="msv">71km</div><div class="msl">this wk</div></div><div class="mc-stat"><div class="msv">6d</div><div class="msl">streak</div></div></div>
-      <div class="mc-footer"><div class="mc-streak"><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--gray-200)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--yellow)"></div></div><button class="follow-btn" onclick="toggleFollow(this)">Follow</button></div>
-    </div>
-    <div class="member-card">
-      <div class="mc-head"><div class="mc-av" style="background:#FBEAF0;color:#72243E">PR</div><div><div class="mc-name">Priya R.</div><div class="mc-handle">@priyaruns</div><div class="mc-location">📍 Mumbai, IN</div></div></div>
-      <div class="mc-tags"><span class="pill pill-run">Running</span><span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;background:#FAEEDA;color:#633806;border:1px solid #EF9F27">Advanced</span></div>
-      <div class="mc-stats"><div class="mc-stat"><div class="msv">6,980</div><div class="msl">pts</div></div><div class="mc-stat"><div class="msv">62km</div><div class="msl">this wk</div></div><div class="mc-stat"><div class="msv">6d</div><div class="msl">streak</div></div></div>
-      <div class="mc-footer"><div class="mc-streak"><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--gray-200)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--yellow)"></div></div><button class="follow-btn" onclick="toggleFollow(this)">Follow</button></div>
-    </div>
-    <div class="member-card" style="background:#FFFBEB;border-color:#fde68a">
-      <div style="position:absolute" ></div>
-      <div class="mc-head"><div class="mc-av" style="background:var(--yellow);color:var(--gray-900)">JK</div><div><div class="mc-name">Jamie K. <span style="font-size:11px;color:var(--gray-400);font-weight:400">(you)</span></div><div class="mc-handle">@jamiek</div><div class="mc-location">📍 London, UK · Member</div></div></div>
-      <div class="mc-tags"><span class="pill pill-run">Running</span><span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;background:#FAEEDA;color:#633806;border:1px solid #EF9F27">Advanced</span></div>
-      <div class="mc-stats"><div class="mc-stat"><div class="msv">6,440</div><div class="msl">pts</div></div><div class="mc-stat"><div class="msv">12km</div><div class="msl">this wk</div></div><div class="mc-stat"><div class="msv">#5</div><div class="msl">club rank</div></div></div>
-      <div class="mc-footer"><div style="font-size:11px;color:#7a5c00">Your profile</div><button class="btn btn-sm btn-ghost" onclick="showToast('Opening your profile…')">Edit profile</button></div>
-    </div>
-    <div class="member-card">
-      <div class="mc-head"><div class="mc-av" style="background:#F5F3FF;color:#5B21B6">TR</div><div><div class="mc-name">Tom R.</div><div class="mc-handle">@tomruns</div><div class="mc-location">📍 London, UK</div></div></div>
-      <div class="mc-tags"><span class="pill pill-run">Running</span><span class="pill pill-member">Intermediate</span></div>
-      <div class="mc-stats"><div class="mc-stat"><div class="msv">5,880</div><div class="msl">pts</div></div><div class="mc-stat"><div class="msv">21km</div><div class="msl">this wk</div></div><div class="mc-stat"><div class="msv">4d</div><div class="msl">streak</div></div></div>
-      <div class="mc-footer"><div class="mc-streak"><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--gray-200)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--green)"></div><div class="mc-s-dot" style="background:var(--yellow)"></div></div><button class="follow-btn" onclick="toggleFollow(this)">Follow</button></div>
-    </div>
-  </div>
-  <div style="text-align:center;margin-top:16px"><button class="btn btn-ghost" onclick="showToast('Loading more members…')">Load more members</button></div>
-</div>
-
-<!-- ═══ NOTIFICATIONS TAB ═══ -->
-<div class="tab-content" id="tab-notifications">
-  <div class="page-hdr">
-    <div><h1>Notifications 🔔</h1><p>Club updates, event invitations and challenge alerts</p></div>
-    <div class="page-hdr-right"><button class="btn btn-ghost" onclick="showToast('All marked as read')">Mark all read</button></div>
-  </div>
-  <div class="card">
-    <div class="notif-item unread">
-      <div class="notif-icon-wrap" style="background:var(--orange-light)">📅</div>
-      <div class="notif-content">
-        <div class="notif-text"><strong>Coach Rachel</strong> has invited you to the London Half Marathon on Apr 13. 34 clubmates are already going — RSVP by Apr 6.</div>
-        <div class="notif-action">
-          <button class="btn btn-sm btn-yellow" onclick="rsvpGoing(this)">✓ I'm going</button>
-          <button class="btn btn-sm btn-ghost" onclick="showToast('You declined')">Can't make it</button>
-        </div>
-        <div class="notif-time">2 hours ago · Club event</div>
-      </div>
-      <div class="unread-dot"></div>
-    </div>
-    <div class="notif-item unread">
-      <div class="notif-icon-wrap" style="background:var(--purple-light)">⚡</div>
-      <div class="notif-content">
-        <div class="notif-text"><strong>Club weekly streak</strong> — don't break it! You've run 6 days in a row. Log a run today to complete this week and earn 100 pts.</div>
-        <div class="notif-action">
-          <button class="btn btn-sm btn-primary" onclick="showToast('Opening activity log…')">Log a run →</button>
-        </div>
-        <div class="notif-time">5 hours ago · Challenge</div>
-      </div>
-      <div class="unread-dot"></div>
-    </div>
-    <div class="notif-item unread">
-      <div class="notif-icon-wrap" style="background:var(--green-light)">🎉</div>
-      <div class="notif-content">
-        <div class="notif-text"><strong>Alena L.</strong> from your club just completed the 100km May Run challenge — she's the first Hackney RC member to finish! Give her kudos.</div>
-        <div class="notif-action">
-          <button class="btn btn-sm btn-ghost" onclick="showToast('Kudos sent to Alena! 🎉')">👍 Send kudos</button>
-        </div>
-        <div class="notif-time">1 day ago · Club challenge</div>
-      </div>
-      <div class="unread-dot"></div>
-    </div>
-    <div class="notif-item">
-      <div class="notif-icon-wrap" style="background:var(--yellow-light)">🏆</div>
-      <div class="notif-content">
-        <div class="notif-text">You moved up to <strong>rank #5</strong> on the Hackney RC leaderboard this week — up 3 places. Log one more run to overtake Priya R. for #4.</div>
-        <div class="notif-time">2 days ago · Leaderboard</div>
-      </div>
-    </div>
-    <div class="notif-item">
-      <div class="notif-icon-wrap" style="background:var(--blue-light)">👋</div>
-      <div class="notif-content">
-        <div class="notif-text"><strong>Welcome to Hackney Running Club!</strong> You've been added by coach Rachel H. Connect Strava to start logging activities and appear on the club leaderboard.</div>
-        <div class="notif-action">
-          <button class="btn btn-sm btn-primary" onclick="showToast('Connecting Strava…')">Connect Strava →</button>
-          <button class="btn btn-sm btn-ghost" onclick="setTab('members',document.getElementById('nav-members'))">Meet the team</button>
-        </div>
-        <div class="notif-time">2 days ago · Club welcome</div>
-      </div>
-    </div>
-  </div>
+<div id="cm-content">
+  <div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Loading your club…</div>
 </div>
 
 </main>
@@ -1017,16 +433,17 @@ button,select,input,textarea{font-family:var(--font)}
 
 <script>
 function setTab(id, el) {
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  const target = document.getElementById('tab-' + id);
-  if (target) target.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   if (el) el.classList.add('active');
   else {
     const navEl = document.getElementById('nav-' + id);
     if (navEl) navEl.classList.add('active');
   }
-  window.scrollTo(0, 0);
+  // The club member home is now a single scrolling page; sidebar items jump to
+  // the matching rendered section if present, otherwise scroll to the top.
+  const sec = document.getElementById('cm-sec-' + id);
+  if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  else window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function openModal(id) { document.getElementById('modal-' + id).classList.add('open'); }
@@ -1112,6 +529,264 @@ function showToast(msg) {
       });
     }
   }
+})();
+</script>
+<script>
+// Stage 2: render the member's club home (hero + stats, weekly standing, coach
+// announcements, upcoming events, active challenges, roster) into #cm-content
+// from the real /api/clubs/:clubId/member-home endpoint. Fetches are BASE-prefixed
+// for the /html mount; every DB-derived string (including computed initials) is
+// escaped before innerHTML.
+(function() {
+  var data = window.ARENAS_DATA;
+  if (!data || !data.club) return;
+  var clubId = data.club.id;
+  var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+    });
+  }
+  function ini(name) {
+    return (name || 'M').split(/\s+/).map(function(n){ return n[0]; }).join('').slice(0, 2).toUpperCase();
+  }
+  function timeAgo(ts) {
+    var s = Math.floor((new Date() - new Date(ts)) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.floor(s / 60) + 'm ago';
+    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+    return Math.floor(s / 86400) + 'd ago';
+  }
+
+  var sportIcons = { running:'🏃',cycling:'🚴',climbing:'🧗',swimming:'🏊',football:'⚽',weightlifting:'🏋️',hiking:'🥾',yoga:'🧘' };
+  var sportBgs = { running:'#FFF7ED',cycling:'#EFF6FF',climbing:'#F5F3FF',swimming:'#F0FDFA',football:'#ECFDF5',weightlifting:'#FEF9C3',hiking:'#FAEEDA',yoga:'#FBEAF0' };
+  var avColors = [
+    {bg:'#FEF9C3',c:'#854D0E'},{bg:'#FCE7F3',c:'#9D174D'},
+    {bg:'#E0F2FE',c:'#0369A1'},{bg:'#F5F3FF',c:'#5B21B6'},
+    {bg:'#ECFDF5',c:'#065F46'},{bg:'#FAEEDA',c:'#633806'},
+    {bg:'#FFF7ED',c:'#9A3412'},{bg:'#FBEAF0',c:'#72243E'}
+  ];
+
+  async function loadMemberHome() {
+    var container = document.getElementById('cm-content');
+    if (!container) return;
+    try {
+      var response = await fetch(B + '/api/clubs/' + clubId + '/member-home');
+      var r = await response.json();
+      if (r.error) {
+        container.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">' + esc(r.error) + '</div>';
+        return;
+      }
+
+      var c = r.club || data.club;
+      var s = r.standing || {};
+      var clubIcon = sportIcons[c.sport] || '🏟';
+      var sportLabel = c.sport ? (c.sport.charAt(0).toUpperCase() + c.sport.slice(1) + ' club') : 'Club';
+
+      // Hero + stats
+      var html = '' +
+        '<div id="cm-sec-overview" style="margin:12px;background:var(--gray-900);border-radius:var(--radius-lg);padding:16px;color:white">' +
+          '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">' +
+            '<div style="width:46px;height:46px;border-radius:12px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">' + clubIcon + '</div>' +
+            '<div style="flex:1;min-width:0">' +
+              '<div style="font-size:18px;font-weight:700;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(c.name) + '</div>' +
+              '<div style="font-size:11px;color:rgba(255,255,255,.55)">' + esc(sportLabel) + (c.city ? ' · ' + esc(c.city) : '') + ' · You\u2019re a ' + esc(r.myRole) + '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">' +
+            '<div style="background:rgba(255,255,255,.06);border:0.5px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 10px;text-align:center">' +
+              '<div style="font-size:16px;font-weight:700;font-family:var(--mono);color:white;line-height:1">' + r.stats.memberCount + '</div>' +
+              '<div style="font-size:9px;color:rgba(255,255,255,.45);margin-top:3px;text-transform:uppercase">Members</div>' +
+            '</div>' +
+            '<div style="background:rgba(255,255,255,.06);border:0.5px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 10px;text-align:center">' +
+              '<div style="font-size:16px;font-weight:700;font-family:var(--mono);color:white;line-height:1">' + r.stats.eventCount + '</div>' +
+              '<div style="font-size:9px;color:rgba(255,255,255,.45);margin-top:3px;text-transform:uppercase">Events</div>' +
+            '</div>' +
+            '<div style="background:rgba(255,255,255,.06);border:0.5px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 10px;text-align:center">' +
+              '<div style="font-size:16px;font-weight:700;font-family:var(--mono);color:white;line-height:1">' + r.stats.challengeCount + '</div>' +
+              '<div style="font-size:9px;color:rgba(255,255,255,.45);margin-top:3px;text-transform:uppercase">Challenges</div>' +
+            '</div>' +
+            '<div style="background:rgba(255,255,255,.06);border:0.5px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 10px;text-align:center">' +
+              '<div style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--yellow);line-height:1">' + (s.rank ? '#' + s.rank : '\u2014') + '</div>' +
+              '<div style="font-size:9px;color:rgba(255,255,255,.45);margin-top:3px;text-transform:uppercase">Your rank</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+
+      // Standing
+      if (s.rank) {
+        var ord = s.rank === 1 ? 'st' : s.rank === 2 ? 'nd' : s.rank === 3 ? 'rd' : 'th';
+        html += '' +
+          '<div id="cm-sec-leaderboard" style="margin:12px;background:linear-gradient(135deg,#FFFDF0,var(--yellow-light));border:0.5px solid var(--yellow-dark);border-radius:var(--radius-lg);padding:12px 16px;display:flex;align-items:center;gap:12px">' +
+            '<div style="font-size:24px;font-weight:700;font-family:var(--mono);color:#E6B800;flex-shrink:0">#' + s.rank + '</div>' +
+            '<div style="flex:1;font-size:12px;color:#633806;line-height:1.5">You\u2019re <strong>' + s.rank + ord + ' of ' + s.total + '</strong> on the club leaderboard this week with <strong>' + s.points + ' points</strong>.' + (s.activeChallenges > 0 ? ' You\u2019re in ' + s.activeChallenges + ' of the club\u2019s active challenge' + (s.activeChallenges !== 1 ? 's' : '') + ' \u2014 keep logging to climb!' : '') + '</div>' +
+          '</div>';
+      }
+
+      // Announcements
+      if (r.announcements.length > 0) {
+        html += '' +
+          '<div id="cm-sec-feed" style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:12px;overflow:hidden">' +
+            '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);font-size:12px;font-weight:600">📣 Coach announcements</div>' +
+            r.announcements.map(function(a) {
+              return '' +
+                '<div style="padding:12px 14px;border-bottom:var(--border)">' +
+                  '<div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">' +
+                    '<div style="width:32px;height:32px;border-radius:50%;background:var(--yellow);color:var(--gray-900);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0">' + esc(ini(a.coachName)) + '</div>' +
+                    '<div style="font-size:12px;font-weight:600">' + esc(a.coachName) + '</div>' +
+                    '<div style="font-size:9px;font-weight:600;padding:2px 8px;border-radius:20px;background:var(--yellow);color:var(--gray-900);border:0.5px solid var(--yellow-dark)">' + (a.role === 'admin' ? 'Admin' : 'Coach') + '</div>' +
+                    '<div style="font-size:10px;color:var(--gray-400);margin-left:auto">' + timeAgo(a.createdAt) + '</div>' +
+                  '</div>' +
+                  '<div style="font-size:13px;color:var(--gray-900);line-height:1.6;margin-bottom:8px">' + esc(a.content) + '</div>' +
+                  '<button onclick="toggleAnnKudos(\'' + esc(a.id) + '\',this)" style="display:flex;align-items:center;gap:5px;padding:4px 11px;border-radius:7px;font-size:11px;border:' + (a.likedByMe ? '0.5px solid var(--yellow-dark)' : 'var(--border)') + ';background:' + (a.likedByMe ? 'var(--yellow-light)' : 'white') + ';color:' + (a.likedByMe ? '#633806' : 'var(--gray-600)') + ';cursor:pointer">👍 <span>' + a.likeCount + '</span></button>' +
+                '</div>';
+            }).join('') +
+          '</div>';
+      }
+
+      // Events
+      if (r.events.length > 0) {
+        html += '' +
+          '<div id="cm-sec-events" style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:12px;overflow:hidden">' +
+            '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between">' +
+              '<div style="font-size:12px;font-weight:600">📅 Upcoming club events</div>' +
+              '<span onclick="nav(\'/events\')" style="font-size:11px;color:var(--gray-400);cursor:pointer">View all →</span>' +
+            '</div>' +
+            r.events.map(function(e) {
+              var d = new Date(e.date);
+              var diff = Math.ceil((d - new Date()) / 86400000);
+              var when = diff <= 0 ? 'Today' : diff === 1 ? 'Tomorrow' : d.toLocaleDateString('en-GB', { weekday:'short' });
+              var time = d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+              var badge = e.myStatus === 'going'
+                ? '<span style="font-size:9px;font-weight:600;padding:2px 8px;border-radius:10px;background:#ECFDF5;color:#166534;border:0.5px solid #86EFAC;flex-shrink:0">Going ✓</span>'
+                : e.myStatus === 'interested'
+                ? '<span style="font-size:9px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--yellow-light);color:#633806;border:0.5px solid #fde68a;flex-shrink:0">Interested</span>'
+                : '<span style="font-size:9px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--gray-100);color:var(--gray-400);border:var(--border);flex-shrink:0">RSVP</span>';
+              return '' +
+                '<div onclick="nav(\'/events\')" style="display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:var(--border);cursor:pointer">' +
+                  '<div style="width:34px;height:38px;border-radius:6px;background:#FFF7ED;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0">' +
+                    '<div style="font-size:8px;font-weight:600;text-transform:uppercase;color:#9A3412">' + d.toLocaleDateString('en-GB', { month:'short' }) + '</div>' +
+                    '<div style="font-size:15px;font-weight:700;font-family:var(--mono);line-height:1;color:#9A3412">' + d.getDate() + '</div>' +
+                  '</div>' +
+                  '<div style="flex:1;min-width:0">' +
+                    '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(e.title) + '</div>' +
+                    '<div style="font-size:10px;color:var(--gray-400)">' + when + ' ' + time + ' · ' + esc(e.location) + ' · ' + e.goingCount + ' going</div>' +
+                  '</div>' +
+                  badge +
+                '</div>';
+            }).join('') +
+          '</div>';
+      }
+
+      // Challenges
+      if (r.challenges.length > 0) {
+        html += '' +
+          '<div id="cm-sec-challenges" style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:12px;overflow:hidden">' +
+            '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between">' +
+              '<div style="font-size:12px;font-weight:600">⚡ Active club challenges</div>' +
+              '<span onclick="nav(\'/challenges\')" style="font-size:11px;color:var(--gray-400);cursor:pointer">View all →</span>' +
+            '</div>' +
+            r.challenges.map(function(ch) {
+              var fillColor = ch.pct >= 100 ? '#10B981' : 'var(--yellow)';
+              var progressLine = ch.joined
+                ? 'You: ' + ch.progress + ' / ' + ch.goalTarget + ' ' + esc(ch.goalUnit)
+                : ch.participantCount + ' joined';
+              return '' +
+                '<div onclick="nav(\'/challenges\')" style="display:flex;align-items:flex-start;gap:9px;padding:9px 14px;border-bottom:var(--border);cursor:pointer">' +
+                  '<div style="width:32px;height:32px;border-radius:8px;background:' + (sportBgs[ch.sport] || 'var(--gray-100)') + ';display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">' + (sportIcons[ch.sport] || '⚡') + '</div>' +
+                  '<div style="flex:1;min-width:0">' +
+                    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">' +
+                      '<div style="font-size:12px;font-weight:600;flex:1">' + esc(ch.title) + '</div>' +
+                      '<div style="font-size:10px;font-family:var(--mono);color:var(--gray-400)">' + ch.daysLeft + 'd left</div>' +
+                    '</div>' +
+                    '<div style="height:5px;background:var(--gray-100);border-radius:3px;overflow:hidden;margin-bottom:3px">' +
+                      '<div style="width:' + ch.pct + '%;height:100%;background:' + fillColor + ';border-radius:3px"></div>' +
+                    '</div>' +
+                    '<div style="display:flex;justify-content:space-between;font-size:10px">' +
+                      '<span style="color:var(--gray-500);font-family:var(--mono)">' + esc(progressLine) + '</span>' +
+                      '<span style="color:' + ch.statusColor + '">' + esc(ch.statusText) + '</span>' +
+                    '</div>' +
+                  '</div>' +
+                '</div>';
+            }).join('') +
+          '</div>';
+      }
+
+      // Roster
+      var roleBadge = function(role) {
+        return role === 'admin'
+          ? '<span style="font-size:9px;padding:1px 6px;border-radius:8px;background:var(--yellow-light);color:#633806;border:0.5px solid #fde68a;flex-shrink:0">Admin</span>'
+          : role === 'coach'
+          ? '<span style="font-size:9px;padding:1px 6px;border-radius:8px;background:#EFF6FF;color:#1E40AF;border:0.5px solid #93C5FD;flex-shrink:0">Coach</span>'
+          : '';
+      };
+      var shown = r.roster.slice(0, 12);
+      html += '' +
+        '<div id="cm-sec-members" style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:12px 12px 14px;overflow:hidden">' +
+          '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);font-size:12px;font-weight:600">👥 Members · ' + r.roster.length + '</div>' +
+          '<div style="display:grid;grid-template-columns:repeat(2,1fr)" id="cm-roster">' +
+            shown.map(function(m, i) {
+              var av = avColors[i % avColors.length];
+              return '' +
+                '<div style="display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:var(--border);' + (i % 2 === 0 ? 'border-right:var(--border);' : '') + '">' +
+                  '<div style="width:30px;height:30px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0">' + esc(ini(m.name)) + '</div>' +
+                  '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(m.name) + (m.isMe ? ' <span style="font-size:9px;color:var(--gray-400);font-weight:400">(you)</span>' : '') + '</div></div>' +
+                  roleBadge(m.role) +
+                '</div>';
+            }).join('') +
+          '</div>' +
+          (r.roster.length > 12 ? '<div style="padding:9px 14px;text-align:center;border-top:var(--border)"><button onclick="showAllRoster()" id="cm-show-all" style="font-size:11px;color:var(--gray-600);background:none;border:none;cursor:pointer">Show all ' + r.roster.length + ' members →</button></div>' : '') +
+        '</div>';
+
+      container.innerHTML = html;
+      window._cmRoster = r.roster;
+    } catch (err) {
+      var cont = document.getElementById('cm-content');
+      if (cont) cont.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Could not load this club right now.</div>';
+    }
+  }
+
+  window.toggleAnnKudos = async function(postId, btn) {
+    try {
+      var response = await fetch(B + '/api/posts/' + postId + '/like', { method: 'POST' });
+      var result = await response.json();
+      if (result.error) return;
+      var countEl = btn.querySelector('span');
+      if (result.liked) {
+        btn.style.background = 'var(--yellow-light)'; btn.style.borderColor = 'var(--yellow-dark)'; btn.style.color = '#633806';
+        if (countEl) countEl.textContent = parseInt(countEl.textContent || '0', 10) + 1;
+      } else {
+        btn.style.background = 'white'; btn.style.borderColor = 'var(--gray-200)'; btn.style.color = 'var(--gray-600)';
+        if (countEl) countEl.textContent = Math.max(0, parseInt(countEl.textContent || '0', 10) - 1);
+      }
+    } catch (err) {}
+  };
+
+  window.showAllRoster = function() {
+    var grid = document.getElementById('cm-roster');
+    var btn = document.getElementById('cm-show-all');
+    if (!grid || !window._cmRoster) return;
+    var roleBadge = function(role) {
+      return role === 'admin'
+        ? '<span style="font-size:9px;padding:1px 6px;border-radius:8px;background:var(--yellow-light);color:#633806;border:0.5px solid #fde68a;flex-shrink:0">Admin</span>'
+        : role === 'coach'
+        ? '<span style="font-size:9px;padding:1px 6px;border-radius:8px;background:#EFF6FF;color:#1E40AF;border:0.5px solid #93C5FD;flex-shrink:0">Coach</span>'
+        : '';
+    };
+    grid.innerHTML = window._cmRoster.map(function(m, i) {
+      var av = avColors[i % avColors.length];
+      return '' +
+        '<div style="display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:var(--border);' + (i % 2 === 0 ? 'border-right:var(--border);' : '') + '">' +
+          '<div style="width:30px;height:30px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0">' + esc(ini(m.name)) + '</div>' +
+          '<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(m.name) + (m.isMe ? ' <span style="font-size:9px;color:var(--gray-400);font-weight:400">(you)</span>' : '') + '</div></div>' +
+          roleBadge(m.role) +
+        '</div>';
+    }).join('');
+    if (btn) btn.parentElement.style.display = 'none';
+  };
+
+  loadMemberHome();
 })();
 </script>
 </body>
