@@ -339,7 +339,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">👤</span> My profile</div>
   <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">📅</span> Events</div>
 
-  <div class="nav-section-label" style="margin-top:4px">Hackney Running Club</div>
+  <div class="nav-section-label" id="club-name-label" style="margin-top:4px">Hackney Running Club</div>
   <div class="club-sidebar-header">
     <div class="club-sb-icon">🏃</div>
     <div>
@@ -1075,6 +1075,43 @@ function showToast(msg) {
     var navBadge = document.getElementById("nav-unread-badge");
     if (navBadge) navBadge.textContent = unread > 0 ? unread : "";
   }).catch(function(){});
+})();
+</script>
+<script>
+// Stage 1: wire the page chrome (club name + avatars) to the real injected
+// data. The six content sections stay static until a later stage. Hardcoded
+// markup remains as a graceful fallback when ARENAS_DATA isn't present.
+(function(){
+  var D = window.ARENAS_DATA || {};
+  var club = D.club || {};
+  var profile = D.profile || {};
+
+  // Real club name → top-bar pill, sidebar club name, sidebar section label, title.
+  if (club.name) {
+    var tc = document.querySelector('.tc-name');
+    if (tc) tc.textContent = club.name;
+    var sbName = document.querySelector('.club-sb-name');
+    if (sbName) sbName.textContent = club.name;
+    var sbLabel = document.getElementById('club-name-label');
+    if (sbLabel) sbLabel.textContent = club.name;
+    document.title = 'Arenas — ' + club.name;
+  }
+
+  // Avatar initials from the logged-in user's real name, scoped to the header
+  // and sidebar footer only (same text-based 'JK' replacement as other pages).
+  var name = (profile.name || '').trim();
+  if (name) {
+    var initials = name.split(/\s+/).map(function(n){ return n[0]; }).join('').slice(0, 2).toUpperCase();
+    if (initials) {
+      ['header', '.sidebar-footer'].forEach(function(sel){
+        var scope = document.querySelector(sel);
+        if (!scope) return;
+        scope.querySelectorAll('div').forEach(function(el){
+          if (el.childElementCount === 0 && el.textContent.trim() === 'JK') el.textContent = initials;
+        });
+      });
+    }
+  }
 })();
 </script>
 </body>

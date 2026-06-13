@@ -4007,7 +4007,60 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
     servePlain();
   }
 });
-app.get(BASE + '/clubs/member', (req, res) => res.sendFile(path.join(HTML, 'arenas-club-member.html')));
+// ── CLUB MEMBER PAGE ──
+// A member's view of one specific club they belong to. The club id is in the
+// path; we verify the viewer is actually a member of that club, then inject the
+// real club + the viewer's profile as window.ARENAS_DATA. The bare /clubs/member
+// route redirects to the viewer's first club (or /feed if they have none) so any
+// old links keep working.
+app.get(BASE + '/clubs/member', requirePageAuth, async (req, res) => {
+  try {
+    const clubs = await getSidebarClubs(req.user.id);
+    if (clubs.length) return res.redirect(BASE + '/clubs/member/' + clubs[0].id);
+    return res.redirect(BASE + '/feed');
+  } catch (err) {
+    console.log('Club member fallback error:', err.message);
+    return res.redirect(BASE + '/feed');
+  }
+});
+app.get(BASE + '/clubs/member/:clubId', requirePageAuth, async (req, res) => {
+  const servePlain = () => res.sendFile(path.join(HTML, 'arenas-club-member.html'));
+  try {
+    // No service-role client means we can't verify membership — never serve the
+    // static mock here (that's the wrong-club bug we're fixing); bounce to feed.
+    if (!supabaseAdmin) return res.redirect(BASE + '/feed');
+    // Confirm the viewer is a member of the requested club before showing it.
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('role, clubs:club_id (id, name, handle, sport)')
+      .eq('user_id', req.user.id)
+      .eq('club_id', req.params.clubId)
+      .maybeSingle();
+    const club = membership && (Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs);
+    if (!club) {
+      // Not a member of this club — fall back to their own first club, else the
+      // feed. Guard against redirecting back to the same id (avoids a loop).
+      const clubs = await getSidebarClubs(req.user.id);
+      if (clubs.length && clubs[0].id !== req.params.clubId) {
+        return res.redirect(BASE + '/clubs/member/' + clubs[0].id);
+      }
+      return res.redirect(BASE + '/feed');
+    }
+    const clubData = {
+      club,
+      role: membership.role,
+      profile: displayFromUser(req.user),
+      clubs: await getSidebarClubs(req.user.id),
+      userId: req.user.id,
+      userEmail: req.user.email
+    };
+    const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-club-member.html'), 'utf8'), clubData);
+    res.type('html').send(html);
+  } catch (err) {
+    console.log('Club member data error:', err.message);
+    servePlain();
+  }
+});
 
 // ── CLUB INVITE ADMIN PAGE ──
 // Renders the invite console with the manager's real club, pending invites, and

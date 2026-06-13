@@ -1176,7 +1176,7 @@ function showToast(msg) {
   clubs.forEach(function (club) {
     var item = document.createElement('div');
     item.className = 'nav-item';
-    item.onclick = function () { if (typeof nav === 'function') nav('/clubs/member'); };
+    item.onclick = function () { if (typeof nav === 'function') nav('/clubs/member/' + club.id); };
     var ic = document.createElement('span');
     ic.className = 'nav-icon';
     ic.textContent = sportIcons[club.sport] || '🏟';
