@@ -338,7 +338,6 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="nav-item" onclick="nav('/profile#activities')"><span class="nav-icon">➕</span> Log activity</div>
   <div class="nav-item active"><span class="nav-icon">👥</span> Athletes</div>
   <div class="nav-section-label">My clubs</div>
-  <div class="nav-item" onclick="nav('/clubs/member')"><span class="nav-icon">🏃</span> Hackney RC <span class="nav-badge red">2</span></div>
   <div class="nav-section-label">Account</div>
   <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">⚙️</span> Settings</div>
   <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">💳</span> Pro plan</div>
@@ -1537,6 +1536,48 @@ function showToast(msg) {
       if (modalBtn) { modalBtn.disabled = false; modalBtn.textContent = wasFollowing ? '✓ Following' : 'Follow'; }
     }
   };
+})();
+</script>
+<script>
+// Shared "My clubs" sidebar renderer — identical on every athlete-facing page so
+// the sidebar always reflects the viewer's real club memberships
+// (window.ARENAS_DATA.clubs) from the same Supabase query. No hardcoded club data
+// lives in the static HTML.
+(function () {
+  var clubs = (window.ARENAS_DATA && window.ARENAS_DATA.clubs) || [];
+  var label = null;
+  document.querySelectorAll('.sidebar .nav-section-label').forEach(function (l) {
+    if (/^\s*my clubs\s*$/i.test(l.textContent || '')) label = l;
+  });
+  if (!label) return;
+  var parent = label.parentNode;
+  var sib = label.nextElementSibling;
+  while (sib && sib.classList && sib.classList.contains('nav-item')) {
+    var next = sib.nextElementSibling;
+    sib.remove();
+    sib = next;
+  }
+  var anchor = label.nextElementSibling;
+  var sportIcons = { running: '🏃', cycling: '🚴', climbing: '🧗', swimming: '🏊', football: '⚽', triathlon: '🔱', hiking: '🥾', yoga: '🧘', weightlifting: '🏋️' };
+  if (!clubs.length) {
+    var empty = document.createElement('div');
+    empty.className = 'nav-item';
+    empty.style.cssText = 'color:var(--gray-400);cursor:default';
+    empty.textContent = 'No clubs yet';
+    parent.insertBefore(empty, anchor);
+    return;
+  }
+  clubs.forEach(function (club) {
+    var item = document.createElement('div');
+    item.className = 'nav-item';
+    item.onclick = function () { if (typeof nav === 'function') nav('/clubs/member'); };
+    var ic = document.createElement('span');
+    ic.className = 'nav-icon';
+    ic.textContent = sportIcons[club.sport] || '🏟';
+    item.appendChild(ic);
+    item.appendChild(document.createTextNode(' ' + (club.name || 'Club')));
+    parent.insertBefore(item, anchor);
+  });
 })();
 </script>
 </body>

@@ -16,4 +16,5 @@
 - [html-arenas overview tab](html-arenas-overview.md) — default tab so render on load too; spec wrongly assumed pendingInvites injected; recent-activity orders by activities.date, names via buildUserProfileMap.
 - [html-arenas club feed tab](html-arenas-club-feed.md) — merged member feed (posts/activities/RSVPs/joins/milestones) + coach announce; guard milestones with goal_target>0; esc() initials too.
 - [html-arenas achievements tab](html-arenas-achievements.md) — real badges; NEW user-SQL `achievements` table; degrade before it exists; early_bird uses activity date (no created_at); fire-and-forget idempotent awards in 6 routes.
+- [html-arenas sidebar "My clubs"](html-arenas-sidebar-clubs.md) — all 7 athlete pages render the sidebar club list from one identical IIFE over window.ARENAS_DATA.clubs; server injects via getSidebarClubs(); never hardcode club rows.
 - [html-arenas profile Overview tab](html-arenas-profile-overview.md) — default profile tab (≠ club overview); /api/profile/overview; activities order by date, .in() not FK embeds, escape others' titles.

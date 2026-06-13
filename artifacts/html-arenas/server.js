@@ -2829,29 +2829,34 @@ async function buildFeedPosts(limit, currentUserId) {
 // Feed requires authentication; unauthenticated visitors are sent to landing.
 // Inject the logged-in user's real name/handle plus recent posts so the feed
 // shows live data instead of the hardcoded "Jamie King" placeholder.
+// Viewer's real club memberships for the sidebar "My clubs" section, shared by
+// every athlete-facing page so the sidebar is identical everywhere. There is no
+// `status` column on `memberships` — every row is an active membership, ordered
+// by `created_at`.
+async function getSidebarClubs(userId) {
+  if (!supabaseAdmin || !userId) return [];
+  try {
+    const { data } = await supabaseAdmin
+      .from('memberships')
+      .select('role, clubs:club_id (id, name, handle, sport)')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    return (data || []).map(m => {
+      const c = Array.isArray(m.clubs) ? m.clubs[0] : m.clubs;
+      return c ? Object.assign({}, c, { role: m.role }) : null;
+    }).filter(Boolean);
+  } catch (e) {
+    return [];
+  }
+}
 app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
   try {
     const { posts, followsNobody } = await buildFeedPosts(20, req.user.id);
     const feedActivities = await buildFeedActivities(10, req.user.id);
     const followingRsvps = await buildFeedRsvps(req.user.id);
-    // Viewer's real club memberships for the sidebar "My clubs" section. No
-    // `status` column on memberships — every row is an active membership.
-    let userClubs = [];
-    if (supabaseAdmin) {
-      try {
-        const { data: cm } = await supabaseAdmin
-          .from('memberships')
-          .select('role, clubs:club_id (id, name, handle, sport)')
-          .eq('user_id', req.user.id)
-          .order('created_at', { ascending: false });
-        userClubs = (cm || []).map(m => {
-          const c = Array.isArray(m.clubs) ? m.clubs[0] : m.clubs;
-          return c ? Object.assign({}, c, { role: m.role }) : null;
-        }).filter(Boolean);
-      } catch (e) {
-        userClubs = [];
-      }
-    }
+    // Viewer's real club memberships for the sidebar "My clubs" section — shared
+    // helper so every athlete-facing page shows the exact same clubs.
+    const userClubs = await getSidebarClubs(req.user.id);
     const userData = { profile: displayFromUser(req.user), userId: req.user.id, posts, followsNobody, feedActivities, followingRsvps, clubs: userClubs };
     const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), userData);
     res.type('html').send(html);
@@ -2869,7 +2874,8 @@ app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
     athletes: [],
     myProfile: displayFromUser(req.user),
     userId: req.user.id,
-    followingIds: []
+    followingIds: [],
+    clubs: []
   };
   try {
     if (supabaseAdmin) {
@@ -2923,7 +2929,8 @@ app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
         athletes,
         myProfile: displayFromUser(req.user),
         userId: req.user.id,
-        followingIds
+        followingIds,
+        clubs: await getSidebarClubs(req.user.id)
       };
     }
   } catch (err) {
@@ -3367,10 +3374,7 @@ app.get(BASE + '/events', requirePageAuth, async (req, res) => {
       name: (nameMap[id] || {}).name || 'Athlete',
       handle: (nameMap[id] || {}).handle || 'athlete'
     }));
-    const { data: memberships } = await supabaseAdmin
-      .from('memberships').select('club_id, clubs (id, name, handle)').eq('user_id', userId);
-    const clubs = (memberships || [])
-      .map(m => Array.isArray(m.clubs) ? m.clubs[0] : m.clubs).filter(Boolean);
+    const clubs = await getSidebarClubs(userId);
     const eventData = { userId, profile: displayFromUser(req.user), following: followingList, clubs };
     const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-events.html'), 'utf8'), eventData);
     res.type('html').send(html);
@@ -3398,7 +3402,8 @@ app.get(BASE + '/leaderboards', requirePageAuth, async (req, res) => {
       const c = Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs;
       clubName = (c && c.name) || null;
     }
-    const lbData = { userId: req.user.id, profile: displayFromUser(req.user), clubName };
+    const clubs = await getSidebarClubs(req.user.id);
+    const lbData = { userId: req.user.id, profile: displayFromUser(req.user), clubName, clubs };
     const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-leaderboards.html'), 'utf8'), lbData);
     res.type('html').send(html);
   } catch (err) {
@@ -3421,7 +3426,8 @@ app.get(BASE + '/challenges', requirePageAuth, async (req, res) => {
         handle: (map[id] && map[id].handle) || 'athlete'
       }));
     }
-    const challengeData = { userId, profile: displayFromUser(req.user), following };
+    const clubs = await getSidebarClubs(userId);
+    const challengeData = { userId, profile: displayFromUser(req.user), following, clubs };
     const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-challenges.html'), 'utf8'), challengeData);
     res.send(html);
   } catch (err) {
@@ -4765,7 +4771,8 @@ app.get(BASE + '/notifications', requirePageAuth, async (req, res) => {
     const notifData = {
       notifications,
       unreadCount: notifications.filter(n => !n.read).length,
-      profile: displayFromUser(req.user)
+      profile: displayFromUser(req.user),
+      clubs: await getSidebarClubs(req.user.id)
     };
     const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-notifications.html'), 'utf8'), notifData);
     res.type('html').send(html);
