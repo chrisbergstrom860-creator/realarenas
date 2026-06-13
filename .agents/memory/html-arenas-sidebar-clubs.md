@@ -30,3 +30,23 @@ confuse it with the sidebar one.
 Out of scope by user decision: other hardcoded "Hackney RC" demo content (feed
 posts, event cards, bios, club-context pages, marketing) is intentionally left
 alone.
+
+# MY ARENAS nav-set invariant
+
+The "MY ARENAS" sidebar section must contain exactly these items, in this order,
+on ALL 7 athlete pages: Feed, My profile, Events, Leaderboards, Challenges,
+Log activity, Athletes — then the "My clubs" label.
+
+**Rule:** Notifications is reached via the topbar 🔔 bell only; it must NEVER be a
+sidebar nav-item on any page. The notifications page therefore has no `active`
+sidebar highlight, which is acceptable. Each page keeps its own page-specific
+`active` item, so markup is "canonical set+order identical," not byte-identical.
+
+**Why:** Notifications nav-items had drifted onto challenges, leaderboards, and the
+notifications page itself, breaking sidebar parity.
+
+**How to apply:** The unread count is shown via `id="nav-unread-badge"`. After
+removing that element from the notifications sidebar, its `decrementUnread`/
+`markAllRead`/`clearAll` must null-guard the lookup (the `syncUnread` path and the
+other 6 pages' lookups already do). Leave the separate topbar `.notif-dot` logic
+untouched.

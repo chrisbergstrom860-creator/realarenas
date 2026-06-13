@@ -244,7 +244,6 @@ button,select,input{font-family:var(--font)}
   <div class="nav-item" onclick="nav('/challenges')"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">3</span></div>
   <div class="nav-item" onclick="nav('/profile#activities')"><span class="nav-icon">➕</span> Log activity</div>
   <div class="nav-item" onclick="nav('/athletes')"><span class="nav-icon">👥</span> Athletes</div>
-  <div class="nav-item active"><span class="nav-icon">🔔</span> Notifications <span class="nav-badge active" id="nav-unread-badge">7</span></div>
   <div class="nav-section-label">My clubs</div>
   <div class="nav-section-label">Account</div>
   <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">⚙️</span> Settings</div>
@@ -757,7 +756,7 @@ function decrementUnread() {
   document.getElementById('stat-unread').textContent = unreadCount;
   document.getElementById('badge-all').textContent = unreadCount || '';
   document.getElementById('badge-all').className = unreadCount ? 'badge unread' : 'badge';
-  document.getElementById('nav-unread-badge').textContent = unreadCount || '';
+  { const nb = document.getElementById('nav-unread-badge'); if (nb) nb.textContent = unreadCount || ''; }
   document.getElementById('header-subtitle').textContent = (unreadCount ? unreadCount + ' unread · ' : 'All caught up · ') + 'Last updated just now';
 }
 
@@ -777,7 +776,7 @@ function markAllRead() {
     const b = document.getElementById('badge-' + t);
     if (b) { b.textContent = document.getElementById('br-' + t).textContent; b.className = 'badge'; }
   });
-  document.getElementById('nav-unread-badge').textContent = '';
+  { const nb = document.getElementById('nav-unread-badge'); if (nb) nb.textContent = ''; }
   document.getElementById('header-subtitle').textContent = 'All caught up · Last updated just now';
   showToast('✓ All notifications marked as read');
 }
@@ -793,7 +792,7 @@ function clearAll() {
   unreadCount = 0;
   document.getElementById('stat-unread').textContent = '0';
   document.getElementById('badge-all').textContent = '';
-  document.getElementById('nav-unread-badge').textContent = '';
+  { const nb = document.getElementById('nav-unread-badge'); if (nb) nb.textContent = ''; }
   document.getElementById('header-subtitle').textContent = 'All clear · Last updated just now';
   showToast('All notifications cleared');
 }
