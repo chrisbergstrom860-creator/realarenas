@@ -929,6 +929,11 @@ function showToast(msg) {
   document.querySelectorAll('.user-av').forEach(el => {
     if (el.textContent.trim() === 'JK') el.textContent = initials;
   });
+  // Also fix the sidebar-footer avatar (which has no class) by matching its text
+  // content, scoped to .sidebar-footer so content avatars elsewhere stay untouched.
+  document.querySelectorAll('.sidebar-footer div').forEach(el => {
+    if (el.childElementCount === 0 && el.textContent.trim() === 'JK') el.textContent = initials;
+  });
 
   let unreadCount = data.unreadCount || 0;
   const navBadge = document.getElementById('nav-unread-badge');

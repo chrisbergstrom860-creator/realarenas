@@ -1314,6 +1314,11 @@ function showToast(msg) {
   document.querySelectorAll('.user-av').forEach(el => {
     if (el.textContent.trim() === 'JK') el.textContent = myInitials;
   });
+  // Also fix the sidebar-footer avatar (which has no class) by matching its text
+  // content, scoped to .sidebar-footer so content avatars elsewhere stay untouched.
+  document.querySelectorAll('.sidebar-footer div').forEach(el => {
+    if (el.childElementCount === 0 && el.textContent.trim() === 'JK') el.textContent = myInitials;
+  });
 
   // Hide the hardcoded "recommended" and "nearby" strips, the demo "load more"
   // button, and override search so cleared searches don't re-show fake sections.

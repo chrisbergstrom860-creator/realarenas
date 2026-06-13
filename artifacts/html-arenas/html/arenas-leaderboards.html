@@ -886,5 +886,27 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
   });
 })();
 </script>
+<script>
+// Personalise the user avatars in the page chrome (top-right header avatar and
+// sidebar-footer avatar) from the logged-in user's real identity. The server
+// injects window.ARENAS_DATA.profile.name (from Supabase auth metadata). We match
+// by text content — any leaf element inside the <header> or .sidebar-footer whose
+// trimmed text is exactly "JK" becomes the computed initials — so both avatars
+// update regardless of their class. Content avatars elsewhere are left untouched.
+(function () {
+  var data = window.ARENAS_DATA;
+  if (!data || !data.profile || !data.profile.name) return;
+  var initials = data.profile.name.trim().split(/\s+/)
+    .map(function (n) { return n[0]; }).join('').slice(0, 2).toUpperCase();
+  if (!initials) return;
+  ['header', '.sidebar-footer'].forEach(function (sel) {
+    var root = document.querySelector(sel);
+    if (!root) return;
+    root.querySelectorAll('div').forEach(function (el) {
+      if (el.childElementCount === 0 && el.textContent.trim() === 'JK') el.textContent = initials;
+    });
+  });
+})();
+</script>
 </body>
 </html>
