@@ -344,16 +344,15 @@ button,select,input,textarea{font-family:var(--font)}
     <div class="club-sb-icon">🏃</div>
     <div>
       <div class="club-sb-name">Hackney RC</div>
-      <div class="club-sb-meta">48 members · Club Pro</div>
+      <div class="club-sb-meta"></div>
     </div>
   </div>
   <div class="nav-item active" id="nav-overview" onclick="setTab('overview',this)"><span class="nav-icon">📊</span> Overview</div>
-  <div class="nav-item" id="nav-feed" onclick="setTab('feed',this)"><span class="nav-icon">🏃</span> Club feed <span class="nav-badge">4</span></div>
-  <div class="nav-item" id="nav-leaderboard" onclick="setTab('leaderboard',this)"><span class="nav-icon">🏆</span> Leaderboard</div>
-  <div class="nav-item" id="nav-challenges" onclick="setTab('challenges',this)"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">3</span></div>
-  <div class="nav-item" id="nav-events" onclick="setTab('events',this)"><span class="nav-icon">📅</span> Club events <span class="nav-badge red">2</span></div>
+  <div class="nav-item" id="nav-feed" onclick="setTab('feed',this)" style="display:none"><span class="nav-icon">📣</span> Announcements</div>
+  <div class="nav-item" id="nav-leaderboard" onclick="nav('/leaderboards')"><span class="nav-icon">🏆</span> Leaderboard</div>
+  <div class="nav-item" id="nav-challenges" onclick="setTab('challenges',this)" style="display:none"><span class="nav-icon">⚡</span> Challenges</div>
+  <div class="nav-item" id="nav-events" onclick="setTab('events',this)" style="display:none"><span class="nav-icon">📅</span> Club events</div>
   <div class="nav-item" id="nav-members" onclick="setTab('members',this)"><span class="nav-icon">👥</span> Members</div>
-  <div class="nav-item" id="nav-notifications" onclick="nav('/notifications')"><span class="nav-icon">🔔</span> Notifications <span class="nav-badge red">3</span></div>
 
   <div class="sidebar-footer">
     <div class="sf-row">
@@ -578,6 +577,15 @@ function showToast(msg) {
         container.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">' + esc(r.error) + '</div>';
         return;
       }
+
+      // Sidebar: inject the real member count and hide club nav items whose
+      // target section has no data (so there are no soft scroll-to-nothing links).
+      var metaEl = document.querySelector('.club-sb-meta');
+      if (metaEl && r.stats) metaEl.textContent = r.stats.memberCount + (r.stats.memberCount === 1 ? ' member' : ' members');
+      var setNav = function(id, on) { var el = document.getElementById('nav-' + id); if (el) el.style.display = on ? '' : 'none'; };
+      setNav('feed', !!(r.announcements && r.announcements.length));
+      setNav('challenges', !!(r.challenges && r.challenges.length));
+      setNav('events', !!(r.events && r.events.length));
 
       var c = r.club || data.club;
       var s = r.standing || {};
