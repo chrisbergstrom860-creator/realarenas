@@ -50,3 +50,20 @@ removing that element from the notifications sidebar, its `decrementUnread`/
 `markAllRead`/`clearAll` must null-guard the lookup (the `syncUnread` path and the
 other 6 pages' lookups already do). Leave the separate topbar `.notif-dot` logic
 untouched.
+
+# "Log activity" sidebar highlight
+
+"Log activity" is NOT its own page — its sidebar item does `nav('/profile#activities')`,
+landing on the profile page's Activities tab. So its active highlight is driven by
+the profile page's `setTab(id)`, which clears `active` from all `.nav-item`s then
+re-applies it by tab→label: `activities`→"Log activity", `settings`→"Settings",
+everything else (overview/stats/achievements/clubs/following)→"My profile".
+
+**Why:** Previously `setTab` only re-highlighted on overview/settings, so the
+activities tab (and stats/etc.) left the sidebar with no highlight at all.
+
+**How to apply:** Keep every profile tab mapped to some sidebar label so the
+sidebar is never blank. Matching is `textContent.includes(label)`, which relies on
+the static labels "My profile"/"Log activity"/"Settings" being unique — if a
+dynamically injected "My clubs" item could ever collide, switch to an explicit
+selector/data-attribute.

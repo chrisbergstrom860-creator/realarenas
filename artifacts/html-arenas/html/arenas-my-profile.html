@@ -823,11 +823,13 @@ function setTab(id) {
   const ht = document.getElementById('htab-' + id);
   if (tc) tc.classList.add('active');
   if (ht) ht.classList.add('active');
-  if (id === 'settings' || id === 'overview') {
-    document.querySelectorAll('.nav-item').forEach(n => {
-      if (n.textContent.includes(id === 'settings' ? 'Settings' : 'profile')) n.classList.add('active');
-    });
-  }
+  document.querySelectorAll('.nav-item').forEach(n => {
+    let label;
+    if (id === 'settings') label = 'Settings';
+    else if (id === 'activities') label = 'Log activity';
+    else label = 'My profile';
+    if (n.textContent.includes(label)) n.classList.add('active');
+  });
   window.scrollTo({ top: document.getElementById('profile-hero-section').offsetHeight + 56, behavior: 'smooth' });
 }
 
