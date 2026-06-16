@@ -43,6 +43,12 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
+// Shared app-shell stylesheet (public, no auth). Served at both the Replit
+// (/html) and Railway (root) base paths so the in-page href resolves in both.
+app.get(['/html/arenas.css', '/arenas.css'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas.css'));
+});
+
 // ── AUTH (Supabase) ──
 const COOKIE_OPTS = {
   httpOnly: true,

@@ -18,4 +18,5 @@
 - [html-arenas achievements tab](html-arenas-achievements.md) — real badges; NEW user-SQL `achievements` table; degrade before it exists; early_bird uses activity date (no created_at); fire-and-forget idempotent awards in 6 routes.
 - [html-arenas sidebar "My clubs"](html-arenas-sidebar-clubs.md) — all 7 athlete pages render the sidebar club list from one identical IIFE over window.ARENAS_DATA.clubs; server injects via getSidebarClubs(); never hardcode club rows.
 - [html-arenas profile Overview tab](html-arenas-profile-overview.md) — default profile tab (≠ club overview); /api/profile/overview; activities order by date, .in() not FK embeds, escape others' titles.
+- [html-arenas shared shell CSS](html-arenas-shell-css.md) — shell lives in html/arenas.css (9 app-shell pages link it; served via dual public route); edit shell there not per-page; challenges/leaderboards also carry a legacy top-nav block.
 - [html-arenas club member-home page](html-arenas-club-member-home.md) — /clubs/member/:clubId single scrolling page; membership gate is the IDOR boundary; "coach announcements" are posts by admin/coach (no table); unknown challenge goal_type → sessions.
