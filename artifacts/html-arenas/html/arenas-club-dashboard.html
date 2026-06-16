@@ -27,6 +27,10 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
 .topbar-search input::placeholder { color: var(--gray-400); }
 .notif-btn { width: 34px; height: 34px; border-radius: 7px; border: var(--border); background: white; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 15px; position: relative; }
 .topbar-club-name { font-size: 14px; font-weight: 600; color: var(--gray-900); }
+@media (max-width:768px){
+  body:has(.bottom-nav) .topbar-club-name{max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  body:has(.bottom-nav) .topbar-role{display:none}
+}
 .topbar-role { font-size: 11px; color: var(--gray-500); background: var(--gray-100); padding: 2px 8px; border-radius: 10px; }/* ─── SIDEBAR ─── */
 .nav-item .nav-icon { font-size: 15px; flex-shrink: 0; width: 18px; text-align: center; }
 .nav-badge.alert { background: var(--red-light); color: var(--red); }
@@ -527,9 +531,11 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
           <div class="tl-filter-pill" data-filter="inactive" onclick="setTlFilter(this,'inactive')" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Inactive</div>
         </div>
       </div>
+      <div class="table-scroll"><div class="table-scroll-inner">
       <div id="tl-member-rows">
         <div style="padding:24px;text-align:center;font-size:13px;color:var(--gray-400)">Loading…</div>
       </div>
+      </div></div>
     </div>
 
     <!-- Info note -->

@@ -108,6 +108,14 @@ button,select,input,textarea{font-family:var(--font)}
 
 /* ── EVENTS GRID ── */
 .events-grid{display:grid;grid-template-columns:1fr 1fr;gap:0}
+@media (max-width:768px){
+  body:has(.bottom-nav) .main{overflow-y:auto;-webkit-overflow-scrolling:touch}
+  body:has(.bottom-nav) .body-grid{display:block;overflow:visible}
+  body:has(.bottom-nav) .events-col{overflow:visible;border-right:none}
+  body:has(.bottom-nav) .sidebar-col{overflow:visible}
+  body:has(.bottom-nav) .events-grid{grid-template-columns:1fr}
+  body:has(.bottom-nav) .filter-row{flex-wrap:wrap}
+}
 
 /* ── EVENT CARD ── */
 .ev-card{background:white;border-bottom:var(--border);border-right:var(--border);padding:16px;cursor:pointer;transition:background .12s;display:flex;flex-direction:column;gap:10px;animation:fade-up .2s ease both}

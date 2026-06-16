@@ -285,22 +285,49 @@ function athleteBottomNav(activeKey) {
     + '</nav>';
 }
 const ATHLETE_NAV_ACTIVE = { feed: 'feed', profile: 'profile', events: 'events', leaderboards: 'ranks', challenges: null, athletes: null, notifications: null };
+
+// Club pages (coach dashboard + member home) navigate by switching tabs/sections
+// in place via setTab(), not by loading a new URL, so their bottom nav calls
+// cbnTab(): it runs setTab() and moves the bn-active highlight itself, since
+// there is no page load to refresh the server-rendered active state. The helper
+// script is injected once alongside the nav.
+const CLUB_BN_SCRIPT = '<script>function cbnTab(e,id){try{setTab(id,null);}catch(_){}'
+  + 'var n=document.querySelectorAll(".bottom-nav .bn-item");for(var i=0;i<n.length;i++){n[i].classList.remove("bn-active");}'
+  + 'if(e&&e.currentTarget){e.currentTarget.classList.add("bn-active");}}</script>';
+function clubBnItem(activeKey, key, tabId, icon, label) {
+  const cls = 'bn-item' + (activeKey === key ? ' bn-active' : '');
+  return `<a class="${cls}" onclick="cbnTab(event,'${tabId}')"><span class="bn-icon">${icon}</span><span class="bn-label">${label}</span></a>`;
+}
+function clubDashboardBottomNav(activeKey) {
+  return '<nav class="bottom-nav" aria-label="Primary">'
+    + clubBnItem(activeKey, 'overview', 'overview', '📊', 'Overview')
+    + clubBnItem(activeKey, 'members', 'members', '👥', 'Members')
+    + clubBnItem(activeKey, 'training', 'training', '📈', 'Load')
+    + clubBnItem(activeKey, 'leaderboard', 'leaderboard', '🏆', 'Ranks')
+    + clubBnItem(activeKey, 'feed', 'feed', '🏃', 'Feed')
+    + '</nav>' + CLUB_BN_SCRIPT;
+}
+function clubMemberBottomNav(activeKey) {
+  return '<nav class="bottom-nav" aria-label="Primary">'
+    + clubBnItem(activeKey, 'overview', 'overview', '📊', 'Overview')
+    + clubBnItem(activeKey, 'feed', 'feed', '📣', 'News')
+    + clubBnItem(activeKey, 'challenges', 'challenges', '⚡', 'Goals')
+    + clubBnItem(activeKey, 'events', 'events', '📅', 'Events')
+    + clubBnItem(activeKey, 'members', 'members', '👥', 'Members')
+    + '</nav>' + CLUB_BN_SCRIPT;
+}
 function bottomNavFor(pageKey) {
+  if (pageKey === 'club-dashboard') return clubDashboardBottomNav('overview');
+  if (pageKey === 'club-member') return clubMemberBottomNav('overview');
   if (Object.prototype.hasOwnProperty.call(ATHLETE_NAV_ACTIVE, pageKey)) return athleteBottomNav(ATHLETE_NAV_ACTIVE[pageKey]);
   return '';
 }
 function injectBottomNav(html, pageKey) {
+  if (html.includes('class="bottom-nav"')) return html;
   const nav = bottomNavFor(pageKey);
   if (!nav) return html;
   return html.replace('</body>', nav + '</body>');
 }
-
-// TEMP: unauthenticated mobile-layout verification route (remove after pilot).
-app.get(BASE + '/landing/__mobiletest-feed', (req, res) => {
-  let html = injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), 'feed');
-  if (req.query.rail) html = html.replace('</head>', '<style>.feed-col{display:none}</style></head>');
-  res.type('html').send(html);
-});
 
 // ── NOTIFICATIONS ──
 // Insert a notification row for a recipient. Best-effort: failures are logged
@@ -2980,11 +3007,11 @@ app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
     console.log('Athletes data error:', err.message);
   }
   try {
-    const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-athletes.html'), 'utf8'), athleteData);
+    const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-athletes.html'), 'utf8'), athleteData), 'athletes');
     res.type('html').send(html);
   } catch (err) {
     console.log('Athletes render error:', err.message);
-    res.sendFile(path.join(HTML, 'arenas-athletes.html'));
+    res.type('html').send(injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-athletes.html'), 'utf8'), 'athletes'));
   }
 });
 // ── EVENTS API ──
@@ -3406,7 +3433,7 @@ app.patch(BASE + '/api/events/:id', requireAuth, async (req, res) => {
 // `profiles` table, so names come from auth metadata.
 app.get(BASE + '/events', requirePageAuth, async (req, res) => {
   try {
-    if (!supabaseAdmin) return res.sendFile(path.join(HTML, 'arenas-events.html'));
+    if (!supabaseAdmin) return res.type('html').send(injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-events.html'), 'utf8'), 'events'));
     const userId = req.user.id;
     const { data: follows } = await supabaseAdmin
       .from('follows').select('following_id').eq('follower_id', userId);
@@ -3419,18 +3446,18 @@ app.get(BASE + '/events', requirePageAuth, async (req, res) => {
     }));
     const clubs = await getSidebarClubs(userId);
     const eventData = { userId, profile: displayFromUser(req.user), following: followingList, clubs };
-    const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-events.html'), 'utf8'), eventData);
+    const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-events.html'), 'utf8'), eventData), 'events');
     res.type('html').send(html);
   } catch (err) {
     console.log('Events page error:', err.message);
-    res.sendFile(path.join(HTML, 'arenas-events.html'));
+    res.type('html').send(injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-events.html'), 'utf8'), 'events'));
   }
 });
 // Leaderboards page. Injects the viewer's identity + club name so the client can
 // highlight "you" and label the club scope. There is no `profiles` table, so the
 // name comes from auth metadata.
 app.get(BASE + '/leaderboards', requirePageAuth, async (req, res) => {
-  const servePlain = () => res.sendFile(path.join(HTML, 'arenas-leaderboards.html'));
+  const servePlain = () => res.type('html').send(injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-leaderboards.html'), 'utf8'), 'leaderboards'));
   try {
     if (!supabaseAdmin) return servePlain();
     let clubName = null;
@@ -3447,7 +3474,7 @@ app.get(BASE + '/leaderboards', requirePageAuth, async (req, res) => {
     }
     const clubs = await getSidebarClubs(req.user.id);
     const lbData = { userId: req.user.id, profile: displayFromUser(req.user), clubName, clubs };
-    const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-leaderboards.html'), 'utf8'), lbData);
+    const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-leaderboards.html'), 'utf8'), lbData), 'leaderboards');
     res.type('html').send(html);
   } catch (err) {
     console.log('Leaderboards page error:', err.message);
@@ -3471,11 +3498,11 @@ app.get(BASE + '/challenges', requirePageAuth, async (req, res) => {
     }
     const clubs = await getSidebarClubs(userId);
     const challengeData = { userId, profile: displayFromUser(req.user), following, clubs };
-    const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-challenges.html'), 'utf8'), challengeData);
+    const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-challenges.html'), 'utf8'), challengeData), 'challenges');
     res.send(html);
   } catch (err) {
     console.log('Challenges page error:', err.message);
-    res.sendFile(path.join(HTML, 'arenas-challenges.html'));
+    res.type('html').send(injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-challenges.html'), 'utf8'), 'challenges'));
   }
 });
 // My profile requires authentication. Inject the user's real identity, post/
@@ -3483,7 +3510,7 @@ app.get(BASE + '/challenges', requirePageAuth, async (req, res) => {
 // live data instead of the hardcoded "Jamie King" placeholders. There is no
 // `profiles` table, so name/handle/bio/location come from auth user metadata.
 app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
-  const servePlain = () => res.sendFile(path.join(HTML, 'arenas-my-profile.html'));
+  const servePlain = () => res.type('html').send(injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-my-profile.html'), 'utf8'), 'profile'));
   try {
     if (!supabaseAdmin) return servePlain();
     const meta = req.user.user_metadata || {};
@@ -3564,7 +3591,7 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
       followerList
     };
 
-    const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-my-profile.html'), 'utf8'), profileData);
+    const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-my-profile.html'), 'utf8'), profileData), 'profile');
     res.type('html').send(html);
   } catch (err) {
     console.log('Profile data error:', err.message);
@@ -3781,7 +3808,7 @@ app.get(BASE + '/for-clubs', (req, res) => res.sendFile(path.join(HTML, 'arenas-
 // count, and recent members so the page shows live data instead of the
 // hardcoded "Hackney Running Club" / "Rachel" placeholders.
 app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
-  const servePlain = () => res.sendFile(path.join(HTML, 'arenas-club-dashboard.html'));
+  const servePlain = () => res.type('html').send(injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-club-dashboard.html'), 'utf8'), 'club-dashboard'));
   try {
     if (!supabaseAdmin) return servePlain();
 
@@ -4043,7 +4070,7 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
       userEmail: req.user.email
     };
 
-    const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-club-dashboard.html'), 'utf8'), clubData);
+    const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-club-dashboard.html'), 'utf8'), clubData), 'club-dashboard');
     res.type('html').send(html);
   } catch (err) {
     console.log('Dashboard data error:', err.message);
@@ -4067,7 +4094,6 @@ app.get(BASE + '/clubs/member', requirePageAuth, async (req, res) => {
   }
 });
 app.get(BASE + '/clubs/member/:clubId', requirePageAuth, async (req, res) => {
-  const servePlain = () => res.sendFile(path.join(HTML, 'arenas-club-member.html'));
   try {
     // No service-role client means we can't verify membership — never serve the
     // static mock here (that's the wrong-club bug we're fixing); bounce to feed.
@@ -4097,11 +4123,13 @@ app.get(BASE + '/clubs/member/:clubId', requirePageAuth, async (req, res) => {
       userId: req.user.id,
       userEmail: req.user.email
     };
-    const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-club-member.html'), 'utf8'), clubData);
+    const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-club-member.html'), 'utf8'), clubData), 'club-member');
     res.type('html').send(html);
   } catch (err) {
     console.log('Club member data error:', err.message);
-    servePlain();
+    // Never serve the static mock on error — it would bypass the membership
+    // (IDOR) gate. Bounce to the feed instead.
+    res.redirect(BASE + '/feed');
   }
 });
 
@@ -5063,7 +5091,7 @@ app.delete(BASE + '/api/notifications/:id', requireAuth, async (req, res) => {
 // Notifications page requires auth. Inject the viewer's real notifications and
 // identity so the page renders live data instead of the hardcoded placeholders.
 app.get(BASE + '/notifications', requirePageAuth, async (req, res) => {
-  const servePlain = () => res.sendFile(path.join(HTML, 'arenas-notifications.html'));
+  const servePlain = () => res.type('html').send(injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-notifications.html'), 'utf8'), 'notifications'));
   try {
     if (!supabaseAdmin) return servePlain();
     const { data } = await supabaseAdmin
@@ -5079,7 +5107,7 @@ app.get(BASE + '/notifications', requirePageAuth, async (req, res) => {
       profile: displayFromUser(req.user),
       clubs: await getSidebarClubs(req.user.id)
     };
-    const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-notifications.html'), 'utf8'), notifData);
+    const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-notifications.html'), 'utf8'), notifData), 'notifications');
     res.type('html').send(html);
   } catch (err) {
     console.log('Notifications error:', err.message);

@@ -275,6 +275,33 @@ body {
   body:has(.bottom-nav) .grid-3 { grid-template-columns: 1fr !important; }
   body:has(.bottom-nav) .grid-2 { grid-template-columns: 1fr !important; }
 
+  /* Inline-styled grids have no class to hook, so collapse them by matching the
+     inline grid-template value. 4-up → 2-up (KPI rows on the club dashboard,
+     profile stat bars); plain 2-up → single column (paired cards, form rows,
+     the dashboard distance/sessions ranking pair). The :not() keeps real 3-up
+     grids — and the 4→2 result — from being squashed. */
+  body:has(.bottom-nav) [style*="repeat(4"] { grid-template-columns: repeat(2, 1fr) !important; }
+  body:has(.bottom-nav) [style*="1fr 1fr"]:not([style*="1fr 1fr 1fr"]) { grid-template-columns: 1fr !important; }
+
+  /* Page-specific card grids that must stack / shrink on mobile. */
+  body:has(.bottom-nav) .stats-4 { grid-template-columns: 1fr 1fr !important; }   /* profile hero stats */
+  body:has(.bottom-nav) .stat-cards { grid-template-columns: 1fr 1fr !important; } /* challenges summary */
+  body:has(.bottom-nav) .cards-grid-3 { grid-template-columns: 1fr !important; }  /* challenge cards stack */
+  body:has(.bottom-nav) .events-grid { grid-template-columns: 1fr !important; }   /* event cards stack */
+
+  /* Activity stat chips (KM/TIME/PACE/BPM/ELEV/KCAL) wrap to a second row on
+     mobile instead of cramming into one tight row (feed, profile, club feed). */
+  body:has(.bottom-nav) .ac-stats-row { gap: 6px; }
+  body:has(.bottom-nav) .ac-stats-row .ac-stat { flex: 1 1 auto; min-width: 88px; }
+
+  /* my-profile in-content tab bar scrolls horizontally rather than wrapping to
+     several rows once the sidebar is gone. */
+  body:has(.bottom-nav) .htb-inner {
+    display: flex; flex-wrap: nowrap;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
+  body:has(.bottom-nav) .htb-inner .htab { flex: 0 0 auto; }
+
   /* Wide fixed-column tables: wrap rows in
      <div class="table-scroll"><div class="table-scroll-inner">…</div></div>
      so they scroll horizontally instead of being clipped by the page's

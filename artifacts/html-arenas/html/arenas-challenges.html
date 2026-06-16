@@ -55,6 +55,11 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 .main-tab .tab-count { font-size: 11px; font-family: var(--mono); background: var(--gray-100); color: var(--gray-500); padding: 1px 6px; border-radius: 10px; }
 .main-tab.active .tab-count { background: var(--gray-200); color: var(--gray-700); }
 .tabs-spacer { flex: 1; }
+@media (max-width:768px){
+  body:has(.bottom-nav) .tabs-inner{overflow-x:auto;-webkit-overflow-scrolling:touch;padding:0 12px}
+  body:has(.bottom-nav) .tabs-inner .main-tab{flex:0 0 auto}
+  body:has(.bottom-nav) .tabs-spacer{display:none}
+}
 .create-btn-wrap { padding: 8px 0; }
 
 /* ── MAIN LAYOUT ── */

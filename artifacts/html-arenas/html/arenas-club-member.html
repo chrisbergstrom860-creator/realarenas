@@ -27,6 +27,9 @@ button,select,input,textarea{font-family:var(--font)}/* ── LAYOUT ── *//
 .notif-btn{width:34px;height:34px;border-radius:7px;border:var(--border);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;position:relative}
 .topbar-club-pill{display:flex;align-items:center;gap:6px;background:var(--gray-100);border:var(--border);border-radius:20px;padding:4px 12px 4px 6px;cursor:pointer;transition:background 0.1s}
 .topbar-club-pill:hover{background:var(--gray-200)}
+@media (max-width:768px){
+  body:has(.bottom-nav) .topbar-club-pill .tc-name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+}
 .tc-icon{width:20px;height:20px;border-radius:5px;background:var(--orange-light);display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
 .tc-name{font-size:12px;font-weight:500;color:var(--gray-800)}/* ── SIDEBAR ── */
 

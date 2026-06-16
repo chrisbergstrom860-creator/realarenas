@@ -16,6 +16,11 @@ challenges, standing, RSVP/like state).
 **Why:** this single gate is what prevents cross-club reads; every club-scoped field on
 this page depends on it. Keep all new member-home data behind the same gate — do not add
 fields that read club data before the membership check.
+**The page route's error paths must also never serve the static mock.** `GET
+BASE+'/clubs/member/:clubId'` must redirect to `/feed` on BOTH the `!supabaseAdmin` branch
+AND the catch block — never `sendFile`/serve the static `arenas-club-member.html`. The
+static HTML contains fake club data, so serving it on error silently bypasses the
+membership gate (the "wrong-club" bug). Same rule applies to any future club-scoped page.
 
 ## "Coach announcements" are posts, not a table
 There is no announcements table. The announcements block is just recent `posts` authored
