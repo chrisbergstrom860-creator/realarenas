@@ -265,6 +265,43 @@ function injectArenasData(html, dataObj) {
   return html.replace('</head>', `<script>window.ARENAS_DATA = ${json};</script></head>`);
 }
 
+// Mobile bottom navigation. Single server-side source of truth injected before
+// </body> on shell pages so the markup is not duplicated across the static HTML.
+// It is hidden on desktop and only shown <=768px (see arenas.css). The athlete
+// variant mirrors the sidebar's nav() targets across the 7 athlete-facing pages;
+// activeKey receives the bn-active class (challenges/athletes/notifications have
+// no matching item, so nothing is active there — that is intentional).
+function bnItem(activeKey, key, onclick, icon, label, primary) {
+  const cls = 'bn-item' + (primary ? ' bn-primary' : '') + (activeKey === key ? ' bn-active' : '');
+  return `<a class="${cls}" onclick="${onclick}"><span class="bn-icon">${icon}</span><span class="bn-label">${label}</span></a>`;
+}
+function athleteBottomNav(activeKey) {
+  return '<nav class="bottom-nav" aria-label="Primary">'
+    + bnItem(activeKey, 'feed', "nav('/feed')", '🏠', 'Feed', false)
+    + bnItem(activeKey, 'events', "nav('/events')", '📅', 'Events', false)
+    + bnItem(activeKey, 'log', "nav('/profile#activities')", '➕', 'Log', true)
+    + bnItem(activeKey, 'ranks', "nav('/leaderboards')", '🏆', 'Ranks', false)
+    + bnItem(activeKey, 'profile', "nav('/profile')", '👤', 'Profile', false)
+    + '</nav>';
+}
+const ATHLETE_NAV_ACTIVE = { feed: 'feed', profile: 'profile', events: 'events', leaderboards: 'ranks', challenges: null, athletes: null, notifications: null };
+function bottomNavFor(pageKey) {
+  if (Object.prototype.hasOwnProperty.call(ATHLETE_NAV_ACTIVE, pageKey)) return athleteBottomNav(ATHLETE_NAV_ACTIVE[pageKey]);
+  return '';
+}
+function injectBottomNav(html, pageKey) {
+  const nav = bottomNavFor(pageKey);
+  if (!nav) return html;
+  return html.replace('</body>', nav + '</body>');
+}
+
+// TEMP: unauthenticated mobile-layout verification route (remove after pilot).
+app.get(BASE + '/landing/__mobiletest-feed', (req, res) => {
+  let html = injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), 'feed');
+  if (req.query.rail) html = html.replace('</head>', '<style>.feed-col{display:none}</style></head>');
+  res.type('html').send(html);
+});
+
 // ── NOTIFICATIONS ──
 // Insert a notification row for a recipient. Best-effort: failures are logged
 // but never bubble up, so the triggering action (like/comment/follow) still
@@ -2864,11 +2901,11 @@ app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
     // helper so every athlete-facing page shows the exact same clubs.
     const userClubs = await getSidebarClubs(req.user.id);
     const userData = { profile: displayFromUser(req.user), userId: req.user.id, posts, followsNobody, feedActivities, followingRsvps, clubs: userClubs };
-    const html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), userData);
+    const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), userData), 'feed');
     res.type('html').send(html);
   } catch (err) {
     console.log('Feed data error:', err.message);
-    res.sendFile(path.join(HTML, 'arenas-feed.html'));
+    res.type('html').send(injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), 'feed'));
   }
 });
 // Athletes directory. Lists real signed-up users (resolved from auth metadata,

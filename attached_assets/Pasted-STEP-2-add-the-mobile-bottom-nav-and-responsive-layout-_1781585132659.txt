@@ -1,0 +1,88 @@
+STEP 2 — add the mobile bottom nav and responsive layout. The bottom nav HTML should be injected server-side (one source of truth, not pasted into 9 files), and all responsive CSS goes into the shared arenas.css. Here's the plan:
+A. Bottom nav markup — inject server-side, three variants.
+In server.js, create a helper that returns the bottom-nav HTML, and inject it into the page just before </body> (similar to how injectArenasData works). Three variants based on page type:
+Athlete variant (for feed, my-profile, events, leaderboards, challenges, athletes, notifications) — 5 items using the same nav() targets as the sidebar:
+html<nav class="bottom-nav" aria-label="Primary">
+  <a class="bn-item" onclick="nav('/feed')"><span class="bn-icon">🏠</span><span class="bn-label">Feed</span></a>
+  <a class="bn-item" onclick="nav('/events')"><span class="bn-icon">📅</span><span class="bn-label">Events</span></a>
+  <a class="bn-item bn-primary" onclick="nav('/profile#activities')"><span class="bn-icon">➕</span><span class="bn-label">Log</span></a>
+  <a class="bn-item" onclick="nav('/leaderboards')"><span class="bn-icon">🏆</span><span class="bn-label">Ranks</span></a>
+  <a class="bn-item" onclick="nav('/profile')"><span class="bn-icon">👤</span><span class="bn-label">Profile</span></a>
+</nav>
+The server should add an bn-active class to whichever item matches the current page (feed→Feed, events→Events, leaderboards→Ranks, profile→Profile; challenges/athletes/notifications have no bottom-nav item so none is active — that's fine).
+Club-dashboard variant — items mapping to its setTab model: Overview, Members, Challenges, Events, and a "More" that opens the rest. Use its setTab calls, not nav(). Keep it to 5 items.
+Club-member variant — items for its scrolling sections: Overview, Announcements, Challenges, Events, Members, using its setTab/scroll calls. Keep to 5.
+Only inject the bottom nav on the 9 shell pages, not the marketing/login/blog pages.
+B. Responsive CSS — all in arenas.css, one @media (max-width: 768px) block.
+css/* Bottom nav hidden on desktop */
+.bottom-nav { display: none; }
+
+@media (max-width: 768px) {
+  /* Collapse the shell grid to a single column, no sidebar */
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: 56px 1fr;
+  }
+  .sidebar { display: none; }
+
+  /* Topbar: logo no longer needs to match sidebar width; tighten search */
+  .topbar-logo { width: auto; padding: 0 14px; }
+  .topbar-search { width: 100%; min-width: 0; }
+  .topbar-center { flex: 1; min-width: 0; padding: 0 8px; }
+
+  /* Main content full width with space for the bottom nav */
+  .main { padding-bottom: 72px !important; }
+
+  /* Right rails: stack below content (rail is always last child) */
+  .main { grid-template-columns: 1fr !important; }
+  .side-col, .right-col {
+    position: static !important;
+    height: auto !important;
+    overflow: visible !important;
+    width: auto !important;
+  }
+
+  /* Full-bleed header rows that used grid-column span still work in 1-col */
+
+  /* Collapse multi-column content grids */
+  .grid-4 { grid-template-columns: 1fr 1fr !important; }
+  .grid-3 { grid-template-columns: 1fr !important; }
+  .grid-2 { grid-template-columns: 1fr !important; }
+
+  /* Show the bottom nav */
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 60px;
+    background: var(--white, #fff);
+    border-top: 1px solid var(--gray-200);
+    z-index: 300;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  .bn-item {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 2px; cursor: pointer;
+    color: var(--gray-500); text-decoration: none;
+    font-size: 10px;
+  }
+  .bn-icon { font-size: 20px; line-height: 1; }
+  .bn-item.bn-active { color: var(--gray-900); }
+  .bn-item.bn-active .bn-icon { transform: scale(1.05); }
+  .bn-primary .bn-icon {
+    background: var(--yellow); color: var(--gray-900);
+    width: 38px; height: 38px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: -4px; box-shadow: 0 2px 8px rgba(230,184,0,.4);
+  }
+}
+C. Important checks:
+
+The club dashboard's leaderboard table row (.lb-table-row with grid-template-columns: 32px 1fr 80px 70px 60px) and any other fixed multi-column rows will overflow on mobile. Add rules in the media block to let those wrap or scroll horizontally — for any wide table, wrap it in a horizontally-scrollable container rather than breaking the columns. Report which fixed-column tables exist on the 9 pages and handle each.
+On leaderboards, verify .page-header and .sport-bar (which don't set grid-column) still render full-width once the grid is single-column — they should, but confirm.
+Verify the --white variable exists; if the token is named differently, use the correct one for the bottom nav background.
+
+D. Do feed first as the pilot. Apply everything, but before pushing, tell me: does feed look correct at 375px wide (sidebar gone, bottom nav showing, rail stacked below, content full width)? Once feed is verified I'll confirm rolling to the rest.
+Report the fixed-column tables from check C, and confirm feed works at mobile width, before pushing.

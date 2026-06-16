@@ -224,3 +224,91 @@ body {
   background: var(--red);
   border: 1.5px solid white;
 }
+
+/* ===========================================================================
+   Mobile bottom nav + responsive shell (<=768px).
+   The bottom-nav element is injected server-side only on shell pages. The
+   shell-collapse rules are gated on `body:has(.bottom-nav)` so pages that have
+   NOT yet received the bottom nav keep their desktop sidebar at mobile width
+   (they would otherwise lose all navigation). Once the nav is rolled out to all
+   shell pages the gate is satisfied everywhere and becomes a no-op.
+   =========================================================================== */
+.bottom-nav { display: none; }
+
+@media (max-width: 768px) {
+  /* Collapse the shell grid to a single column and drop the sidebar */
+  body:has(.bottom-nav) .app {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 56px 1fr;
+  }
+  body:has(.bottom-nav) .sidebar { display: none; }
+
+  /* Topbar: logo no longer needs to match sidebar width; let search fill */
+  body:has(.bottom-nav) .topbar-logo { width: auto; padding: 0 14px; }
+  body:has(.bottom-nav) .topbar-center { flex: 1; min-width: 0; padding: 0 8px; }
+  body:has(.bottom-nav) .topbar-search { width: 100%; min-width: 0; }
+  body:has(.bottom-nav) .topbar-search input { min-width: 0; }
+
+  /* Main content full width, with clearance for the fixed bottom nav.
+     Right rails are always the last child, so they stack below naturally. */
+  body:has(.bottom-nav) .main {
+    grid-template-columns: minmax(0, 1fr) !important;
+    padding-bottom: 76px !important;
+  }
+  /* min-width:0 lets grid/flex children shrink below their content width so
+     long text wraps instead of widening the column past the viewport. */
+  body:has(.bottom-nav) .feed-col,
+  body:has(.bottom-nav) .side-col,
+  body:has(.bottom-nav) .right-col {
+    min-width: 0;
+  }
+  body:has(.bottom-nav) .side-col,
+  body:has(.bottom-nav) .right-col {
+    position: static !important;
+    height: auto !important;
+    overflow: visible !important;
+    width: auto !important;
+  }
+
+  /* Collapse multi-column content grids */
+  body:has(.bottom-nav) .grid-4 { grid-template-columns: 1fr 1fr !important; }
+  body:has(.bottom-nav) .grid-3 { grid-template-columns: 1fr !important; }
+  body:has(.bottom-nav) .grid-2 { grid-template-columns: 1fr !important; }
+
+  /* Wide fixed-column tables: wrap rows in
+     <div class="table-scroll"><div class="table-scroll-inner">…</div></div>
+     so they scroll horizontally instead of being clipped by the page's
+     overflow-x:hidden. Applied to leaderboards/club-dashboard/club-member. */
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table-scroll-inner { min-width: 560px; }
+
+  /* Bottom nav itself */
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 60px;
+    background: #fff;
+    border-top: 1px solid var(--gray-200);
+    z-index: 300;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  .bn-item {
+    flex: 1;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 2px; cursor: pointer;
+    color: var(--gray-500); text-decoration: none;
+    font-size: 10px;
+  }
+  .bn-icon { font-size: 20px; line-height: 1; }
+  .bn-label { line-height: 1; }
+  .bn-item.bn-active { color: var(--gray-900); }
+  .bn-item.bn-active .bn-icon { transform: scale(1.05); }
+  .bn-primary .bn-icon {
+    background: var(--yellow); color: var(--gray-900);
+    width: 38px; height: 38px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: -4px; box-shadow: 0 2px 8px rgba(230,184,0,.4);
+  }
+}
