@@ -338,4 +338,26 @@ body {
     display: flex; align-items: center; justify-content: center;
     margin-top: -4px; box-shadow: 0 2px 8px rgba(230,184,0,.4);
   }
+
+  /* Notifications pop-down (club dashboard only). On desktop it's a 360px panel
+     anchored right:0 to the bell; the bell isn't flush-right (the avatar sits to
+     its right) so on mobile that anchoring pushes the panel off the left edge.
+     Pin it to the viewport instead: full-width minus 8px side margins, capped at
+     70vh with its own scroll as a safety net. Left UNGATED (not behind
+     body:has(.bottom-nav)) so the rules always reach the panel; #notifications-panel
+     exists only on the club dashboard, so this can't affect any other page. The
+     panel's width/right/position are inline styles, so !important is required to
+     win the cascade over them. */
+  #notifications-panel {
+    position: fixed !important;
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+    top: 60px !important;
+    max-height: 70vh !important;
+    overflow-y: auto !important;
+  }
+  #notifications-panel-list {
+    max-height: none !important;
+  }
 }
