@@ -290,7 +290,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
           <div style="font-size:14px;font-weight:600;color:var(--gray-900)">Notifications</div>
           <div style="display:flex;align-items:center;gap:8px">
             <button onclick="markAllNotificationsRead()" style="font-size:12px;color:var(--gray-500);background:none;border:none;cursor:pointer">Mark all read</button>
-            <a href="#" onclick="nav('/notifications');return false;" style="font-size:12px;color:var(--gray-500);text-decoration:none">See all →</a>
+            <a href="#" id="notif-see-all" onclick="showAllNotifications();return false;" style="font-size:12px;color:var(--gray-500);text-decoration:none;display:none">See all →</a>
           </div>
         </div>
         <div id="notifications-panel-list" style="overflow-y:auto;flex:1;max-height:400px">
@@ -1061,6 +1061,9 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   var panelOpen = false;
   var typeIcons = { like: '👍', follow: '👤', comment: '💬', club: '🏃', challenge: '⚡', event: '📅', system: '✦' };
+  var allNotifs = [];
+  var showAll = false;
+  var COLLAPSED = 15;
 
   function syncDot(unread) {
     var dot = document.querySelector('.notif-dot');
@@ -1079,34 +1082,55 @@ document.addEventListener('DOMContentLoaded', function () {
       .then(function (d) { syncDot((d && d.unreadCount) || 0); }).catch(function () {});
   }
 
+  function renderNotificationsList() {
+    var list = document.getElementById('notifications-panel-list');
+    if (!list) return;
+    var seeAll = document.getElementById('notif-see-all');
+    if (!allNotifs.length) {
+      list.innerHTML = '<div style="text-align:center;padding:32px;font-size:13px;color:var(--gray-400)">No notifications yet</div>';
+      if (seeAll) seeAll.style.display = 'none';
+      return;
+    }
+    var visible = showAll ? allNotifs : allNotifs.slice(0, COLLAPSED);
+    list.innerHTML = visible.map(function (n) {
+      var id = esc(n.id);
+      var bg = n.read ? 'white' : '#FFFDF0';
+      return '<div data-nid="' + id + '" onclick="markNotificationRead(\'' + id + '\')"' +
+        ' style="display:flex;align-items:flex-start;gap:10px;padding:11px 16px;border-bottom:var(--border);cursor:pointer;background:' + bg + '"' +
+        ' onmouseenter="this.style.background=\'var(--gray-50)\'" onmouseleave="this.style.background=\'' + bg + '\'">' +
+          '<div style="width:32px;height:32px;border-radius:50%;background:var(--yellow-light);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-top:1px">' + (typeIcons[n.type] || '✦') + '</div>' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-size:12px;color:var(--gray-900);line-height:1.5;margin-bottom:2px">' + esc(n.body) + '</div>' +
+            '<div style="font-size:10px;color:var(--gray-400)">' + esc(timeAgo(n.created_at)) + '</div>' +
+          '</div>' +
+          (!n.read ? '<div style="width:7px;height:7px;border-radius:50%;background:#FFD21E;flex-shrink:0;margin-top:5px"></div>' : '') +
+        '</div>';
+    }).join('');
+    // "See all" only matters when the collapsed view hides some notifications.
+    if (seeAll) seeAll.style.display = (!showAll && allNotifs.length > COLLAPSED) ? 'inline' : 'none';
+  }
+
+  // Expand the in-place panel to the full list — the coach never leaves the
+  // dashboard (replaces the old nav to the athlete /notifications page).
+  window.showAllNotifications = function () {
+    showAll = true;
+    renderNotificationsList();
+  };
+
   async function loadNotificationsPanel() {
     var list = document.getElementById('notifications-panel-list');
     if (!list) return;
+    showAll = false;
     try {
       var r = await fetch(B + '/api/notifications');
       var data = await r.json();
-      var notifs = (data && data.notifications) || [];
-      if (data.error || !notifs.length) {
-        list.innerHTML = '<div style="text-align:center;padding:32px;font-size:13px;color:var(--gray-400)">No notifications yet</div>';
-        syncDot(0);
-        return;
-      }
-      list.innerHTML = notifs.slice(0, 15).map(function (n) {
-        var id = esc(n.id);
-        var bg = n.read ? 'white' : '#FFFDF0';
-        return '<div data-nid="' + id + '" onclick="markNotificationRead(\'' + id + '\')"' +
-          ' style="display:flex;align-items:flex-start;gap:10px;padding:11px 16px;border-bottom:var(--border);cursor:pointer;background:' + bg + '"' +
-          ' onmouseenter="this.style.background=\'var(--gray-50)\'" onmouseleave="this.style.background=\'' + bg + '\'">' +
-            '<div style="width:32px;height:32px;border-radius:50%;background:var(--yellow-light);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-top:1px">' + (typeIcons[n.type] || '✦') + '</div>' +
-            '<div style="flex:1;min-width:0">' +
-              '<div style="font-size:12px;color:var(--gray-900);line-height:1.5;margin-bottom:2px">' + esc(n.body) + '</div>' +
-              '<div style="font-size:10px;color:var(--gray-400)">' + esc(timeAgo(n.created_at)) + '</div>' +
-            '</div>' +
-            (!n.read ? '<div style="width:7px;height:7px;border-radius:50%;background:#FFD21E;flex-shrink:0;margin-top:5px"></div>' : '') +
-          '</div>';
-      }).join('');
+      allNotifs = (data && !data.error && data.notifications) || [];
+      renderNotificationsList();
       syncDot((data && data.unreadCount) || 0);
     } catch (err) {
+      allNotifs = [];
+      var seeAll = document.getElementById('notif-see-all');
+      if (seeAll) seeAll.style.display = 'none';
       list.innerHTML = '<div style="text-align:center;padding:32px;font-size:13px;color:var(--gray-400)">Could not load notifications</div>';
     }
   }
@@ -1121,6 +1145,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
   window.markNotificationRead = async function (id) {
     try { await fetch(B + '/api/notifications/' + id + '/read', { method: 'POST' }); } catch (e) {}
+    for (var i = 0; i < allNotifs.length; i++) {
+      if (String(allNotifs[i].id) === String(id)) { allNotifs[i].read = true; break; }
+    }
     var item = document.querySelector('#notifications-panel-list [data-nid="' + id + '"]');
     if (item) {
       item.style.background = 'white';
@@ -1133,6 +1160,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   window.markAllNotificationsRead = async function () {
     try { await fetch(B + '/api/notifications/read-all', { method: 'POST' }); } catch (e) {}
+    allNotifs.forEach(function (n) { n.read = true; });
     document.querySelectorAll('#notifications-panel-list [data-nid]').forEach(function (item) {
       item.style.background = 'white';
       item.setAttribute('onmouseleave', "this.style.background='white'");

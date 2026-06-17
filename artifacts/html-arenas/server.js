@@ -3812,15 +3812,28 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
   try {
     if (!supabaseAdmin) return servePlain();
 
-    // The club this user administers (most recent admin/coach membership wins).
-    const { data: membership } = await supabaseAdmin
-      .from('memberships')
-      .select('club_id, role, clubs (id, name, handle, sport, city)')
-      .eq('user_id', req.user.id)
-      .in('role', ['admin', 'coach'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // The club this user administers. Honor an explicit ?club=<id> when the
+    // viewer is an admin/coach of it (so multi-club coaches land on the right
+    // dashboard from the "My clubs" sidebar); otherwise default to their most
+    // recent admin/coach membership. The role filter keeps this IDOR-safe — an
+    // unmanaged or unknown id silently falls back to the default club.
+    const requestedClubId = typeof req.query.club === 'string' ? req.query.club : null;
+    const pickManagedMembership = async (clubFilter) => {
+      let q = supabaseAdmin
+        .from('memberships')
+        .select('club_id, role, clubs (id, name, handle, sport, city)')
+        .eq('user_id', req.user.id)
+        .in('role', ['admin', 'coach']);
+      if (clubFilter) q = q.eq('club_id', clubFilter);
+      const { data } = await q
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data;
+    };
+
+    let membership = requestedClubId ? await pickManagedMembership(requestedClubId) : null;
+    if (!membership) membership = await pickManagedMembership(null);
 
     const clubId = membership && membership.club_id;
     let memberCount = 0;

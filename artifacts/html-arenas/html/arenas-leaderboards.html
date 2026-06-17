@@ -840,7 +840,11 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
   clubs.forEach(function (club) {
     var item = document.createElement('div');
     item.className = 'nav-item';
-    item.onclick = function () { if (typeof nav === 'function') nav('/clubs/member/' + club.id); };
+    item.onclick = function () {
+      if (typeof nav !== 'function') return;
+      if (club.role === 'admin' || club.role === 'coach') { nav('/clubs/dashboard?club=' + club.id); }
+      else { nav('/clubs/member/' + club.id); }
+    };
     var ic = document.createElement('span');
     ic.className = 'nav-icon';
     ic.textContent = sportIcons[club.sport] || '🏟';

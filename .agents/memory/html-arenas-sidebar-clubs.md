@@ -22,10 +22,22 @@ keeps the sidebar consistent everywhere.
 
 **How to apply:** When adding a new athlete page or touching any sidebar, copy
 the existing renderer verbatim and ensure the route injects `clubs`. Club names
-are inserted with `createTextNode` (XSS-safe); the sport→icon map and the
-`nav('/clubs/member')` click target are fixed. Empty state is "No clubs yet".
-Note: the Profile page's in-page "My Clubs" TAB is a separate renderer — do not
-confuse it with the sidebar one.
+are inserted with `createTextNode` (XSS-safe); the sport→icon map is fixed.
+Empty state is "No clubs yet". Note: the Profile page's in-page "My Clubs" TAB is
+a separate renderer — do not confuse it with the sidebar one.
+
+**Click target is ROLE-AWARE (not fixed to member view).** `getSidebarClubs`
+returns `{id,name,handle,sport,role}`, so the renderer branches on `club.role`:
+`admin`/`coach` → `nav('/clubs/dashboard?club=' + club.id)`, everyone else →
+`nav('/clubs/member/' + club.id)`. This is what lets a coach get back to their
+dashboard from any athlete page (the old dead-end was that it always went to the
+member view). Keep this branch identical across all 7 pages.
+
+**Why coaches need `?club=`:** the `/clubs/dashboard` route picks the viewer's
+most-recent admin/coach membership by default, so without an id a multi-club coach
+would land on the wrong club. The route honors `?club=<id>` ONLY when the viewer
+is admin/coach of that club (role-filtered membership query = IDOR-safe); an
+unmanaged/unknown id silently falls back to the default club.
 
 Out of scope by user decision: other hardcoded "Hackney RC" demo content (feed
 posts, event cards, bios, club-context pages, marketing) is intentionally left
