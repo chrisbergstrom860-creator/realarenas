@@ -349,6 +349,48 @@ button,select,input,textarea{font-family:var(--font)}
 /* Toast */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--gray-900);color:white;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:500;z-index:999;transition:transform .3s ease;white-space:nowrap;box-shadow:var(--shadow-md)}
 .toast.show{transform:translateX(-50%) translateY(0)}
+
+/* ══════════════════════════════════════════
+   MOBILE RESPONSIVE  (≤768px)
+══════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Nav — wrap instead of overflowing the viewport */
+  .nav { height: auto; flex-wrap: wrap; padding: 10px 16px; gap: 10px; }
+  .nav-links { width: 100%; margin-left: 0; flex-wrap: wrap; justify-content: center; gap: 6px; }
+
+  /* Hero — collapse the fixed 1fr/440px split that caused horizontal scroll */
+  .hero { padding: 132px 20px 56px; }
+  .hero-inner { grid-template-columns: 1fr; gap: 32px; }
+  .hero-title { font-size: 32px; }
+  .hero-glow { width: 320px; height: 320px; top: -60px; right: -60px; }
+  .hp-stat-row { grid-template-columns: repeat(2, 1fr); }
+
+  /* Yellow stats bar — wrap its row of stats */
+  .stats-bar { flex-wrap: wrap; gap: 18px 28px; padding: 18px 20px; }
+
+  /* Section spacing + headings */
+  .section { padding: 56px 20px; }
+  .section-title { font-size: 26px; }
+
+  /* Multi-column content grids -> single column */
+  .features-grid { grid-template-columns: 1fr; }
+  .testimonials-grid { grid-template-columns: 1fr; }
+  .pricing-grid { grid-template-columns: 1fr; }
+  .price-amount { font-size: 30px; }
+
+  /* Inline 1fr/1fr grids (how-it-works split + review step) -> single column */
+  [style*="grid-template-columns:1fr 1fr"] { grid-template-columns: 1fr !important; }
+
+  /* CTA band */
+  .cta-band { padding: 56px 20px; }
+  .cta-title { font-size: 28px; }
+
+  /* Signup modal — collapse inner grids so the multi-step flow is usable */
+  .signup-overlay { padding: 12px; }
+  .form-row { grid-template-columns: 1fr; }
+  .plan-cards { grid-template-columns: 1fr; }
+  .integration-grid { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
