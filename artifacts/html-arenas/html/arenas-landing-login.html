@@ -482,6 +482,56 @@ html { scroll-behavior: smooth; }
 .success-icon { width: 56px; height: 56px; background: var(--yellow); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; margin: 0 auto 16px; }
 .auth-success h3 { font-size: 20px; font-weight: 700; color: var(--gray-900); margin-bottom: 8px; }
 .auth-success p { font-size: 14px; color: var(--gray-500); margin-bottom: 24px; }
+
+/* ── MOBILE RESPONSIVE ── */
+@media (max-width: 768px) {
+  /* Prevent any horizontal scroll from decorative elements */
+  body { overflow-x: hidden; }
+
+  /* Topbar nav — allow wrap, tighten (height:auto so wrapped rows don't overlap hero) */
+  .topbar-inner { flex-wrap: wrap; gap: 12px 16px; padding: 12px 16px; height: auto; }
+  .topnav { gap: 4px 12px; flex-wrap: wrap; flex: 1 1 100%; }
+  .topbar-actions { margin-left: 0; }
+
+  /* Hero — stack to single column, shrink heading, reduce padding */
+  .split-hero { grid-template-columns: 1fr !important; min-height: auto; }
+  .hero-left { padding: 40px 20px !important; }
+  .hero-h1 { font-size: 32px !important; line-height: 1.15; }
+  .hero-right, .hero-left { width: auto; }
+
+  /* All multi-column content grids → single (stats stays 2-col 2x2) */
+  .stats-bar-inner { grid-template-columns: 1fr 1fr !important; gap: 16px; }
+  .features-grid { grid-template-columns: 1fr !important; }
+  .steps-grid { grid-template-columns: 1fr !important; }
+  .testimonials { grid-template-columns: 1fr !important; }
+  .pricing-grid { grid-template-columns: 1fr !important; }
+
+  /* For-clubs teaser 2-col → stack */
+  .for-clubs-inner { grid-template-columns: 1fr !important; gap: 32px !important; }
+
+  /* Section titles and big numbers shrink */
+  .section-title { font-size: 26px !important; }
+  .stat-num { font-size: 26px !important; }
+  .pricing-amount { font-size: 30px !important; }
+  .cta-band h2 { font-size: 26px !important; }
+
+  /* The horizontal connector line on the steps section — hide on mobile */
+  .steps-grid::before { display: none !important; }
+
+  /* Footer — wrap to column */
+  .footer-inner { flex-direction: column; gap: 24px; }
+
+  /* AUTH SECTION (login/signup) — the important one */
+  .auth-page { grid-template-columns: 1fr !important; min-height: auto; }
+  /* Hide the dark branding panel on mobile, just show the form */
+  .auth-left { display: none !important; }
+  .auth-form-wrap { max-width: 100% !important; padding: 32px 20px !important; }
+  /* Stack the side-by-side name fields */
+  .form-row { grid-template-columns: 1fr !important; }
+
+  /* Clip the oversized decorative glow so it can't cause horizontal scroll */
+  .cta-band::before { max-width: 100vw; overflow: hidden; }
+}
 </style>
 </head>
 <body>

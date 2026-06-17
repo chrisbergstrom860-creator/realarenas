@@ -20,4 +20,5 @@
 - [html-arenas profile Overview tab](html-arenas-profile-overview.md) — default profile tab (≠ club overview); /api/profile/overview; activities order by date, .in() not FK embeds, escape others' titles.
 - [html-arenas shared shell CSS](html-arenas-shell-css.md) — shell lives in html/arenas.css (9 app-shell pages link it; served via dual public route); edit shell there not per-page; challenges/leaderboards also carry a legacy top-nav block.
 - [html-arenas club member-home page](html-arenas-club-member-home.md) — /clubs/member/:clubId single scrolling page; membership gate is the IDOR boundary; "coach announcements" are posts by admin/coach (no table); unknown challenge goal_type → sessions.
+- [html-arenas marketing responsive](html-arenas-marketing-responsive.md) — self-contained marketing/auth pages; hero grid is `.split-hero` not `.hero`; topbar needs height:auto when wrapping; real grid class names listed.
 - [html-arenas mobile shell](html-arenas-mobile-shell.md) — STEP2 mobile: server-injected bottom nav + one @media block gated on body:has(.bottom-nav); collapse with minmax(0,1fr)+min-width:0 (not 1fr) or content clips; px tables need .table-scroll.
