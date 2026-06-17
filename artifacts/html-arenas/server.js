@@ -322,11 +322,74 @@ function bottomNavFor(pageKey) {
   if (Object.prototype.hasOwnProperty.call(ATHLETE_NAV_ACTIVE, pageKey)) return athleteBottomNav(ATHLETE_NAV_ACTIVE[pageKey]);
   return '';
 }
+// Avatar dropdown enhancement: a "Clubs you manage" section injected at the top
+// of #userMenu, populated client-side from window.ARENAS_DATA.clubs. Gives
+// admins/coaches a one-tap path to each club's dashboard from any shell page.
+// The topbar (and its avatar menu) is visible on mobile, so this is the mobile
+// route to the dashboard now that the sidebar is hidden <=768px. No-ops for pure
+// athletes (no admin/coach membership) and for pages without ARENAS_DATA. Club
+// names are written via textContent, so they cannot inject markup.
+const MANAGED_CLUBS_MENU_SCRIPT = `<script>(function buildManagedClubsMenu(){
+  try {
+    var d = window.ARENAS_DATA;
+    var clubs = (d && d.clubs) || [];
+    var managed = clubs.filter(function(c){ return c.role === 'admin' || c.role === 'coach'; });
+    if (!managed.length) return;
+    var menu = document.getElementById('userMenu');
+    if (!menu || menu.querySelector('.menu-club-item')) return;
+    var icons = { running:'🏃', cycling:'🚴', climbing:'🧗', swimming:'🏊', football:'⚽', weightlifting:'🏋️', hiking:'🥾', yoga:'🧘', triathlon:'🔱' };
+    var bgs = { running:'#FFF7ED', cycling:'#EFF6FF', climbing:'#F5F3FF', swimming:'#F0FDFA', football:'#ECFDF5', weightlifting:'#FEF9C3', hiking:'#FAEEDA', yoga:'#FBEAF0', triathlon:'#EFF6FF' };
+    var section = document.createElement('div');
+    var lab = document.createElement('div');
+    lab.style.cssText = 'font-size:10px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em;padding:9px 14px 5px';
+    lab.textContent = 'Clubs you manage';
+    section.appendChild(lab);
+    managed.forEach(function(c){
+      var item = document.createElement('div');
+      item.className = 'menu-club-item';
+      item.style.cssText = 'display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer';
+      item.onclick = function(){ if (typeof nav === 'function') nav('/clubs/dashboard?club=' + encodeURIComponent(c.id)); };
+      var ic = document.createElement('div');
+      ic.style.cssText = 'width:26px;height:26px;border-radius:7px;background:' + (bgs[c.sport] || '#FFF7ED') + ';display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0';
+      ic.textContent = icons[c.sport] || '🏟';
+      item.appendChild(ic);
+      var mid = document.createElement('div');
+      mid.style.cssText = 'flex:1;min-width:0';
+      var nm = document.createElement('div');
+      nm.style.cssText = 'font-size:13px;font-weight:600;color:var(--gray-900);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+      nm.textContent = c.name || 'Club';
+      var sub = document.createElement('div');
+      sub.style.cssText = 'font-size:10px;color:#854D0E';
+      sub.textContent = 'Coach dashboard';
+      mid.appendChild(nm); mid.appendChild(sub);
+      item.appendChild(mid);
+      var bdg = document.createElement('span');
+      bdg.style.cssText = 'font-size:9px;font-weight:600;padding:2px 8px;border-radius:20px;background:#FAEEDA;color:#633806;flex-shrink:0';
+      bdg.textContent = 'Manage';
+      item.appendChild(bdg);
+      item.addEventListener('mouseenter', function(){ item.style.background = 'var(--gray-50)'; });
+      item.addEventListener('mouseleave', function(){ item.style.background = 'transparent'; });
+      section.appendChild(item);
+    });
+    var dv = document.createElement('div');
+    dv.style.cssText = 'height:0.5px;background:var(--gray-200);margin:4px 0';
+    section.appendChild(dv);
+    menu.insertBefore(section, menu.firstChild);
+  } catch (e) {}
+})();</script>`;
 function injectBottomNav(html, pageKey) {
-  if (html.includes('class="bottom-nav"')) return html;
-  const nav = bottomNavFor(pageKey);
-  if (!nav) return html;
-  return html.replace('</body>', nav + '</body>');
+  let out = html;
+  if (!out.includes('class="bottom-nav"')) {
+    const nav = bottomNavFor(pageKey);
+    if (nav) out = out.replace('</body>', nav + '</body>');
+  }
+  // Shared avatar-dropdown "Clubs you manage" enhancement (one source of truth
+  // for all shell pages; self-guards against double injection and no-ops for
+  // pure athletes / pages without ARENAS_DATA).
+  if (out.indexOf('buildManagedClubsMenu') === -1) {
+    out = out.replace('</body>', MANAGED_CLUBS_MENU_SCRIPT + '</body>');
+  }
+  return out;
 }
 
 // ── NOTIFICATIONS ──
@@ -4070,6 +4133,10 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
     const clubData = {
       club: (membership && membership.clubs) || null,
       profile: displayFromUser(req.user),
+      // The viewer's full membership list (with role) powers the "Clubs you
+      // manage" section of the avatar dropdown on this page too, so multi-club
+      // coaches can switch dashboards from here.
+      clubs: await getSidebarClubs(req.user.id),
       memberCount,
       members,
       pendingCount,

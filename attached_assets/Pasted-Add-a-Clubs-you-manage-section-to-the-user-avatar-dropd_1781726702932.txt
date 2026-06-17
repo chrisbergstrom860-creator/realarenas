@@ -1,0 +1,43 @@
+Add a "Clubs you manage" section to the user avatar dropdown menu (the menu that opens from the avatar/initials circle next to the bell in the topbar). This gives coaches a one-tap path to their club dashboard from any page, including mobile. Here's the plan:
+1. Confirm the data is available. The dropdown needs the list of clubs where the logged-in user is an admin or coach. getSidebarClubs(userId) already returns {id, name, handle, sport, role} per club and is injected as window.ARENAS_DATA.clubs on the athlete pages. First confirm: is window.ARENAS_DATA.clubs (with role) available on ALL pages that have the avatar dropdown — the 7 athlete pages AND the club-dashboard and club-member pages? Report which pages have it and which don't. If club-dashboard or club-member don't inject clubs with role, we'll need to add that. Report before building.
+2. The avatar dropdown markup. The dropdown is the #userMenu element in the topbar (it currently has items like "My profile" and "Log out"). It's defined per-page (not shared). We need to inject a "Clubs you manage" section at the TOP of this menu, above the existing items, populated from the coached clubs.
+Since the menu markup is per-page, do this via a shared script that runs on page load and builds the section from window.ARENAS_DATA.clubs. Add this logic (adapt selectors to the real #userMenu structure on each page):
+javascript(function buildManagedClubsMenu() {
+  const data = window.ARENAS_DATA;
+  const clubs = (data && data.clubs) || [];
+  const managed = clubs.filter(c => c.role === 'admin' || c.role === 'coach');
+  if (managed.length === 0) return; // pure athletes see nothing extra
+  const menu = document.getElementById('userMenu');
+  if (!menu) return;
+  const sportIcons = { running:'🏃', cycling:'🚴', climbing:'🧗', swimming:'🏊', football:'⚽', weightlifting:'🏋️', hiking:'🥾', yoga:'🧘' };
+  const sportBgs = { running:'#FFF7ED', cycling:'#EFF6FF', climbing:'#F5F3FF', swimming:'#F0FDFA', football:'#ECFDF5', weightlifting:'#FEF9C3', hiking:'#FAEEDA', yoga:'#FBEAF0' };
+  const section = document.createElement('div');
+  section.innerHTML =
+    '<div style="font-size:10px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em;padding:9px 14px 5px">Clubs you manage</div>' +
+    managed.map(c => {
+      const icon = sportIcons[c.sport] || '🏟';
+      const bg = sportBgs[c.sport] || '#FFF7ED';
+      return '<div class="menu-club-item" onclick="nav(\'/clubs/dashboard?club=' + c.id + '\')" style="display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer">' +
+        '<div style="width:26px;height:26px;border-radius:7px;background:' + bg + ';display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0">' + icon + '</div>' +
+        '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--gray-900);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + c.name + '</div><div style="font-size:10px;color:#854D0E">Coach dashboard</div></div>' +
+        '<span style="font-size:9px;font-weight:600;padding:2px 8px;border-radius:20px;background:#FAEEDA;color:#633806;flex-shrink:0">Manage</span>' +
+      '</div>';
+    }).join('') +
+    '<div style="height:0.5px;background:var(--gray-200);margin:4px 0"></div>';
+  // Insert at the very top of the menu, above existing items
+  menu.insertBefore(section, menu.firstChild);
+  // Add hover effect to match other menu items
+  section.querySelectorAll('.menu-club-item').forEach(el => {
+    el.addEventListener('mouseenter', () => el.style.background = 'var(--gray-50)');
+    el.addEventListener('mouseleave', () => el.style.background = 'transparent');
+  });
+})();
+3. Apply this script on all pages that have the avatar dropdown — the 7 athlete pages plus club-dashboard and club-member. On club-dashboard and club-member, confirm the #userMenu exists and that window.ARENAS_DATA.clubs (with role) is available; if those pages use a different menu id or don't inject clubs, adapt accordingly and tell me what you changed.
+4. Important checks:
+
+The "Clubs you manage" section must only appear for users who are admin/coach of at least one club. Pure athletes (members only) see no change.
+Each club links to /clubs/dashboard?club=<id> so multi-club coaches land on the right dashboard (using the ?club= handling we already built).
+This must work on mobile — the avatar dropdown is in the topbar which is visible on mobile, so this is the mobile path to the dashboard. Verify the dropdown opens and is usable at 375px.
+If you're already on a club dashboard, linking to that same club's dashboard is harmless (just reloads/stays).
+
+Report the step-1 data-availability findings before building. Then apply, verify the dropdown shows managed clubs on desktop AND at 375px mobile, and that a pure-athlete account sees no managed-clubs section. Don't push until I confirm.
