@@ -57,3 +57,8 @@ Thumbs.db
 .replit
 replit.nix
 *.log
+
+# Orphan asset auto-re-encoded every session by an external process
+# (unreferenced; kept on disk but untracked so it stops polluting diffs).
+# See .agents/memory/html-arenas-opengraph-asset.md
+artifacts/html-arenas/public/opengraph.jpg
