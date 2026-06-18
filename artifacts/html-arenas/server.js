@@ -49,6 +49,12 @@ app.get(['/html/arenas.css', '/arenas.css'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas.css'));
 });
 
+// Shared in-place notifications dropdown logic (public, no auth). Served at both
+// the Replit (/html) and Railway (root) base paths, like the stylesheet above.
+app.get(['/html/arenas-notifications-panel.js', '/arenas-notifications-panel.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-notifications-panel.js'));
+});
+
 // ── AUTH (Supabase) ──
 const COOKIE_OPTS = {
   httpOnly: true,
@@ -377,6 +383,40 @@ const MANAGED_CLUBS_MENU_SCRIPT = `<script>(function buildManagedClubsMenu(){
     menu.insertBefore(section, menu.firstChild);
   } catch (e) {}
 })();</script>`;
+
+// Shared in-place notifications dropdown. Markup is the club dashboard's panel;
+// the behaviour lives in the served arenas-notifications-panel.js. For any page
+// whose bell still navigates to the (now retired) /notifications page, rebuild
+// the bell exactly like the dashboard: wrap it in a position:relative box with
+// the panel as a SIBLING (never a child — a nested panel would bubble its own
+// clicks up into the bell's onclick and toggle itself shut). Works for both
+// .notif-btn and .icon-btn. Atomic and self-guarding: no-ops on the dashboard
+// (its panel id already exists) and on any page without the bell, and only
+// injects the panel script when the bell actually matched (otherwise the bell
+// simply keeps redirecting to /feed rather than becoming a dead button).
+const NOTIF_PANEL_MARKUP = `<div id="notifications-panel" style="display:none;position:absolute;top:calc(100% + 8px);right:0;width:360px;max-height:480px;background:white;border:var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);z-index:300;overflow:hidden;flex-direction:column">
+        <div style="padding:12px 16px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+          <div style="font-size:14px;font-weight:600;color:var(--gray-900)">Notifications</div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button onclick="markAllNotificationsRead()" style="font-size:12px;color:var(--gray-500);background:none;border:none;cursor:pointer">Mark all read</button>
+            <a href="#" id="notif-see-all" onclick="showAllNotifications();return false;" style="font-size:12px;color:var(--gray-500);text-decoration:none;display:none">See all →</a>
+          </div>
+        </div>
+        <div id="notifications-panel-list" style="overflow-y:auto;flex:1;max-height:400px">
+          <div style="text-align:center;padding:32px;font-size:13px;color:var(--gray-400)">Loading notifications…</div>
+        </div>
+      </div>`;
+function injectNotificationsPanel(html) {
+  if (html.indexOf('id="notifications-panel"') !== -1) return html;
+  let out = html.replace(
+    /<div class="(notif-btn|icon-btn)" onclick="nav\('\/notifications'\)">(.*?)<div class="notif-dot"><\/div><\/div>/,
+    '<div style="position:relative"><div class="$1" onclick="toggleNotificationsPanel()">$2<div class="notif-dot"></div></div>' + NOTIF_PANEL_MARKUP + '</div>'
+  );
+  if (out !== html) {
+    out = out.replace('</body>', '<script src="' + BASE + '/arenas-notifications-panel.js"></script></body>');
+  }
+  return out;
+}
 function injectBottomNav(html, pageKey) {
   let out = html;
   if (!out.includes('class="bottom-nav"')) {
@@ -389,6 +429,7 @@ function injectBottomNav(html, pageKey) {
   if (out.indexOf('buildManagedClubsMenu') === -1) {
     out = out.replace('</body>', MANAGED_CLUBS_MENU_SCRIPT + '</body>');
   }
+  out = injectNotificationsPanel(out);
   return out;
 }
 
@@ -4427,7 +4468,7 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
 // members injected as window.INVITE_DATA. Falls back to the static mockup if the
 // viewer isn't a club manager or data can't be loaded.
 app.get(BASE + '/clubs/invite', requirePageAuth, async (req, res) => {
-  const servePlain = () => res.sendFile(path.join(HTML, 'arenas-club-invite.html'));
+  const servePlain = () => res.type('html').send(injectNotificationsPanel(fs.readFileSync(path.join(HTML, 'arenas-club-invite.html'), 'utf8')));
   try {
     if (!supabaseAdmin) return servePlain();
 
@@ -4487,7 +4528,7 @@ app.get(BASE + '/clubs/invite', requirePageAuth, async (req, res) => {
       baseUrl: publicBaseUrl(req)
     };
 
-    const html = injectNamedData(fs.readFileSync(path.join(HTML, 'arenas-club-invite.html'), 'utf8'), 'INVITE_DATA', inviteData);
+    const html = injectNotificationsPanel(injectNamedData(fs.readFileSync(path.join(HTML, 'arenas-club-invite.html'), 'utf8'), 'INVITE_DATA', inviteData));
     res.type('html').send(html);
   } catch (err) {
     console.log('Invite page data error:', err.message);
@@ -5168,32 +5209,11 @@ app.delete(BASE + '/api/notifications/:id', requireAuth, async (req, res) => {
   res.json({ success: true });
 });
 
-// Notifications page requires auth. Inject the viewer's real notifications and
-// identity so the page renders live data instead of the hardcoded placeholders.
-app.get(BASE + '/notifications', requirePageAuth, async (req, res) => {
-  const servePlain = () => res.type('html').send(injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-notifications.html'), 'utf8'), 'notifications'));
-  try {
-    if (!supabaseAdmin) return servePlain();
-    const { data } = await supabaseAdmin
-      .from('notifications')
-      .select('*')
-      .eq('user_id', req.user.id)
-      .order('created_at', { ascending: false })
-      .limit(50);
-    const notifications = await enrichNotifications(data);
-    const notifData = {
-      notifications,
-      unreadCount: notifications.filter(n => !n.read).length,
-      profile: displayFromUser(req.user),
-      clubs: await getSidebarClubs(req.user.id)
-    };
-    const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-notifications.html'), 'utf8'), notifData), 'notifications');
-    res.type('html').send(html);
-  } catch (err) {
-    console.log('Notifications error:', err.message);
-    servePlain();
-  }
-});
+// The standalone notifications page is retired — the bell now opens an in-place
+// dropdown on every shell page (see injectNotificationsPanel). Redirect any old
+// links/bookmarks to the feed. The /api/notifications* routes above remain (the
+// dropdown depends on them); arenas-notifications.html stays on disk, unused.
+app.get(BASE + '/notifications', (req, res) => res.redirect(BASE + '/feed'));
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server listening on 0.0.0.0:${PORT}`);
