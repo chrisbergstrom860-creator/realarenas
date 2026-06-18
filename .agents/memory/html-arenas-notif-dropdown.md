@@ -21,10 +21,14 @@ The dashboard keeps its OWN inline copy on purpose; the helper guards on an exis
 through it: feed, my-profile, club-member, challenges, leaderboards, events, athletes)
 AND is applied to the two serve points of the `/clubs/invite` route, because
 `arenas-club-invite.html` is the one bell page that does NOT go through `injectBottomNav`
-(served via `sendFile`/`injectNamedData`) and does NOT link `arenas.css`. That page
-defines all needed CSS vars except `--shadow-lg` (panel renders shadowless there) and
-misses the shared mobile `@media #notifications-panel` override (panel uses desktop
-absolute positioning on ~375px). Coach/admin-only page; accepted caveat.
+(served via `sendFile`/`injectNamedData`) and does NOT link `arenas.css`. Because it
+skips `arenas.css`, that page must carry the panel's CSS itself: it now defines
+`--shadow-lg` in its inline `:root` AND copies the shared mobile
+`@media (max-width:768px) #notifications-panel` override (position:fixed; left/right:8px;
+width:auto) verbatim into its own `<style>`. **Lesson:** any self-contained bell page that
+injects the panel but skips `arenas.css` needs BOTH inline, or the dropdown renders
+shadowless (arenas.css never defines `--shadow-lg`; it's per-page inline) and clips
+off-screen at ~375px. Coach/admin-only page.
 
 ## Gotcha: panel must be a SIBLING of the bell, never a child
 **Rule:** wrap the bell in `<div style="position:relative">` and emit the panel as a
@@ -39,9 +43,15 @@ outside-click handler (`bell.contains`), which masks the bug.
 (`.notif-btn`/`.icon-btn`); the `<script>` is added only when the regex actually matched
 (`out !== html`) so a non-matching page degrades to the /feed redirect, never a dead bell.
 
-## Accepted tradeoff: dropdown rows don't navigate on `n.link`
-Like the dashboard, rows only mark-as-read — they don't follow `n.link`. So an existing
-user invited in-app (notification `link` = `/join/:token`) loses the in-app click-through.
-Invites are still redeemable via the public `/join/:token` page (the canonical accept
-surface for every invite). The `POST /api/clubs/:id/accept-invite` endpoint was only
-called from the retired page and is now orphaned but harmless. User approved this.
+## Dropdown rows navigate on `n.link` (mark-read + nav)
+Rows now follow `n.link`: the row onclick calls `openNotification(id)`, which awaits
+`markNotificationRead(id)` (so the read POST isn't cancelled by the page unloading) THEN
+navigates via `nav(link)` (or `location.href = BASE + link` fallback). Rows with no link
+stay mark-read-only.
+**Guard:** `isSafeLink(link)` only follows single-leading-slash root-relative paths
+(rejects `//host`, absolute URLs, `javascript:`). `link` is DB-derived, so this blocks
+open-redirect / stored-XSS regressions if a hostile row ever lands.
+**Scope:** this lives in the shared `arenas-notifications-panel.js` only. The dashboard
+keeps its OWN inline panel copy and was intentionally left mark-read-only (shared-JS scope).
+`/join/:token` is still the canonical public accept surface; `POST /api/clubs/:id/accept-invite`
+remains orphaned/harmless.

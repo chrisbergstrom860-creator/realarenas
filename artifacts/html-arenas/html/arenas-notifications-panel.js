@@ -29,6 +29,14 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
+  // Notification links are server-generated, root-relative paths (e.g. /feed,
+  // /join/<token>). Only follow ones that start with a single '/': this rejects
+  // protocol-relative URLs (//evil.com), absolute URLs, and javascript: so a
+  // malformed or hostile DB row can't turn a click into an open-redirect or
+  // script execution.
+  function isSafeLink(link) {
+    return typeof link === 'string' && /^\/(?!\/)/.test(link);
+  }
   var panelOpen = false;
   var typeIcons = { like: '👍', follow: '👤', comment: '💬', club: '🏃', challenge: '⚡', event: '📅', system: '✦' };
   var allNotifs = [];
@@ -65,7 +73,7 @@
     list.innerHTML = visible.map(function (n) {
       var id = esc(n.id);
       var bg = n.read ? 'white' : '#FFFDF0';
-      return '<div data-nid="' + id + '" onclick="markNotificationRead(\'' + id + '\')"' +
+      return '<div data-nid="' + id + '" onclick="openNotification(\'' + id + '\')"' +
         ' style="display:flex;align-items:flex-start;gap:10px;padding:11px 16px;border-bottom:var(--border);cursor:pointer;background:' + bg + '"' +
         ' onmouseenter="this.style.background=\'var(--gray-50)\'" onmouseleave="this.style.background=\'' + bg + '\'">' +
           '<div style="width:32px;height:32px;border-radius:50%;background:var(--yellow-light);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-top:1px">' + (typeIcons[n.type] || '✦') + '</div>' +
@@ -126,6 +134,23 @@
       if (dot) dot.remove();
     }
     refreshCount();
+  };
+
+  // Clicking a notification marks it read; if it carries a link, navigate there
+  // too (e.g. a club invite -> /join/:token, a like/comment -> /feed). Rows with
+  // no link just mark read. The panel is a sibling of the bell, so this click
+  // never bubbles into the bell's toggle. We await the read POST before
+  // navigating so it isn't cancelled by the page unloading.
+  window.openNotification = async function (id) {
+    var link = '';
+    for (var i = 0; i < allNotifs.length; i++) {
+      if (String(allNotifs[i].id) === String(id)) { link = allNotifs[i].link || ''; break; }
+    }
+    await window.markNotificationRead(id);
+    if (isSafeLink(link)) {
+      if (typeof window.nav === 'function') window.nav(link);
+      else window.location.href = (window.BASE || B) + link;
+    }
   };
 
   window.markAllNotificationsRead = async function () {
