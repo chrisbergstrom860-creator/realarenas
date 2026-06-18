@@ -1,6 +1,6 @@
 ---
 name: html-arenas managed-clubs avatar dropdown
-description: How the "Clubs you manage" section in the #userMenu avatar dropdown is injected and gated across shell pages.
+description: How the #userMenu avatar dropdown is built — the "Clubs you manage" section, and its shared click-to-open/click-outside-to-close behavior — and which injection chokepoint reaches which pages.
 ---
 
 # "Clubs you manage" avatar-dropdown section
@@ -20,6 +20,23 @@ a club dashboard, because the sidebar "My clubs" list is hidden ≤768px.
   `getSidebarClubs`), filtered to admin/coach, via `createElement`/`textContent`
   (so club names can't inject markup). It no-ops for pure athletes / missing menu
   / missing data and self-guards against double insertion.
+- **Avatar-menu open/close lives in ONE server-injected script (`AVATAR_MENU_SCRIPT`
+  / `injectAvatarMenu`), mirroring the bell: click-to-open (the inline avatar
+  `onclick` toggle stays), close on document click-OUTSIDE — never `onmouseleave`.**
+  The old per-page `onmouseleave` on the wrapper closed the menu the instant the
+  cursor crossed the 8px gap to the menu (wrapper's box = just the avatar, since
+  `#userMenu` is `position:absolute`); the script removes that attribute at runtime.
+  **Why:** one source of truth so the close logic can't drift across the 10 pages.
+  **How to apply:** targets the menu by `#userMenu` and the avatar by
+  `[onclick*="userMenu"]` (works across wrapper-class variants incl. blog's
+  `topbar-user`/`avatar-sm`). The two dropdowns coexist automatically — each one's
+  click-outside listener treats a click on the OTHER trigger as "outside", so
+  opening one closes the other (only one open at a time), no extra wiring.
+- **Different chokepoint from managed-clubs:** the close-behavior script is injected
+  at the TOP of `injectNotificationsPanel` (covers 9 pages incl. club-dashboard,
+  whose inline `#notifications-panel` triggers the bell early-return — so it MUST run
+  before that return) PLUS a direct `injectAvatarMenu` call in the `/blog` route.
+  That set is all 10 avatar-menu pages, vs `injectBottomNav`'s 9 for managed-clubs.
 
 ## Gotcha: club-dashboard route injects only the single `club`
 The `/clubs/dashboard` route historically injected just the one managed `club`,

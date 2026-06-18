@@ -384,6 +384,32 @@ const MANAGED_CLUBS_MENU_SCRIPT = `<script>(function buildManagedClubsMenu(){
   } catch (e) {}
 })();</script>`;
 
+// Shared avatar-dropdown behaviour: open on avatar click, close on click-OUTSIDE
+// (mirroring the notifications bell panel), replacing the fragile per-page
+// onmouseleave that closed the menu the instant the cursor crossed the 8px gap
+// between the avatar and the menu. One source of truth for every shell page that
+// carries the avatar menu; the inline onclick toggle on the avatar is left as-is.
+// Targets the menu by #userMenu and the avatar by [onclick*="userMenu"] so it
+// works regardless of per-page wrapper classes (e.g. blog's topbar-user/avatar-sm).
+// Coexists with the bell: each dropdown's own click-outside listener treats a
+// click on the other trigger as "outside", so opening one closes the other.
+const AVATAR_MENU_SCRIPT = `<script>(function avatarMenuBehaviour(){
+  try {
+    var menu = document.getElementById('userMenu');
+    if (!menu) return;
+    var wrap = menu.parentElement;
+    if (wrap) { wrap.removeAttribute('onmouseleave'); wrap.onmouseleave = null; }
+    document.addEventListener('click', function (e) {
+      var m = document.getElementById('userMenu');
+      if (!m || m.style.display === 'none') return;
+      var avatar = document.querySelector('[onclick*="userMenu"]');
+      if (m.contains(e.target)) return;
+      if (avatar && avatar.contains(e.target)) return;
+      m.style.display = 'none';
+    });
+  } catch (e) {}
+})();</script>`;
+
 // Shared in-place notifications dropdown. Markup is the club dashboard's panel;
 // the behaviour lives in the served arenas-notifications-panel.js. For any page
 // whose bell still navigates to the (now retired) /notifications page, rebuild
@@ -406,14 +432,27 @@ const NOTIF_PANEL_MARKUP = `<div id="notifications-panel" style="display:none;po
           <div style="text-align:center;padding:32px;font-size:13px;color:var(--gray-400)">Loading notifications…</div>
         </div>
       </div>`;
+// Append the shared avatar-dropdown behaviour script once, only on pages that
+// actually have the avatar menu. Idempotent (guards on the IIFE name).
+function injectAvatarMenu(html) {
+  if (html.indexOf('id="userMenu"') === -1) return html;
+  if (html.indexOf('avatarMenuBehaviour') !== -1) return html;
+  return html.replace('</body>', AVATAR_MENU_SCRIPT + '</body>');
+}
 function injectNotificationsPanel(html) {
-  if (html.indexOf('id="notifications-panel"') !== -1) return html;
-  let out = html.replace(
-    /<div class="(notif-btn|icon-btn)" onclick="nav\('\/notifications'\)">(.*?)<div class="notif-dot"><\/div><\/div>/,
-    '<div style="position:relative"><div class="$1" onclick="toggleNotificationsPanel()">$2<div class="notif-dot"></div></div>' + NOTIF_PANEL_MARKUP + '</div>'
-  );
-  if (out !== html) {
-    out = out.replace('</body>', '<script src="' + BASE + '/arenas-notifications-panel.js"></script></body>');
+  // The avatar-dropdown fix is independent of the bell panel and must run on
+  // every shell page that has the avatar menu — including the club dashboard,
+  // whose notifications panel is already inline (so the bell block below no-ops
+  // there, but the avatar fix still needs to apply).
+  let out = injectAvatarMenu(html);
+  if (out.indexOf('id="notifications-panel"') === -1) {
+    const withBell = out.replace(
+      /<div class="(notif-btn|icon-btn)" onclick="nav\('\/notifications'\)">(.*?)<div class="notif-dot"><\/div><\/div>/,
+      '<div style="position:relative"><div class="$1" onclick="toggleNotificationsPanel()">$2<div class="notif-dot"></div></div>' + NOTIF_PANEL_MARKUP + '</div>'
+    );
+    out = (withBell !== out)
+      ? withBell.replace('</body>', '<script src="' + BASE + '/arenas-notifications-panel.js"></script></body>')
+      : withBell;
   }
   return out;
 }
@@ -3905,6 +3944,7 @@ app.get(BASE + '/blog', (req, res) => {
   const loggedIn = !!(req.signedCookies && req.signedCookies.sb_access_token);
   let html = fs.readFileSync(path.join(HTML, 'arenas-blog.html'), 'utf8');
   if (loggedIn) html = html.replace('<body>', '<body class="logged-in">');
+  html = injectAvatarMenu(html);
   res.type('html').send(html);
 });
 app.get(BASE + '/for-clubs', (req, res) => res.sendFile(path.join(HTML, 'arenas-for-clubs.html')));
