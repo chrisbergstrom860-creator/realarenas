@@ -1,0 +1,18 @@
+Proceed with both cleanups as follows:
+Cleanup 1 — delete both. Delete arenas-notifications.html and remove the orphaned POST /api/clubs/:clubId/accept-invite endpoint. Confirmed fine to drop the one-click-accept (no UI, invites work via join link + the clickable notification). After removing, double-check nothing else references the deleted endpoint or page.
+Cleanup 2 — fix ONLY the 🅐 bugs. Leave 🅑 and 🅒 completely alone.
+Fix these (real UI chrome showing fake identity):
+
+Header user-menu dropdown NAME "Jamie King" + "@jamiek · Pro" not replaced on: events:296, leaderboards:249, athletes:304, my-profile:350. Wire these to the real profile name/handle from window.ARENAS_DATA (the same data the avatar replacement already uses). Match how feed and challenges already do it correctly.
+my-profile:349 — dropdown avatar "JK" not replaced. Wire it.
+my-profile:725 — Edit-profile modal avatar "JK" (56px) not replaced. Wire it to real initials.
+club-member:323/324 — sidebar-footer name "Jamie K." and role "Member · Running" are static. Wire to real profile name + role.
+
+For these two — HIDE them, don't wire them (they're un-wired demo widgets; wiring is a feature job, not cleanup):
+
+5. leaderboards:432–437 — the "nearby" widget showing "You (Jamie K.)" + fake points. Hide this widget (it's leftover; the real "your position" banner above it at 307/309 is already wired and stays).
+
+6. feed:733–738 — the "Hackney RC · this week" mini-leaderboard "You" row with fake "JK"/6,440. Hide this whole hardcoded mini-leaderboard widget (it's all hardcoded fictional data, not wired to anything).
+Do NOT touch the 🅑 template defaults (they're replaced at runtime, fine as-is) or any 🅒 sample/demo content (marketing page testimonials, comment-thread samples, head-to-head cards, demo tables — those are illustrative and wiring them is a separate feature decision, not this cleanup).
+For the two "hide" items (5, 6): confirm hiding them doesn't leave an awkward empty gap in the layout — if hiding a widget leaves a visible hole, report it so we decide whether to hide differently or just remove the element cleanly.
+Report when done. Don't push until I confirm.

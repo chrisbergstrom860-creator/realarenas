@@ -36,10 +36,13 @@ select/insert policies.
   `select('*', { count:'exact', head:true })` head counts.
 
 ## Awarding is idempotent + non-blocking
-- Awards fire-and-forget from 6 action routes via
+- Awards fire-and-forget from action routes via
   `checkAchievements(req.user.id).catch(()=>{})` placed just before `res.json`:
   posts like, follow (POST), activities create, challenges join, events rsvp
-  (**only** when `status==='going'`), clubs accept-invite. Never `await` them.
+  (**only** when `status==='going'`). Never `await` them. (The old club
+  accept-invite fire site was removed with that endpoint; the join-token paths
+  don't fire it, so a "joined club" badge surfaces lazily on the next GET
+  `/api/profile/achievements` rather than instantly.)
 - The GET route also runs a check first so the tab is always current.
 - `earnedIds` skip means a badge is inserted + notified **once** — re-checks on
   every tab open or action can't duplicate notifications.

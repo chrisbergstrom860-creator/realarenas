@@ -490,6 +490,18 @@ function showToast(msg) {
       });
     }
   }
+
+  // Sidebar-footer name + role line ("Member · Running") from the real profile,
+  // the viewer's membership role, and the club's sport.
+  var cap = function(s){ s = String(s || ''); return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; };
+  var sfName = document.querySelector('.sf-name');
+  if (sfName && name) sfName.textContent = name;
+  var sfRole = document.querySelector('.sf-role');
+  if (sfRole) {
+    var roleLabel = cap(D.role) || 'Member';
+    var sportLabel = cap(club.sport);
+    sfRole.textContent = sportLabel ? roleLabel + ' · ' + sportLabel : roleLabel;
+  }
 })();
 </script>
 <script>

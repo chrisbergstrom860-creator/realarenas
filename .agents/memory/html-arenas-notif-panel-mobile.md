@@ -5,9 +5,11 @@ description: Why the club-dashboard notifications panel needs a mobile-only over
 
 # html-arenas notifications pop-down (mobile)
 
-The `#notifications-panel` pop-down exists **only** on the club dashboard
-(`arenas-club-dashboard.html`). Every other shell page sends the bell to the
-full `arenas-notifications.html` page instead, so there is no panel to fix there.
+The `#notifications-panel` pop-down (this exact ID) exists **only** on the club
+dashboard (`arenas-club-dashboard.html`). Other shell pages now open an in-place
+dropdown injected via `injectNotificationsPanel` (see html-arenas-notif-dropdown.md),
+which carries its own copy of this mobile override; the standalone
+`arenas-notifications.html` page has been deleted.
 
 **Root cause of the ~375px bug:** the panel's inline styles
 (`position:absolute; right:0; width:360px`) anchor it to the bell wrapper, but the

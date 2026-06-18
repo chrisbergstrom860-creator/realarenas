@@ -17,9 +17,10 @@ description: How notifications are produced/read in artifacts/html-arenas and wh
   feed/profile pages, which also use `displayFromUser`.
 - **How to apply:** if you ever switch name resolution to `profiles`, you must also
   change `/api/profile/update` to write to `profiles`, or names will desync.
-- Client unread counters (nav badge, sidebar stat, tab badge, header subtitle) are
-  driven by one `syncUnread()` helper in arenas-notifications.html. markRead /
-  dismiss / markAllRead must all go through it, or counters go stale.
+- Client unread counters are driven by a `syncUnread()` helper. The standalone
+  `arenas-notifications.html` page is gone; the live copy now lives in the shared
+  `arenas-notifications-panel.js` (the in-place dropdown). markRead / dismiss /
+  markAllRead must all go through it, or counters go stale.
 - Notification bodies contain user-supplied text (post content, names). The client
   renders via innerHTML, so dynamic text MUST be escaped (`esc()`); the server-side
   injection only escapes `<` for the JSON blob, which is not enough on its own.
@@ -29,8 +30,8 @@ description: How notifications are produced/read in artifacts/html-arenas and wh
 - GET `/api/notifications` returns `{ notifications, unreadCount }`; each notif
   has `read` (bool), `created_at`, `type`, `body`. There is NO numeric badge
   element — unread state is shown only by the `.notif-dot` indicator.
-- Coach dashboard bell opens an **inline** `#notifications-panel` dropdown
-  (`toggleNotificationsPanel`) instead of navigating to `/notifications`; it
-  reuses `.notif-dot` for the unread indicator and a "See all →" link still
-  routes to the full page via `nav('/notifications')`. **Why:** navigating away
-  pulled the coach out of the dashboard. Other pages may still use the full page.
+- Every shell bell opens an **inline** `#notifications-panel` dropdown
+  (`toggleNotificationsPanel`); the dashboard keeps its own inline copy and other
+  pages get one via `injectNotificationsPanel`. The `/notifications` route now just
+  redirects to `/feed` (the standalone page was deleted). **Why:** navigating away
+  pulled users out of context. See html-arenas-notif-dropdown.md.

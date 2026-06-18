@@ -429,7 +429,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
         <div style="flex:1"><div class="nb-name">Alena L.</div><div style="font-size:11px;color:var(--gray-400)">1.4 mi · Running</div></div>
         <span class="nb-pts">7,220</span>
       </div>
-      <div class="nearby-row is-you">
+      <div class="nearby-row is-you" style="display:none">
         <span class="nb-rank" style="color:#D97706;font-weight:700">3</span>
         <div class="nb-av" style="background:#FFF7ED;color:#9A3412">JK</div>
         <div style="flex:1"><div class="nb-name">You <span style="font-size:10px;color:var(--gray-400)">(Jamie K.)</span></div><div style="font-size:11px;color:var(--gray-400)">— · Running</div></div>
@@ -855,23 +855,29 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 })();
 </script>
 <script>
-// Personalise the user avatars in the page chrome (top-right header avatar and
-// sidebar-footer avatar) from the logged-in user's real identity. The server
-// injects window.ARENAS_DATA.profile.name (from Supabase auth metadata). We match
-// by text content — any leaf element inside the <header> or .sidebar-footer whose
-// trimmed text is exactly "JK" becomes the computed initials — so both avatars
-// update regardless of their class. Content avatars elsewhere are left untouched.
+// Personalise the user chrome (top-right header avatar, sidebar-footer avatar +
+// name + handle) from the logged-in user's real identity. The server injects
+// window.ARENAS_DATA.profile.{name,handle} (from Supabase auth metadata). We match
+// by text content — inside <header> or .sidebar-footer, a leaf whose trimmed text
+// is "JK" becomes the initials, "Jamie King" the real name, "@jamiek · Pro" the
+// real handle — so chrome updates regardless of class. Content elsewhere untouched.
 (function () {
   var data = window.ARENAS_DATA;
   if (!data || !data.profile || !data.profile.name) return;
-  var initials = data.profile.name.trim().split(/\s+/)
+  var name = data.profile.name.trim();
+  var handle = (data.profile.handle || 'athlete').replace(/^@+/, '');
+  var initials = name.split(/\s+/)
     .map(function (n) { return n[0]; }).join('').slice(0, 2).toUpperCase();
   if (!initials) return;
   ['header', '.sidebar-footer'].forEach(function (sel) {
     var root = document.querySelector(sel);
     if (!root) return;
     root.querySelectorAll('div').forEach(function (el) {
-      if (el.childElementCount === 0 && el.textContent.trim() === 'JK') el.textContent = initials;
+      if (el.childElementCount !== 0) return;
+      var t = el.textContent.trim();
+      if (t === 'JK') el.textContent = initials;
+      else if (t === 'Jamie King') el.textContent = name;
+      else if (t === '@jamiek · Pro') el.textContent = '@' + handle + ' · Pro';
     });
   });
 })();

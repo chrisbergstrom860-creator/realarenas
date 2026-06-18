@@ -885,6 +885,14 @@ document.getElementById('htab-overview').classList.add('active');
     }
   }
 
+  // Edit-profile modal avatar (56px, no class) — match its "JK" text.
+  var editModal = document.getElementById('modal-edit-profile');
+  if (editModal) {
+    editModal.querySelectorAll('div').forEach(function (el) {
+      if (el.childElementCount === 0 && el.textContent.trim() === 'JK') el.textContent = initials;
+    });
+  }
+
   // Handle line: "@handle · Location · Member since Mon YYYY"
   var parts = ['@' + handle];
   if (p.location) parts.push(p.location);

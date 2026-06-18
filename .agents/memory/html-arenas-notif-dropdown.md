@@ -7,8 +7,8 @@ description: Athlete bells open the club-dashboard notifications panel in place;
 
 Every bell that used `onclick="nav('/notifications')"` now opens the club dashboard's
 notifications panel in place. The standalone `/notifications` route is retired and
-redirects to `BASE + '/feed'`; `arenas-notifications.html` stays on disk, unused.
-All `/api/notifications*` routes are kept — the dropdown depends on them.
+redirects to `BASE + '/feed'`; `arenas-notifications.html` has been **deleted** (it was
+orphaned). All `/api/notifications*` routes are kept — the dropdown depends on them.
 
 **Mechanism:** `injectNotificationsPanel(html)` in `server.js` rebuilds the bell
 server-side and injects `<script src="${BASE}/arenas-notifications-panel.js">`. That JS
@@ -53,5 +53,6 @@ stay mark-read-only.
 open-redirect / stored-XSS regressions if a hostile row ever lands.
 **Scope:** this lives in the shared `arenas-notifications-panel.js` only. The dashboard
 keeps its OWN inline panel copy and was intentionally left mark-read-only (shared-JS scope).
-`/join/:token` is still the canonical public accept surface; `POST /api/clubs/:id/accept-invite`
-remains orphaned/harmless.
+`/join/:token` (+ `/auth/join/:token`, `/auth/join/:token/existing`) is the canonical accept
+surface. The old one-click `POST /api/clubs/:id/accept-invite` (only ever called by the now-deleted
+notifications page) has been **removed**.

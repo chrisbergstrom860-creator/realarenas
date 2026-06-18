@@ -1267,14 +1267,20 @@ function showToast(msg) {
 
   // Update the logged-in user's initials in the nav.
   const myName = (data.myProfile && data.myProfile.name) || 'Athlete';
+  const myHandle = ((data.myProfile && data.myProfile.handle) || 'athlete').replace(/^@+/, '');
   const myInitials = myName.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
   document.querySelectorAll('.user-av').forEach(el => {
     if (el.textContent.trim() === 'JK') el.textContent = myInitials;
   });
-  // Also fix the sidebar-footer avatar (which has no class) by matching its text
-  // content, scoped to .sidebar-footer so content avatars elsewhere stay untouched.
+  // Also fix the sidebar-footer avatar + name + handle (none have classes) by
+  // matching their text content, scoped to .sidebar-footer so content avatars
+  // elsewhere stay untouched.
   document.querySelectorAll('.sidebar-footer div').forEach(el => {
-    if (el.childElementCount === 0 && el.textContent.trim() === 'JK') el.textContent = myInitials;
+    if (el.childElementCount !== 0) return;
+    const t = el.textContent.trim();
+    if (t === 'JK') el.textContent = myInitials;
+    else if (t === 'Jamie King') el.textContent = myName;
+    else if (t === '@jamiek · Pro') el.textContent = '@' + myHandle + ' · Pro';
   });
 
   // Hide the hardcoded "recommended" and "nearby" strips, the demo "load more"

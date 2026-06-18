@@ -23,9 +23,9 @@ description: Design rules for the club invite/join feature (personal vs open lin
 - On invite (single + bulk), detect if the email already belongs to a Supabase auth user. Existing non-members get an **in-app notification** (type `club`, link `/join/<token>`) instead of relying on the link; existing members are rejected/skipped (`already_member`). New emails get the join link as before.
 - Use `listAllAuthUsers()` (paginates `auth.admin.listUsers`) — a single `listUsers({perPage:1000})` misclassifies users past page 1 as new. In bulk, fetch the user map once before the loop, not per email.
 
-## accept-invite must require a real invite (authorization)
-- `POST /api/clubs/:clubId/accept-invite` MUST look up a pending invite for `req.user.email` + `clubId` and reject (403) if none, (410) if expired, **before** inserting membership. Deriving role/defaulting to member without this check lets any signed-in user join any club by id.
-- **Why:** the user's spec inserted membership unconditionally — a broken-access-control hole caught in review.
+## Any one-click join must require a real invite (authorization)
+- The standalone `POST /api/clubs/:clubId/accept-invite` endpoint was **removed** (its only caller was the retired notifications page). Acceptance now flows only through `/join/:token` + `/auth/join/:token[/existing]`, which resolve the invite by token.
+- **Durable rule:** if you ever add another "join this club" path, it MUST verify a real pending invite for `req.user.email` + `clubId` (reject 403 if none, 410 if expired) **before** inserting membership. Deriving role / defaulting to member without that check lets any signed-in user join any club by id — a broken-access-control hole caught in review once already.
 
 ## Other constraints carried from schema reality
 - Revoke = DELETE the row (do not write a `revoked` status — unknown status CHECK risk). Only `pending`/`accepted` are ever written.
