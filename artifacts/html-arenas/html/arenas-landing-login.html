@@ -284,11 +284,11 @@ html { scroll-behavior: smooth; }
 /* ── HOW IT WORKS ── */
 .how-it-works { background: white; border-top: var(--border); border-bottom: var(--border); padding: 72px 24px; }
 .how-inner { max-width: 960px; margin: 0 auto; }
-.steps-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin-top: 48px; position: relative; }
+.steps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin-top: 48px; position: relative; }
 .steps-grid::before {
   content: '';
   position: absolute;
-  top: 28px; left: 12.5%; right: 12.5%;
+  top: 28px; left: 16.67%; right: 16.67%;
   height: 1px; background: var(--gray-200);
   z-index: 0;
 }
@@ -740,7 +740,7 @@ html { scroll-behavior: smooth; }
   <div class="how-it-works">
     <div class="how-inner">
       <div class="section-label" style="text-align:center">How it works</div>
-      <div class="section-title" style="text-align:center;margin:0 auto 0;max-width:520px">Up and running in four steps</div>
+      <div class="section-title" style="text-align:center;margin:0 auto 0;max-width:520px">Up and running in three steps</div>
       <div class="steps-grid">
         <div class="step">
           <div class="step-num">1</div>
@@ -749,16 +749,11 @@ html { scroll-behavior: smooth; }
         </div>
         <div class="step">
           <div class="step-num">2</div>
-          <div class="step-title">Connect Strava</div>
-          <div class="step-desc">Your past and future activities sync automatically — no manual logging.</div>
-        </div>
-        <div class="step">
-          <div class="step-num">3</div>
           <div class="step-title">Get AI coaching</div>
           <div class="step-desc">Every workout gets a personalised analysis grounded in your data.</div>
         </div>
         <div class="step">
-          <div class="step-num">4</div>
+          <div class="step-num">3</div>
           <div class="step-title">Find your people</div>
           <div class="step-desc">Follow athletes, join events, and compete in challenges near you.</div>
         </div>
