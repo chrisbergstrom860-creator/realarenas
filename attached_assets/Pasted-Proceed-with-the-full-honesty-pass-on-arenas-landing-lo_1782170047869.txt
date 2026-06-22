@@ -1,0 +1,16 @@
+Proceed with the full honesty pass on arenas-landing-login.html. Here's exactly what to change:
+Right panel → reframe to product preview:
+
+Line 596: change the ".live-badge" from "Live activity feed" to "Product preview". Remove or restyle the pulsing ".live-dot" so it no longer implies real-time live data (a static dot or none).
+Line 597 (.live-count): remove "312,841 activities logged". Replace with an honest caption like "A glimpse of how Arenas works" or "See it in action".
+Keep the three sample cards (Jamie K./Sofia R./Marco C.) as-is — they're fine as clearly-illustrative product examples.
+
+Hero eyebrow (line 573): change "84,000+ athletes · 47 sports" to honest framing. Use "Every sport. One community." spirit — something like "Train. Compete. Connect. · Every sport" with no fabricated count. No invented numbers.
+Social-proof row (lines 582–589): the five fake avatars + "4,800+ athletes joined this week alone" — replace with founding-member framing. Something like "Be one of the first — join the founding community." Remove the "4,800+" claim. The avatar cluster can stay as a small decorative element or be removed; your call on what looks clean, but no false "joined this week" number.
+Stats bar (lines 677–698): all four stats (84k athletes, 312k activities, 2.1k events, 47 sports) and their fake growth deltas are fabricated. Replace this entire band with honest content — either feature highlights (what Arenas does) instead of traction numbers, OR remove the band if it doesn't work without numbers. Recommend feature-oriented replacements (e.g. "8 sports supported", "AI coaching on every activity", "Clubs & challenges", "Free forever plan") — things that are TRUE about the product rather than invented user counts.
+Events feature card (line 724): "2,100+ events across 47 sports" — remove the fabricated counts. Reframe to describe the feature honestly ("Discover and create events across every sport").
+Dark CTA band (line 981): "Join 84,000 athletes already training smarter" — remove the fake number. Reframe to "Start training smarter with Arenas" or founding-member framing.
+Auth screen subtitle (line 1097): "Join 84,000 athletes on Arenas" — remove the number. "Join Arenas" or "Create your free account".
+Testimonials section (lines ~791–807, ~972): these are fake named endorsements (Jamie K., Sofia R., Marco C., Rachel H. with quotes). A pre-launch product has no real testimonials, and fake endorsements are the one fabrication that genuinely damages trust. REMOVE the testimonials section entirely. If removing it leaves an awkward gap in the page flow, either close the gap cleanly or replace it with an honest feature/benefit section (not endorsements). Report what you'd put there if anything.
+Leave alone: "Follow up to 50 athletes" (line 872) — that's a real pricing limit, not a traction claim.
+Report your plan for the testimonials gap before applying (what replaces it, or clean removal). Apply everything, verify desktop and mobile, and confirm there's not a single fabricated number or fake endorsement left on the page. Don't push until I confirm.

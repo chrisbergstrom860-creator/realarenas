@@ -176,6 +176,7 @@ html { scroll-behavior: smooth; }
   50% { opacity: 0.6; transform: scale(0.85); }
 }
 .live-count { font-size: 12px; color: var(--gray-400); font-family: var(--mono); }
+.preview-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gray-300); flex-shrink: 0; }
 
 .feed-preview { display: flex; flex-direction: column; gap: 10px; flex: 1; }
 
@@ -570,7 +571,7 @@ html { scroll-behavior: smooth; }
 
     <!-- Left: headline + CTA -->
     <div class="hero-left">
-      <div class="hero-eyebrow">🏅 <span>84,000+</span> athletes · 47 sports</div>
+      <div class="hero-eyebrow">🏅 Train. Compete. Connect. · Every sport</div>
       <h1 class="hero-h1">Every sport.<br><em>One community.</em></h1>
       <p class="hero-sub">Share workouts, get AI coaching on every activity, discover events, and find athletes who train as hard as you do.</p>
       <div class="hero-cta">
@@ -579,22 +580,15 @@ html { scroll-behavior: smooth; }
       </div>
       <div class="hero-note">No credit card required · Free forever plan available</div>
       <div class="hero-social-proof">
-        <div class="hsp-avatars">
-          <div class="hsp-av" style="background:#FFF7ED;color:#9A3412">JK</div>
-          <div class="hsp-av" style="background:#FEF9C3;color:#854D0E">SL</div>
-          <div class="hsp-av" style="background:#E0F2FE;color:#0369A1">MC</div>
-          <div class="hsp-av" style="background:#F5F3FF;color:#6D28D9">SR</div>
-          <div class="hsp-av" style="background:#FCE7F3;color:#9D174D">YT</div>
-        </div>
-        <div class="hsp-text"><strong>4,800+ athletes</strong> joined this week alone</div>
+        <div class="hsp-text"><strong>Be one of the first</strong> — join the founding community</div>
       </div>
     </div>
 
     <!-- Right: live feed preview -->
     <div class="hero-right">
       <div class="hero-right-header">
-        <div class="live-badge"><div class="live-dot"></div>Live activity feed</div>
-        <div class="live-count">312,841 activities logged</div>
+        <div class="live-badge"><div class="preview-dot"></div>Product preview</div>
+        <div class="live-count">A glimpse of how Arenas works</div>
       </div>
 
       <div class="feed-preview">
@@ -677,24 +671,20 @@ html { scroll-behavior: smooth; }
   <div class="stats-bar">
     <div class="stats-bar-inner">
       <div class="stat-item">
-        <div class="stat-num">84k</div>
-        <div class="stat-label">Athletes worldwide</div>
-        <div class="stat-delta"><span class="stat-pulse"></span>↑ +1.2k this week</div>
+        <div class="stat-num">8</div>
+        <div class="stat-label">Sports supported</div>
       </div>
       <div class="stat-item">
-        <div class="stat-num">312k</div>
-        <div class="stat-label">Activities logged</div>
-        <div class="stat-delta"><span class="stat-pulse"></span>↑ +4.8k today</div>
+        <div class="stat-num">AI</div>
+        <div class="stat-label">Coaching on every activity</div>
       </div>
       <div class="stat-item">
-        <div class="stat-num">2.1k</div>
-        <div class="stat-label">Upcoming events</div>
-        <div class="stat-delta"><span class="stat-pulse"></span>↑ +38 this week</div>
+        <div class="stat-num">$0</div>
+        <div class="stat-label">Free forever plan</div>
       </div>
       <div class="stat-item">
-        <div class="stat-num">47</div>
-        <div class="stat-label">Sports covered</div>
-        <div class="stat-delta">↑ +2 this month</div>
+        <div class="stat-num">∞</div>
+        <div class="stat-label">Clubs, events &amp; challenges</div>
       </div>
     </div>
   </div>
@@ -721,7 +711,7 @@ html { scroll-behavior: smooth; }
         <div class="feature-card">
           <div class="feature-icon" style="background:#EFF6FF">📅</div>
           <h3>Event discovery</h3>
-          <p>2,100+ events across 47 sports. AI matches you with events that suit your fitness profile and connects you with athletes already registered near you.</p>
+          <p>Discover and create events across every sport. AI matches you with events that suit your fitness profile and connects you with athletes already registered near you.</p>
           <span class="feature-badge badge-free">Free forever</span>
         </div>
         <div class="feature-card">
@@ -776,46 +766,11 @@ html { scroll-behavior: smooth; }
     </div>
   </div>
 
-  <!-- Social proof -->
-  <div class="social-proof" id="community">
-    <a class="section-anchor" id="community-anchor"></a>
-    <div class="social-proof-inner">
-      <div class="section-label" style="text-align:center">Athletes love it</div>
-      <div class="section-title" style="text-align:center;margin:0 auto;max-width:500px">What the community is saying</div>
-      <div class="testimonials">
-        <div class="testimonial">
-          <div class="stars">★★★★★</div>
-          <div class="testimonial-text">"The AI coach told me my heart rate was too high for a recovery run before I even realised it. Came back and it was exactly right. Nothing else does that."</div>
-          <div class="testimonial-author">
-            <div class="t-avatar" style="background:#FFF7ED;color:#9A3412">JK</div>
-            <div><div class="t-name">Jamie K.</div><div class="t-sport">Running · London</div></div>
-          </div>
-        </div>
-        <div class="testimonial">
-          <div class="stars">★★★★★</div>
-          <div class="testimonial-text">"Finally a place where my running AND my climbing coexist in the same feed. I don't have to choose which sport identity to post from."</div>
-          <div class="testimonial-author">
-            <div class="t-avatar" style="background:#F5F3FF;color:#6D28D9">SR</div>
-            <div><div class="t-name">Sofia R.</div><div class="t-sport">Climbing · Barcelona</div></div>
-          </div>
-        </div>
-        <div class="testimonial">
-          <div class="stars">★★★★★</div>
-          <div class="testimonial-text">"Found 8 riders for my Stelvio group through Arenas Events. Never met any of them before — now we ride every Saturday."</div>
-          <div class="testimonial-author">
-            <div class="t-avatar" style="background:#FEF9C3;color:#854D0E">MC</div>
-            <div><div class="t-name">Marco C.</div><div class="t-sport">Cycling · Milan</div></div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- Activity preview strip -->
   <div class="preview-strip">
     <div class="preview-strip-inner">
-      <div class="section-label">Live feed preview</div>
-      <div class="section-title">See what's happening right now</div>
+      <div class="section-label">Product preview</div>
+      <div class="section-title">See what Arenas looks like in action</div>
       <div class="preview-cards">
         <div class="p-card">
           <div class="p-avatar" style="background:#FFF7ED;color:#9A3412">JK</div>
@@ -965,20 +920,13 @@ html { scroll-behavior: smooth; }
             <p>Register your whole club for a race in one step. Members get a notification, the coach sees who's confirmed, and attendance is tracked automatically.</p>
           </div>
         </div>
-        <div class="clubs-testimonial">
-          <blockquote>"We moved our running club from a WhatsApp group to Arenas. The coach dashboard alone saves me two hours a week — I can see every member's training at a glance."</blockquote>
-          <div class="clubs-testimonial-author">
-            <div class="t-avatar" style="background:#FFF7ED;color:#9A3412;width:32px;height:32px;font-size:11px">RH</div>
-            <div><div class="t-name" style="font-size:13px">Rachel H.</div><div class="t-sport">Head coach · Hackney Running Club</div></div>
-          </div>
-        </div>
       </div>
     </div>
   </div>
 
   <div class="cta-band">
     <h2>Start for free today</h2>
-    <p>Join 84,000 athletes already training smarter with Arenas.</p>
+    <p>Be one of the first to train smarter with Arenas.</p>
     <div class="cta-band-btns">
       <button class="btn btn-yellow btn-lg" onclick="showPage('login'); setMode('signup')">Create free account</button>
       <button class="btn btn-ghost btn-lg" style="color:var(--gray-300);border-color:var(--gray-700)" onclick="showPage('login'); setMode('login')">Log in</button>
@@ -1036,9 +984,9 @@ html { scroll-behavior: smooth; }
         </div>
       </div>
       <div class="auth-left-stats">
-        <div class="auth-ls"><div class="n">84k</div><div class="l">Athletes</div></div>
-        <div class="auth-ls"><div class="n">47</div><div class="l">Sports</div></div>
-        <div class="auth-ls"><div class="n">2.1k</div><div class="l">Events</div></div>
+        <div class="auth-ls"><div class="n">8</div><div class="l">Sports</div></div>
+        <div class="auth-ls"><div class="n">AI</div><div class="l">Coaching</div></div>
+        <div class="auth-ls"><div class="n">$0</div><div class="l">Free plan</div></div>
       </div>
     </div>
 
@@ -1094,7 +1042,7 @@ html { scroll-behavior: smooth; }
               <div class="onboard-dot"></div>
             </div>
             <div class="auth-title">Create your account</div>
-            <div class="auth-subtitle">Join 84,000 athletes on Arenas</div>
+            <div class="auth-subtitle">Free forever — no credit card needed</div>
             <div class="social-btns">
               <button type="button" class="social-btn strava-btn" onclick="handleSignup()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="#FC4C02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
