@@ -26,17 +26,20 @@ a club dashboard, because the sidebar "My clubs" list is hidden ≤768px.
   The old per-page `onmouseleave` on the wrapper closed the menu the instant the
   cursor crossed the 8px gap to the menu (wrapper's box = just the avatar, since
   `#userMenu` is `position:absolute`); the script removes that attribute at runtime.
-  **Why:** one source of truth so the close logic can't drift across the 10 pages.
+  **Why:** one source of truth so the close logic can't drift across the pages
+  that show the menu.
   **How to apply:** targets the menu by `#userMenu` and the avatar by
-  `[onclick*="userMenu"]` (works across wrapper-class variants incl. blog's
+  `[onclick*="userMenu"]` (works across wrapper-class variants, e.g.
   `topbar-user`/`avatar-sm`). The two dropdowns coexist automatically — each one's
   click-outside listener treats a click on the OTHER trigger as "outside", so
   opening one closes the other (only one open at a time), no extra wiring.
-- **Different chokepoint from managed-clubs:** the close-behavior script is injected
-  at the TOP of `injectNotificationsPanel` (covers 9 pages incl. club-dashboard,
-  whose inline `#notifications-panel` triggers the bell early-return — so it MUST run
-  before that return) PLUS a direct `injectAvatarMenu` call in the `/blog` route.
-  That set is all 10 avatar-menu pages, vs `injectBottomNav`'s 9 for managed-clubs.
+- **Chokepoint:** `injectAvatarMenu` is called ONLY inside `injectNotificationsPanel`
+  (at its top, before the bell early-return that club-dashboard's inline
+  `#notifications-panel` triggers — so it MUST run before that return).
+  `injectNotificationsPanel` runs via `injectBottomNav` (the shell pages) and
+  directly on club-invite, so the avatar fix covers all of those. NOT blog: `/blog`
+  now redirects to `/landing` (blog is moving to an external Ghost site) and no
+  longer serves or injects the page; `arenas-blog.html` stays on disk, unused.
 
 ## Gotcha: club-dashboard route injects only the single `club`
 The `/clubs/dashboard` route historically injected just the one managed `club`,
@@ -53,3 +56,14 @@ page. Pattern that works: add a TEMPORARY no-auth route that renders the real
 menu script against mock `ARENAS_DATA`, screenshot, then remove it. The
 screenshot tool prepends the artifact preview path (`/html/landing`), so the
 temp route must also answer under that prefix for the tool to reach it.
+
+## Screenshotting a non-default page (e.g. /for-clubs)
+The app_preview screenshot always prefixes preview path `/html/landing`, so
+`path:'/for-clubs'` 404s as `/html/landing/for-clubs`. To reach any other public
+page without a temp route, pass `path:'/../for-clubs'` — Chromium normalizes the
+`..` so it resolves to `/html/for-clubs`. `path:'/'` → `/html/landing/` = landing.
+**Why:** lets you screenshot for-clubs/etc. directly at chosen viewports.
+**Caveat:** the tool captures from the top with no scroll, so a footer at the
+bottom of a tall page (landing/for-clubs are >3000px) can't be reached — verify
+footer layout structurally instead (these footers are `display:flex; gap` with no
+text/`::before` separators, so removing one flex child never leaves a gap).

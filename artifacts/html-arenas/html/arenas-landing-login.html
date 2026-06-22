@@ -554,7 +554,6 @@ html { scroll-behavior: smooth; }
       <a href="#features" onclick="return scrollToSection('features')" data-section="features">Features</a>
       <a href="#pricing" onclick="return scrollToSection('pricing')" data-section="pricing">Pricing</a>
       <a href="/html/for-clubs">For clubs</a>
-      <a href="/html/blog">Blog</a>
     </nav>
     <div class="topbar-actions">
       <button class="btn btn-ghost" onclick="showPage('login'); setMode('login')">Log in</button>
@@ -977,9 +976,6 @@ html { scroll-behavior: smooth; }
     </div>
   </div>
 
-  <!-- BLOG placeholder anchor -->
-  <div id="blog" style="display:none"><a class="section-anchor" id="blog-anchor"></a></div>
-
   <div class="cta-band">
     <h2>Start for free today</h2>
     <p>Join 84,000 athletes already training smarter with Arenas.</p>
@@ -997,7 +993,7 @@ html { scroll-behavior: smooth; }
         <span>Arenas © 2026</span>
       </div>
       <div class="footer-links">
-        <a href="#" onclick="return scrollToSection('features')">About</a><a href="/html/blog">Blog</a><a href="#" onclick="return false;">API</a><a href="#" onclick="return false;">Terms</a><a href="#" onclick="return false;">Privacy</a><a href="#" onclick="return false;">Contact</a>
+        <a href="#" onclick="return scrollToSection('features')">About</a><a href="#" onclick="return false;">API</a><a href="#" onclick="return false;">Terms</a><a href="#" onclick="return false;">Privacy</a><a href="#" onclick="return false;">Contact</a>
       </div>
     </div>
   </footer>
@@ -1267,8 +1263,7 @@ function markConnected(btn) {
 // Maps nav data-section values to element IDs on the page
 const sectionMap = {
   features:  'features',
-  pricing:   'pricing',
-  blog:      'cta-band'   // blog not yet built — scroll to CTA instead
+  pricing:   'pricing'
 };
 
 function scrollToSection(section) {

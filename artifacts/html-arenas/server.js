@@ -3938,15 +3938,11 @@ app.post(BASE + '/api/profile/update', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Update failed' });
   }
 });
-app.get(BASE + '/blog', (req, res) => {
-  // Marketing page: only reveal the user avatar when actually logged in,
-  // otherwise show the guest "Log in / Sign up" CTAs (matches the landing page).
-  const loggedIn = !!(req.signedCookies && req.signedCookies.sb_access_token);
-  let html = fs.readFileSync(path.join(HTML, 'arenas-blog.html'), 'utf8');
-  if (loggedIn) html = html.replace('<body>', '<body class="logged-in">');
-  html = injectAvatarMenu(html);
-  res.type('html').send(html);
-});
+// Blog is moving to an external Ghost site (not live yet). Until then the in-app
+// blog is unreachable: every in-app blog link has been removed and this route
+// redirects to the landing page so stale bookmarks/links don't 404. The page
+// file arenas-blog.html stays on disk, unused, to repurpose or point at Ghost later.
+app.get(BASE + '/blog', (req, res) => res.redirect(BASE + '/landing'));
 app.get(BASE + '/for-clubs', (req, res) => res.sendFile(path.join(HTML, 'arenas-for-clubs.html')));
 // Club dashboard requires authentication. Inject the coach's real club, member
 // count, and recent members so the page shows live data instead of the
