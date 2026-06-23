@@ -519,8 +519,14 @@ button,select,input,textarea{font-family:var(--font)}
       <div class="card">
         <div class="card-header"><span class="card-title">Other import options</span></div>
         <div style="padding:12px 16px;display:flex;flex-direction:column;gap:7px">
-          <button class="btn btn-ghost btn-full" onclick="showToast('Opening Google Contacts…')">📇 Import from Google Contacts</button>
-          <button class="btn btn-ghost btn-full" onclick="showToast('Opening Strava club import…')">🔶 Import from Strava club</button>
+          <div class="btn btn-ghost btn-full" style="display:flex;align-items:center;justify-content:space-between;gap:8px;opacity:.55;cursor:default;pointer-events:none" aria-disabled="true">
+            <span>📇 Import from Google Contacts</span>
+            <span style="font-size:11px;font-weight:600;background:var(--gray-100);color:var(--gray-500);padding:2px 9px;border-radius:999px">Coming soon</span>
+          </div>
+          <div class="btn btn-ghost btn-full" style="display:flex;align-items:center;justify-content:space-between;gap:8px;opacity:.55;cursor:default;pointer-events:none" aria-disabled="true">
+            <span>🔶 Import from Strava club</span>
+            <span style="font-size:11px;font-weight:600;background:var(--gray-100);color:var(--gray-500);padding:2px 9px;border-radius:999px">Coming soon</span>
+          </div>
           <button class="btn btn-ghost btn-full" onclick="openModal('paste')">📋 Paste a list of emails</button>
         </div>
       </div>
