@@ -722,8 +722,8 @@ html { scroll-behavior: smooth; }
         </div>
         <div class="feature-card">
           <div class="feature-icon" style="background:#FFF7ED">🔗</div>
-          <h3>Strava & device sync</h3>
-          <p>Connect Strava, Garmin, Wahoo, or Apple Watch. Activities sync automatically — your stats flow straight into your Arenas feed without manual logging.</p>
+          <h3>Log your activities</h3>
+          <p>Log workouts in a few taps and your stats flow straight into your Arenas feed. Automatic Strava and device sync is coming soon.</p>
           <span class="feature-badge badge-free">Free forever</span>
         </div>
         <div class="feature-card">
@@ -1000,17 +1000,6 @@ html { scroll-behavior: smooth; }
         <div id="form-login">
           <div class="auth-title">Welcome back</div>
           <div class="auth-subtitle">Log in to your Arenas account</div>
-          <div class="social-btns">
-            <button type="button" class="social-btn strava-btn" onclick="handleLogin()">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="#FC4C02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
-              Continue with Strava
-            </button>
-            <button type="button" class="social-btn" onclick="handleLogin()">
-              <svg width="16" height="16" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-              Continue with Google
-            </button>
-          </div>
-          <div class="auth-divider"><span>or log in with email</span></div>
           <form action="/html/auth/login" method="POST">
             <div class="form-field">
               <label class="form-label">Email</label>
@@ -1038,17 +1027,6 @@ html { scroll-behavior: smooth; }
             </div>
             <div class="auth-title">Create your account</div>
             <div class="auth-subtitle">Free forever — no credit card needed</div>
-            <div class="social-btns">
-              <button type="button" class="social-btn strava-btn" onclick="handleSignup()">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="#FC4C02"><path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/></svg>
-                Sign up with Strava
-              </button>
-              <button type="button" class="social-btn" onclick="handleSignup()">
-                <svg width="16" height="16" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-                Sign up with Google
-              </button>
-            </div>
-            <div class="auth-divider"><span>or sign up with email</span></div>
             <div class="form-row">
               <div class="form-field"><label class="form-label">First name</label><input class="form-input" name="name" type="text" placeholder="Jamie"></div>
               <div class="form-field"><label class="form-label">Last name</label><input class="form-input" name="lastName" type="text" placeholder="King"></div>
@@ -1107,27 +1085,26 @@ html { scroll-behavior: smooth; }
             <div class="onboard-progress">
               <div class="onboard-dot done"></div><div class="onboard-dot done"></div><div class="onboard-dot active"></div>
             </div>
-            <div class="auth-title">Connect your devices</div>
-            <div class="auth-subtitle">Sync activities automatically — no manual logging needed.</div>
+            <div class="auth-title">Device sync — coming soon</div>
+            <div class="auth-subtitle">Automatic Strava, Garmin & Apple Health sync is on the way. For now, you can log your activities in seconds.</div>
             <div style="display:flex;flex-direction:column;gap:8px;margin:20px 0">
               <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:var(--border);border-radius:9px;background:white">
                 <div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">🔶</span><div><div style="font-size:14px;font-weight:600;color:var(--gray-900)">Strava</div><div style="font-size:12px;color:var(--gray-500)">Sync runs, rides, swims & more</div></div></div>
-                <button type="button" class="btn btn-ghost" style="font-size:12px;padding:5px 12px;color:#FC4C02;border-color:#FC4C02" onclick="markConnected(this)">Connect</button>
+                <span style="font-size:12px;padding:5px 12px;border-radius:999px;background:var(--gray-100);color:var(--gray-500);font-weight:600">Coming soon</span>
               </div>
               <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:var(--border);border-radius:9px;background:white">
                 <div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">⌚</span><div><div style="font-size:14px;font-weight:600;color:var(--gray-900)">Garmin Connect</div><div style="font-size:12px;color:var(--gray-500)">Sync GPS data and heart rate</div></div></div>
-                <button type="button" class="btn btn-ghost" style="font-size:12px;padding:5px 12px" onclick="markConnected(this)">Connect</button>
+                <span style="font-size:12px;padding:5px 12px;border-radius:999px;background:var(--gray-100);color:var(--gray-500);font-weight:600">Coming soon</span>
               </div>
               <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:var(--border);border-radius:9px;background:white">
                 <div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">🍎</span><div><div style="font-size:14px;font-weight:600;color:var(--gray-900)">Apple Health</div><div style="font-size:12px;color:var(--gray-500)">Workouts, steps and activity</div></div></div>
-                <button type="button" class="btn btn-ghost" style="font-size:12px;padding:5px 12px" onclick="markConnected(this)">Connect</button>
+                <span style="font-size:12px;padding:5px 12px;border-radius:999px;background:var(--gray-100);color:var(--gray-500);font-weight:600">Coming soon</span>
               </div>
             </div>
             <div style="display:flex;gap:8px;margin-top:8px">
               <button class="btn btn-ghost" style="flex:1" onclick="goStep(2)">← Back</button>
               <button type="submit" class="btn btn-primary" style="flex:2">Finish setup →</button>
             </div>
-            <div style="text-align:center;margin-top:10px"><a href="#" style="font-size:12px;color:var(--gray-400);text-decoration:none" onclick="handleSignup(); return false;">Skip for now</a></div>
           </div>
           </form>
           <script>
@@ -1291,21 +1268,6 @@ function showToast(msg){
   clearTimeout(t._hideTimer);
   t._hideTimer = setTimeout(function(){ t.style.opacity = '0'; }, 2800);
 }
-
-// ── DISABLE SOCIAL SIGN-IN (OAuth not wired yet) ──
-// Note: we use aria-disabled + preventDefault rather than the `disabled`
-// property, because a truly disabled <button> never fires click events and so
-// could not show the "coming soon" toast.
-document.querySelectorAll('.social-btn, .strava-btn').forEach(function(btn){
-  btn.setAttribute('aria-disabled', 'true');
-  btn.style.opacity = '0.4';
-  btn.style.cursor = 'not-allowed';
-  btn.title = 'Coming soon';
-  btn.onclick = function(e){
-    if(e) e.preventDefault();
-    showToast('Strava and Google sign up coming soon — please use email for now');
-  };
-});
 
 // ── COMBINE FIRST + LAST NAME INTO A SINGLE name FIELD ON SUBMIT ──
 (function(){

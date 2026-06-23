@@ -600,8 +600,8 @@ button,select,input,textarea{font-family:var(--font)}
           <div class="hiw-step">
             <div class="hiw-num">4</div>
             <div>
-              <div class="hiw-title">Connect Strava</div>
-              <div class="hiw-desc">Every member connects their Strava (or logs manually). Activities flow in automatically. Your dashboard populates itself.</div>
+              <div class="hiw-title">Members log their training</div>
+              <div class="hiw-desc">Members log their activities in a few taps and they flow straight into your club dashboard. Automatic Strava and device sync is coming soon.</div>
             </div>
           </div>
           <div class="hiw-step">
@@ -953,44 +953,11 @@ button,select,input,textarea{font-family:var(--font)}
       <!-- ── STEP 5: Integrations ── -->
       <div class="signup-step" id="step-5">
         <div class="step-eyebrow">Step 5 of 6 · Integrations</div>
-        <h2 class="step-title">Connect your tools</h2>
-        <p class="step-sub">Connect the services your members already use. Activities sync automatically — no manual logging required. You can set these up later.</p>
+        <h2 class="step-title">Device sync — coming soon</h2>
+        <p class="step-sub">Members log their activities in a few taps from day one. Automatic device sync is on the way — you don't need to set anything up here.</p>
         <div class="error-banner" id="err-5"></div>
-        <div class="integration-grid" id="int-grid">
-          <div class="int-card" id="int-strava" onclick="toggleIntegration('strava')">
-            <div class="int-icon">🔶</div>
-            <div><div class="int-name">Strava</div><div class="int-desc">Sync all member activities automatically</div></div>
-            <span class="int-status add" id="int-status-strava">Connect</span>
-          </div>
-          <div class="int-card" id="int-garmin" onclick="toggleIntegration('garmin')">
-            <div class="int-icon">⌚</div>
-            <div><div class="int-name">Garmin Connect</div><div class="int-desc">GPS watch data for all members</div></div>
-            <span class="int-status add" id="int-status-garmin">Connect</span>
-          </div>
-          <div class="int-card" id="int-apple" onclick="toggleIntegration('apple')">
-            <div class="int-icon">🍎</div>
-            <div><div class="int-name">Apple Health</div><div class="int-desc">iPhone workout and health data</div></div>
-            <span class="int-status add" id="int-status-apple">Connect</span>
-          </div>
-          <div class="int-card" id="int-wahoo" onclick="toggleIntegration('wahoo')">
-            <div class="int-icon">🌀</div>
-            <div><div class="int-name">Wahoo</div><div class="int-desc">ELEMNT and KICKR data</div></div>
-            <span class="int-status add" id="int-status-wahoo">Connect</span>
-          </div>
-          <div class="int-card" id="int-polar" onclick="toggleIntegration('polar')">
-            <div class="int-icon">🔵</div>
-            <div><div class="int-name">Polar</div><div class="int-desc">Polar watch and sensor data</div></div>
-            <span class="int-status add" id="int-status-polar">Connect</span>
-          </div>
-          <div class="int-card" id="int-coros" onclick="toggleIntegration('coros')">
-            <div class="int-icon">🟠</div>
-            <div><div class="int-name">COROS</div><div class="int-desc">COROS GPS watch sync</div></div>
-            <span class="int-status add" id="int-status-coros">Connect</span>
-          </div>
-        </div>
-        <div style="margin-top:14px;display:flex;flex-direction:column;gap:7px">
-          <div class="toggle-row"><div class="toggle on" onclick="toggleT(this)"></div><span>Send auto-reminder to members who haven't connected Strava after 3 days</span></div>
-          <div class="toggle-row"><div class="toggle on" onclick="toggleT(this)"></div><span>Allow members to log activities manually if no device is connected</span></div>
+        <div style="background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:16px 18px;font-size:13px;color:var(--gray-600);line-height:1.6">
+          <strong style="color:var(--gray-900)">Coming soon:</strong> one-tap sync from Strava, Garmin, Wahoo and COROS, so member activities flow in without manual logging. Until then, manual logging keeps your club dashboard fully up to date — nothing to configure now.
         </div>
       </div>
 
@@ -1054,7 +1021,7 @@ button,select,input,textarea{font-family:var(--font)}
       <h2 class="success-title">Your club is live!</h2>
       <p class="success-sub">Welcome to Arenas. Your club dashboard is ready and your member invites are on their way. Here's what to do next:</p>
       <div class="success-steps">
-        <div class="ss-item"><div class="ss-num">1</div><span>Connect your Strava account so your own activities appear in the club feed</span></div>
+        <div class="ss-item"><div class="ss-num">1</div><span>Log your first activity so it appears in the club feed — automatic Strava sync coming soon</span></div>
         <div class="ss-item"><div class="ss-num">2</div><span>Set your first club challenge to get members engaged immediately</span></div>
         <div class="ss-item"><div class="ss-num">3</div><span>Create your first club event so members have something to train toward</span></div>
       </div>

@@ -1,0 +1,17 @@
+Handle the Strava references with this principle: false present-tense promises get reframed to reality (Strava is genuinely on our roadmap, so honest "coming soon" framing is fine — but nothing may imply it works NOW); competitor mentions stay untouched. Specifically:
+Landing page:
+
+The "Strava & device sync" feature card (~L725): reframe from "activities sync automatically… without manual logging" to honest reality + roadmap, e.g. "Log your activities in seconds. Automatic Strava and device sync coming soon." Keep the card, make it future-tense and true.
+The auth screen "Connect your devices" panel (~L1115–1123): same reframe — "Device sync coming soon" rather than "Sync activities automatically — no manual logging needed."
+The "Continue with Strava" / "Sign up with Strava" social-login buttons (~L1009, L1047): REMOVE them. A login button that only shows "coming soon" is a dead-end at the conversion moment. If the Google social button is also non-functional, remove it too. Keep email signup (which works). Make sure removing them doesn't leave an awkward gap or a dangling "or" divider.
+Competitor mentions ("Strava's siloed design," "without chasing Strava screenshots"): LEAVE alone — they're positioning, not promises.
+
+For-clubs page:
+
+The "Connect Strava" how-it-works step (~L603): reframe to reality — members log activities, with sync as a future enhancement. Don't promise auto-population that doesn't happen.
+The integrations section with the 4-service Connect grid (~L957–992): the connect-grid implies you can connect now. Replace it with an honest "coming soon" treatment — either a clearly-future "Device sync coming soon: Strava, Garmin, Wahoo, COROS" line with NO working connect buttons, or remove the grid and keep one honest line. I prefer the simpler honest line over a non-functional connect-grid. Use your judgment on what looks clean, but no buttons that imply connecting works today.
+The "connect your Strava account" setup step (~L1057): reframe to reality.
+The "Strava Clubs" comparison-table column (~L549): LEAVE alone — it's a competitor comparison, fine.
+
+Logged-in app pages: yes, include the profile, feed, and club dashboard auto-sync language in this pass — a logged-in user seeing "activities sync automatically" with no such feature is the worst version of this. Find every "automatic sync / no manual logging / activities flow in automatically" claim on the logged-in app pages and reframe to reality or remove. Report what you find there.
+Report your plan for (a) the for-clubs integrations section and (b) the logged-in app page findings before applying — those are the two structural changes. Then apply everything, verify desktop and mobile, confirm no present-tense Strava/auto-sync promises remain anywhere (while competitor mentions stay). Don't push until I confirm.
