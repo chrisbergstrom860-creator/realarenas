@@ -620,20 +620,19 @@ button,select,input,textarea{font-family:var(--font)}
     <div><h1>Invite history 📋</h1><p>All invitations sent from Hackney Running Club</p></div>
     <div class="page-hdr-right">
       <button class="btn btn-ghost" onclick="setTab('invites',document.getElementById('nav-invites'))">← Invites</button>
-      <button class="btn btn-ghost" onclick="showToast('Exporting CSV…')">📥 Export</button>
     </div>
   </div>
   <div class="grid-4" style="margin-bottom:16px">
     <div class="stat-card"><div class="sc-label">Total sent</div><div class="sc-value">62</div><div class="sc-delta neutral">All time</div></div>
     <div class="stat-card"><div class="sc-label">Accepted</div><div class="sc-value">48</div><div class="sc-delta up">78% rate</div></div>
     <div class="stat-card"><div class="sc-label">Pending</div><div class="sc-value">8</div><div class="sc-delta warn">3 expire soon</div></div>
-    <div class="stat-card"><div class="sc-label">Declined/expired</div><div class="sc-value">6</div><div class="sc-delta neutral">10%</div></div>
+    <div class="stat-card"><div class="sc-label">Expired</div><div class="sc-value">6</div><div class="sc-delta neutral">10%</div></div>
   </div>
   <div class="card">
     <div class="table-scroll">
     <table class="hist-table">
       <thead><tr><th>Member</th><th>Role</th><th>Sent</th><th>Responded</th><th>Status</th><th>Time to accept</th></tr></thead>
-      <tbody>
+      <tbody id="hist-body">
         <tr><td><div class="member-cell"><div class="av-sm" style="background:#FEF9C3;color:#854D0E">SL</div><div><div class="member-name">Sofia L.</div><div class="member-email">sofia@example.com</div></div></div></td><td><span class="pill pill-coach">Coach</span></td><td class="time-ago">Apr 2</td><td class="time-ago">Apr 2 (4h)</td><td><span class="pill pill-sent">✓ Accepted</span></td><td><div class="prog-mini"><div class="prog-mini-fill" style="width:100%"></div></div><div style="font-size:10px;color:var(--gray-400);margin-top:2px">4 hrs</div></td></tr>
         <tr><td><div class="member-cell"><div class="av-sm" style="background:#FCE7F3;color:#9D174D">YT</div><div><div class="member-name">Yuki T.</div><div class="member-email">yuki@example.com</div></div></div></td><td><span class="pill pill-member">Member</span></td><td class="time-ago">Apr 2</td><td class="time-ago">Apr 3 (1d)</td><td><span class="pill pill-sent">✓ Accepted</span></td><td><div class="prog-mini"><div class="prog-mini-fill" style="width:80%"></div></div><div style="font-size:10px;color:var(--gray-400);margin-top:2px">1 day</div></td></tr>
         <tr><td><div class="member-cell"><div class="av-sm" style="background:#E0F2FE;color:#0369A1">AL</div><div><div class="member-name">Alena L.</div><div class="member-email">alena@example.com</div></div></div></td><td><span class="pill pill-member">Member</span></td><td class="time-ago">Apr 5</td><td class="time-ago">Apr 5 (2h)</td><td><span class="pill pill-sent">✓ Accepted</span></td><td><div class="prog-mini"><div class="prog-mini-fill" style="width:95%"></div></div><div style="font-size:10px;color:var(--gray-400);margin-top:2px">2 hrs</div></td></tr>
@@ -643,7 +642,6 @@ button,select,input,textarea{font-family:var(--font)}
       </tbody>
     </table>
     </div>
-    <div style="padding:10px 14px;border-top:var(--border);background:var(--gray-50);font-size:12px;color:var(--gray-500);display:flex;justify-content:space-between"><span>Showing 6 of 62 invitations</span><button class="btn btn-sm btn-ghost" onclick="showToast('Loading all…')">Load all</button></div>
   </div>
 </div>
 
@@ -861,6 +859,53 @@ updateCounts();
     setStat('pending', pending.length);
   }
 
+  // ── Invite history (real data) ──
+  function fmtDate(iso){ if(!iso) return '—'; var d=new Date(iso); if(isNaN(d.getTime())) return '—'; return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
+  function fmtDur(ms){ if(ms==null||isNaN(ms)||ms<0) return '—'; var h=ms/3600000; if(h<1){ var m=Math.max(1,Math.round(ms/60000)); return m+' min'; } if(h<24){ var hh=Math.round(h); return hh+' hr'+(hh!==1?'s':''); } var d=Math.round(h/24); return d+' day'+(d!==1?'s':''); }
+  function setHistStat(label, value, delta, deltaClass){
+    var root = document.getElementById('tab-history'); if (!root) return;
+    root.querySelectorAll('.stat-card').forEach(function(card){
+      var l = card.querySelector('.sc-label');
+      if (l && l.textContent.trim().toLowerCase()===label){
+        var v = card.querySelector('.sc-value'); if (v) v.textContent = value;
+        var dd = card.querySelector('.sc-delta'); if (dd && delta!=null){ dd.textContent = delta; dd.className = 'sc-delta '+(deltaClass||'neutral'); }
+      }
+    });
+  }
+  function renderHistory(invites){
+    var list = (invites||[]).filter(function(i){ return !i.isOpen; });
+    list.sort(function(a,b){ return new Date(b.created_at||0).getTime() - new Date(a.created_at||0).getTime(); });
+    var total = list.length;
+    var accepted = list.filter(function(i){ return i.status==='accepted'; });
+    var expired = list.filter(function(i){ return i.status!=='accepted' && i.isExpired; });
+    var pendingActive = list.filter(function(i){ return i.status==='pending' && !i.isExpired; });
+    var SOON = 2*86400000;
+    var soon = pendingActive.filter(function(i){ return i.expires_at && (new Date(i.expires_at).getTime()-Date.now())<=SOON; }).length;
+    function pct(n){ return (total ? Math.round(n/total*100) : 0) + '%'; }
+    setHistStat('total sent', total, 'Current records', 'neutral');
+    setHistStat('accepted', accepted.length, pct(accepted.length)+' rate', 'up');
+    setHistStat('pending', pendingActive.length, soon>0 ? (soon+' expiring soon') : 'None expiring soon', soon>0 ? 'warn' : 'neutral');
+    setHistStat('expired', expired.length, pct(expired.length)+' of sent', 'neutral');
+    var tb = document.getElementById('hist-body'); if (!tb) return;
+    if (list.length===0){ tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:24px">No invites sent yet</td></tr>'; return; }
+    tb.innerHTML = list.map(function(i){
+      var name = (i.email||'').split('@')[0] || 'Invite';
+      var isAcc = i.status==='accepted';
+      var isExp = i.status!=='accepted' && i.isExpired;
+      var statusPill = isAcc ? '<span class="pill pill-sent">✓ Accepted</span>' : (isExp ? '<span class="pill pill-expired">Expired</span>' : '<span class="pill pill-pending">⏳ Pending</span>');
+      var responded = isAcc ? fmtDate(i.accepted_at) : (isExp ? 'Expired' : '—');
+      var tta = (isAcc && i.accepted_at && i.created_at) ? fmtDur(new Date(i.accepted_at).getTime()-new Date(i.created_at).getTime()) : '—';
+      return '<tr>'+
+        '<td><div class="member-cell"><div class="av-sm" style="background:var(--gray-100);color:var(--gray-500)">'+esc(initials(name))+'</div><div><div class="member-name">'+esc(name)+'</div><div class="member-email">'+esc(i.email)+'</div></div></div></td>'+
+        '<td><span class="pill '+(pillRole[i.role]||'pill-member')+'">'+esc(i.role)+'</span></td>'+
+        '<td class="time-ago">'+esc(fmtDate(i.created_at))+'</td>'+
+        '<td class="time-ago">'+esc(responded)+'</td>'+
+        '<td>'+statusPill+'</td>'+
+        '<td class="time-ago">'+esc(tta)+'</td>'+
+      '</tr>';
+    }).join('');
+  }
+
   // ── Members management + shareable join link (injected section) ──
   var tab = document.getElementById('tab-invites');
   if (tab){
@@ -914,7 +959,7 @@ updateCounts();
   }
 
   function refresh(){
-    api('/api/clubs/'+clubId+'/invites', {}).then(function(r){ if (r.ok && r.data.invites) renderPending(r.data.invites); });
+    api('/api/clubs/'+clubId+'/invites', {}).then(function(r){ if (r.ok && r.data.invites){ renderPending(r.data.invites); renderHistory(r.data.invites); } });
     loadMembers();
   }
 
@@ -1002,6 +1047,7 @@ updateCounts();
 
   // ── Initial render ──
   renderPending(D.invites || []);
+  renderHistory(D.invites || []);
   loadMembers();
 })();
 </script>

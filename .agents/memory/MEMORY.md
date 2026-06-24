@@ -7,6 +7,7 @@
 - [html-arenas training load](html-arenas-training-load.md) — load from activities.duration; parse "45:00" as MM:SS when 1st seg>12 (60x bug); single check-in uses /checkin not nudge-atrisk.
 - [html-arenas club events tab](html-arenas-club-events.md) — Events tab rollups via ARENAS_DATA; event-mgmt routes need requireEventManager; DELETE = creator OR coach.
 - [html-arenas club invites](html-arenas-invites.md) — open links (OPEN_INVITE_EMAIL) stay pending/reusable, personal invites single-use + email-bound; revoke=DELETE row.
+- [html-arenas invite stats + History](html-arenas-invite-history.md) — setStat label-match is page-wide (scope per-tab + run after renderPending); isExpired ignores status; no 'declined' status; History = clean partition of current records.
 - [html-arenas events](html-arenas-events.md) — events/RSVP feature: club-scoped writes need membership gate; notif fan-out only on transition into "going"; events page is fully real-data-driven (mock chrome DELETED, not hidden; grid/RSVP card start empty).
 - [html-arenas activity logging](html-arenas-activities.md) — manual training log; `activities` table must be user-created via SQL (no DDL via service role); author from auth metadata; GET /api/activities/:userId is self-only (IDOR).
 - [html-arenas challenges](html-arenas-challenges.md) — join permissive; leaderboard auth-wide; coach rollup + requireChallengeManager; same-route writes need hash+reload not nav().
