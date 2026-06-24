@@ -3062,6 +3062,132 @@ async function getSidebarClubs(userId) {
     return [];
   }
 }
+
+// Right-rail sidebar data for the feed page: this-week distance + day strip,
+// current streak, this-week club rank, and follow suggestions. Every value is
+// real (no fabricated content); the widgets fall back to honest empty/low-data
+// states client-side when these are zero/empty.
+async function buildFeedSidebar(userId) {
+  const sidebar = { week: { activities: 0, km: 0 }, dayStrip: [], currentStreak: 0, clubRank: null, followSuggestions: [] };
+  if (!supabaseAdmin || !userId) return sidebar;
+  try {
+    // Week bounds — local Monday 00:00 (matches /api/profile/overview).
+    const now = new Date();
+    const day = now.getDay() || 7;
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - day + 1);
+    weekStart.setHours(0, 0, 0, 0);
+    const todayIdx = day - 1;
+
+    // One query for the user's own activities → weekly km, day strip, streak.
+    const { data: allActs } = await supabaseAdmin
+      .from('activities')
+      .select('sport, distance, date')
+      .eq('user_id', userId);
+    const acts = allActs || [];
+    const weekActs = acts.filter(a => new Date(a.date) >= weekStart);
+    const weekKm = Math.round(weekActs.reduce((s, a) => s + parseDistanceKm(a.distance), 0) * 10) / 10;
+    sidebar.week = { activities: weekActs.length, km: weekKm };
+
+    // Day strip — which weekdays (Mon=0) had activity this week.
+    const activeDaySet = new Set(weekActs.map(a => (new Date(a.date).getDay() || 7) - 1));
+    const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    sidebar.dayStrip = dayLabels.map((label, i) => ({
+      label,
+      name: dayNames[i],
+      state: activeDaySet.has(i) ? 'active'
+        : i === todayIdx ? 'today'
+        : i < todayIdx ? 'rest'
+        : 'future'
+    }));
+
+    // Current streak — consecutive active days ending today or yesterday.
+    const days = [...new Set(acts.map(a => new Date(a.date).toDateString()))]
+      .map(d => new Date(d)).sort((a, b) => a - b);
+    let currentStreak = 0;
+    if (days.length > 0) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const last = new Date(days[days.length - 1]); last.setHours(0, 0, 0, 0);
+      if (Math.round((today - last) / 86400000) <= 1) {
+        currentStreak = 1;
+        for (let i = days.length - 1; i > 0; i--) {
+          if (Math.round((days[i] - days[i - 1]) / 86400000) === 1) currentStreak++;
+          else break;
+        }
+      }
+    }
+    sidebar.currentStreak = currentStreak;
+
+    // This-week club rank — viewer's most recent club, ranked by week points.
+    // A rank number needs no names, so we skip the per-member metadata lookups.
+    const { data: membership } = await supabaseAdmin
+      .from('memberships')
+      .select('club_id, clubs:club_id (name)')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (membership && membership.club_id) {
+      const club = Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs;
+      const { data: members } = await supabaseAdmin
+        .from('memberships').select('user_id').eq('club_id', membership.club_id);
+      const memberIds = [...new Set((members || []).map(m => m.user_id).filter(Boolean))];
+      if (memberIds.length) {
+        // Rank by points earned since the same local-Monday weekStart used for the
+        // viewer's "this week" km — NOT the rolling-7-day leaderboard window, so the
+        // rank and the distance above it always describe the same period.
+        const { data: memberActs } = await supabaseAdmin
+          .from('activities')
+          .select('user_id, sport, distance, date')
+          .in('user_id', memberIds)
+          .gte('date', weekStart.toISOString());
+        const byUser = bucketActivities(memberActs || []);
+        const ranked = memberIds
+          .map(id => ({ id, points: calculatePoints(byUser[id] || []) }))
+          .sort((a, b) => b.points - a.points);
+        const idx = ranked.findIndex(r => r.id === userId);
+        if (idx >= 0) sidebar.clubRank = { rank: idx + 1, total: ranked.length, clubName: (club && club.name) || 'your club' };
+      }
+    }
+
+    // Follow suggestions — hybrid: club-mates the viewer doesn't follow first,
+    // then other real users not yet followed. Excludes self + already-followed.
+    const { data: following } = await supabaseAdmin
+      .from('follows').select('following_id').eq('follower_id', userId);
+    const followingIds = new Set((following || []).map(f => f.following_id).filter(Boolean));
+    const { data: myMems } = await supabaseAdmin
+      .from('memberships').select('club_id').eq('user_id', userId);
+    const myClubIds = [...new Set((myMems || []).map(m => m.club_id).filter(Boolean))];
+    let clubMateIds = new Set();
+    if (myClubIds.length) {
+      const { data: mates } = await supabaseAdmin
+        .from('memberships').select('user_id').in('club_id', myClubIds);
+      clubMateIds = new Set((mates || []).map(m => m.user_id).filter(Boolean));
+    }
+    const allUsers = await listAllAuthUsers();
+    const candidates = allUsers
+      .filter(u => u.id !== userId && !followingIds.has(u.id))
+      .sort((a, b) => (clubMateIds.has(a.id) ? 0 : 1) - (clubMateIds.has(b.id) ? 0 : 1));
+    sidebar.followSuggestions = candidates.slice(0, 3).map(u => {
+      const meta = u.user_metadata || {};
+      const disp = displayFromUser(u);
+      const initials = (disp.name || 'A').split(/\s+/).map(n => n[0]).join('').slice(0, 2).toUpperCase();
+      const metaBits = [];
+      if (Array.isArray(meta.sports) && meta.sports.length) {
+        const sport = meta.sports[0];
+        metaBits.push(sport.charAt(0).toUpperCase() + sport.slice(1));
+      }
+      if (meta.location) metaBits.push(meta.location);
+      if (clubMateIds.has(u.id)) metaBits.push('Club-mate');
+      return { id: u.id, name: disp.name, initials, meta: metaBits.join(' · ') };
+    });
+  } catch (err) {
+    console.log('Feed sidebar error:', err.message);
+  }
+  return sidebar;
+}
+
 app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
   try {
     const { posts, followsNobody } = await buildFeedPosts(20, req.user.id);
@@ -3070,7 +3196,9 @@ app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
     // Viewer's real club memberships for the sidebar "My clubs" section — shared
     // helper so every athlete-facing page shows the exact same clubs.
     const userClubs = await getSidebarClubs(req.user.id);
-    const userData = { profile: displayFromUser(req.user), userId: req.user.id, posts, followsNobody, feedActivities, followingRsvps, clubs: userClubs };
+    // Real right-rail widget data (weekly km, streak, club rank, follow suggestions).
+    const sidebar = await buildFeedSidebar(req.user.id);
+    const userData = { profile: displayFromUser(req.user), userId: req.user.id, posts, followsNobody, feedActivities, followingRsvps, clubs: userClubs, week: sidebar.week, dayStrip: sidebar.dayStrip, currentStreak: sidebar.currentStreak, clubRank: sidebar.clubRank, followSuggestions: sidebar.followSuggestions };
     const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), userData), 'feed');
     res.type('html').send(html);
   } catch (err) {

@@ -172,29 +172,12 @@ button,select,input,textarea{font-family:var(--font)}
 .side-hdr{padding:12px 16px 8px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px}
 .side-title{font-size:13px;font-weight:600;color:var(--gray-900);display:flex;align-items:center;gap:6px}
 
-/* Leaderboard sidebar */
-.lb-row{display:flex;align-items:center;gap:8px;padding:9px 16px;border-bottom:var(--border);cursor:pointer;transition:background .1s}
-.lb-row:hover{background:var(--gray-50)}
-.lb-row.you{background:#FFFBEB}
-.lb-row:last-child{border-bottom:none}
-.lb-rank{font-family:var(--mono);font-size:12px;color:var(--gray-400);width:20px;text-align:center;font-weight:600}
-.lb-rank.r1{color:#D97706}.lb-rank.r2{color:var(--gray-500)}.lb-rank.r3{color:#B45309}
-.lb-av{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0}
-.lb-name{flex:1;font-size:12px;font-weight:500;color:var(--gray-900)}
-.lb-pts{font-size:11px;font-family:var(--mono);color:var(--gray-600)}
-.you-tag{font-size:9px;font-weight:600;padding:1px 6px;border-radius:10px;background:var(--yellow-light);color:#7a5c00;border:1px solid #fde68a;white-space:nowrap}
-.lb-trend{font-size:10px;font-family:var(--mono);padding:1px 5px;border-radius:4px}
-.lt-up{background:var(--green-light);color:#166534}
-.lt-dn{background:var(--red-light);color:#A32D2D}
-.lt-eq{background:var(--gray-100);color:var(--gray-500)}
-
 /* Streak */
 .streak-days{display:flex;gap:3px;padding:10px 16px}
 .s-dot{width:22px;height:22px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0}
 .sd-on{background:var(--green-light);color:#166534}
 .sd-off{background:var(--gray-100);color:var(--gray-300)}
 .sd-today{background:var(--yellow-light);color:#7a5c00;border:1.5px solid var(--yellow-dark)}
-.sd-miss{background:var(--red-light);color:#A32D2D}
 
 /* Who to follow */
 .follow-item{display:flex;align-items:center;gap:9px;padding:9px 16px;border-bottom:var(--border);cursor:pointer;transition:background .1s}
@@ -215,13 +198,6 @@ button,select,input,textarea{font-family:var(--font)}
 .qa-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
 .qa-title{font-size:13px;font-weight:500;color:var(--gray-900)}
 .qa-sub{font-size:11px;color:var(--gray-500);margin-top:1px}
-
-/* Trending topics */
-.topic-item{display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:var(--border);cursor:pointer;transition:background .1s}
-.topic-item:hover{background:var(--gray-50)}
-.topic-item:last-child{border-bottom:none}
-.topic-tag{font-size:12px;font-weight:600;color:var(--gray-900);flex:1}
-.topic-count{font-size:11px;font-family:var(--mono);color:var(--gray-400)}
 
 /* ── MODAL ── */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;display:none;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(2px)}
@@ -707,131 +683,43 @@ button,select,input,textarea{font-family:var(--font)}
     <div class="side-card">
       <div class="side-hdr">
         <span class="side-title">📊 Your week</span>
-        <span style="font-size:11px;font-family:var(--mono);color:var(--gray-400)">May 15–22</span>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-bottom:var(--border)">
-        <div style="padding:12px 14px;border-right:var(--border);text-align:center">
-          <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">12.4</div>
-          <div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">km this week</div>
-          <div style="font-size:10px;color:var(--green);font-family:var(--mono);margin-top:2px">↑ +3.2 vs last</div>
-        </div>
-        <div style="padding:12px 14px;text-align:center">
-          <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">#5</div>
-          <div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">Club rank</div>
-          <div style="font-size:10px;color:var(--green);font-family:var(--mono);margin-top:2px">↑ +3 this week</div>
-        </div>
-      </div>
-      <div style="padding:10px 14px;font-size:12px;color:var(--gray-600)">540 pts to overtake Priya R. for rank #4 — log one more run today.</div>
-    </div>
-
-    <!-- Leaderboard (hardcoded fictional mini-leaderboard — hidden; not wired to data) -->
-    <div class="side-card" style="display:none">
-      <div class="side-hdr">
-        <span class="side-title">🏆 Hackney RC · this week</span>
-        <button class="btn btn-sm" style="font-size:11px;padding:3px 8px" onclick="showToast('Opening full leaderboard…')">Full →</button>
-      </div>
-      <div class="lb-row"><span class="lb-rank r1">1</span><div class="lb-av" style="background:#E0F2FE;color:#0369A1">AL</div><span class="lb-name">Alena L.</span><span class="lb-pts">7,220</span><span class="lb-trend lt-up">↑+3</span></div>
-      <div class="lb-row"><span class="lb-rank r2">2</span><div class="lb-av" style="background:#FEF9C3;color:#854D0E">SL</div><span class="lb-name">Sofia L.</span><span class="lb-pts">9,840</span><span class="lb-trend lt-eq">—</span></div>
-      <div class="lb-row"><span class="lb-rank r3">3</span><div class="lb-av" style="background:#FCE7F3;color:#9D174D">YT</div><span class="lb-name">Yuki T.</span><span class="lb-pts">7,610</span><span class="lb-trend lt-up">↑+2</span></div>
-      <div class="lb-row"><span class="lb-rank">4</span><div class="lb-av" style="background:#FBEAF0;color:#72243E">PR</div><span class="lb-name">Priya R.</span><span class="lb-pts">6,980</span><span class="lb-trend lt-dn">↓−1</span></div>
-      <div class="lb-row you"><span class="lb-rank">5</span><div class="lb-av" style="background:var(--yellow);color:var(--gray-900)">JK</div><span class="lb-name">You</span><span class="lb-pts">6,440</span><span class="you-tag">you</span></div>
-      <div style="padding:8px 14px 12px;border-top:var(--border);font-size:11px;color:var(--gray-500)">540 pts to rank #4 · you moved up 3 places this week 🚀</div>
+      <div id="yourweek-body"></div>
     </div>
 
     <!-- Streak -->
     <div class="side-card">
       <div class="side-hdr">
         <span class="side-title">🔥 Activity streak</span>
-        <span style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--orange)">6 days</span>
+        <span id="streak-count" style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--orange)"></span>
       </div>
-      <div class="streak-days">
-        <div class="s-dot sd-on" title="Mon — ran 8.2km">M</div>
-        <div class="s-dot sd-on" title="Tue — rode 34km">T</div>
-        <div class="s-dot sd-on" title="Wed — ran 5km">W</div>
-        <div class="s-dot sd-miss" title="Thu — missed">T</div>
-        <div class="s-dot sd-on" title="Fri — climbed 2hrs">F</div>
-        <div class="s-dot sd-on" title="Sat — ran 12.4km">S</div>
-        <div class="s-dot sd-today" title="Today — log something!">S</div>
-      </div>
-      <div style="padding:0 14px 12px;font-size:12px;color:var(--orange);font-weight:500">Log something today to keep the streak alive — and complete your 7-day club challenge!</div>
+      <div class="streak-days" id="streak-days"></div>
+      <div id="streak-foot" style="padding:0 14px 12px;font-size:12px;color:var(--orange);font-weight:500"></div>
     </div>
 
     <!-- Who to follow -->
-    <div class="side-card">
+    <div class="side-card" id="follow-card" style="display:none">
       <div class="side-hdr"><span class="side-title">👥 Athletes to follow</span></div>
-      <div class="follow-item">
-        <div class="fi-av" style="background:#FBEAF0;color:#72243E">PR</div>
-        <div style="flex:1">
-          <div class="fi-name">Priya R.</div>
-          <div class="fi-meta">Running · Hackney RC · rank #4</div>
-        </div>
-        <button class="follow-btn" onclick="toggleFollow(this)">Follow</button>
-      </div>
-      <div class="follow-item">
-        <div class="fi-av" style="background:#FEF3C7;color:#92400E">MC</div>
-        <div style="flex:1">
-          <div class="fi-name">Marco C.</div>
-          <div class="fi-meta">Cycling · Milan · similar pace</div>
-        </div>
-        <button class="follow-btn following" onclick="toggleFollow(this)">Following</button>
-      </div>
-      <div class="follow-item">
-        <div class="fi-av" style="background:#F5F3FF;color:#5B21B6">SR</div>
-        <div style="flex:1">
-          <div class="fi-name">Sofia R.</div>
-          <div class="fi-meta">Climbing · Barcelona · V7 climber</div>
-        </div>
-        <button class="follow-btn" onclick="toggleFollow(this)">Follow</button>
-      </div>
+      <div id="follow-list"></div>
     </div>
 
     <!-- Quick actions -->
     <div class="side-card">
       <div class="side-hdr"><span class="side-title">⚡ Quick actions</span></div>
-      <div class="qa-item" onclick="openModal('log-activity')">
+      <div class="qa-item" onclick="nav('/profile#activities')">
         <div class="qa-icon" style="background:var(--orange-light)">📝</div>
-        <div><div class="qa-title">Log an activity</div><div class="qa-sub">Keep your streak alive · 6 days</div></div>
+        <div><div class="qa-title">Log an activity</div></div>
         <span style="font-size:12px;color:var(--gray-300)">→</span>
       </div>
       <div class="qa-item" onclick="nav('/challenges')">
         <div class="qa-icon" style="background:var(--yellow-light)">⚡</div>
-        <div><div class="qa-title">View challenges</div><div class="qa-sub">3 active · rank #5 in 100km</div></div>
+        <div><div class="qa-title">View challenges</div></div>
         <span style="font-size:12px;color:var(--gray-300)">→</span>
       </div>
       <div class="qa-item" onclick="nav('/events')">
         <div class="qa-icon" style="background:var(--blue-light)">📅</div>
-        <div><div class="qa-title">Upcoming events</div><div class="qa-sub">London Half · Apr 13</div></div>
+        <div><div class="qa-title">Upcoming events</div></div>
         <span style="font-size:12px;color:var(--gray-300)">→</span>
-      </div>
-      <div class="qa-item" onclick="showToast('Opening AI coaching…')">
-        <div class="qa-icon" style="background:var(--yellow-light)">✦</div>
-        <div><div class="qa-title">AI coach insights</div><div class="qa-sub">Rest day recommended today</div></div>
-        <span style="font-size:12px;color:var(--gray-300)">→</span>
-      </div>
-    </div>
-
-    <!-- Trending topics -->
-    <div class="side-card">
-      <div class="side-hdr"><span class="side-title">🔥 Trending topics</span></div>
-      <div class="topic-item" onclick="showToast('Filtering by #LondonHalf…')">
-        <div style="font-size:20px;flex-shrink:0">🏃</div>
-        <div class="topic-tag">#LondonHalf</div>
-        <div class="topic-count">2.4k posts</div>
-      </div>
-      <div class="topic-item" onclick="showToast('Filtering by #MayRun100km…')">
-        <div style="font-size:20px;flex-shrink:0">⚡</div>
-        <div class="topic-tag">#MayRun100km</div>
-        <div class="topic-count">840 posts</div>
-      </div>
-      <div class="topic-item" onclick="showToast('Filtering by #MontserratV7…')">
-        <div style="font-size:20px;flex-shrink:0">🧗</div>
-        <div class="topic-tag">#MontserratV7</div>
-        <div class="topic-count">312 posts</div>
-      </div>
-      <div class="topic-item" onclick="showToast('Filtering by #ZoneTwo…')">
-        <div style="font-size:20px;flex-shrink:0">❤️</div>
-        <div class="topic-tag">#ZoneTwo</div>
-        <div class="topic-count">1.1k posts</div>
       </div>
     </div>
 
@@ -866,40 +754,6 @@ button,select,input,textarea{font-family:var(--font)}
     </div>
     <div class="modal-footer">
       <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="closeModals();showToast('Comment posted!')">Post comment</button>
-      <button class="btn" onclick="closeModals()">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<!-- Log activity modal -->
-<div class="modal-overlay" id="modal-log-activity" onclick="closeModals(event)">
-  <div class="modal">
-    <div class="modal-header">
-      <div><div style="font-size:17px;font-weight:700;color:var(--gray-900)">Log an activity</div><div style="font-size:13px;color:var(--gray-500);margin-top:2px">Automatic Strava sync coming soon</div></div>
-      <button class="modal-close" onclick="closeModals()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-sm" style="background:var(--orange-light);color:#9A3412;border-color:#FDBA74" onclick="showToast('Opening run log…')">🏃 Run</button>
-        <button class="btn btn-sm" style="background:var(--blue-light);color:#1E40AF;border-color:#93C5FD" onclick="showToast('Opening ride log…')">🚴 Ride</button>
-        <button class="btn btn-sm" style="background:var(--purple-light);color:#5B21B6;border-color:#C4B5FD" onclick="showToast('Opening climb log…')">🧗 Climb</button>
-        <button class="btn btn-sm" onclick="showToast('Opening walk log…')">🚶 Walk</button>
-        <button class="btn btn-sm" onclick="showToast('Opening swim log…')">🏊 Swim</button>
-        <button class="btn btn-sm" onclick="showToast('Opening gym log…')">🏋️ Gym</button>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div><label class="form-label">Activity name</label><input class="form-input" type="text" placeholder="Morning run"></div>
-        <div><label class="form-label">Distance (km)</label><input class="form-input" type="number" placeholder="0.0"></div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div><label class="form-label">Duration</label><input class="form-input" type="text" placeholder="00:00:00"></div>
-        <div><label class="form-label">Date & time</label><input class="form-input" type="datetime-local"></div>
-      </div>
-      <div><label class="form-label">Description <span style="font-weight:400;color:var(--gray-400)">(optional)</span></label><textarea class="form-textarea" placeholder="How did it feel? What did you learn?"></textarea></div>
-      <div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:var(--radius);padding:10px 12px;font-size:12px;color:#7a5c00">✦ The AI Coach will automatically analyse your activity and add insights after you log it.</div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-yellow" style="flex:1;justify-content:center" onclick="closeModals();showToast('✓ Activity logged — AI coaching on the way!')">Log activity</button>
       <button class="btn" onclick="closeModals()">Cancel</button>
     </div>
   </div>
@@ -968,12 +822,33 @@ function toggleLike(btn, base) {
   btn.textContent = '👍 ' + (liked ? parseInt(base) : n) + ' kudos';
 }
 
-// ── FOLLOW ──
-function toggleFollow(btn) {
-  const f = btn.classList.contains('following');
-  btn.classList.toggle('following', !f);
-  btn.textContent = f ? 'Follow' : 'Following';
-  showToast(f ? 'Unfollowed' : '✓ Following — their activities will appear in your feed');
+// ── FOLLOW ── real follow/unfollow against the API; button reflects server state.
+async function toggleFollow(btn) {
+  const id = btn.getAttribute('data-user-id');
+  if (!id) return;
+  const isFollowing = btn.classList.contains('following');
+  btn.disabled = true;
+  try {
+    const res = await fetch(window.BASE + '/api/follow/' + id, {
+      method: isFollowing ? 'DELETE' : 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    if (data.error) { showToast(data.error); return; }
+    if (data.following) {
+      btn.classList.add('following');
+      btn.textContent = 'Following';
+      showToast('✓ Following — their activities will appear in your feed');
+    } else {
+      btn.classList.remove('following');
+      btn.textContent = 'Follow';
+      showToast('Unfollowed');
+    }
+  } catch (err) {
+    showToast('Could not update — please try again');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 // ── RSVP ──
@@ -1433,6 +1308,83 @@ renderFollowingRsvps();
     item.appendChild(document.createTextNode(' ' + (club.name || 'Club')));
     parent.insertBefore(item, anchor);
   });
+})();
+</script>
+<script>
+// ── RIGHT-RAIL WIDGETS ── rendered from real injected data (window.ARENAS_DATA).
+// Every widget degrades to an honest empty/low-data state with no fabricated
+// numbers or users.
+(function () {
+  var data = window.ARENAS_DATA || {};
+
+  // Your week — real weekly km + this-week club rank.
+  (function () {
+    var body = document.getElementById('yourweek-body');
+    if (!body) return;
+    var week = data.week || { activities: 0, km: 0 };
+    if (!week.activities) {
+      body.innerHTML = '<div style="padding:16px 14px;text-align:center">'
+        + '<div style="font-size:12px;color:var(--gray-500)">No activities logged this week yet</div>'
+        + '<a href="' + (window.BASE || '') + '/profile#activities" style="display:inline-block;margin-top:6px;font-size:12px;color:var(--orange);text-decoration:none;font-weight:500">Log your first activity →</a>'
+        + '</div>';
+      return;
+    }
+    var rank = data.clubRank;
+    var kmCell = '<div style="padding:12px 14px;text-align:center' + (rank ? ';border-right:var(--border)' : '') + '">'
+      + '<div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">' + week.km + '</div>'
+      + '<div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">km this week</div>'
+      + '</div>';
+    var rankCell = rank ? '<div style="padding:12px 14px;text-align:center">'
+      + '<div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">#' + rank.rank + '</div>'
+      + '<div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">Club rank</div>'
+      + '<div style="font-size:10px;color:var(--gray-400);font-family:var(--mono);margin-top:2px">of ' + rank.total + '</div>'
+      + '</div>' : '';
+    body.innerHTML = '<div style="display:grid;grid-template-columns:' + (rank ? '1fr 1fr' : '1fr') + ';gap:0">' + kmCell + rankCell + '</div>';
+  })();
+
+  // Activity streak — real current streak + real this-week day dots.
+  (function () {
+    var countEl = document.getElementById('streak-count');
+    var daysEl = document.getElementById('streak-days');
+    var footEl = document.getElementById('streak-foot');
+    if (!daysEl) return;
+    var streak = data.currentStreak || 0;
+    var strip = data.dayStrip || [];
+    var cls = { active: 'sd-on', today: 'sd-today', rest: 'sd-off', future: 'sd-off' };
+    var tip = { active: ' — active', today: ' — today, log something', rest: ' — rest day', future: '' };
+    daysEl.innerHTML = strip.map(function (d) {
+      return '<div class="s-dot ' + (cls[d.state] || 'sd-off') + '" title="' + escFeedAct((d.name || '') + (tip[d.state] || '')) + '">' + escFeedAct(d.label) + '</div>';
+    }).join('');
+    if (streak > 0) {
+      if (countEl) countEl.textContent = streak + (streak === 1 ? ' day' : ' days');
+      if (footEl) footEl.textContent = 'Keep it going — log today to extend your streak.';
+    } else {
+      if (countEl) countEl.textContent = '';
+      if (footEl) footEl.textContent = 'Start your streak — log an activity today.';
+    }
+  })();
+
+  // Athletes to follow — real unfollowed users; the card stays hidden if none.
+  (function () {
+    var card = document.getElementById('follow-card');
+    var list = document.getElementById('follow-list');
+    if (!card || !list) return;
+    var sugg = data.followSuggestions || [];
+    if (!sugg.length) { card.style.display = 'none'; return; }
+    var palette = ['#FBEAF0;#72243E', '#FEF3C7;#92400E', '#F5F3FF;#5B21B6', '#EFF6FF;#1E40AF', '#F0FDFA;#134E4A'];
+    list.innerHTML = sugg.map(function (u, i) {
+      var pal = palette[i % palette.length].split(';');
+      return '<div class="follow-item">'
+        + '<div class="fi-av" style="background:' + pal[0] + ';color:' + pal[1] + '">' + escFeedAct(u.initials || 'A') + '</div>'
+        + '<div style="flex:1;min-width:0">'
+        + '<div class="fi-name">' + escFeedAct(u.name || 'Athlete') + '</div>'
+        + (u.meta ? '<div class="fi-meta">' + escFeedAct(u.meta) + '</div>' : '')
+        + '</div>'
+        + '<button class="follow-btn" data-user-id="' + escFeedAct(u.id) + '" onclick="toggleFollow(this)">Follow</button>'
+        + '</div>';
+    }).join('');
+    card.style.display = '';
+  })();
 })();
 </script>
 </body>
