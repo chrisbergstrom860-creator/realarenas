@@ -360,7 +360,7 @@ function showToast(msg){
     });
     if (!card) return;
     // Remove the mock rsvp/stat rows but keep the header.
-    card.querySelectorAll('.rsvp-item, .stats-strip').forEach(function (n) { n.remove(); });
+    card.querySelectorAll('.rsvp-item, .stats-strip, .rsvp-empty').forEach(function (n) { n.remove(); });
 
     var going = rsvps.filter(function (r) { return r.status === 'going'; });
     var interested = rsvps.filter(function (r) { return r.status === 'interested'; });
@@ -376,6 +376,7 @@ function showToast(msg){
 
     if (!rsvps.length) {
       var empty = document.createElement('div');
+      empty.className = 'rsvp-empty';
       empty.style.cssText = 'padding:14px;font-size:12px;color:var(--gray-400);text-align:center';
       empty.textContent = "You haven't RSVP'd to any events yet.";
       card.appendChild(empty);
