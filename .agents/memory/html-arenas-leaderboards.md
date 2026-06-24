@@ -23,3 +23,8 @@ Name/handle/sports/location read from auth `user_metadata` (no profiles table). 
 
 ## Athlete page has no tab bar
 The `/leaderboards` page's scope `<select>` IS the platform/following/club switch (the old local/national/global options were pure mock). The client maps period `alltime`→`all` for the API and renders "—" in the Change column (no historical rank snapshots exist).
+
+## The right rail is real-data only (banner/podium/table stay server-rendered)
+The athlete `/leaderboards` right rail now contains ONLY an "Active challenges" card, populated client-side by a fetch of `GET BASE+/api/challenges` (same contract the Challenges page uses), filtered to `isJoined && !isExpired && !isComplete`. Everything else that used to live there (Near-you / Medals / Global-top-5, sport count-pills, the "· Pro" tier suffix, points/reward badges) was fabricated and has been deleted along with its CSS — do not reintroduce; none of it has a backing column.
+**Why:** pre-launch app with no real data behind those widgets; showing invented numbers is dishonest.
+**How to apply:** render challenges with `c.title` + real `c.goal_unit`; use the server's clamped `c.pct` for the bar. `goal_type === 'duration'` has NO server progress branch (computeChallengeProgress only does distance/sessions/streak → progress always 0), so render duration goals WITHOUT a bar — show "`goal_target goal_unit` goal · N days left" instead of a misleading 0%.

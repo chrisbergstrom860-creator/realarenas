@@ -1,0 +1,25 @@
+Clean up the Leaderboards page (arenas-leaderboards.html) right rail. The main leaderboard (banner/podium/table) is real — LEAVE IT ALONE. Handle the rail items as follows:
+WIRE — Active Challenges card (L374–415):
+
+Inject the user's real challenge data into this page. The /leaderboards route currently injects only ARENAS_DATA (no challenges). Either add the user's active challenges to the injected data, OR have the page fetch GET /api/challenges on load (the same endpoint the Challenges page uses, returning myChallenges with name, sport, progress, pct, daysLeft, goal_target, goal_type, isComplete, isExpired, isJoined). Report which approach you took.
+Replace the three hardcoded challenge rows with the user's REAL active challenges, filtered to isJoined && !isExpired && !isComplete. Show: challenge name, the progress bar (using pct), the "X / Y unit" text (from progress / goal_target + unit derived from goal_type), and days-left.
+DROP the "+500/+350/+200" points badges entirely — there's no points/reward column behind them, so they're fabricated with no real source.
+Empty state: if the user has no active challenges, show an honest empty state (e.g. "No active challenges — browse to join one") rather than fake rows or an empty card.
+Note the known limitation that duration-type challenges report progress 0 — handle gracefully (don't show a broken/0 bar oddly; use a sensible display).
+
+WIRE — Browse button + rows:
+
+Wire "Browse all challenges →" (L413) to nav('/challenges').
+Make the challenge rows clickable (they already have pointer styling) — clicking a challenge navigates to /challenges (or the specific challenge if there's a route for it; otherwise just /challenges).
+
+FIX — "· Pro" suffix: remove it. It's hardcoded at L249 AND actively re-appended by the personalization script at L880 ('@' + handle + ' · Pro'). Fix BOTH: remove " · Pro" from L249 and change L880 to just '@' + handle. (Same fix already applied on Events.)
+FIX — sport toggle count badges: the toggle itself works (leave the filtering alone), but the count numbers ("3 / 612 / 488 / 134") next to each sport are fabricated. Remove just the fake count pills while keeping the working sport toggle. (If real per-sport counts are easily available, wire them instead — but if not, just remove the fake numbers.)
+REMOVE — unwireable fabricated cards (no real data source, would need feature-building):
+
+"Near you — London" card (fake users, no geo system) — remove.
+"Your recent medals" + "View all achievements →" (fabricated mock rows, button dead) — remove.
+"Global top 5 — Running" + "Your global rank #2,841" (fabricated) — remove.
+Remove any now-unused CSS for the deleted cards.
+
+Make sure removing the bottom cards doesn't leave gaps in the rail — it should end cleanly after the Active Challenges card.
+Report your plan (especially how you're sourcing the challenge data) before applying. Then build, use the mock-harness screenshot approach to verify the Active Challenges card renders real-shaped data + the empty state, confirm "· Pro" is gone (both static and JS), the fake cards are removed, and the sport toggle still filters correctly. Verify desktop and mobile. Don't push until I confirm.

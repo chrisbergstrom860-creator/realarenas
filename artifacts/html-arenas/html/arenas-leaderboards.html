@@ -52,8 +52,6 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 .sport-nav-tab { padding: 13px 18px; font-size: 14px; font-weight: 500; color: var(--gray-500); border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; transition: color 0.1s, border-color 0.1s; display: flex; align-items: center; gap: 7px; flex-shrink: 0; border-top: none; border-left: none; border-right: none; background: transparent; font-family: var(--font); }
 .sport-nav-tab:hover { color: var(--gray-800); }
 .sport-nav-tab.active { color: var(--gray-900); border-bottom-color: var(--gray-900); }
-.sport-nav-tab .count-pill { font-size: 10px; font-family: var(--mono); background: var(--gray-100); color: var(--gray-500); padding: 1px 6px; border-radius: 10px; }
-.sport-nav-tab.active .count-pill { background: var(--gray-200); color: var(--gray-700); }
 .sport-bar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 8px 0; flex-shrink: 0; }
 .metric-select { padding: 6px 10px; border: var(--border); border-radius: 7px; font-size: 13px; font-family: var(--font); color: var(--gray-600); background: white; outline: none; cursor: pointer; }
 .scope-select { padding: 6px 10px; border: var(--border); border-radius: 7px; font-size: 13px; font-family: var(--font); color: var(--gray-600); background: white; outline: none; cursor: pointer; }
@@ -153,36 +151,6 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 .ch-bar { flex: 1; height: 3px; background: var(--gray-100); border-radius: 2px; overflow: hidden; }
 .ch-bar-fill { height: 100%; border-radius: 2px; }
 .ch-pct { font-size: 10px; font-family: var(--mono); color: var(--gray-400); flex-shrink: 0; }
-.ch-pts { font-size: 12px; font-family: var(--mono); color: var(--gray-500); flex-shrink: 0; font-weight: 500; }
-
-/* Nearby athletes */
-.nearby-row { display: flex; align-items: center; gap: 9px; padding: 9px 16px; border-bottom: var(--border); cursor: pointer; transition: background 0.1s; }
-.nearby-row:last-child { border-bottom: none; }
-.nearby-row:hover { background: var(--gray-50); }
-.nearby-row.is-you { background: #FFFBEB; }
-.nb-rank { font-size: 12px; font-family: var(--mono); color: var(--gray-400); width: 18px; text-align: center; flex-shrink: 0; }
-.nb-av { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; flex-shrink: 0; }
-.nb-name { flex: 1; font-size: 13px; font-weight: 500; color: var(--gray-800); }
-.nb-dist { font-size: 11px; color: var(--gray-400); }
-.nb-pts { font-size: 12px; font-family: var(--mono); color: var(--gray-600); }
-
-/* Medals */
-.medal-row { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-bottom: var(--border); }
-.medal-row:last-child { border-bottom: none; }
-.medal-icon { font-size: 20px; flex-shrink: 0; }
-.medal-info { flex: 1; }
-.medal-name { font-size: 12px; font-weight: 600; color: var(--gray-900); }
-.medal-date { font-size: 11px; color: var(--gray-400); }
-.medal-pts { font-size: 12px; font-family: var(--mono); color: var(--gray-500); font-weight: 500; }
-
-/* Global mini board */
-.global-row { display: flex; align-items: center; gap: 9px; padding: 9px 16px; border-bottom: var(--border); cursor: pointer; transition: background 0.1s; }
-.global-row:last-child { border-bottom: none; }
-.global-row:hover { background: var(--gray-50); }
-.gr-rank { font-size: 12px; font-family: var(--mono); color: var(--gray-400); width: 20px; text-align: center; flex-shrink: 0; }
-.gr-flag { font-size: 16px; flex-shrink: 0; }
-.gr-name { flex: 1; font-size: 13px; font-weight: 500; color: var(--gray-800); }
-.gr-pts { font-size: 12px; font-family: var(--mono); color: var(--gray-600); }
 
 /* ── TOAST ── */
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--gray-900); color: white; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; z-index: 999; transition: transform 0.3s ease; white-space: nowrap; box-shadow: var(--shadow-md); }
@@ -246,7 +214,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
   <div class="sidebar-footer">
     <div style="display:flex;align-items:center;gap:9px">
       <div style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">JK</div>
-      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div><div style="font-size:10px;color:var(--gray-500)">@jamiek · Pro</div></div>
+      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div><div style="font-size:10px;color:var(--gray-500)">@jamiek</div></div>
     </div>
   </div>
 </aside>
@@ -274,16 +242,16 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 <div class="sport-bar">
   <div class="sport-bar-inner">
     <button class="sport-nav-tab active" data-sport="all" onclick="setSport('all', this)">
-      🏅 All my sports <span class="count-pill">3</span>
+      🏅 All my sports
     </button>
     <button class="sport-nav-tab" data-sport="running" onclick="setSport('running', this)">
-      🏃 Running <span class="count-pill">612</span>
+      🏃 Running
     </button>
     <button class="sport-nav-tab" data-sport="cycling" onclick="setSport('cycling', this)">
-      🚴 Cycling <span class="count-pill">488</span>
+      🚴 Cycling
     </button>
     <button class="sport-nav-tab" data-sport="climbing" onclick="setSport('climbing', this)">
-      🧗 Climbing <span class="count-pill">134</span>
+      🧗 Climbing
     </button>
     <div style="flex:1"></div>
     <div class="sport-bar-right">
@@ -370,171 +338,17 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
   <!-- RIGHT SIDEBAR -->
   <div class="right-col">
 
-    <!-- Challenges -->
+    <!-- Challenges (real data — fetched from GET /api/challenges on load) -->
     <div class="side-card">
       <div class="side-title">Active challenges</div>
-      <div class="challenge-row">
-        <div class="ch-icon" style="background:#FFF7ED">🏃</div>
-        <div class="ch-info">
-          <div class="ch-name">100km May Run</div>
-          <div class="ch-bar-row">
-            <div class="ch-bar"><div class="ch-bar-fill" style="width:62%;background:#F97316"></div></div>
-            <span class="ch-pct">62%</span>
-          </div>
-          <div style="font-size:11px;color:var(--gray-400);margin-top:2px">62 / 100 km · 9 days left</div>
-        </div>
-        <div class="ch-pts" style="color:#3B6D11">+500</div>
-      </div>
-      <div class="challenge-row">
-        <div class="ch-icon" style="background:#EFF6FF">🚴</div>
-        <div class="ch-info">
-          <div class="ch-name">Cycling Century</div>
-          <div class="ch-bar-row">
-            <div class="ch-bar"><div class="ch-bar-fill" style="width:88%;background:#3B82F6"></div></div>
-            <span class="ch-pct">88%</span>
-          </div>
-          <div style="font-size:11px;color:var(--gray-400);margin-top:2px">88 / 100 mi · 21 days left</div>
-        </div>
-        <div class="ch-pts" style="color:#3B6D11">+350</div>
-      </div>
-      <div class="challenge-row">
-        <div class="ch-icon" style="background:#F5F3FF">🧗</div>
-        <div class="ch-info">
-          <div class="ch-name">V6+ send streak</div>
-          <div class="ch-bar-row">
-            <div class="ch-bar"><div class="ch-bar-fill" style="width:60%;background:#8B5CF6"></div></div>
-            <span class="ch-pct">60%</span>
-          </div>
-          <div style="font-size:11px;color:var(--gray-400);margin-top:2px">3 / 5 sessions · ongoing</div>
-        </div>
-        <div class="ch-pts" style="color:#3B6D11">+200</div>
+      <div id="active-challenges-list">
+        <div style="padding:16px;text-align:center;color:var(--gray-400);font-size:12px">Loading…</div>
       </div>
       <div style="padding:10px 16px">
-        <button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:13px">Browse all challenges →</button>
+        <button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:13px" onclick="nav('/challenges')">Browse all challenges →</button>
       </div>
     </div>
 
-    <!-- Nearby athletes -->
-    <div class="side-card">
-      <div class="side-title">Near you — London</div>
-      <div class="nearby-row">
-        <span class="nb-rank">1</span>
-        <div class="nb-av" style="background:#FEF9C3;color:#854D0E">SL</div>
-        <div style="flex:1"><div class="nb-name">Sofia L.</div><div style="font-size:11px;color:var(--gray-400)">0.8 mi · Running</div></div>
-        <span class="nb-pts">9,840</span>
-      </div>
-      <div class="nearby-row">
-        <span class="nb-rank">2</span>
-        <div class="nb-av" style="background:#E0F2FE;color:#0369A1">AL</div>
-        <div style="flex:1"><div class="nb-name">Alena L.</div><div style="font-size:11px;color:var(--gray-400)">1.4 mi · Running</div></div>
-        <span class="nb-pts">7,220</span>
-      </div>
-      <div class="nearby-row is-you" style="display:none">
-        <span class="nb-rank" style="color:#D97706;font-weight:700">3</span>
-        <div class="nb-av" style="background:#FFF7ED;color:#9A3412">JK</div>
-        <div style="flex:1"><div class="nb-name">You <span style="font-size:10px;color:var(--gray-400)">(Jamie K.)</span></div><div style="font-size:11px;color:var(--gray-400)">— · Running</div></div>
-        <span class="nb-pts" style="color:#D97706;font-weight:600">6,440</span>
-      </div>
-      <div class="nearby-row">
-        <span class="nb-rank">4</span>
-        <div class="nb-av" style="background:#F0FDF4;color:#166534">TR</div>
-        <div style="flex:1"><div class="nb-name">Tom R.</div><div style="font-size:11px;color:var(--gray-400)">2.1 mi · Cycling</div></div>
-        <span class="nb-pts">5,880</span>
-      </div>
-      <div class="nearby-row">
-        <span class="nb-rank">5</span>
-        <div class="nb-av" style="background:#FBEAF0;color:#9D174D">PK</div>
-        <div style="flex:1"><div class="nb-name">Priya K.</div><div style="font-size:11px;color:var(--gray-400)">2.9 mi · Yoga</div></div>
-        <span class="nb-pts">5,340</span>
-      </div>
-      <div class="nearby-row">
-        <span class="nb-rank">6</span>
-        <div class="nb-av" style="background:#FEF3C7;color:#92400E">RW</div>
-        <div style="flex:1"><div class="nb-name">Rachel W.</div><div style="font-size:11px;color:var(--gray-400)">3.4 mi · Swimming</div></div>
-        <span class="nb-pts">4,910</span>
-      </div>
-    </div>
-
-    <!-- Medals & achievements -->
-    <div class="side-card">
-      <div class="side-title">Your recent medals</div>
-      <div class="medal-row">
-        <div class="medal-icon">🥇</div>
-        <div class="medal-info">
-          <div class="medal-name">London Running — Week 16</div>
-          <div class="medal-date">Apr 21, 2026</div>
-        </div>
-        <div class="medal-pts">+500 pts</div>
-      </div>
-      <div class="medal-row">
-        <div class="medal-icon">🥈</div>
-        <div class="medal-info">
-          <div class="medal-name">UK Cycling — March</div>
-          <div class="medal-date">Mar 31, 2026</div>
-        </div>
-        <div class="medal-pts">+300 pts</div>
-      </div>
-      <div class="medal-row">
-        <div class="medal-icon">🏅</div>
-        <div class="medal-info">
-          <div class="medal-name">100 activities milestone</div>
-          <div class="medal-date">Mar 14, 2026</div>
-        </div>
-        <div class="medal-pts">+250 pts</div>
-      </div>
-      <div class="medal-row">
-        <div class="medal-icon">🥉</div>
-        <div class="medal-info">
-          <div class="medal-name">Climbing — February</div>
-          <div class="medal-date">Feb 28, 2026</div>
-        </div>
-        <div class="medal-pts">+150 pts</div>
-      </div>
-      <div style="padding:10px 16px">
-        <button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:13px">View all achievements →</button>
-      </div>
-    </div>
-
-    <!-- Global top 5 -->
-    <div class="side-card">
-      <div class="side-title">Global top 5 — Running</div>
-      <div class="global-row">
-        <span class="gr-rank" style="color:#D97706;font-weight:700">1</span>
-        <span class="gr-flag">🇰🇪</span>
-        <span class="gr-name">Amara O.</span>
-        <span class="gr-pts">48,200</span>
-      </div>
-      <div class="global-row">
-        <span class="gr-rank" style="color:var(--gray-500);font-weight:700">2</span>
-        <span class="gr-flag">🇪🇹</span>
-        <span class="gr-name">Desta M.</span>
-        <span class="gr-pts">44,880</span>
-      </div>
-      <div class="global-row">
-        <span class="gr-rank" style="color:#B45309;font-weight:700">3</span>
-        <span class="gr-flag">🇯🇵</span>
-        <span class="gr-name">Yuki T.</span>
-        <span class="gr-pts">41,610</span>
-      </div>
-      <div class="global-row">
-        <span class="gr-rank">4</span>
-        <span class="gr-flag">🇵🇱</span>
-        <span class="gr-name">Marek W.</span>
-        <span class="gr-pts">38,990</span>
-      </div>
-      <div class="global-row">
-        <span class="gr-rank">5</span>
-        <span class="gr-flag">🇧🇷</span>
-        <span class="gr-name">Fernanda S.</span>
-        <span class="gr-pts">36,440</span>
-      </div>
-      <div style="padding:8px 16px;border-top:var(--border)">
-        <div style="font-size:12px;color:var(--gray-400);display:flex;justify-content:space-between">
-          <span>Your global rank</span>
-          <span style="font-family:var(--mono);font-weight:600;color:var(--gray-700)">#2,841</span>
-        </div>
-      </div>
-    </div>
 
   </div>
 </main>
@@ -859,7 +673,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 // name + handle) from the logged-in user's real identity. The server injects
 // window.ARENAS_DATA.profile.{name,handle} (from Supabase auth metadata). We match
 // by text content — inside <header> or .sidebar-footer, a leaf whose trimmed text
-// is "JK" becomes the initials, "Jamie King" the real name, "@jamiek · Pro" the
+// is "JK" becomes the initials, "Jamie King" the real name, "@jamiek" the
 // real handle — so chrome updates regardless of class. Content elsewhere untouched.
 (function () {
   var data = window.ARENAS_DATA;
@@ -877,9 +691,96 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
       var t = el.textContent.trim();
       if (t === 'JK') el.textContent = initials;
       else if (t === 'Jamie King') el.textContent = name;
-      else if (t === '@jamiek · Pro') el.textContent = '@' + handle + ' · Pro';
+      else if (t === '@jamiek') el.textContent = '@' + handle;
     });
   });
+})();
+</script>
+<script>
+// ── ACTIVE CHALLENGES RAIL (live data) ──
+// Sourced client-side from GET /api/challenges — the same endpoint the Challenges
+// page uses. Renders only the viewer's active joined challenges
+// (isJoined && !isExpired && !isComplete). There is no points/reward column, so no
+// points badge is shown. duration-type goals have no server progress branch
+// (always 0), so they render without a misleading progress bar.
+(function () {
+  var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
+  var listEl = document.getElementById('active-challenges-list');
+  if (!listEl) return;
+
+  var sportStyle = {
+    running:       { icon: '🏃', bg: '#FFF7ED', bar: '#F97316' },
+    cycling:       { icon: '🚴', bg: '#EFF6FF', bar: '#3B82F6' },
+    climbing:      { icon: '🧗', bg: '#F5F3FF', bar: '#8B5CF6' },
+    swimming:      { icon: '🏊', bg: '#ECFEFF', bar: '#06B6D4' },
+    football:      { icon: '⚽', bg: '#F0FDF4', bar: '#22C55E' },
+    weightlifting: { icon: '🏋️', bg: '#FEF2F2', bar: '#EF4444' },
+    hiking:        { icon: '🥾', bg: '#F7FEE7', bar: '#65A30D' },
+    yoga:          { icon: '🧘', bg: '#FDF4FF', bar: '#D946EF' }
+  };
+  var DEFAULT_STYLE = { icon: '🏅', bg: '#FFF9E0', bar: '#F59E0B' };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function num(n) { return Math.round((Number(n) || 0) * 10) / 10; }
+  function daysLeftText(d) {
+    d = Number(d) || 0;
+    if (d <= 0) return 'ends today';
+    if (d === 1) return '1 day left';
+    return d + ' days left';
+  }
+
+  function showEmpty() {
+    listEl.innerHTML =
+      '<div style="padding:18px 16px;text-align:center">' +
+        '<div style="font-size:26px;margin-bottom:6px">⚡</div>' +
+        '<div style="font-size:13px;font-weight:600;color:var(--gray-700);margin-bottom:3px">No active challenges</div>' +
+        '<div style="font-size:12px;color:var(--gray-400)">Browse to join one and track your progress here.</div>' +
+      '</div>';
+  }
+
+  function render(items) {
+    if (!items.length) { showEmpty(); return; }
+    listEl.innerHTML = items.map(function (c) {
+      var st = sportStyle[c.sport] || DEFAULT_STYLE;
+      var unit = c.goal_unit ? (' ' + esc(c.goal_unit)) : '';
+      var isDuration = c.goal_type === 'duration';
+      var pct = Math.max(0, Math.min(100, Number(c.pct) || 0));
+      var sub, bar;
+      if (isDuration) {
+        bar = '';
+        sub = num(c.goal_target) + unit + ' goal · ' + daysLeftText(c.daysLeft);
+      } else {
+        bar =
+          '<div class="ch-bar-row">' +
+            '<div class="ch-bar"><div class="ch-bar-fill" style="width:' + pct + '%;background:' + st.bar + '"></div></div>' +
+            '<span class="ch-pct">' + pct + '%</span>' +
+          '</div>';
+        sub = num(c.progress) + ' / ' + num(c.goal_target) + unit + ' · ' + daysLeftText(c.daysLeft);
+      }
+      return '' +
+        '<div class="challenge-row" onclick="nav(\'/challenges\')">' +
+          '<div class="ch-icon" style="background:' + st.bg + '">' + st.icon + '</div>' +
+          '<div class="ch-info">' +
+            '<div class="ch-name">' + esc(c.title || c.name || 'Challenge') + '</div>' +
+            bar +
+            '<div style="font-size:11px;color:var(--gray-400);margin-top:2px">' + sub + '</div>' +
+          '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  fetch(B + '/api/challenges')
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      var mine = (j && j.myChallenges) || [];
+      var active = mine.filter(function (c) { return c.isJoined && !c.isExpired && !c.isComplete; });
+      render(active);
+    })
+    .catch(function () { showEmpty(); });
 })();
 </script>
 </body>
