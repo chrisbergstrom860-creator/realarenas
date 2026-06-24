@@ -70,6 +70,19 @@ shows until a manual refresh. The Events tab already uses the hash+reload form.
 - mine → active myChallenges; completed (#completed-list) → finished myChallenges
 - friends (#tab-friends) → clubChallenges; discover (#discover-grid) → publicChallenges
 
+## Tab-panel flex direction + gap (layout gotcha)
+
+`setTab(tab)` toggles the chosen panel to `display:flex` (mine/completed/friends)
+or `block` (discover). Any panel set to flex that should stack vertically MUST
+carry inline `flex-direction:column`, or it defaults to `row` and cards reflow
+horizontally off the right edge. `#tab-friends`/`#tab-completed` already do this;
+`#tab-mine` was missing it (the reflow bug) — now fixed.
+**Do NOT add a flex `gap` to these panels:** `buildChallengeCard` cards each
+carry inline `margin-bottom:10px`, so a gap would double the inter-card spacing.
+`gap:0` (default) keeps the flex (after-click) state pixel-identical to the
+block first-load state. On first load `#tab-mine` is `block` (no setTab has run),
+so its `flex-direction` is inert until the tab is clicked.
+
 ## Query notes
 
 - Empty `.in(col, ids)` is invalid in Supabase — pass a placeholder array when
