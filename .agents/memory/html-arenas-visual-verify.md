@@ -1,0 +1,11 @@
+---
+name: html-arenas visual verification of auth-gated pages
+description: How to screenshot auth-gated html-arenas widgets, and the screenshot-tool previewPath quirk
+---
+
+- App-shell pages (events, dashboard, profile, clubs…) are auth-gated and redirect 302 to landing when unauthed, so the screenshot tool cannot capture the real authed widget without a Supabase login. (Auth is Supabase, not Clerk — the testing skill's Clerk override does not apply.)
+- To visually verify a widget's rendering, build a self-contained harness HTML: link `/html/arenas.css` for base vars (`--gray-*`, `--green`, `--border`, `--mono`, `--radius-lg` live there, NOT in the page), copy the page's own `<style>` rules for the widget, paste the render fns verbatim, add mock data covering every state. Serve it via a TEMPORARY unauthed `app.get(..., sendFile)` route, screenshot desktop + mobile, then remove the route + file + restart so the tree is clean before push.
+
+**screenshot-tool previewPath quirk**
+- For `app_preview`, the tool resolves `localhost:80{previewPath}{path}`, and this artifact's previewPath is `/html/landing` (NOT `/html`). So `path:'/foo'` becomes `/html/landing/foo`.
+- **How to apply:** to screenshot a route mounted at `/html/foo`, add a `/html/landing/foo` alias to the temp route (or otherwise make the composed URL land on your handler). A bare `/html/foo` path will 404 through the tool.

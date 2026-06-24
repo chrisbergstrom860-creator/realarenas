@@ -1,0 +1,20 @@
+Split the "Your RSVPs" widget on the Events page (arenas-events.html) into Upcoming and Past sections, in the renderMyRsvps function. Here's the spec:
+Data split: divide the user's RSVPs by date relative to now — future-dated (date >= today) = Upcoming, past-dated (date < today) = Past. The server already returns all RSVPs with their event date (myRsvps), so this is a client-side split in renderMyRsvps; no server change needed unless the date isn't available — confirm the event date is in the RSVP data, and if not, add it to the server query.
+Stat strip (the GOING / INTERESTED / TOTAL counts at top): count UPCOMING RSVPs only. So "Going" = upcoming going, "Interested" = upcoming interested, "Total" = upcoming total. This makes the strip's numbers match the forward-looking events list and stops the count from looking like a discrepancy. Past events are NOT counted in this strip.
+Upcoming section:
+
+Shown first, full color, the actionable list
+Each row as it currently renders (date badge, title, sport/location, "✓ Going" / "Interested" status)
+Always show all upcoming (don't collapse the actionable ones)
+If there are zero upcoming RSVPs, show an honest empty state like "No upcoming RSVPs" rather than nothing
+
+Past section:
+
+Shown below Upcoming, with its own section header showing the count, e.g. "Past · 3"
+Visually de-emphasized so it reads as history at a glance: the DATE shown in grey, and a checkmark (✓) indicating it's done/attended. Keep the event title readable but mute the overall row (lighter/greyed treatment) so it's clearly distinct from the upcoming rows.
+Collapse when there are too many: show the first 3 past events, then a "Show all N past →" expander that reveals the rest. If there are 3 or fewer past events, show them all with no expander.
+If there are zero past RSVPs, hide the Past section entirely (no empty "Past · 0" header).
+
+Layout order: Header ("Your RSVPs" + "Manage all →") → stat strip (upcoming counts) → Upcoming section → Past section (if any).
+Important — preserve the existing fixes: keep the rsvp-empty class handling we just added so empty states clear correctly on re-render. The widget re-renders after every RSVP/delete/create (via loadEvents → renderEvents → renderMyRsvps), so make sure the upcoming/past split and the collapse state rebuild correctly on every re-render, not just first load. The "show all past" expander state can reset on re-render — that's fine.
+Verify desktop and mobile: confirm the stat strip shows only upcoming counts, upcoming events appear in full color above, past events appear below with grey dates + checkmark and muted styling, the past section collapses past 3 with a working "show all" expander, and the section hides entirely when there are no past RSVPs. Test that re-rendering (RSVP to something, delete something) rebuilds both sections correctly. Don't push until I confirm.
