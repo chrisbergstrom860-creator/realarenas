@@ -190,12 +190,19 @@ button,select,input,textarea{font-family:var(--font)}
 .ss-item{background:white;border:1px solid #86EFAC;border-radius:var(--radius);padding:10px 12px;text-align:center}
 .ss-val{font-size:20px;font-weight:700;color:#166534;font-family:var(--mono)}
 .ss-label{font-size:10px;color:#166534;margin-top:2px}
-/* This page is self-contained and does NOT link the shared arenas.css, so the
-   injected notifications dropdown needs its mobile override here. The panel
-   anchors right:0 to the bell, which isn't flush-right (the avatar sits to its
-   right), so on a narrow screen that anchoring pushes it off the left edge. Pin
-   it to the viewport instead, like the shared stylesheet does. */
+/* This page is self-contained and does NOT link the shared arenas.css, so its
+   full mobile/responsive treatment lives here (no shared shell rules apply, and
+   there is no injected bottom nav). The block below: pins the injected
+   notifications dropdown to the viewport, collapses the .app grid to a single
+   column (sidebar hidden), fits the topbar at 375px, stacks all multi-column
+   grids, turns the action tables (pending invites + members) into tappable
+   stacked cards, gives the read-only history table a horizontal scroll, and
+   stacks the invite-entry rows + the shareable join link. The action-table and
+   join-link rules deliberately target the SHARED classes/ids (.pending-table,
+   #pending-body, #members-body, .join-link-row) that the runtime JS-injected
+   content reuses, so the injected sections get the same responsive treatment. */
 @media (max-width: 768px) {
+  /* Injected notifications dropdown — pin to viewport (anchors off the bell) */
   #notifications-panel {
     position: fixed !important;
     left: 8px !important;
@@ -205,9 +212,68 @@ button,select,input,textarea{font-family:var(--font)}
     max-height: 70vh !important;
     overflow-y: auto !important;
   }
-  #notifications-panel-list {
-    max-height: none !important;
-  }
+  #notifications-panel-list { max-height: none !important; }
+
+  /* ── Shell: single column, sidebar hidden (tap the logo to return to dashboard) ── */
+  .app { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .tab-content { padding: 16px; }
+
+  /* ── Topbar: fit everything at 375px without clipping ── */
+  .topbar { padding: 0 12px 0 0; }
+  .topbar-logo { width: auto; padding: 0 12px; border-right: none; }
+  .club-badge { display: none; }
+  .topbar-center { padding: 0 8px; gap: 6px; min-width: 0; overflow: hidden; }
+  .topbar-center > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .topbar-center > span:last-child { display: none; }
+  .topbar-actions { gap: 6px; }
+
+  /* ── Grids collapse ── */
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .grid-2 { grid-template-columns: 1fr; }
+  .csv-row, .csv-header-row { grid-template-columns: 1fr; }
+  .tri-grid { grid-template-columns: 1fr 1fr !important; }
+  .send-summary { grid-template-columns: 1fr; }
+
+  /* ── Email preview: lighter padding when stacked ── */
+  .ep-body { padding: 16px; }
+  .ep-header { padding: 12px 14px; }
+
+  /* ── Invite-entry table → stacked, full-width fields for typing ── */
+  .inv-table thead { display: none; }
+  .inv-table tbody, .inv-table tr, .inv-table td { display: block; width: 100%; }
+  .inv-table tr { padding: 10px 12px; border-bottom: var(--border); }
+  .inv-table tbody tr:last-child { border-bottom: none; }
+  .inv-table td { border-bottom: none !important; padding: 5px 0; }
+  .inv-table .inv-row-input, .inv-table .inv-row-select { width: 100%; }
+  .inv-table td:last-child { text-align: right; padding-top: 0; }
+
+  /* ── Action tables (pending invites + members) → tappable stacked cards ── */
+  .stack-card { border: none; border-radius: 0; background: transparent; overflow: visible; }
+  .pending-table thead { display: none; }
+  .pending-table tbody, .pending-table tr, .pending-table td { display: block; width: 100%; }
+  .pending-table tr { border: var(--border); border-radius: var(--radius-lg); background: white; padding: 12px 14px; margin: 0 0 10px; box-shadow: var(--shadow); }
+  .pending-table tr:hover td { background: transparent; }
+  .pending-table td { border-bottom: none !important; padding: 3px 0; }
+  .pending-table .actions-cell { margin-top: 10px; gap: 8px; flex-wrap: wrap; }
+  .pending-table .actions-cell .btn { flex: 1; justify-content: center; min-width: 110px; padding: 9px 10px; }
+  .pending-table .inv-row-select { width: 100% !important; }
+  /* date labels — scoped per tbody id so each reads correctly (covers static + JS-rendered) */
+  #pending-body td:nth-of-type(3)::before { content: "Sent · "; color: var(--gray-400); font-weight: 600; }
+  #pending-body td:nth-of-type(4)::before { content: "Expires · "; color: var(--gray-400); font-weight: 600; }
+  #members-body td:nth-of-type(3)::before { content: "Joined · "; color: var(--gray-400); font-weight: 600; }
+
+  /* ── Read-only history table → horizontal scroll ── */
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table-scroll .hist-table { min-width: 640px; }
+
+  /* ── Shareable join link (JS-injected) → stack input over buttons ── */
+  .join-link-row { flex-direction: column; align-items: stretch; }
+  #join-link-url { width: 100%; }
+  #copy-link-btn, #gen-link-btn { width: 100%; justify-content: center; }
+
+  /* ── Modals: tighter overlay padding ── */
+  .modal-overlay { padding: 16px; }
 }
 </style>
 </head>
@@ -464,7 +530,7 @@ button,select,input,textarea{font-family:var(--font)}
         <button class="btn btn-ghost btn-sm" onclick="showToast('Expired invites cleared')">🗑 Clear expired</button>
       </div>
     </div>
-    <div class="card">
+    <div class="card stack-card">
       <table class="pending-table">
         <thead><tr><th>Invited member</th><th>Role</th><th>Sent</th><th>Expires</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="pending-body">
@@ -535,7 +601,7 @@ button,select,input,textarea{font-family:var(--font)}
       <div class="card">
         <div class="card-header"><span class="card-title">✓ 10 members detected</span><button class="btn btn-sm btn-ghost" onclick="simulateDrop()">Re-upload</button></div>
         <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div class="tri-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
             <div style="background:var(--green-light);border:1px solid #86EFAC;border-radius:var(--radius);padding:10px;text-align:center"><div style="font-size:18px;font-weight:700;color:#166534;font-family:var(--mono)">10</div><div style="font-size:11px;color:#166634">Valid emails</div></div>
             <div style="background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:10px;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--gray-900);font-family:var(--mono)">8</div><div style="font-size:11px;color:var(--gray-500)">With names</div></div>
             <div style="background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:10px;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--gray-900);font-family:var(--mono)">0</div><div style="font-size:11px;color:var(--gray-500)">Duplicates</div></div>
@@ -564,6 +630,7 @@ button,select,input,textarea{font-family:var(--font)}
     <div class="stat-card"><div class="sc-label">Declined/expired</div><div class="sc-value">6</div><div class="sc-delta neutral">10%</div></div>
   </div>
   <div class="card">
+    <div class="table-scroll">
     <table class="hist-table">
       <thead><tr><th>Member</th><th>Role</th><th>Sent</th><th>Responded</th><th>Status</th><th>Time to accept</th></tr></thead>
       <tbody>
@@ -575,6 +642,7 @@ button,select,input,textarea{font-family:var(--font)}
         <tr><td><div class="member-cell"><div class="av-sm" style="background:#FFF7ED;color:#9A3412">JK</div><div><div class="member-name">Jamie King</div><div class="member-email">jamie.king@gmail.com</div></div></div></td><td><span class="pill pill-member">Member</span></td><td class="time-ago">May 13</td><td class="time-ago">—</td><td><span class="pill pill-pending">⏳ Pending</span></td><td><div style="font-size:10px;color:var(--orange)">12 days left</div></td></tr>
       </tbody>
     </table>
+    </div>
     <div style="padding:10px 14px;border-top:var(--border);background:var(--gray-50);font-size:12px;color:var(--gray-500);display:flex;justify-content:space-between"><span>Showing 6 of 62 invitations</span><button class="btn btn-sm btn-ghost" onclick="showToast('Loading all…')">Load all</button></div>
   </div>
 </div>
@@ -800,8 +868,8 @@ updateCounts();
     section.style.marginTop = '24px';
     section.innerHTML =
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px"><div style="font-size:15px;font-weight:600;color:var(--gray-900)">Club members <span id="rm-count" style="font-size:13px;font-family:var(--mono);font-weight:400;color:var(--gray-500);margin-left:6px"></span></div></div>'+
-      '<div class="card"><table class="pending-table"><thead><tr><th>Member</th><th>Role</th><th>Joined</th><th>Actions</th></tr></thead><tbody id="members-body"><tr><td colspan="4" style="text-align:center;color:var(--gray-400);padding:18px">Loading…</td></tr></tbody></table></div>'+
-      '<div class="card" style="margin-top:20px"><div class="card-header"><span class="card-title">Shareable join link</span></div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"><div style="font-size:12px;color:var(--gray-500)">Anyone with this link can join '+esc(D.club.name)+' as a member. Generate a fresh link any time.</div><div style="display:flex;gap:8px"><input id="join-link-url" class="form-input" style="flex:1;font-family:var(--mono);font-size:12px" readonly placeholder="Click generate to create a link"><button class="btn btn-primary btn-sm" id="copy-link-btn" style="display:none">Copy</button></div><button class="btn btn-yellow btn-sm" id="gen-link-btn" style="align-self:flex-start">🔗 Generate join link</button></div></div>';
+      '<div class="card stack-card"><table class="pending-table"><thead><tr><th>Member</th><th>Role</th><th>Joined</th><th>Actions</th></tr></thead><tbody id="members-body"><tr><td colspan="4" style="text-align:center;color:var(--gray-400);padding:18px">Loading…</td></tr></tbody></table></div>'+
+      '<div class="card" style="margin-top:20px"><div class="card-header"><span class="card-title">Shareable join link</span></div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"><div style="font-size:12px;color:var(--gray-500)">Anyone with this link can join '+esc(D.club.name)+' as a member. Generate a fresh link any time.</div><div class="join-link-row" style="display:flex;gap:8px"><input id="join-link-url" class="form-input" style="flex:1;font-family:var(--mono);font-size:12px" readonly placeholder="Click generate to create a link"><button class="btn btn-primary btn-sm" id="copy-link-btn" style="display:none">Copy</button></div><button class="btn btn-yellow btn-sm" id="gen-link-btn" style="align-self:flex-start">🔗 Generate join link</button></div></div>';
     tab.appendChild(section);
 
     document.getElementById('gen-link-btn').addEventListener('click', function(){
