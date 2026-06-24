@@ -6,10 +6,15 @@ description: Constraints/decisions for the Arenas events + RSVP feature (server 
 # Events feature (html-arenas)
 
 The events page (`/events`) is data-injected via `injectArenasData` + `requirePageAuth`
-(was a static `sendFile` stub). The rich mock UI (filter bar, featured card, "Near you"
-and "Hackney RC events" side-cards) is **hidden at runtime** by the client IIFE because it
-operated on removed mock `.ev-card`s / listed hardcoded fake events. Real events render into
-`#events-grid` (forced single-column) and the real "Your RSVPs" side-card is populated in place.
+(was a static `sendFile` stub). The page is now **fully real-data-driven**: all prototype/mock
+chrome (filter bar, featured "AI match" card, fake map view, static `.ev-card`s, load-more,
+AI-rec + "Near you" + "Hackney RC" side-cards, mock event-detail modal, and the entire mock
+`<script>` incl. `hideMockChrome`) was **deleted outright** — there is no runtime-hide step
+anymore. `#events-grid` ships **empty** and `renderEvents` fills it (real `.evx-card`s or a real
+empty state); the "Your RSVPs" side-card ships **header-only** and `renderMyRsvps` rebuilds it
+from real data. The one mock-era helper kept is `showToast` + `#toast` (real rsvp/del/create call
+it via the `if (window.showToast)` guard). If JS/API fails the page honestly shows "Loading
+events…" + an empty RSVP card (no fabricated content).
 
 ## Durable rules
 
