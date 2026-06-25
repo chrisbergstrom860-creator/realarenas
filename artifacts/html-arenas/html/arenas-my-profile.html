@@ -74,18 +74,11 @@ button,select,input,textarea{font-family:var(--font)}
 .hero-stat-sep{width:1px;background:rgba(255,255,255,.1);align-self:stretch;margin:2px 0}
 .hero-actions{display:flex;flex-direction:column;gap:8px;flex-shrink:0;align-self:center;animation:slide-in .3s ease .3s both}
 .hero-rank-badge{background:var(--yellow);color:var(--gray-900);padding:6px 16px;border-radius:20px;font-size:12px;font-weight:700;text-align:center;font-family:var(--mono);display:flex;align-items:center;gap:6px;justify-content:center}
-.hero-connections{padding:12px 28px;border-top:1px solid rgba(255,255,255,.07);display:flex;align-items:center;gap:16px;position:relative;z-index:1}
 @media (max-width:768px){
   body:has(.bottom-nav) .hero-inner{flex-direction:column;align-items:stretch;gap:16px;padding:20px 16px}
   body:has(.bottom-nav) .hero-stats{gap:0;justify-content:space-between}
   body:has(.bottom-nav) .hero-actions{align-self:stretch}
-  body:has(.bottom-nav) .hero-connections{padding:12px 16px}
 }
-.hc-avs{display:flex}
-.hc-av{width:24px;height:24px;border-radius:50%;border:2px solid var(--gray-900);margin-left:-6px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600;flex-shrink:0}
-.hc-av:first-child{margin-left:0}
-.hc-text{font-size:12px;color:var(--gray-500)}
-.hc-text strong{color:rgba(255,255,255,.7);font-weight:500}
 .hero-tab-bar{background:white;border-bottom:var(--border);position:sticky;top:56px;z-index:50}
 .htb-inner{max-width:1200px;margin:0 auto;padding:0 28px;display:flex;gap:0}
 .htab{padding:13px 18px;font-size:13px;font-weight:500;color:var(--gray-500);border-bottom:2px solid transparent;cursor:pointer;transition:color .1s,border-color .1s;white-space:nowrap;display:flex;align-items:center;gap:6px}
@@ -392,16 +385,6 @@ button,select,input,textarea{font-family:var(--font)}
         <button class="btn btn-yellow btn-sm" onclick="openModal('edit-profile')" style="justify-content:center">✏️ Edit profile</button>
         <button class="btn btn-ghost btn-sm" style="color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.15);justify-content:center" onclick="copyProfileLink()">🔗 Share profile</button>
       </div>
-    </div>
-    <div class="hero-connections">
-      <div class="hc-avs">
-        <div class="hc-av" style="background:#FEF9C3;color:#854D0E">SL</div>
-        <div class="hc-av" style="background:#FCE7F3;color:#9D174D">YT</div>
-        <div class="hc-av" style="background:#E0F2FE;color:#0369A1">AL</div>
-        <div class="hc-av" style="background:#F5F3FF;color:#5B21B6">TR</div>
-        <div class="hc-av" style="background:var(--gray-200);color:var(--gray-500);font-size:7px">+85</div>
-      </div>
-      <div class="hc-text"><strong>Sofia L., Yuki T., Alena L.</strong> and 86 others follow you</div>
     </div>
   </div>
 
