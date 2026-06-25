@@ -1087,6 +1087,24 @@ function parseDistanceKm(distance) {
   return isNaN(n) ? 0 : n;
 }
 
+// Unit-aware distance parser used ONLY for the profile "km logged" headline stat.
+// Unlike parseDistanceKm (which ignores units app-wide), this converts to real km:
+// "km" as-is, "mi"/miles ×1.609, bare "m"/metres ÷1000, no unit → assume km.
+// Strips thousands separators first so "2,000m" parses as 2000 m → 2 km.
+// KNOWN ISSUE (intentionally out of scope here): parseDistanceKm treats
+// swim-in-metres as km, inflating distance ~1000× across leaderboards/weekly/
+// scoring — needs a unit-aware fix app-wide in a future dedicated pass.
+function parseDistanceKmUnitAware(distance) {
+  if (distance == null) return 0;
+  const raw = String(distance).toLowerCase().replace(/,/g, '');
+  const n = parseFloat(raw.replace(/[^0-9.]/g, ''));
+  if (isNaN(n) || n <= 0) return 0;
+  if (raw.includes('km')) return n;
+  if (raw.includes('mi')) return n * 1.609;
+  if (raw.includes('m')) return n / 1000;
+  return n;
+}
+
 // Total leaderboard points for a set of activities.
 function calculatePoints(activities) {
   let total = 0;
@@ -3787,7 +3805,7 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
     const meta = req.user.user_metadata || {};
     const display = displayFromUser(req.user);
 
-    const [postCountRes, followerRes, followingRes, postsRes, membershipRes, clubsRes, followingListRes, followerListRes] = await Promise.all([
+    const [postCountRes, followerRes, followingRes, postsRes, membershipRes, clubsRes, followingListRes, followerListRes, activitiesRes] = await Promise.all([
       supabaseAdmin.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', req.user.id),
       supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', req.user.id),
       supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', req.user.id),
@@ -3798,7 +3816,11 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
       supabaseAdmin.from('memberships').select('role, clubs:club_id (id, name, handle, sport, city)').eq('user_id', req.user.id).order('created_at', { ascending: false }),
       // Raw follow edges (no `created_at` ordering — not guaranteed on this table).
       supabaseAdmin.from('follows').select('following_id').eq('follower_id', req.user.id),
-      supabaseAdmin.from('follows').select('follower_id').eq('following_id', req.user.id)
+      supabaseAdmin.from('follows').select('follower_id').eq('following_id', req.user.id),
+      // Lifetime distance source. The `activities` table is user-provisioned and may
+      // not exist yet — supabase-js returns { data: null } rather than throwing, so a
+      // missing table degrades kmLogged to 0 instead of breaking the whole page.
+      supabaseAdmin.from('activities').select('distance').eq('user_id', req.user.id)
     ]);
 
     const membership = membershipRes.data || null;
@@ -3842,6 +3864,13 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
     const followingList = followingIds.map(id => userMap[id]).filter(Boolean);
     const followerList = followerIds.map(id => userMap[id]).filter(Boolean);
 
+    // Total km logged across all activities, rounded to 1 decimal. Unit-aware so
+    // swimming (logged in metres) and miles convert to real km; non-distance
+    // sessions (yoga, weights) contribute 0. No activities → 0.
+    const kmLogged = Math.round(
+      (activitiesRes.data || []).reduce((s, a) => s + parseDistanceKmUnitAware(a.distance), 0) * 10
+    ) / 10;
+
     const profileData = {
       profile: {
         name: display.name,
@@ -3853,6 +3882,7 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
       email: req.user.email,
       memberSince: req.user.created_at || null,
       postCount: postCountRes.count || 0,
+      kmLogged,
       followerCount: followerRes.count || 0,
       followingCount: followingRes.count || 0,
       posts: postsRes.data || [],

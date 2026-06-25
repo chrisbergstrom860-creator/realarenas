@@ -372,13 +372,13 @@ button,select,input,textarea{font-family:var(--font)}
         <div class="hero-bio" id="profile-bio">Marathon runner, weekend cyclist, occasional wall climber. Chasing a sub-3:30 marathon. Hackney RC member since 2024. Always looking for Sunday long run partners in East London.</div>
       </div>
       <div class="hero-stats">
-        <div class="hero-stat"><div class="hero-stat-val">312</div><div class="hero-stat-label">Activities</div></div>
+        <div class="hero-stat"><div class="hero-stat-val">0</div><div class="hero-stat-label">Activities</div></div>
         <div class="hero-stat-sep"></div>
-        <div class="hero-stat"><div class="hero-stat-val">4,820</div><div class="hero-stat-label">km logged</div></div>
+        <div class="hero-stat"><div class="hero-stat-val">0</div><div class="hero-stat-label">km logged</div></div>
         <div class="hero-stat-sep"></div>
-        <div class="hero-stat"><div class="hero-stat-val">142</div><div class="hero-stat-label">Followers</div></div>
+        <div class="hero-stat"><div class="hero-stat-val">0</div><div class="hero-stat-label">Followers</div></div>
         <div class="hero-stat-sep"></div>
-        <div class="hero-stat"><div class="hero-stat-val">89</div><div class="hero-stat-label">Following</div></div>
+        <div class="hero-stat"><div class="hero-stat-val">0</div><div class="hero-stat-label">Following</div></div>
       </div>
       <div class="hero-actions">
         <div class="hero-rank-badge">🏆 #5 Hackney RC · #2,841 Global</div>
@@ -392,11 +392,11 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="hero-tab-bar">
     <div class="htb-inner">
       <div class="htab active" id="htab-overview" onclick="setTab('overview')">Overview</div>
-      <div class="htab" id="htab-activities" onclick="setTab('activities')">Activities <span class="tab-count">312</span></div>
+      <div class="htab" id="htab-activities" onclick="setTab('activities')">Activities <span class="tab-count">0</span></div>
       <div class="htab" id="htab-stats" onclick="setTab('stats')">Stats & PRs</div>
-      <div class="htab" id="htab-achievements" onclick="setTab('achievements')">Achievements <span class="tab-count">18</span></div>
-      <div class="htab" id="htab-clubs" onclick="setTab('clubs')">Clubs <span class="tab-count">1</span></div>
-      <div class="htab" id="htab-following" onclick="setTab('following')">Following <span class="tab-count">89</span></div>
+      <div class="htab" id="htab-achievements" onclick="setTab('achievements')">Achievements <span class="tab-count">0</span></div>
+      <div class="htab" id="htab-clubs" onclick="setTab('clubs')">Clubs <span class="tab-count">0</span></div>
+      <div class="htab" id="htab-following" onclick="setTab('following')">Following <span class="tab-count">0</span></div>
       <div class="htab" id="htab-settings" onclick="setTab('settings')">Settings</div>
     </div>
   </div>
@@ -898,6 +898,7 @@ document.getElementById('htab-overview').classList.add('active');
     if (/Followers/i.test(label)) valEl.textContent = data.followerCount;
     else if (/Following/i.test(label)) valEl.textContent = data.followingCount;
     else if (/Activities/i.test(label)) valEl.textContent = data.postCount;
+    else if (/km logged/i.test(label)) valEl.textContent = Number(data.kmLogged || 0).toLocaleString('en-US');
   });
 
   // Tab counts
