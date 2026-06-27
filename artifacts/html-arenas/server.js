@@ -4107,6 +4107,8 @@ app.post(BASE + '/api/profile/update', requireAuth, async (req, res) => {
 // file arenas-blog.html stays on disk, unused, to repurpose or point at Ghost later.
 app.get(BASE + '/blog', (req, res) => res.redirect(BASE + '/landing'));
 app.get(BASE + '/for-clubs', (req, res) => res.sendFile(path.join(HTML, 'arenas-for-clubs.html')));
+// About is a public marketing/content page (no auth), served raw like /for-clubs.
+app.get(BASE + '/about', (req, res) => res.sendFile(path.join(HTML, 'arenas-about.html')));
 // Club dashboard requires authentication. Inject the coach's real club, member
 // count, and recent members so the page shows live data instead of the
 // hardcoded "Hackney Running Club" / "Rachel" placeholders.
