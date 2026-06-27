@@ -1,0 +1,121 @@
+# Privacy Policy
+
+**Last updated: June 27, 2026**
+
+## 1. Introduction
+
+This Privacy Policy explains how Arenas LLC, a California limited liability company ("Arenas," "we," "us," or "our"), collects, uses, shares, and protects your information when you use the Arenas website, applications, and services (the "Service").
+
+By using Arenas, you agree to this Privacy Policy. If you do not agree, please do not use the Service. This policy is incorporated into and works alongside our Terms of Service.
+
+## 2. Information we collect
+
+We collect the following categories of information:
+
+**Information you provide directly:**
+
+- **Account information:** email address, display name, username/handle, and password (stored securely in hashed form by our authentication provider).
+- **Profile information:** city or general location, sports you participate in, bio, and any other details you choose to add.
+- **Activity data:** workouts and training you log, including sport, distance, duration, dates, "feeling," and related notes.
+- **Social and community content:** posts, comments, club memberships, club information you create or manage, follows, invitations, event RSVPs, and challenge participation.
+- **Communications:** messages you send to us (for example, to support@realarenas.com).
+
+**Information collected automatically:**
+
+- **Usage data:** how you interact with the Service — pages viewed, features used, and actions taken.
+- **Device and technical data:** IP address, browser type, device information, and similar technical identifiers.
+- **Cookies and similar technologies:** see Section 7.
+
+**Information from third parties:**
+
+- If we later offer connections to external services (for example, device or activity-sync integrations such as Strava — which is planned but not currently available), we would receive data from those services only with your authorization, and this policy would be updated to describe it.
+
+We do not intentionally collect sensitive personal information beyond what is inherent in fitness activity data. Please do not share special-category data (such as detailed health conditions) that you do not want associated with your account.
+
+## 3. How we use your information
+
+We use your information to:
+
+- Create and manage your account and provide the Service;
+- Display your activities, posts, profile, and community participation to you and, where you choose, to other members;
+- Calculate leaderboards, rankings, streaks, challenges, and similar features;
+- Generate AI-based insights from your activity data (see Section 4);
+- Communicate with you about your account, security, and important Service updates (transactional communications);
+- Respond to your support requests;
+- Maintain the security, integrity, and proper functioning of the Service, and detect and prevent fraud or abuse;
+- Improve and develop the Service;
+- Comply with legal obligations and enforce our Terms.
+
+## 4. AI-generated insights
+
+Arenas offers (or will offer) AI-generated training insights. To produce these, your activity data (such as sport, distance, duration, and related metrics) may be processed by a third-party AI service provider on our behalf.
+
+This processing is used solely to generate insights for you. We do not sell this data. AI-generated insights are automated estimates and are not medical or professional advice (see our Terms of Service).
+
+## 5. How we share information
+
+We do not sell your personal information. We share information only as described below:
+
+- **With other users:** Your profile, activities, posts, and community participation are visible to other members according to the Service's design and any settings available to you. Think before you post.
+- **With service providers:** We use trusted third parties to operate the Service. These currently include or are expected to include:
+  - Supabase — authentication and database hosting;
+  - Railway — application hosting;
+  - A third-party email provider, for confirmation emails, invitations, and password resets (planned);
+  - A third-party payment processor, for paid subscriptions (planned, not yet active);
+  - A third-party AI provider, to generate activity insights.
+
+  These providers process data only on our instructions and as needed to provide their services.
+- **For legal reasons:** We may disclose information if required by law, legal process, or to protect the rights, safety, or property of Arenas, our users, or others.
+- **In a business transfer:** If Arenas is involved in a merger, acquisition, or sale of assets, your information may be transferred as part of that transaction, subject to this policy.
+
+## 6. Data retention
+
+We keep your personal information for as long as your account is active or as needed to provide the Service. When you delete your account, we will delete or anonymize your personal information within a reasonable period, except where we need to retain certain data to comply with legal obligations, resolve disputes, enforce our agreements, or maintain security (and except for residual copies in routine backups for a limited time).
+
+Some content you shared in community spaces (for example, comments or club activity others have interacted with) may persist after account deletion in a de-identified or aggregated form.
+
+## 7. Cookies and analytics
+
+We use cookies and similar technologies to keep you logged in, remember your preferences, and operate the Service.
+
+We may also use analytics tools to understand how the Service is used so we can improve it. These tools may collect usage and device data as described in Section 2. Where required by law, we will obtain your consent before using non-essential cookies or analytics.
+
+## 8. Your rights and choices
+
+Depending on where you live, you may have rights regarding your personal information, including the right to:
+
+- Access the personal information we hold about you;
+- Correct inaccurate information;
+- Delete your account and associated personal information;
+- Object to or restrict certain processing;
+- Port your data to another service;
+- Withdraw consent where processing is based on consent.
+
+You can exercise many of these rights directly in your account settings (for example, editing your profile or deleting your account), or by contacting us at support@realarenas.com. We will respond as required by applicable law.
+
+If you are a California resident, you have rights under the CCPA/CPRA, including the right to know, delete, and correct your personal information, and to opt out of the "sale" or "sharing" of personal information. We do not sell your personal information.
+
+If you are in the EU or UK, you have rights under the GDPR, including the rights listed above and the right to lodge a complaint with your local data-protection authority.
+
+## 9. Children's privacy
+
+The Service is not directed to children under 13, and we do not knowingly collect personal information from children under 13. If you believe a child under 13 has provided us personal information, contact us at support@realarenas.com and we will take appropriate steps to delete it.
+
+## 10. Security
+
+We take reasonable technical and organizational measures to protect your information, including using established providers for authentication and hosting. However, no method of transmission or storage is completely secure, and we cannot guarantee absolute security. You are responsible for keeping your password confidential.
+
+## 11. International users
+
+Arenas is operated from the United States. If you access the Service from outside the US, you understand your information will be processed in the United States and other locations where our service providers operate, which may have different data-protection laws than your country.
+
+## 12. Changes to this policy
+
+We may update this Privacy Policy from time to time. When we make material changes, we will update the "Last updated" date and, where appropriate, notify you through the Service. Your continued use after changes take effect means you accept the updated policy.
+
+## 13. Contact us
+
+If you have questions about this Privacy Policy or how we handle your information, contact us at:
+
+Arenas LLC
+Email: support@realarenas.com
