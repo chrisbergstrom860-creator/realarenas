@@ -3805,7 +3805,7 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
     const meta = req.user.user_metadata || {};
     const display = displayFromUser(req.user);
 
-    const [postCountRes, followerRes, followingRes, postsRes, membershipRes, clubsRes, followingListRes, followerListRes, activitiesRes] = await Promise.all([
+    const [postCountRes, followerRes, followingRes, postsRes, membershipRes, clubsRes, followingListRes, followerListRes, activitiesRes, activityCountRes] = await Promise.all([
       supabaseAdmin.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', req.user.id),
       supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', req.user.id),
       supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', req.user.id),
@@ -3820,7 +3820,11 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
       // Lifetime distance source. The `activities` table is user-provisioned and may
       // not exist yet — supabase-js returns { data: null } rather than throwing, so a
       // missing table degrades kmLogged to 0 instead of breaking the whole page.
-      supabaseAdmin.from('activities').select('distance').eq('user_id', req.user.id)
+      supabaseAdmin.from('activities').select('distance').eq('user_id', req.user.id),
+      // Real count of the user's activities for the "Activities" hero stat + tab
+      // badge. Counted from the activities table (NOT posts) so it matches the
+      // Activities list and the Stats & PRs tab. Missing table → count null → 0.
+      supabaseAdmin.from('activities').select('*', { count: 'exact', head: true }).eq('user_id', req.user.id)
     ]);
 
     const membership = membershipRes.data || null;
@@ -3882,6 +3886,7 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
       email: req.user.email,
       memberSince: req.user.created_at || null,
       postCount: postCountRes.count || 0,
+      activityCount: activityCountRes.count || 0,
       kmLogged,
       followerCount: followerRes.count || 0,
       followingCount: followingRes.count || 0,

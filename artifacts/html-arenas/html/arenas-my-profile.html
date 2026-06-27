@@ -897,13 +897,13 @@ document.getElementById('htab-overview').classList.add('active');
     if (!valEl) return;
     if (/Followers/i.test(label)) valEl.textContent = data.followerCount;
     else if (/Following/i.test(label)) valEl.textContent = data.followingCount;
-    else if (/Activities/i.test(label)) valEl.textContent = data.postCount;
+    else if (/Activities/i.test(label)) valEl.textContent = data.activityCount;
     else if (/km logged/i.test(label)) valEl.textContent = Number(data.kmLogged || 0).toLocaleString('en-US');
   });
 
   // Tab counts
   var actTab = document.querySelector('#htab-activities .tab-count');
-  if (actTab) actTab.textContent = data.postCount;
+  if (actTab) actTab.textContent = data.activityCount;
   var folTab = document.querySelector('#htab-following .tab-count');
   if (folTab) folTab.textContent = data.followingCount;
 
@@ -1001,59 +1001,11 @@ document.getElementById('htab-overview').classList.add('active');
     }
   })();
 
-  // Render the user's real posts into the overview "Recent activities" card
-  function timeAgo(dateStr) {
-    var secs = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-    if (isNaN(secs)) return '';
-    if (secs < 60) return 'Just now';
-    if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
-    if (secs < 86400) return Math.floor(secs / 3600) + 'h ago';
-    return Math.floor(secs / 86400) + 'd ago';
-  }
-  var recentCard = null;
-  document.querySelectorAll('.card').forEach(function (card) {
-    var title = card.querySelector('.card-title');
-    if (title && /Recent activities/i.test(title.textContent)) recentCard = card;
-  });
-  if (recentCard) {
-    var hdr = recentCard.querySelector('.card-hdr');
-    var allBtn = hdr && hdr.querySelector('button');
-    if (allBtn) allBtn.textContent = 'All ' + data.postCount + ' →';
-    var list = hdr ? hdr.nextElementSibling : null;
-    if (list) {
-      list.innerHTML = '';
-      var posts = data.posts || [];
-      if (!posts.length) {
-        var empty = document.createElement('div');
-        empty.style.cssText = 'padding:20px 14px;font-size:13px;color:var(--gray-500);text-align:center';
-        empty.textContent = 'No activities yet — share your first training note from the feed.';
-        list.appendChild(empty);
-      } else {
-        posts.forEach(function (post) {
-          var row = document.createElement('div');
-          row.style.cssText = 'padding:14px;border-bottom:var(--border)';
-          var body = document.createElement('div');
-          body.style.cssText = 'font-size:13px;color:var(--gray-800);margin-bottom:8px;line-height:1.6';
-          body.textContent = post.content || '';
-          row.appendChild(body);
-          var foot = document.createElement('div');
-          foot.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:11px;color:var(--gray-400)';
-          var when = document.createElement('span');
-          when.textContent = timeAgo(post.created_at);
-          foot.appendChild(when);
-          if (post.sport) {
-            var meta = SPORTS[post.sport];
-            var tag = document.createElement('span');
-            tag.style.cssText = 'background:var(--orange-light);color:#9A3412;padding:1px 7px;border-radius:10px;font-size:10px';
-            tag.textContent = meta ? (meta.emoji + ' ' + meta.label) : post.sport;
-            foot.appendChild(tag);
-          }
-          row.appendChild(foot);
-          list.appendChild(row);
-        });
-      }
-    }
-  }
+  // The Overview tab's "Recent activities" card is rendered by the lazy
+  // /api/profile/overview loader (loadProfileOverview), sourced from the
+  // ACTIVITIES table — not posts. No posts-based fallback here: a post is not an
+  // activity, so rendering posts under a "Recent activities" heading would be the
+  // same conflation that made the header count wrong.
   // --- Populate edit forms with real values + persist to auth metadata ---
   // The two-field name inputs are filled from the display name split into
   // first/last; on save they are recombined into a single `name`.

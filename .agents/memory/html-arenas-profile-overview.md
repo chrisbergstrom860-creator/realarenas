@@ -46,3 +46,23 @@ with the leaderboard and Challenges pages.
 **How to apply:** when extending profile-data routes, trust the live schema +
 existing `.in()` fetch pattern over any spec snippet, keep routes BASE-prefixed,
 and escape any string that originates from another user's content.
+
+## Activities count ≠ posts count; Overview cards are lazy (no static targets)
+- The "Activities" hero stat + Activities tab badge must read an **activities**
+  count (`activityCount`, a `count:'exact'` on the activities table), NOT
+  `postCount`. `postCount` is the posts table and is a different number; it stays
+  injected for the athletes directory. All other "activities" numbers
+  (leaderboards, feed "Your week", overview week, club stats, achievements,
+  Stats&PRs hero) already count the activities table — the profile header/badge
+  was the only conflation.
+- The whole Overview tab is **lazy-rendered** into `#po-body` by
+  `loadProfileOverview()`. The on-load `window.ARENAS_DATA` hydration runs while
+  `#po-body` is still the "Loading overview…" placeholder, so any hydration code
+  that `querySelectorAll('.card')`-matches an overview card (e.g. a card titled
+  "Recent activities") finds nothing and is **dead code**. Put overview rendering
+  inside the lazy loader, not the on-load hydrate.
+**Why:** a dead posts-based "Recent activities" block masqueraded as the real
+card and made the count look posts-driven; the live card already used activities.
+**How to apply:** to verify auth-gated profile widgets, use the temp-harness +
+`/landing/_pcheck` alias pattern (see html-arenas-visual-verify); the list
+endpoint caps at 50, so >50-activity users see fewer cards than the exact count.
