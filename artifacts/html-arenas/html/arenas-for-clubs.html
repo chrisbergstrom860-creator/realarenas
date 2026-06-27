@@ -180,7 +180,7 @@ button,select,input,textarea{font-family:var(--font)}
 /* ── FOOTER ── */
 .footer{background:white;border-top:var(--border);padding:32px 40px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
 .footer-links{display:flex;gap:20px}
-.footer-link{font-size:13px;color:var(--gray-400);cursor:pointer;transition:color .1s}
+.footer-link{font-size:13px;color:var(--gray-400);cursor:pointer;transition:color .1s;text-decoration:none}
 .footer-link:hover{color:var(--gray-700)}
 .footer-copy{font-size:12px;color:var(--gray-400)}
 
@@ -721,10 +721,10 @@ button,select,input,textarea{font-family:var(--font)}
     <span class="nav-logo-text">Arenas</span>
   </a>
   <div class="footer-links">
-    <span class="footer-link" onclick="document.getElementById('features').scrollIntoView({behavior:'smooth'})">Features</span>
-    <span class="footer-link" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">Pricing</span>
-    <span class="footer-link" onclick="showToast('Opening privacy policy…')">Privacy</span>
-    <span class="footer-link" onclick="showToast('Opening terms…')">Terms</span>
+    <a class="footer-link" href="/html/about">About</a>
+    <a class="footer-link" href="/html/terms">Terms</a>
+    <a class="footer-link" href="/html/privacy">Privacy</a>
+    <a class="footer-link" href="mailto:support@realarenas.com">Contact</a>
   </div>
   <div class="footer-copy">© 2026 Arenas · Built for athletes who mean it</div>
 </footer>
