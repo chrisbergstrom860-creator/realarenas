@@ -4109,6 +4109,8 @@ app.get(BASE + '/blog', (req, res) => res.redirect(BASE + '/landing'));
 app.get(BASE + '/for-clubs', (req, res) => res.sendFile(path.join(HTML, 'arenas-for-clubs.html')));
 // About is a public marketing/content page (no auth), served raw like /for-clubs.
 app.get(BASE + '/about', (req, res) => res.sendFile(path.join(HTML, 'arenas-about.html')));
+// Terms of Service is a public content page (no auth), served raw like /about.
+app.get(BASE + '/terms', (req, res) => res.sendFile(path.join(HTML, 'arenas-terms.html')));
 // Club dashboard requires authentication. Inject the coach's real club, member
 // count, and recent members so the page shows live data instead of the
 // hardcoded "Hackney Running Club" / "Rachel" placeholders.

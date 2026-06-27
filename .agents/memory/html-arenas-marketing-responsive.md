@@ -27,9 +27,11 @@ The marketing/auth pages (`arenas-landing-login.html`, `arenas-for-clubs.html`) 
 - Content grids: `.features-grid`, `.testimonials-grid`, `.pricing-grid` (all `repeat(3)`); amount `.price-amount` 36px; `.cta-title` 40px; `.section-title` 38px; `.hero-title` 52px.
 - Signup modal `#signup-overlay`/`.signup-modal` (max-width:760px width:100%, fits 375px). Inner grids `.form-row`/`.integration-grid` (1fr 1fr) + `.plan-cards` (repeat(3)) → 1fr. TWO grids are INLINE-styled (how-it-works split + step-6 review) so no class targets them — collapse via attribute selector `[style*="grid-template-columns:1fr 1fr"]{grid-template-columns:1fr!important}`.
 
-**arenas-about.html (public /about route, mirrors for-clubs):**
-- Self-contained marketing page modeled on for-clubs tokens/nav/footer. Hero + 3 `.story` sections (`.story-num` decorative numeral + `<h2 class="story-title">` = section name) + dark `.cta-band` + `.footer`. Content area is white (`.content{background:#fff}`).
+**Public content pages — arenas-about.html (/about) & arenas-terms.html (/terms):**
+- Both are self-contained pages modeled on for-clubs tokens/nav/footer with a white content area (`.content{background:#fff}`), served raw via `sendFile` from public BASE-prefixed routes in server.js (beside `/for-clubs`, no auth). Both carry the dual-base head script (strips `/html` on Railway), so hardcoded `/html/...` hrefs are correct on both bases.
+- about = "story" layout: hero + 3 `.story` sections (`.story-num` + `.story-title`) + dark `.cta-band`. terms = "legal" layout: hero + `.prose.legal` with `.legal-section` dividers, `.legal-title` headings, bold `<strong>` list lead-ins, mono `.doc-meta` "Last updated" line; NO cta-band (a legal doc shouldn't push a signup CTA). Reuse the legal CSS pattern for future Privacy page.
 - **Cross-page auth-link gotcha:** landing only deep-links **`#login`** (top-script handler opens the auth panel). There is NO `#signup` handler — linking to `/landing#signup` silently just lands on landing with no panel. So every marketing page's Log in / Sign up / primary CTA must point at **`/html/landing#login`** (the auth panel has its own login/signup toggle).
+- **Footer wiring still pending:** Terms/Privacy/Contact footer links across pages are `href="#"` stubs (and landing's "About" still has the old `onclick="scrollToSection('features')"` scroll bug). Deferred to a single dedicated footer-wiring pass.
 
 **Two cross-cutting gotchas (cost real time):**
 - The html-arenas artifact `previewPath` is **`/html/landing`** (the landing page), NOT `/html`. So `app_preview` screenshots of for-clubs must use `path:'/../for-clubs'` (resolves `/html/landing/../for-clubs` → `/html/for-clubs`). A bare `path:'/for-clubs'` 404s as `/html/landing/for-clubs`.
