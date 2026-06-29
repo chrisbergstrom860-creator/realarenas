@@ -676,6 +676,12 @@ function generateInviteToken() {
 // BASE path) instead of a hard-coded domain, so links are correct on both the
 // Replit (/html) preview and the Railway (root) deployment.
 function publicBaseUrl(req) {
+  // Prefer an explicit canonical origin when configured. This closes a
+  // Host/x-forwarded-proto spoofing vector now that absolute links (esp. invite
+  // emails) go out from a trusted sender. Falls back to request-derived host so
+  // dev and any environment without PUBLIC_BASE_URL set keep working unchanged.
+  const override = (process.env.PUBLIC_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (override) return `${override}${BASE}`;
   const proto = (req.get('x-forwarded-proto') || req.protocol || 'https').split(',')[0].trim();
   return `${proto}://${req.get('host')}${BASE}`;
 }
