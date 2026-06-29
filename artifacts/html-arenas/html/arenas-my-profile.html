@@ -381,7 +381,7 @@ button,select,input,textarea{font-family:var(--font)}
         <div class="hero-stat"><div class="hero-stat-val">0</div><div class="hero-stat-label">Following</div></div>
       </div>
       <div class="hero-actions">
-        <div class="hero-rank-badge">🏆 #5 Hackney RC · #2,841 Global</div>
+        <div class="hero-rank-badge" style="display:none"></div>
         <button class="btn btn-yellow btn-sm" onclick="openModal('edit-profile')" style="justify-content:center">✏️ Edit profile</button>
         <button class="btn btn-ghost btn-sm" style="color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.15);justify-content:center" onclick="copyProfileLink()">🔗 Share profile</button>
       </div>
@@ -937,11 +937,17 @@ document.getElementById('htab-overview').classList.add('active');
     }
   }
 
-  // Hero rank badge reflects the viewer's primary club; the sidebar "My clubs"
-  // list is rendered by the shared sidebar renderer near the end of the page.
+  // Hero club pill: shows "🏆 [club name]" only when the viewer is in a real
+  // club. It starts hidden/empty in the markup (no fabricated rank fallback) and
+  // is revealed here only when a real club membership exists, so a club-less user
+  // sees no badge rather than fake ranks. The sidebar "My clubs" list is rendered
+  // by the shared sidebar renderer near the end of the page.
   var clubName = data.membership && data.membership.club && data.membership.club.name;
   var heroBadge = document.querySelector('.hero-rank-badge');
-  if (heroBadge && clubName) heroBadge.textContent = '🏆 ' + clubName;
+  if (heroBadge && clubName) {
+    heroBadge.textContent = '🏆 ' + clubName;
+    heroBadge.style.display = '';
+  }
 
   // My Clubs tab: replace the hardcoded club card(s) with the viewer's real
   // memberships (data.clubs), keeping the "Find clubs near you" dashed card.
