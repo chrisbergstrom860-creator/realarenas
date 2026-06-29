@@ -29,6 +29,110 @@ const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
     })
   : null;
 
+// ── EMAIL (Resend) ──
+// Sender identity uses the verified Resend domain (send.realarenas.com).
+const EMAIL_FROM = 'Arenas <noreply@send.realarenas.com>';
+
+// Minimal HTML escape for values interpolated into email markup. Club names and
+// inviter names are user-controlled, so they must be escaped.
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// One shared email sender. Uses global fetch (Node 24, no SDK) to POST Resend's
+// REST API. Degrades gracefully: with no RESEND_API_KEY it logs instead of
+// sending, so dev works without a key. It NEVER throws or rejects — it returns
+// { ok, skipped?, status?, error? } so callers can fire-and-forget and a failed
+// email can never break the surrounding request (e.g. invite-row creation).
+async function sendEmail({ to, subject, html, text }) {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) {
+    console.log('[email skipped: no RESEND_API_KEY] To:', to, '| Subject:', subject);
+    return { ok: false, skipped: true };
+  }
+  try {
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: EMAIL_FROM,
+        to: Array.isArray(to) ? to : [to],
+        subject,
+        html,
+        ...(text ? { text } : {})
+      })
+    });
+    if (!resp.ok) {
+      let detail = '';
+      try { detail = await resp.text(); } catch (e) { /* ignore */ }
+      console.error('[email failed]', resp.status, '| To:', to, '| Subject:', subject, '|', detail.slice(0, 500));
+      return { ok: false, status: resp.status, error: detail };
+    }
+    let id = null;
+    try { const j = await resp.json(); id = j && j.id; } catch (e) { /* ignore */ }
+    console.log('[email sent]', id || '(no id)', '| To:', to, '| Subject:', subject);
+    return { ok: true, id };
+  } catch (err) {
+    console.error('[email error]', (err && err.message) || err, '| To:', to, '| Subject:', subject);
+    return { ok: false, error: (err && err.message) || String(err) };
+  }
+}
+
+// Build the club-invite email (shared by single / bulk / resend). Returns
+// { subject, html, text }. All interpolated user values are HTML-escaped.
+function buildInviteEmail({ clubName, inviterName, joinUrl, role }) {
+  const clubRaw = clubName || 'a club';
+  const club = escapeHtml(clubRaw);
+  const url = escapeHtml(joinUrl);
+  const intro = inviterName
+    ? `${escapeHtml(inviterName)} invited you to join <strong>${club}</strong> on Arenas.`
+    : `You've been invited to join <strong>${club}</strong> on Arenas.`;
+  const roleLine = role && role !== 'member'
+    ? `<p style="margin:0 0 18px;color:#52525b;font-size:14px;line-height:1.5">You'll join as <strong>${escapeHtml(role)}</strong>.</p>`
+    : '';
+  const subject = `You're invited to join ${clubRaw} on Arenas`;
+  const html = `<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 16px">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e4e4e7">
+        <tr><td style="background:#18181b;padding:22px 28px">
+          <span style="color:#fde047;font-size:20px;font-weight:800;letter-spacing:-.02em">🏆 Arenas</span>
+        </td></tr>
+        <tr><td style="padding:28px">
+          <h1 style="margin:0 0 14px;font-size:20px;color:#18181b">You're invited 🎉</h1>
+          <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.55">${intro}</p>
+          ${roleLine}
+          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 22px">
+            <tr><td style="border-radius:10px;background:#fde047">
+              <a href="${url}" style="display:inline-block;padding:13px 26px;font-size:15px;font-weight:700;color:#18181b;text-decoration:none">Join ${club} &rarr;</a>
+            </td></tr>
+          </table>
+          <p style="margin:0 0 6px;color:#71717a;font-size:13px">Or paste this link into your browser:</p>
+          <p style="margin:0;word-break:break-all"><a href="${url}" style="color:#2563eb;font-size:13px">${url}</a></p>
+        </td></tr>
+        <tr><td style="padding:18px 28px;border-top:1px solid #e4e4e7;background:#fafafa">
+          <p style="margin:0;color:#a1a1aa;font-size:12px;line-height:1.5">Arenas &mdash; every sport, one community. If you weren't expecting this invite, you can safely ignore this email.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+  </body></html>`;
+  const text = [
+    inviterName ? `${inviterName} invited you to join ${clubRaw} on Arenas.` : `You've been invited to join ${clubRaw} on Arenas.`,
+    role && role !== 'member' ? `You'll join as ${role}.` : '',
+    '',
+    `Join here: ${joinUrl}`,
+    '',
+    `Arenas — every sport, one community. If you weren't expecting this invite, you can safely ignore this email.`
+  ].filter(Boolean).join('\n');
+  return { subject, html, text };
+}
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser(process.env.SESSION_SECRET));
@@ -4793,13 +4897,21 @@ app.post(BASE + '/api/clubs/:clubId/invites', requireAuth, async (req, res) => {
     }
     const joinUrl = `${publicBaseUrl(req)}/join/${token}`;
 
+    // Resolve club + inviter names once, for both the email and the in-app notif.
+    const inviter = displayFromUser(req.user);
+    let clubName = 'a club';
+    try {
+      const { data: club } = await supabaseAdmin.from('clubs').select('name').eq('id', clubId).single();
+      if (club && club.name) clubName = club.name;
+    } catch (err) { /* fall back to generic name */ }
+
+    // Everyone invited gets the email. Fire-and-forget: a failed send must never
+    // block invite creation (the row already exists and the manager has the link).
+    const invEmail = buildInviteEmail({ clubName, inviterName: inviter.name, joinUrl, role: inviteRole });
+    sendEmail({ to: email, subject: invEmail.subject, html: invEmail.html, text: invEmail.text });
+
     if (existingUser) {
-      let clubName = 'a club';
-      try {
-        const { data: club } = await supabaseAdmin.from('clubs').select('name').eq('id', clubId).single();
-        if (club && club.name) clubName = club.name;
-      } catch (err) { /* fall back to generic name */ }
-      const inviter = displayFromUser(req.user);
+      // Existing Arenas users ALSO get an in-app notification (one-click join).
       // Link stored without the BASE prefix (client prepends it). The public
       // /join/:token page handles one-click join for a signed-in invitee.
       await createNotification({
@@ -4816,17 +4928,16 @@ app.post(BASE + '/api/clubs/:clubId/invites', requireAuth, async (req, res) => {
         existingUser: true,
         invite,
         joinUrl,
-        message: `${email} already has an Arenas account — they've been notified in-app and can join with one click`
+        message: `${email} already has an Arenas account — they've been emailed and notified in-app, and can join with one click`
       });
     }
 
-    if (process.env.NODE_ENV !== 'production') console.log('INVITE - To:', email, 'Join URL:', joinUrl);
     return res.json({
       success: true,
       existingUser: false,
       invite,
       joinUrl,
-      message: `Invite created for ${email}`
+      message: `Invite email sent to ${email}`
     });
   } catch (err) {
     console.log('Invite error:', err.message);
@@ -4893,7 +5004,12 @@ app.post(BASE + '/api/clubs/:clubId/invites/bulk', requireAuth, async (req, res)
       if (error) { results.failed.push({ email, reason: 'db' }); continue; }
       const joinUrl = `${publicBaseUrl(req)}/join/${token}`;
 
+      // Everyone invited gets the email (fire-and-forget, never blocks the row).
+      const invEmail = buildInviteEmail({ clubName, inviterName: inviter.name, joinUrl, role: irole });
+      sendEmail({ to: email, subject: invEmail.subject, html: invEmail.html, text: invEmail.text });
+
       if (existingUser) {
+        // Existing Arenas users ALSO get an in-app notification.
         await createNotification({
           userId: existingUser.id,
           type: 'club',
@@ -4905,7 +5021,6 @@ app.post(BASE + '/api/clubs/:clubId/invites/bulk', requireAuth, async (req, res)
         });
         results.sent.push({ email, joinUrl, existingUser: true });
       } else {
-        if (process.env.NODE_ENV !== 'production') console.log('BULK INVITE - To:', email, 'Join URL:', joinUrl);
         results.sent.push({ email, joinUrl, existingUser: false });
       }
     } catch (err) {
@@ -4973,7 +5088,20 @@ app.post(BASE + '/api/clubs/invites/:inviteId/resend', requireAuth, async (req, 
       .single();
     if (error) return res.status(500).json({ error: 'Could not resend invite' });
     const joinUrl = `${publicBaseUrl(req)}/join/${invite.token}`;
-    if (process.env.NODE_ENV !== 'production') console.log('RESEND INVITE - To:', invite.email, 'Join URL:', joinUrl);
+
+    // Actually re-send the invite email (the whole point of "resend"). Skip the
+    // sentinel address used by open shareable links — those aren't tied to a real
+    // inbox. Fire-and-forget so a failed send never fails the resend request.
+    if (invite.email && invite.email !== OPEN_INVITE_EMAIL) {
+      let clubName = 'a club';
+      try {
+        const { data: club } = await supabaseAdmin.from('clubs').select('name').eq('id', invite.club_id).single();
+        if (club && club.name) clubName = club.name;
+      } catch (err) { /* fall back to generic name */ }
+      const resender = displayFromUser(req.user);
+      const invEmail = buildInviteEmail({ clubName, inviterName: resender.name, joinUrl, role: invite.role });
+      sendEmail({ to: invite.email, subject: invEmail.subject, html: invEmail.html, text: invEmail.text });
+    }
     return res.json({ success: true, invite: updated, joinUrl });
   } catch (err) {
     return res.status(500).json({ error: 'Could not resend invite' });

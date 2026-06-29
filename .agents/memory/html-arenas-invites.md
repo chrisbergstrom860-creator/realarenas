@@ -20,7 +20,7 @@ description: Design rules for the club invite/join feature (personal vs open lin
 - New-account path forces the new email to `invite.email` for personal invites, so binding is inherent there.
 
 ## Existing vs new invitees
-- On invite (single + bulk), detect if the email already belongs to a Supabase auth user. Existing non-members get an **in-app notification** (type `club`, link `/join/<token>`) instead of relying on the link; existing members are rejected/skipped (`already_member`). New emails get the join link as before.
+- On invite (single + bulk), detect if the email already belongs to a Supabase auth user. Existing non-members get **both** an invite email AND an **in-app notification** (type `club`, link `/join/<token>`); existing members are rejected/skipped (`already_member`). New emails get the invite email only (no in-app presence).
 - Use `listAllAuthUsers()` (paginates `auth.admin.listUsers`) — a single `listUsers({perPage:1000})` misclassifies users past page 1 as new. In bulk, fetch the user map once before the loop, not per email.
 
 ## Any one-click join must require a real invite (authorization)
@@ -31,5 +31,11 @@ description: Design rules for the club invite/join feature (personal vs open lin
 - Revoke = DELETE the row (do not write a `revoked` status — unknown status CHECK risk). Only `pending`/`accepted` are ever written.
 - `isExpired` is computed from `expires_at`, not stored.
 - TTLs: personal `INVITE_TTL_MS` 14d, open `OPEN_INVITE_TTL_MS` 30d.
-- Token-bearing join URLs are only `console.log`'d when `NODE_ENV !== 'production'` (avoid token replay from logs).
 - Every invite/member API endpoint authorizes via `getClubRole` + `isClubManagerRole`; resend/revoke look up the invite's club first (prevent IDOR/PII leak).
+
+## Invite email delivery (Resend)
+- All three invite spots (single, bulk, resend) send a real invite email via a shared `sendEmail()` helper: plain global `fetch` to `https://api.resend.com/emails` (no SDK), from `EMAIL_FROM` = `Arenas <noreply@send.realarenas.com>` (verified Resend domain). `buildInviteEmail()` builds HTML+text; all interpolated user values (clubName, inviterName, role, joinUrl) are HTML-escaped via a local `escapeHtml`.
+- **Everyone invited gets the email; existing users ALSO keep the in-app notification.** Resend **skips the `OPEN_INVITE_EMAIL` sentinel** (open links have no real inbox).
+- `sendEmail` **never throws** and is called **fire-and-forget** (not awaited) so a failed send never blocks invite-row creation. Degrades gracefully: with no `RESEND_API_KEY` it logs and returns (dev works without a key). **Runs in ALL environments** — the old `NODE_ENV !== 'production'`-gated console.log stubs were the bug (did nothing in prod).
+- **Gotcha (deferred, flagged in review):** the emailed `joinUrl` derives from request `Host`/`x-forwarded-proto` (`publicBaseUrl(req)`). For a trusted-sender email this is a mild Host-spoof phishing vector; prefer a canonical `PUBLIC_BASE_URL`/`APP_ORIGIN` env if hardening.
+- Supabase **auth** emails (signup confirm, password reset) are entirely separate (Supabase SMTP) and were intentionally NOT touched.
