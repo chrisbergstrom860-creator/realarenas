@@ -1006,7 +1006,7 @@ html { scroll-behavior: smooth; }
               <input class="form-input" name="email" type="email" placeholder="you@example.com" required>
             </div>
             <div class="form-field">
-              <label class="form-label">Password <a href="#" class="form-forgot" onclick="return false;">Forgot password?</a></label>
+              <label class="form-label">Password <a href="/html/forgot-password" class="form-forgot">Forgot password?</a></label>
               <input class="form-input" name="password" type="password" placeholder="••••••••" required>
             </div>
             <div class="form-submit">
@@ -1310,6 +1310,31 @@ function showToast(msg){
     box.textContent = msgs[err] || 'Something went wrong. Please try again.';
     box.style.display = 'block';
   }
+})();
+
+// ── SUCCESS / INFO BANNER (from ?msg=) ──
+// Surfaces password-reset and email-confirmation outcomes on the login panel.
+(function(){
+  var msg = new URLSearchParams(location.search).get('msg');
+  if(!msg) return;
+  showPage('login');
+  setMode('login');
+  var box = document.getElementById('auth-error');
+  if(!box) return;
+  var info = {
+    reset_sent:     { ok:true,  text:"If an account exists for that email, we've sent a password reset link. Check your inbox (and spam)." },
+    reset_ok:       { ok:true,  text:'Password updated — please sign in with your new password.' },
+    confirm_failed: { ok:false, text:'That confirmation link is invalid or has expired. Please log in, or sign up again.' }
+  };
+  var m = info[msg];
+  if(!m) return;
+  if(m.ok){
+    box.style.background = '#ECFDF5';
+    box.style.color = '#047857';
+    box.style.borderColor = '#A7F3D0';
+  }
+  box.textContent = m.text;
+  box.style.display = 'block';
 })();
 </script>
 </body>

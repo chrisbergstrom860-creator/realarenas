@@ -207,7 +207,7 @@ app.post(BASE + '/auth/signup', async (req, res) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { name } }
+      options: { data: { name }, emailRedirectTo: publicBaseUrl(req) + '/auth/confirm' }
     });
     console.log('Signup result - user:', data && data.user && data.user.id);
     console.log('Signup result - session:', !!(data && data.session));
@@ -302,6 +302,86 @@ app.get(BASE + '/auth/logout', async (req, res) => {
   res.clearCookie('sb_access_token');
   res.clearCookie('sb_refresh_token');
   return res.redirect(BASE + '/landing');
+});
+
+// ── PASSWORD RESET (server-side token_hash + verifyOtp) ──
+// The "Forgot password?" form posts here. We ALWAYS respond with the same
+// success redirect whether or not the email exists, to prevent account
+// enumeration. Supabase emails the recovery link via the configured SMTP; its
+// action URL is built from redirectTo and carries ?token_hash=...&type=recovery
+// back to /reset-password (see the Supabase email-template config).
+app.get(BASE + '/forgot-password', (req, res) =>
+  res.sendFile(path.join(HTML, 'arenas-forgot-password.html')));
+
+app.post(BASE + '/auth/forgot-password', async (req, res) => {
+  const email = (req.body.email || '').trim();
+  if (!email) return res.redirect(BASE + '/forgot-password?error=missing');
+  try {
+    await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: publicBaseUrl(req) + '/reset-password'
+    });
+  } catch (err) {
+    // Swallow — the response must not reveal whether the email exists.
+  }
+  return res.redirect(BASE + '/landing?msg=reset_sent');
+});
+
+// The reset page reads token_hash from the query and posts it back with the new
+// password. We verify the recovery OTP here (single-use) and, on success, set
+// the new password with the service-role admin client by user id. No
+// browser-side supabase-js: the OTP is verified server-side, not in the page.
+app.get(BASE + '/reset-password', (req, res) =>
+  res.sendFile(path.join(HTML, 'arenas-reset-password.html')));
+
+app.post(BASE + '/reset-password', async (req, res) => {
+  const token_hash = (req.body.token_hash || '').trim();
+  const password = req.body.password || '';
+  if (!token_hash) return res.redirect(BASE + '/reset-password?error=invalid');
+  if (password.length < 8) {
+    // Token not yet consumed — bounce back with it so the user can retry.
+    return res.redirect(BASE + '/reset-password?token_hash=' +
+      encodeURIComponent(token_hash) + '&type=recovery&error=weak');
+  }
+  if (!supabaseAdmin) return res.redirect(BASE + '/reset-password?error=server');
+  try {
+    const { data, error } = await supabase.auth.verifyOtp({ type: 'recovery', token_hash });
+    if (error || !data || !data.user) {
+      return res.redirect(BASE + '/reset-password?error=expired');
+    }
+    const { error: updErr } = await supabaseAdmin.auth.admin.updateUserById(
+      data.user.id, { password }
+    );
+    if (updErr) return res.redirect(BASE + '/reset-password?error=server');
+    // Don't auto-login after a reset — send them to log in with the new password.
+    return res.redirect(BASE + '/landing?msg=reset_ok');
+  } catch (err) {
+    return res.redirect(BASE + '/reset-password?error=expired');
+  }
+});
+
+// ── EMAIL CONFIRMATION (server-side verifyOtp → auto-login) ──
+// signUp sets emailRedirectTo to this route. Supabase's confirm link carries
+// ?token_hash=...&type=signup; we verify it server-side, set the session cookie
+// and drop the now-confirmed user straight into the app.
+app.get(BASE + '/auth/confirm', async (req, res) => {
+  const token_hash = (req.query.token_hash || '').toString();
+  const type = (req.query.type || 'signup').toString();
+  // Only signup confirmation may auto-login here. Reject any other OTP type
+  // (notably 'recovery') so a password-reset token cannot be replayed against
+  // this endpoint to bypass the "reset does not auto-login" policy.
+  if (!token_hash || type !== 'signup') {
+    return res.redirect(BASE + '/landing?msg=confirm_failed');
+  }
+  try {
+    const { data, error } = await supabase.auth.verifyOtp({ type: 'signup', token_hash });
+    if (error || !data || !data.session) {
+      return res.redirect(BASE + '/landing?msg=confirm_failed');
+    }
+    setSession(res, data.session);
+    return res.redirect(BASE + '/feed');
+  } catch (err) {
+    return res.redirect(BASE + '/landing?msg=confirm_failed');
+  }
 });
 
 // ── AUTH GUARD (validates the signed Supabase access-token cookie) ──
