@@ -1,0 +1,12 @@
+Good investigation. Let's plan (not build yet) the password-reset flow and improve email confirmation. Report your recommended approach and a build plan:
+
+PASSWORD RESET — the full flow needs building:
+(a) A real "Forgot password?" form (replace the dead stub on the login page) that calls resetPasswordForEmail with redirectTo pointing at a new reset page (BASE-aware: https://www.realarenas.com/reset-password in prod).
+(b) The /reset-password page that handles the recovery token landing and lets the user set a new password.
+(c) The update-password logic.
+Recommend between your two options: (a) a reset page that loads browser-side supabase-js to read the hash token and call updateUser, vs (b) a server route using the admin client. Which is cleaner and more secure for this app, given it's otherwise fully server-side? Report your recommendation and WHY. I lean toward whatever is most secure and least fragile — note that introducing browser-side supabase-js is a new pattern, so if there's a clean server-side way using the token, weigh that.
+EMAIL CONFIRMATION — currently the account gets confirmed (Supabase-side) but the user lands logged-OUT on the landing page. Plan a small improvement: after confirmation, ideally drop them into the app logged in (or at least show a clear "Email confirmed — please log in" message rather than just the landing page). Report what's feasible given the architecture — does fixing this also require browser-side token handling, or can we set emailRedirectTo to a path that handles it server-side?
+Report the Supabase Redirect URLs that need adding to the allowlist for whatever paths you introduce (e.g. /reset-password), BASE-aware for prod (https://www.realarenas.com/...).
+Confirm the BASE-prefix handling: prod is Railway root, dev is Replit /html — so any new route and any redirectTo must respect that (prod reset page = https://www.realarenas.com/reset-password, no /html).
+
+Report the plan and your recommended approach before building. Don't build yet — I want to review the approach, especially the browser-side-vs-server-side decision.
