@@ -1,0 +1,14 @@
+On arenas-club-invite.html there's a "Live email preview" panel that shows a fabricated mockup of an invite email — it shows sender "clubs@arenas.io" (wrong — we actually send from noreply@send.realarenas.com), a fake "Rachel H." coach persona, "48 members," "Est. 2018," and claims features like "AI coaching on every activity you log" that aren't live. But the REAL invite email we actually send (via Resend, built by buildInviteEmail in server.js) looks completely different — it's a dark-themed "You're invited 🎉" email from the actual inviter's name, with a real realarenas.com/join/<token> link and the tagline "Arenas — every sport, one community."
+The fake preview misrepresents the real product. Investigate and report — don't change anything yet:
+
+Find the "Live email preview" panel on arenas-club-invite.html — report its full markup and everything fabricated in it (the clubs@arenas.io sender, Rachel H., 48 members, Est. 2018, the feature list, the "arenas.io/invite/..." fake link, etc.).
+Is this preview static HTML, or does the "Updates as you type" text mean it's dynamically generated from form inputs? Report how it works.
+THE REAL EMAIL: pull the actual HTML from buildInviteEmail() in server.js — the real template that gets sent. Report what the real invite email actually contains (structure, sender, wording, the join link format, the tagline).
+Options to fix, with your recommendation:
+(a) Replace the fake preview with an accurate representation of the REAL buildInviteEmail template (so what the user sees in the preview matches what actually gets sent), OR
+(b) Remove the "Live email preview" panel entirely (if it's not essential — the invite feature works without showing a preview), OR
+(c) something else.
+Which is cleanest? My lean: if the preview is nice-to-have, either make it show the REAL email accurately, or remove it — but it must NOT show a fabricated email that misrepresents what we send.
+
+Also, while you're in there — remind me of the OTHER fabricated content on this page (the auto-reminder copy with no scheduler, the fake stats like "8 awaiting response," "3 expire within 48 hours," the "Club Pro" badge, the "Nudge all" button). Report the current full list so we can clean the whole page in one pass, not just the email preview.
+Report before changing anything.
