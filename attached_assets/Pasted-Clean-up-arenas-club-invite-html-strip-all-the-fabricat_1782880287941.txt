@@ -1,0 +1,31 @@
+Clean up arenas-club-invite.html — strip all the fabricated dressing off the real working invite tool, in one pass. The invite machinery (bulk send → buildInviteEmail via Resend, pending table, resend/revoke, history, member management) is REAL and must keep working. Remove/neutralize everything fabricated. Specifically:
+1. Remove the "Live email preview" panel entirely (lines ~452–518, the whole right column with the email card). The invite flow works without it, and it shows a fabricated email (clubs@arenas.io, Rachel H., fake stats, AI-coaching claims) that doesn't match the real buildInviteEmail. Remove the panel; adjust the layout so the left column (the real form) fills the space cleanly.
+2. Remove the dead subject/personal-note fields. The "Email subject" and "Your personal note" inputs don't actually affect the sent email — the send path only posts {email, name, role}, and buildInviteEmail hardcodes its own subject with no personal-note support. So these fields let a coach edit text the recipient never sees — a real deception. Remove both fields (and their preview wiring, now moot with the preview gone). Keep the recipient entry, role, and expiry controls that DO work. (Note for later: "personalized invite subject/note" is a good future feature to build for real — but not shipping it fake.)
+3. Remove ALL auto-reminder content — there's no scheduler, so every reminder claim is false:
+
+The "Send automatic reminder to non-responders on day 5" toggle
+"Non-responders get one automatic reminder 2 days before expiry" text
+"Auto-reminder · Day 5" in the review summary (line ~443)
+The "Nudge all" button (line ~529, a toast stub that sends nothing)
+"What happens after you send" step 4 about auto-reminders (line ~514)
+Remove all of it. Also check the "Notify me when each invite is accepted" and "Auto-join without approval" toggles — if they're cosmetic (do nothing real), remove them too; if either actually works, keep only the working one. Report which you found real vs cosmetic.
+
+4. Fix/remove the fake sender + persona everywhere:
+
+"Sent from clubs@arenas.io on behalf of ... Rachel H." (send button caption, line ~447) — remove or replace with accurate info. Real sender is noreply@send.realarenas.com. If you show a sender line, show the real one; otherwise remove it.
+"Delivered from clubs@arenas.io typically within 30 seconds" (line ~502) — remove (wrong sender + invented SLA)
+All "Rachel H." persona instances (sidebar 321–322, avatar "RH" 296, anywhere else)
+
+5. Remove/neutralize the fake stats:
+
+"Club Pro" badge (287), "52 seats remaining on Club Pro" (393), "49 remaining" seats (444) — fake seat math, remove
+Sidebar nav badges Members 48 / Training load 3 / Challenges 4 / Events 3 (308–312) — if hardcoded fake, remove or wire to real; report
+Overview tab: "Hackney Running Club · 48 members" (332), the "8 pending / 3 expire" banner (337), and the stat cards Total members/Pending/Accepted this month/Acceptance rate (341–344) — all fabricated (setStat doesn't even match these labels so they never update). Remove or neutralize.
+Invite tab stat cards (358–362): keep the Members/Pending values that DO update from real data, but remove the fake delta sub-labels and the fabricated Acceptance rate / Seats left cards.
+Static "8 awaiting response" (525) and "3 expire within 48 hours" (526) headings — not tied to real data; remove or wire to the real count.
+Hardcoded fake pending rows (Jamie King/Marcus T./etc., 537–544) — the fallback flash before real data loads; remove so real data is the only thing shown.
+"Clear expired" toast stub (530) — if it does nothing real, remove.
+CSV sample row rachel@email.com (579) — low priority; a generic sample like member@example.com is fine, or leave.
+
+The principle: after this, every control on the page must actually DO what it says, every stat must be real (or absent), and nothing may claim a feature (auto-reminders, personalized subject/note, AI coaching) that doesn't exist. Keep all the genuinely working machinery intact.
+This is a big pass — report your plan first (what you're removing vs keeping, and the real-vs-cosmetic findings on those two toggles), then make the edits. Verify the real invite flow still works (send, pending table, resend, revoke, history). Don't push until I confirm.

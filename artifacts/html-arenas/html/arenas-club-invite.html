@@ -284,16 +284,15 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="topbar-logo" onclick="nav('/clubs/dashboard')" style="cursor:pointer">
     <div class="logo-icon">🏟</div>
     <span class="logo-text">Arenas</span>
-    <span class="club-badge">Club Pro</span>
   </div>
   <div class="topbar-center">
     <span style="font-size:14px;font-weight:600;color:var(--gray-900)">Hackney Running Club</span>
-    <span style="font-size:11px;color:var(--gray-500);background:var(--gray-100);padding:2px 8px;border-radius:10px">Coach · Admin</span>
+    <span style="font-size:11px;color:var(--gray-500);background:var(--gray-100);padding:2px 8px;border-radius:10px">Club manager</span>
   </div>
   <div class="topbar-actions">
     <div class="notif-btn" onclick="nav('/notifications')">🔔<div class="notif-dot"></div></div>
     <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
-      <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">RH</div>
+      <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer"></div>
       <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
         <a href="/html/profile" style="display:block;padding:10px 14px;font-size:13px;color:#111827;text-decoration:none">My profile</a>
         <a href="/html/auth/logout" style="display:block;padding:10px 14px;font-size:13px;color:#DC2626;text-decoration:none;border-top:1px solid #f3f4f6">Log out</a>
@@ -305,11 +304,11 @@ button,select,input,textarea{font-family:var(--font)}
 <aside class="sidebar">
   <div class="nav-section-label">Club management</div>
   <div class="nav-item" onclick="nav('/clubs/dashboard')"><span class="nav-icon">📊</span> Overview</div>
-  <div class="nav-item" onclick="nav('/clubs/dashboard#members')"><span class="nav-icon">👥</span> Members <span class="nav-badge">48</span></div>
-  <div class="nav-item" onclick="nav('/clubs/dashboard#training')"><span class="nav-icon">📈</span> Training load <span class="nav-badge alert">3</span></div>
+  <div class="nav-item" onclick="nav('/clubs/dashboard#members')"><span class="nav-icon">👥</span> Members</div>
+  <div class="nav-item" onclick="nav('/clubs/dashboard#training')"><span class="nav-icon">📈</span> Training load</div>
   <div class="nav-item" onclick="nav('/clubs/dashboard#leaderboard')"><span class="nav-icon">🏆</span> Leaderboard</div>
-  <div class="nav-item" onclick="nav('/clubs/dashboard#challenges')"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">4</span></div>
-  <div class="nav-item" onclick="nav('/clubs/dashboard#events')"><span class="nav-icon">📅</span> Events <span class="nav-badge">3</span></div>
+  <div class="nav-item" onclick="nav('/clubs/dashboard#challenges')"><span class="nav-icon">⚡</span> Challenges</div>
+  <div class="nav-item" onclick="nav('/clubs/dashboard#events')"><span class="nav-icon">📅</span> Events</div>
   <div class="nav-section-label">Analytics</div>
   <div class="nav-item" onclick="nav('/clubs/dashboard#feed')"><span class="nav-icon">🏃</span> Club feed</div>
   <div class="nav-item" onclick="nav('/clubs/dashboard#reports')"><span class="nav-icon">📋</span> Reports</div>
@@ -318,8 +317,8 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="nav-item" onclick="nav('/clubs/dashboard#billing')"><span class="nav-icon">💳</span> Billing</div>
   <div class="sidebar-footer">
     <div class="sf-row">
-      <div class="sf-av">RH</div>
-      <div><div class="sf-name">Rachel H.</div><div class="sf-role">Coach · Admin</div></div>
+      <div class="sf-av"></div>
+      <div><div class="sf-name">Club manager</div><div class="sf-role"></div></div>
     </div>
   </div>
 </aside>
@@ -329,40 +328,27 @@ button,select,input,textarea{font-family:var(--font)}
 <!-- OVERVIEW -->
 <div class="tab-content" id="tab-overview">
   <div class="page-hdr">
-    <div><h1>Overview</h1><p>Hackney Running Club · 48 members</p></div>
-    <div class="page-hdr-right"><button class="btn btn-yellow" onclick="setTab('invites',document.getElementById('nav-invites'))">✉️ Invite members</button></div>
+    <div><h1>Overview</h1><p>Hackney Running Club</p></div>
+    <div class="page-hdr-right"><button class="btn btn-yellow" onclick="setTab('invites',document.getElementById('nav-invites'))">Invite members</button></div>
   </div>
-  <div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:var(--radius-lg);padding:16px 20px;display:flex;align-items:center;gap:14px;margin-bottom:16px">
-    <div style="font-size:24px">✉️</div>
-    <div style="flex:1"><div style="font-size:14px;font-weight:600;color:#7a5c00;margin-bottom:2px">8 pending invitations waiting</div><div style="font-size:13px;color:#854D0E">3 members expire in 2 days — resend now to avoid losing them.</div></div>
-    <button class="btn btn-yellow btn-sm" onclick="setTab('invites',document.getElementById('nav-invites'))">View pending →</button>
-  </div>
-  <div class="grid-4" style="margin-bottom:16px">
-    <div class="stat-card"><div class="sc-label">Total members</div><div class="sc-value">48</div><div class="sc-delta up">↑ +3 this month</div></div>
-    <div class="stat-card"><div class="sc-label">Pending invites</div><div class="sc-value">8</div><div class="sc-delta warn">3 expire in 2 days</div></div>
-    <div class="stat-card"><div class="sc-label">Accepted this month</div><div class="sc-value">11</div><div class="sc-delta up">↑ +4 vs last month</div></div>
-    <div class="stat-card"><div class="sc-label">Acceptance rate</div><div class="sc-value">78%</div><div class="sc-delta neutral">Industry avg: 65%</div></div>
-  </div>
-  <div style="text-align:center;padding:40px;color:var(--gray-400);font-size:13px">Use the <strong style="color:var(--gray-700)">✉️ Invite members</strong> button above to send and manage invitations</div>
+  <div style="text-align:center;padding:40px;color:var(--gray-400);font-size:13px">Use the <strong style="color:var(--gray-700)">Invite members</strong> button above to send and manage invitations</div>
 </div>
 
 <!-- INVITE MEMBERS -->
 <div class="tab-content active" id="tab-invites">
   <div class="page-hdr">
-    <div><h1>Invite members ✉️</h1><p>Model 2 — personalised email invites · members click to auto-join Hackney Running Club</p></div>
+    <div><h1>Invite members ✉️</h1><p>Personalised email invites · members click to auto-join Hackney Running Club</p></div>
     <div class="page-hdr-right">
       <button class="btn btn-ghost" onclick="setTab('history',null)">📋 History</button>
     </div>
   </div>
 
-  <div class="grid-4" style="margin-bottom:20px">
-    <div class="stat-card"><div class="sc-label">Members</div><div class="sc-value">48</div><div class="sc-delta neutral">of 100 seats</div></div>
-    <div class="stat-card"><div class="sc-label">Pending</div><div class="sc-value">8</div><div class="sc-delta warn">3 expire soon</div></div>
-    <div class="stat-card"><div class="sc-label">Acceptance rate</div><div class="sc-value">78%</div><div class="sc-delta up">↑ +4% this month</div></div>
-    <div class="stat-card"><div class="sc-label">Seats left</div><div class="sc-value">52</div><div class="sc-delta neutral">Upgrade for more</div></div>
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,200px));gap:12px;margin-bottom:20px">
+    <div class="stat-card"><div class="sc-label">Members</div><div class="sc-value">-</div></div>
+    <div class="stat-card"><div class="sc-label">Pending</div><div class="sc-value">-</div></div>
   </div>
 
-  <div class="grid-2" style="align-items:start;gap:20px">
+  <div style="max-width:720px">
     <div style="display:flex;flex-direction:column;gap:16px">
 
       <!-- Step 1 -->
@@ -371,10 +357,6 @@ button,select,input,textarea{font-family:var(--font)}
           <div style="display:flex;align-items:center;gap:8px">
             <div style="width:22px;height:22px;border-radius:50%;background:var(--gray-900);color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">1</div>
             <span class="card-title">Add email addresses</span>
-          </div>
-          <div style="display:flex;gap:6px">
-            <button class="btn btn-sm btn-ghost" onclick="setTab('import',null)">📥 Import CSV</button>
-            <button class="btn btn-sm btn-ghost" onclick="openModal('paste')">📋 Paste list</button>
           </div>
         </div>
         <div style="padding:16px">
@@ -389,8 +371,7 @@ button,select,input,textarea{font-family:var(--font)}
             </table>
             <div class="add-row-btn" onclick="addRow()">+ Add another email</div>
           </div>
-          <div style="font-size:12px;color:var(--gray-400);margin-top:8px;display:flex;justify-content:space-between">
-            <span>52 seats remaining on Club Pro</span>
+          <div style="font-size:12px;color:var(--gray-400);margin-top:8px;display:flex;justify-content:flex-end">
             <span id="row-count">3 recipients</span>
           </div>
         </div>
@@ -401,30 +382,15 @@ button,select,input,textarea{font-family:var(--font)}
         <div class="card-header">
           <div style="display:flex;align-items:center;gap:8px">
             <div style="width:22px;height:22px;border-radius:50%;background:var(--gray-900);color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">2</div>
-            <span class="card-title">Personalise the email <span style="font-weight:400;color:var(--gray-500);font-size:12px">(optional)</span></span>
+            <span class="card-title">Invite settings</span>
           </div>
-          <button class="btn btn-sm btn-ghost" onclick="resetMessage()">Reset</button>
         </div>
         <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
-          <div class="form-field">
-            <label class="form-label">Email subject</label>
-            <input class="form-input" id="email-subject" type="text" value="You're invited to join Hackney Running Club on Arenas" oninput="document.getElementById('preview-subject').textContent=this.value">
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--gray-700)">
+            <span>Invite expiry</span>
+            <strong style="color:var(--gray-900)">14 days</strong>
           </div>
-          <div class="form-field">
-            <label class="form-label">Your personal note <span>shown in the email body</span></label>
-            <textarea class="form-textarea" id="coach-note" oninput="updatePreview(this.value)" style="min-height:88px">We've just set up our club on Arenas — it's where we'll track training, run our weekly leaderboard, and organise events together. Takes 2 minutes to join. See you Tuesday!</textarea>
-            <div class="char-count" id="char-count">183 / 500 characters</div>
-          </div>
-          <div class="form-field">
-            <label class="form-label">Invite expires after</label>
-            <select class="form-select"><option>7 days</option><option selected>14 days (recommended)</option><option>30 days</option><option>Never expires</option></select>
-            <div class="form-hint">Non-responders get one automatic reminder 2 days before expiry</div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;background:var(--gray-50);border-radius:var(--radius)">
-            <div class="toggle-wrap"><div class="toggle on" onclick="toggleIt(this)"></div><span>Send automatic reminder to non-responders on day 5</span></div>
-            <div class="toggle-wrap"><div class="toggle on" onclick="toggleIt(this)"></div><span>Notify me when each invite is accepted</span></div>
-            <div class="toggle-wrap"><div class="toggle off" onclick="toggleIt(this)"></div><span>Auto-join without approval (not recommended)</span></div>
-          </div>
+          <div class="form-hint">Each invite includes a unique one-time join link and expires 14 days after it's sent.</div>
         </div>
       </div>
 
@@ -440,176 +406,27 @@ button,select,input,textarea{font-family:var(--font)}
           <div style="background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:12px 14px;font-size:13px;color:var(--gray-700);display:flex;flex-direction:column;gap:5px">
             <div style="display:flex;justify-content:space-between"><span>Recipients</span><strong style="color:var(--gray-900)" id="send-count">3 email invites</strong></div>
             <div style="display:flex;justify-content:space-between"><span>Invite window</span><strong style="color:var(--gray-900)">14 days</strong></div>
-            <div style="display:flex;justify-content:space-between"><span>Auto-reminder</span><strong style="color:var(--gray-900)">Day 5</strong></div>
-            <div style="display:flex;justify-content:space-between"><span>Seats after sending</span><strong style="color:var(--gray-900)">49 remaining</strong></div>
           </div>
           <button class="btn btn-yellow btn-full" style="padding:12px;font-size:14px" onclick="sendInvites()">✉️ Send <span id="send-btn-count">3</span> invitations now</button>
-          <div style="font-size:12px;color:var(--gray-400);text-align:center">Sent from <strong style="color:var(--gray-600)">clubs@arenas.io</strong> on behalf of Hackney RC · Rachel H.</div>
+          <div style="font-size:12px;color:var(--gray-400);text-align:center">Sent from noreply@send.realarenas.com</div>
         </div>
       </div>
     </div>
 
-    <!-- RIGHT: Email preview + flow -->
-    <div style="display:flex;flex-direction:column;gap:14px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
-        <div style="font-size:13px;font-weight:600;color:var(--gray-900)">Live email preview</div>
-        <div style="font-size:11px;color:var(--gray-400)">Updates as you type ↑</div>
-      </div>
-      <div class="card" style="overflow:hidden">
-        <div class="ep-chrome">
-          <div class="ep-dots"><div class="ep-dot" style="background:#EF4444"></div><div class="ep-dot" style="background:#F59E0B"></div><div class="ep-dot" style="background:#10B981"></div></div>
-          <div class="ep-url">clubs@arenas.io — on behalf of Rachel H.</div>
-        </div>
-        <div class="ep-header">
-          <div class="ep-field"><span class="ep-field-label">From:</span><span class="ep-field-val">Arenas Clubs &lt;clubs@arenas.io&gt; on behalf of Rachel H.</span></div>
-          <div class="ep-field"><span class="ep-field-label">To:</span><span class="ep-field-val">jamie@example.com</span></div>
-          <div class="ep-field"><span class="ep-field-label">Subject:</span><span class="ep-field-val" id="preview-subject">You're invited to join Hackney Running Club on Arenas</span></div>
-        </div>
-        <div class="ep-body">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px">
-            <div style="width:34px;height:34px;border-radius:8px;background:var(--orange-light);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">🏃</div>
-            <div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Hackney Running Club</div><div style="font-size:11px;color:var(--gray-500)">London · 48 members</div></div>
-            <div style="margin-left:auto;width:24px;height:24px;background:var(--yellow);border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:12px">🏟</div>
-          </div>
-          <div class="ep-h1">You've been invited to join Hackney Running Club</div>
-          <div class="ep-p">Hi Jamie, your coach <strong>Rachel H.</strong> has personally invited you to join <strong>Hackney Running Club</strong> on Arenas — the platform your club uses to track training, compete on private leaderboards, and manage events together.</div>
-          <div class="ep-quote" id="preview-note">We've just set up our club on Arenas — it's where we'll track training, run our weekly leaderboard, and organise events together. Takes 2 minutes to join. See you Tuesday!</div>
-          <div class="ep-club-card">
-            <div class="ep-club-name">🏃 Hackney Running Club</div>
-            <div class="ep-club-meta"><span>📍 London, UK</span><span>👥 48 members</span><span>🏅 Running</span><span>⚡ Est. 2018</span></div>
-          </div>
-          <div style="font-size:13px;color:var(--gray-700);margin-bottom:10px;line-height:1.6">When you accept, you'll get instant access to:</div>
-          <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:16px">
-            <div style="font-size:13px;color:var(--gray-700);display:flex;gap:8px"><span style="color:var(--green);font-weight:700;flex-shrink:0">✓</span> Private club leaderboard and weekly rankings</div>
-            <div style="font-size:13px;color:var(--gray-700);display:flex;gap:8px"><span style="color:var(--green);font-weight:700;flex-shrink:0">✓</span> AI coaching on every activity you log</div>
-            <div style="font-size:13px;color:var(--gray-700);display:flex;gap:8px"><span style="color:var(--green);font-weight:700;flex-shrink:0">✓</span> Club challenges and event sign-ups</div>
-            <div style="font-size:13px;color:var(--gray-700);display:flex;gap:8px"><span style="color:var(--green);font-weight:700;flex-shrink:0">✓</span> Club activity feed — follow your teammates</div>
-          </div>
-          <a class="ep-btn-primary" onclick="showToast('This would open the member signup page')">✓ Accept invite &amp; create free account →</a>
-          <a class="ep-btn-secondary" onclick="showToast('This would sign in to existing account')">Already have an Arenas account? Sign in instead</a>
-          <div class="ep-link-fallback">Or copy: arenas.io/invite/hrc-jamie-x7k2p9</div>
-          <div class="ep-divider"></div>
-          <div class="ep-footer">Sent by <strong>Rachel H.</strong> · Hackney Running Club · Expires in 14 days<br><a href="#">Unsubscribe</a> · <a href="#">Privacy policy</a> · <a href="#">Manage notifications</a></div>
-        </div>
-      </div>
-
-      <!-- What happens next -->
-      <div class="card">
-        <div class="card-header"><span class="card-title">What happens after you send</span></div>
-        <div style="padding:0">
-          <div style="display:flex;gap:12px;padding:12px 16px;border-bottom:var(--border)">
-            <div style="width:26px;height:26px;border-radius:50%;background:var(--yellow);color:var(--gray-900);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;margin-top:1px">1</div>
-            <div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Email arrives instantly</div><div style="font-size:12px;color:var(--gray-500);margin-top:2px">Delivered from clubs@arenas.io typically within 30 seconds. Unique one-time link per recipient.</div></div>
-          </div>
-          <div style="display:flex;gap:12px;padding:12px 16px;border-bottom:var(--border)">
-            <div style="width:26px;height:26px;border-radius:50%;background:var(--gray-100);color:var(--gray-600);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;margin-top:1px">2</div>
-            <div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Member clicks Accept</div><div style="font-size:12px;color:var(--gray-500);margin-top:2px">Lands on club-branded signup page. Creates new Arenas account or links existing one — 90 seconds.</div></div>
-          </div>
-          <div style="display:flex;gap:12px;padding:12px 16px;border-bottom:var(--border)">
-            <div style="width:26px;height:26px;border-radius:50%;background:var(--gray-100);color:var(--gray-600);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;margin-top:1px">3</div>
-            <div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Auto-joined immediately</div><div style="font-size:12px;color:var(--gray-500);margin-top:2px">No approval needed. Member appears in your dashboard instantly. You receive a notification.</div></div>
-          </div>
-          <div style="display:flex;gap:12px;padding:12px 16px">
-            <div style="width:26px;height:26px;border-radius:50%;background:var(--gray-100);color:var(--gray-600);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;margin-top:1px">4</div>
-            <div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Auto-reminder on day 5</div><div style="font-size:12px;color:var(--gray-500);margin-top:2px">If they haven't responded, Arenas sends one gentle reminder automatically. No action needed from you.</div></div>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 
   <!-- PENDING INVITES -->
   <div style="margin-top:24px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-      <div>
-        <div style="font-size:15px;font-weight:600;color:var(--gray-900)">Pending invitations <span style="font-size:13px;font-family:var(--mono);font-weight:400;color:var(--gray-500);margin-left:6px">8 awaiting response</span></div>
-        <div style="font-size:12px;color:var(--gray-500);margin-top:2px">3 expire within 48 hours — highlighted below</div>
-      </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-ghost btn-sm" onclick="showToast('Reminder sent to all 8 pending members')">📢 Nudge all</button>
-        <button class="btn btn-ghost btn-sm" onclick="showToast('Expired invites cleared')">🗑 Clear expired</button>
-      </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:15px;font-weight:600;color:var(--gray-900)">Pending invitations <span style="font-size:13px;font-family:var(--mono);font-weight:400;color:var(--gray-500);margin-left:6px"><span id="pending-badge">0</span> awaiting response</span></div>
     </div>
     <div class="card stack-card">
       <table class="pending-table">
         <thead><tr><th>Invited member</th><th>Role</th><th>Sent</th><th>Expires</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="pending-body">
-          <tr><td><div class="member-cell"><div class="av-sm" style="background:#FFF7ED;color:#9A3412">JK</div><div><div class="member-name">Jamie King</div><div class="member-email">jamie.king@gmail.com</div></div></div></td><td><span class="pill pill-member">Member</span></td><td class="time-ago">2d ago</td><td class="time-ago" style="color:var(--orange)">12 days</td><td><span class="pill pill-pending">⏳ Pending</span></td><td><div class="actions-cell"><button class="btn btn-sm btn-ghost" onclick="resend(this,'Jamie King')">↩ Resend</button><button class="btn btn-sm btn-red" onclick="revoke(this)">✕ Revoke</button></div></td></tr>
-          <tr><td><div class="member-cell"><div class="av-sm" style="background:#F5F3FF;color:#5B21B6">MT</div><div><div class="member-name">Marcus T.</div><div class="member-email">m.thompson@outlook.com</div></div></div></td><td><span class="pill pill-member">Member</span></td><td class="time-ago">4d ago</td><td class="time-ago" style="color:var(--orange)">10 days</td><td><span class="pill pill-pending">⏳ Pending</span></td><td><div class="actions-cell"><button class="btn btn-sm btn-ghost" onclick="resend(this,'Marcus T.')">↩ Resend</button><button class="btn btn-sm btn-red" onclick="revoke(this)">✕ Revoke</button></div></td></tr>
-          <tr><td><div class="member-cell"><div class="av-sm" style="background:#ECFDF5;color:#065F46">KL</div><div><div class="member-name">Karen Lee</div><div class="member-email">karenl@company.co.uk</div></div></div></td><td><span class="pill pill-coach">Coach</span></td><td class="time-ago">6d ago</td><td class="time-ago">8 days</td><td><span class="pill pill-pending">⏳ Pending</span></td><td><div class="actions-cell"><button class="btn btn-sm btn-ghost" onclick="resend(this,'Karen Lee')">↩ Resend</button><button class="btn btn-sm btn-red" onclick="revoke(this)">✕ Revoke</button></div></td></tr>
-          <tr style="background:#FFF5F5"><td><div class="member-cell"><div class="av-sm" style="background:var(--gray-100);color:var(--gray-500)">DW</div><div><div class="member-name">David W.</div><div class="member-email">dwilliams@email.com</div></div></div></td><td><span class="pill pill-member">Member</span></td><td class="time-ago">12d ago</td><td class="time-ago" style="color:var(--red);font-weight:600">⚠ 2 days</td><td><span class="pill pill-pending">⏳ Pending</span></td><td><div class="actions-cell"><button class="btn btn-sm btn-yellow" onclick="resend(this,'David W.')">↩ Resend now</button><button class="btn btn-sm btn-red" onclick="revoke(this)">✕ Revoke</button></div></td></tr>
-          <tr style="background:#FFF5F5"><td><div class="member-cell"><div class="av-sm" style="background:var(--gray-100);color:var(--gray-500)">NP</div><div><div class="member-name">Natasha P.</div><div class="member-email">natasha.p@hotmail.com</div></div></div></td><td><span class="pill pill-member">Member</span></td><td class="time-ago">12d ago</td><td class="time-ago" style="color:var(--red);font-weight:600">⚠ 2 days</td><td><span class="pill pill-pending">⏳ Pending</span></td><td><div class="actions-cell"><button class="btn btn-sm btn-yellow" onclick="resend(this,'Natasha P.')">↩ Resend now</button><button class="btn btn-sm btn-red" onclick="revoke(this)">✕ Revoke</button></div></td></tr>
-          <tr style="background:#FFF5F5"><td><div class="member-cell"><div class="av-sm" style="background:var(--gray-100);color:var(--gray-500)">BM</div><div><div class="member-name">Ben M.</div><div class="member-email">b.mitchell@work.com</div></div></div></td><td><span class="pill pill-member">Member</span></td><td class="time-ago">12d ago</td><td class="time-ago" style="color:var(--red);font-weight:600">⚠ 2 days</td><td><span class="pill pill-pending">⏳ Pending</span></td><td><div class="actions-cell"><button class="btn btn-sm btn-yellow" onclick="resend(this,'Ben M.')">↩ Resend now</button><button class="btn btn-sm btn-red" onclick="revoke(this)">✕ Revoke</button></div></td></tr>
-          <tr><td><div class="member-cell"><div class="av-sm" style="background:#FEF3C7;color:#92400E">RJ</div><div><div class="member-name">Raj J.</div><div class="member-email">rjones@uni.ac.uk</div></div></div></td><td><span class="pill pill-member">Member</span></td><td class="time-ago">8d ago</td><td class="time-ago">6 days</td><td><span class="pill pill-pending">⏳ Pending</span></td><td><div class="actions-cell"><button class="btn btn-sm btn-ghost" onclick="resend(this,'Raj J.')">↩ Resend</button><button class="btn btn-sm btn-red" onclick="revoke(this)">✕ Revoke</button></div></td></tr>
-          <tr><td><div class="member-cell"><div class="av-sm" style="background:#FBEAF0;color:#72243E">CK</div><div><div class="member-name">Claire K.</div><div class="member-email">claire.k@gmail.com</div></div></div></td><td><span class="pill pill-admin">Admin</span></td><td class="time-ago">3d ago</td><td class="time-ago">11 days</td><td><span class="pill pill-pending">⏳ Pending</span></td><td><div class="actions-cell"><button class="btn btn-sm btn-ghost" onclick="resend(this,'Claire K.')">↩ Resend</button><button class="btn btn-sm btn-red" onclick="revoke(this)">✕ Revoke</button></div></td></tr>
+          <tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:24px">Loading pending invitations...</td></tr>
         </tbody>
       </table>
-    </div>
-  </div>
-</div>
-
-<!-- CSV IMPORT -->
-<div class="tab-content" id="tab-import">
-  <div class="page-hdr">
-    <div><h1>Import from CSV 📥</h1><p>Upload a spreadsheet and we'll pre-fill the invite form</p></div>
-    <div class="page-hdr-right"><button class="btn btn-ghost" onclick="setTab('invites',document.getElementById('nav-invites'))">← Back</button></div>
-  </div>
-  <div class="grid-2" style="align-items:start;gap:20px">
-    <div style="display:flex;flex-direction:column;gap:14px">
-      <div class="import-zone" id="drop-zone" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="handleDrop(event)" onclick="simulateDrop()">
-        <div style="font-size:32px;margin-bottom:10px" id="iz-icon">📁</div>
-        <div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:4px" id="iz-title">Drop your CSV file here</div>
-        <div style="font-size:12px;color:var(--gray-500);margin-bottom:12px" id="iz-sub">or click to browse · .csv or .xlsx · max 500 rows</div>
-        <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();simulateDrop()">Choose file</button>
-        <div id="csv-preview-block" style="display:none;margin-top:14px;text-align:left;border:var(--border);border-radius:var(--radius);overflow:hidden">
-          <div class="csv-header-row"><span>email</span><span>first_name</span><span>role</span></div>
-          <div class="csv-row"><span>jamie.king@gmail.com</span><span>Jamie</span><span>member</span></div>
-          <div class="csv-row"><span>m.thompson@outlook.com</span><span>Marcus</span><span>member</span></div>
-          <div class="csv-row"><span>karenl@company.co.uk</span><span>Karen</span><span>coach</span></div>
-          <div class="csv-row"><span>dwilliams@email.com</span><span>David</span><span>member</span></div>
-          <div class="csv-row" style="color:var(--gray-400);font-size:10px;text-align:center;padding:8px">+ 6 more rows</div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header"><span class="card-title">Expected CSV format</span></div>
-        <div style="padding:14px 16px">
-          <div style="border:var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:10px">
-            <div class="csv-header-row"><span>email</span><span>first_name</span><span>role</span></div>
-            <div class="csv-row"><span>jamie@email.com</span><span>Jamie</span><span>member</span></div>
-            <div class="csv-row"><span>rachel@email.com</span><span>Rachel</span><span>coach</span></div>
-          </div>
-          <div style="font-size:12px;color:var(--gray-500);line-height:1.6">Only <code style="font-family:var(--mono);background:var(--gray-100);padding:1px 5px;border-radius:4px">email</code> is required. Roles: member, coach, admin (defaults to member).</div>
-          <button class="btn btn-ghost btn-full" style="margin-top:10px" onclick="showToast('Downloading example.csv…')">📥 Download template</button>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header"><span class="card-title">Other import options</span></div>
-        <div style="padding:12px 16px;display:flex;flex-direction:column;gap:7px">
-          <div class="btn btn-ghost btn-full" style="display:flex;align-items:center;justify-content:space-between;gap:8px;opacity:.55;cursor:default;pointer-events:none" aria-disabled="true">
-            <span>📇 Import from Google Contacts</span>
-            <span style="font-size:11px;font-weight:600;background:var(--gray-100);color:var(--gray-500);padding:2px 9px;border-radius:999px">Coming soon</span>
-          </div>
-          <div class="btn btn-ghost btn-full" style="display:flex;align-items:center;justify-content:space-between;gap:8px;opacity:.55;cursor:default;pointer-events:none" aria-disabled="true">
-            <span>🔶 Import from Strava club</span>
-            <span style="font-size:11px;font-weight:600;background:var(--gray-100);color:var(--gray-500);padding:2px 9px;border-radius:999px">Coming soon</span>
-          </div>
-          <button class="btn btn-ghost btn-full" onclick="openModal('paste')">📋 Paste a list of emails</button>
-        </div>
-      </div>
-    </div>
-    <div id="import-results" style="display:none;flex-direction:column;gap:14px">
-      <div class="card">
-        <div class="card-header"><span class="card-title">✓ 10 members detected</span><button class="btn btn-sm btn-ghost" onclick="simulateDrop()">Re-upload</button></div>
-        <div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
-          <div class="tri-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-            <div style="background:var(--green-light);border:1px solid #86EFAC;border-radius:var(--radius);padding:10px;text-align:center"><div style="font-size:18px;font-weight:700;color:#166534;font-family:var(--mono)">10</div><div style="font-size:11px;color:#166634">Valid emails</div></div>
-            <div style="background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:10px;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--gray-900);font-family:var(--mono)">8</div><div style="font-size:11px;color:var(--gray-500)">With names</div></div>
-            <div style="background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:10px;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--gray-900);font-family:var(--mono)">0</div><div style="font-size:11px;color:var(--gray-500)">Duplicates</div></div>
-          </div>
-          <div style="font-size:12px;color:#7a5c00;background:var(--yellow-light);border:1px solid #fde68a;border-radius:var(--radius);padding:10px 12px">✦ All 10 emails are valid — no duplicates with existing members found.</div>
-          <button class="btn btn-yellow btn-full" onclick="importAndGo()">Import 10 members to invite form →</button>
-        </div>
-      </div>
     </div>
   </div>
 </div>
@@ -623,22 +440,17 @@ button,select,input,textarea{font-family:var(--font)}
     </div>
   </div>
   <div class="grid-4" style="margin-bottom:16px">
-    <div class="stat-card"><div class="sc-label">Total sent</div><div class="sc-value">62</div><div class="sc-delta neutral">All time</div></div>
-    <div class="stat-card"><div class="sc-label">Accepted</div><div class="sc-value">48</div><div class="sc-delta up">78% rate</div></div>
-    <div class="stat-card"><div class="sc-label">Pending</div><div class="sc-value">8</div><div class="sc-delta warn">3 expire soon</div></div>
-    <div class="stat-card"><div class="sc-label">Expired</div><div class="sc-value">6</div><div class="sc-delta neutral">10%</div></div>
+    <div class="stat-card"><div class="sc-label">Total sent</div><div class="sc-value">-</div><div class="sc-delta neutral"></div></div>
+    <div class="stat-card"><div class="sc-label">Accepted</div><div class="sc-value">-</div><div class="sc-delta up"></div></div>
+    <div class="stat-card"><div class="sc-label">Pending</div><div class="sc-value">-</div><div class="sc-delta warn"></div></div>
+    <div class="stat-card"><div class="sc-label">Expired</div><div class="sc-value">-</div><div class="sc-delta neutral"></div></div>
   </div>
   <div class="card">
     <div class="table-scroll">
     <table class="hist-table">
       <thead><tr><th>Member</th><th>Role</th><th>Sent</th><th>Responded</th><th>Status</th><th>Time to accept</th></tr></thead>
       <tbody id="hist-body">
-        <tr><td><div class="member-cell"><div class="av-sm" style="background:#FEF9C3;color:#854D0E">SL</div><div><div class="member-name">Sofia L.</div><div class="member-email">sofia@example.com</div></div></div></td><td><span class="pill pill-coach">Coach</span></td><td class="time-ago">Apr 2</td><td class="time-ago">Apr 2 (4h)</td><td><span class="pill pill-sent">✓ Accepted</span></td><td><div class="prog-mini"><div class="prog-mini-fill" style="width:100%"></div></div><div style="font-size:10px;color:var(--gray-400);margin-top:2px">4 hrs</div></td></tr>
-        <tr><td><div class="member-cell"><div class="av-sm" style="background:#FCE7F3;color:#9D174D">YT</div><div><div class="member-name">Yuki T.</div><div class="member-email">yuki@example.com</div></div></div></td><td><span class="pill pill-member">Member</span></td><td class="time-ago">Apr 2</td><td class="time-ago">Apr 3 (1d)</td><td><span class="pill pill-sent">✓ Accepted</span></td><td><div class="prog-mini"><div class="prog-mini-fill" style="width:80%"></div></div><div style="font-size:10px;color:var(--gray-400);margin-top:2px">1 day</div></td></tr>
-        <tr><td><div class="member-cell"><div class="av-sm" style="background:#E0F2FE;color:#0369A1">AL</div><div><div class="member-name">Alena L.</div><div class="member-email">alena@example.com</div></div></div></td><td><span class="pill pill-member">Member</span></td><td class="time-ago">Apr 5</td><td class="time-ago">Apr 5 (2h)</td><td><span class="pill pill-sent">✓ Accepted</span></td><td><div class="prog-mini"><div class="prog-mini-fill" style="width:95%"></div></div><div style="font-size:10px;color:var(--gray-400);margin-top:2px">2 hrs</div></td></tr>
-        <tr><td><div class="member-cell"><div class="av-sm" style="background:var(--gray-100);color:var(--gray-500)">PH</div><div><div class="member-name">Phil H.</div><div class="member-email">phil.h@email.com</div></div></div></td><td><span class="pill pill-member">Member</span></td><td class="time-ago">Mar 14</td><td class="time-ago">Expired</td><td><span class="pill pill-expired">Expired</span></td><td><div style="font-size:10px;color:var(--gray-400)">No response / 14d</div></td></tr>
-        <tr><td><div class="member-cell"><div class="av-sm" style="background:var(--gray-100);color:var(--gray-500)">GW</div><div><div class="member-name">Grace W.</div><div class="member-email">gwilliams@email.com</div></div></div></td><td><span class="pill pill-member">Member</span></td><td class="time-ago">Mar 20</td><td class="time-ago">Mar 21</td><td><span class="pill pill-declined">Declined</span></td><td><div style="font-size:10px;color:var(--gray-400)">Opted out</div></td></tr>
-        <tr><td><div class="member-cell"><div class="av-sm" style="background:#FFF7ED;color:#9A3412">JK</div><div><div class="member-name">Jamie King</div><div class="member-email">jamie.king@gmail.com</div></div></div></td><td><span class="pill pill-member">Member</span></td><td class="time-ago">May 13</td><td class="time-ago">—</td><td><span class="pill pill-pending">⏳ Pending</span></td><td><div style="font-size:10px;color:var(--orange)">12 days left</div></td></tr>
+        <tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:24px">Loading invite history...</td></tr>
       </tbody>
     </table>
     </div>
@@ -657,11 +469,10 @@ button,select,input,textarea{font-family:var(--font)}
         <div class="sb-icon">✓</div>
         <div>
           <div class="sb-title">3 invitations sent successfully</div>
-          <div class="sb-sub">Emails are on their way. You'll be notified when each member accepts. Arenas sends one automatic reminder on day 5 for anyone who hasn't responded.</div>
+          <div class="sb-sub">Emails are on their way. Club admins are notified when each member accepts.</div>
           <div class="send-summary">
             <div class="ss-item"><div class="ss-val">3</div><div class="ss-label">Emails sent</div></div>
             <div class="ss-item"><div class="ss-val">14d</div><div class="ss-label">Invite window</div></div>
-            <div class="ss-item"><div class="ss-val">Day 5</div><div class="ss-label">Auto-reminder</div></div>
           </div>
         </div>
       </div>
@@ -677,23 +488,6 @@ button,select,input,textarea{font-family:var(--font)}
 </div>
 
 <!-- PASTE EMAILS MODAL -->
-<div class="modal-overlay" id="modal-paste" onclick="closeModals(event)">
-  <div class="modal">
-    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Paste email list</div><div style="font-size:13px;color:var(--gray-500);margin-top:2px">One email per line or comma-separated</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
-    <div class="modal-body">
-      <div class="form-field">
-        <label class="form-label">Paste emails</label>
-        <textarea class="form-textarea" style="min-height:130px;font-family:var(--mono);font-size:12px" placeholder="jamie.king@gmail.com&#10;m.thompson@outlook.com&#10;karenl@company.co.uk"></textarea>
-      </div>
-      <div class="form-field">
-        <label class="form-label">Default role</label>
-        <select class="form-select"><option>Member</option><option>Coach</option><option>Admin</option></select>
-      </div>
-    </div>
-    <div class="modal-footer"><button class="btn btn-primary" style="flex:1;justify-content:center" onclick="closeModals();showToast('Emails added to invite form')">Add to invite form →</button><button class="btn btn-ghost" onclick="closeModals()">Cancel</button></div>
-  </div>
-</div>
-
 <div class="toast" id="toast"></div>
 
 <script>
@@ -730,18 +524,6 @@ function validateEmail(input){
   const ok=!input.value||/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.value);
   input.classList.toggle('invalid',!ok&&input.value.length>3);
 }
-function updatePreview(val){
-  document.getElementById('preview-note').textContent=val||'(no personal note)';
-  const l=val.length;
-  const cc=document.getElementById('char-count');
-  cc.textContent=l+' / 500 characters';
-  cc.style.color=l>450?'var(--orange)':'var(--gray-400)';
-}
-function resetMessage(){
-  const m="We've just set up our club on Arenas — it's where we'll track training, run our weekly leaderboard, and organise events together. Takes 2 minutes to join. See you Tuesday!";
-  document.getElementById('coach-note').value=m;updatePreview(m);
-}
-function toggleIt(el){const on=el.classList.contains('on');el.classList.toggle('on',!on);el.classList.toggle('off',on);}
 function sendInvites(){
   const rows=document.querySelectorAll('#invite-rows tr');
   let ok=false;
@@ -749,33 +531,7 @@ function sendInvites(){
   if(!ok){showToast('Please add at least one valid email address');return;}
   document.getElementById('modal-success').classList.add('open');
 }
-function resend(btn,name){
-  showToast('Invitation resent to '+name);
-  btn.textContent='✓ Resent';btn.classList.remove('btn-ghost','btn-yellow');btn.classList.add('btn-green');btn.disabled=true;
-  setTimeout(()=>{btn.textContent='↩ Resend';btn.classList.remove('btn-green');btn.classList.add('btn-ghost');btn.disabled=false;},3000);
-}
-function revoke(btn){
-  const row=btn.closest('tr');
-  const name=row.querySelector('.member-name')?.textContent||'member';
-  row.style.transition='opacity 0.3s';row.style.opacity='0';
-  setTimeout(()=>{row.remove();const pb=document.getElementById('pending-badge');if(pb)pb.textContent=Math.max(0,parseInt(pb.textContent)-1);showToast('Invite revoked for '+name);},300);
-}
-function openModal(id){document.getElementById('modal-'+id).classList.add('open');}
 function closeModals(e){if(!e||e.target.classList.contains('modal-overlay'))document.querySelectorAll('.modal-overlay').forEach(m=>m.classList.remove('open'));}
-function dragOver(e){e.preventDefault();document.getElementById('drop-zone').classList.add('drag-over');}
-function dragLeave(){document.getElementById('drop-zone').classList.remove('drag-over');}
-function handleDrop(e){e.preventDefault();dragLeave();simulateDrop();}
-function simulateDrop(){
-  const dz=document.getElementById('drop-zone');
-  dz.classList.remove('drag-over');
-  dz.style.borderColor='var(--green)';dz.style.background='var(--green-light)';dz.style.borderStyle='solid';
-  document.getElementById('iz-icon').textContent='✓';
-  document.getElementById('iz-title').textContent='members.csv uploaded successfully';
-  document.getElementById('iz-sub').textContent='10 rows detected · 10 valid emails · 0 duplicates';
-  document.getElementById('csv-preview-block').style.display='block';
-  const ir=document.getElementById('import-results');ir.style.display='flex';
-}
-function importAndGo(){showToast('10 members added to invite form');setTab('invites',document.getElementById('nav-invites'));}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
 updateCounts();
 </script>
