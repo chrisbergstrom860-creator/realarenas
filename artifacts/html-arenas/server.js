@@ -4931,34 +4931,6 @@ app.get(BASE + '/clubs/invite', requirePageAuth, async (req, res) => {
   }
 });
 
-// ── TEMP: unauthed invite-page preview for visual QA only (mock data). REMOVE before deploy. ──
-app.get(BASE + '/landing/invite-preview', (req, res) => {
-  const now = Date.now();
-  const day = 86400000;
-  const iso = (ms) => new Date(ms).toISOString();
-  const inviteData = {
-    club: { id: 'demo', name: 'Hackney Running Club', handle: 'hackney', sport: 'Running', city: 'London' },
-    role: 'admin',
-    profile: { name: 'Alex Morgan', handle: 'alex' },
-    memberCount: 3,
-    invites: [
-      { id: 'p1', email: 'jamie.wilson@example.com', role: 'member', status: 'pending', created_at: iso(now - 1 * day), expires_at: iso(now + 13 * day), accepted_at: null, isOpen: false, isExpired: false, invitedByName: 'Alex Morgan' },
-      { id: 'p2', email: 'priya.patel@example.com', role: 'coach', status: 'pending', created_at: iso(now - 3 * day), expires_at: iso(now + 11 * day), accepted_at: null, isOpen: false, isExpired: false, invitedByName: 'Alex Morgan' },
-      { id: 'p3', email: 'tom.baker@example.com', role: 'member', status: 'pending', created_at: iso(now - 12 * day), expires_at: iso(now + 1 * day), accepted_at: null, isOpen: false, isExpired: false, invitedByName: 'Alex Morgan' },
-      { id: 'p4', email: 'sam.oconnor@example.com', role: 'member', status: 'pending', created_at: iso(now - 20 * day), expires_at: iso(now - 6 * day), accepted_at: null, isOpen: false, isExpired: true, invitedByName: 'Alex Morgan' },
-      { id: 'a1', email: 'chris.lee@example.com', role: 'member', status: 'accepted', created_at: iso(now - 8 * day), expires_at: iso(now + 6 * day), accepted_at: iso(now - 7 * day), isOpen: false, isExpired: false, invitedByName: 'Alex Morgan' }
-    ],
-    members: [
-      { user_id: 'u1', role: 'admin', joined_at: iso(now - 40 * day), name: 'Alex Morgan', handle: 'alex', isSelf: true },
-      { user_id: 'u2', role: 'coach', joined_at: iso(now - 30 * day), name: 'Dana White', handle: 'dana', isSelf: false },
-      { user_id: 'u3', role: 'member', joined_at: iso(now - 15 * day), name: 'Chris Lee', handle: 'chrisl', isSelf: false }
-    ],
-    baseUrl: ''
-  };
-  const html = injectNotificationsPanel(injectNamedData(fs.readFileSync(path.join(HTML, 'arenas-club-invite.html'), 'utf8'), 'INVITE_DATA', inviteData));
-  res.type('html').send(html);
-});
-
 // ── CLUB INVITES API ──
 // Create a single personal email invite. Only club admins/coaches may invite.
 app.post(BASE + '/api/clubs/:clubId/invites', requireAuth, async (req, res) => {
