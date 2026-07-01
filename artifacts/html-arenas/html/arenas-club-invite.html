@@ -190,6 +190,28 @@ button,select,input,textarea{font-family:var(--font)}
 .ss-item{background:white;border:1px solid #86EFAC;border-radius:var(--radius);padding:10px 12px;text-align:center}
 .ss-val{font-size:20px;font-weight:700;color:#166534;font-family:var(--mono)}
 .ss-label{font-size:10px;color:#166534;margin-top:2px}
+/* Two-column invite dashboard layout */
+.invite-layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;align-items:start}
+.invite-main{min-width:0}
+.invite-side{display:flex;flex-direction:column;gap:16px;min-width:0}
+.pend-list{display:flex;flex-direction:column}
+.pend-item{padding:12px 14px;border-bottom:1px solid var(--gray-100);display:flex;flex-direction:column;gap:9px}
+.pend-item:last-child{border-bottom:none}
+.pend-item.pend-expired{background:#FFF5F5}
+.pend-top{display:flex;align-items:center;gap:8px}
+.pend-id{min-width:0;flex:1}
+.pend-id .member-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pend-id .member-email{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pend-top .pill{margin-left:auto;flex-shrink:0}
+.pend-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px}
+.pend-item .actions-cell{gap:8px}
+.pend-item .actions-cell .btn{flex:1;justify-content:center}
+.how-list{list-style:none;display:flex;flex-direction:column;gap:12px;padding:14px 16px}
+.how-list li{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--gray-600);line-height:1.45}
+.how-num{width:20px;height:20px;border-radius:50%;background:var(--yellow-light);color:#7a5c00;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid #fde68a;margin-top:1px}
+@media (max-width:1024px){
+  .invite-layout{grid-template-columns:1fr}
+}
 /* This page is self-contained and does NOT link the shared arenas.css, so its
    full mobile/responsive treatment lives here (no shared shell rules apply, and
    there is no injected bottom nav). The block below: pins the injected
@@ -259,8 +281,6 @@ button,select,input,textarea{font-family:var(--font)}
   .pending-table .actions-cell .btn { flex: 1; justify-content: center; min-width: 110px; padding: 9px 10px; }
   .pending-table .inv-row-select { width: 100% !important; }
   /* date labels — scoped per tbody id so each reads correctly (covers static + JS-rendered) */
-  #pending-body td:nth-of-type(3)::before { content: "Sent · "; color: var(--gray-400); font-weight: 600; }
-  #pending-body td:nth-of-type(4)::before { content: "Expires · "; color: var(--gray-400); font-weight: 600; }
   #members-body td:nth-of-type(3)::before { content: "Joined · "; color: var(--gray-400); font-weight: 600; }
 
   /* ── Read-only history table → horizontal scroll ── */
@@ -348,7 +368,8 @@ button,select,input,textarea{font-family:var(--font)}
     <div class="stat-card"><div class="sc-label">Pending</div><div class="sc-value">-</div></div>
   </div>
 
-  <div style="max-width:720px">
+  <div class="invite-layout">
+    <div class="invite-main">
     <div style="display:flex;flex-direction:column;gap:16px">
 
       <!-- Step 1 -->
@@ -412,21 +433,26 @@ button,select,input,textarea{font-family:var(--font)}
         </div>
       </div>
     </div>
-
-  </div>
-
-  <!-- PENDING INVITES -->
-  <div style="margin-top:24px">
-    <div style="margin-bottom:14px">
-      <div style="font-size:15px;font-weight:600;color:var(--gray-900)">Pending invitations <span style="font-size:13px;font-family:var(--mono);font-weight:400;color:var(--gray-500);margin-left:6px"><span id="pending-badge">0</span> awaiting response</span></div>
     </div>
-    <div class="card stack-card">
-      <table class="pending-table">
-        <thead><tr><th>Invited member</th><th>Role</th><th>Sent</th><th>Expires</th><th>Status</th><th>Actions</th></tr></thead>
-        <tbody id="pending-body">
-          <tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:24px">Loading pending invitations...</td></tr>
-        </tbody>
-      </table>
+
+    <div class="invite-side">
+      <!-- Pending invitations -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">Pending invitations</span><span style="font-size:11px;font-family:var(--mono);color:var(--gray-500)"><span id="pending-badge">0</span> awaiting</span></div>
+        <div id="pending-body" class="pend-list">
+          <div style="text-align:center;color:var(--gray-400);padding:24px;font-size:13px">Loading pending invitations…</div>
+        </div>
+      </div>
+      <!-- How invites work -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">How invites work</span></div>
+        <ol class="how-list">
+          <li><span class="how-num">1</span><span>Add the email addresses of the people you want to invite.</span></li>
+          <li><span class="how-num">2</span><span>Each person receives an email with a unique, one-time join link.</span></li>
+          <li><span class="how-num">3</span><span>The invite expires 14 days after it's sent.</span></li>
+          <li><span class="how-num">4</span><span>When they click the link, they join the club.</span></li>
+        </ol>
+      </div>
     </div>
   </div>
 </div>
@@ -596,19 +622,20 @@ updateCounts();
     if (!tb) return;
     var pending = (invites||[]).filter(function(i){ return i.status==='pending' && !i.isOpen; });
     if (pending.length===0){
-      tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:24px">No pending invitations yet</td></tr>';
+      tb.innerHTML = '<div style="text-align:center;color:var(--gray-400);padding:24px;font-size:13px">No pending invitations yet</div>';
     } else {
       tb.innerHTML = pending.map(function(i){
         var name = i.email.split('@')[0];
         var exp = i.isExpired;
-        return '<tr'+(exp?' style="background:#FFF5F5"':'')+'>'+
-          '<td><div class="member-cell"><div class="av-sm" style="background:var(--gray-100);color:var(--gray-500)">'+esc(initials(name))+'</div><div><div class="member-name">'+esc(name)+'</div><div class="member-email">'+esc(i.email)+'</div></div></div></td>'+
-          '<td><span class="pill '+(pillRole[i.role]||'pill-member')+'">'+esc(i.role)+'</span></td>'+
-          '<td class="time-ago">'+esc(fmtAgo(i.created_at))+'</td>'+
-          '<td class="time-ago"'+(exp?' style="color:var(--red);font-weight:600"':'')+'>'+esc(fmtLeft(i.expires_at))+'</td>'+
-          '<td><span class="pill '+(exp?'pill-expired':'pill-pending')+'">'+(exp?'Expired':'⏳ Pending')+'</span></td>'+
-          '<td><div class="actions-cell"><button class="btn btn-sm btn-ghost" data-resend="'+esc(i.id)+'">↩ Resend</button><button class="btn btn-sm btn-red" data-revoke="'+esc(i.id)+'">✕ Revoke</button></div></td>'+
-        '</tr>';
+        return '<div class="pend-item'+(exp?' pend-expired':'')+'">'+
+          '<div class="pend-top">'+
+            '<div class="av-sm" style="background:var(--gray-100);color:var(--gray-500)">'+esc(initials(name))+'</div>'+
+            '<div class="pend-id"><div class="member-name">'+esc(name)+'</div><div class="member-email">'+esc(i.email)+'</div></div>'+
+            '<span class="pill '+(exp?'pill-expired':'pill-pending')+'">'+(exp?'Expired':'⏳ Pending')+'</span>'+
+          '</div>'+
+          '<div class="pend-meta"><span class="pill '+(pillRole[i.role]||'pill-member')+'">'+esc(i.role)+'</span><span class="time-ago"'+(exp?' style="color:var(--red);font-weight:600"':'')+'>Sent '+esc(fmtAgo(i.created_at))+' · '+(exp?'expired':esc(fmtLeft(i.expires_at))+' left')+'</span></div>'+
+          '<div class="actions-cell"><button class="btn btn-sm btn-ghost" data-resend="'+esc(i.id)+'">↩ Resend</button><button class="btn btn-sm btn-red" data-revoke="'+esc(i.id)+'">✕ Revoke</button></div>'+
+        '</div>';
       }).join('');
     }
     var badge = document.getElementById('pending-badge'); if (badge) badge.textContent = pending.length;
