@@ -3468,6 +3468,7 @@ app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
           sports: Array.isArray(meta.sports) ? meta.sports : [],
           level: meta.level || null,
           initials,
+          createdAt: u.created_at || null,
           postCount: postRows.filter(p => p.user_id === u.id).length,
           followerCount: followerRows.filter(f => f.following_id === u.id).length,
           isFollowing: followingIds.includes(u.id)

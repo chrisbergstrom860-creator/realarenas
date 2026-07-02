@@ -53,7 +53,7 @@ button,select,input,textarea{font-family:var(--font)}
 .athlete-count{font-size:12px;color:var(--gray-500);white-space:nowrap}
 
 /* ── BODY LAYOUT ── */
-.body-grid{display:grid;grid-template-columns:1fr 300px;flex:1;overflow:hidden}
+.body-grid{display:grid;grid-template-columns:1fr;flex:1;overflow:hidden}
 .athletes-col{overflow-y:auto}
 .athletes-col::-webkit-scrollbar{width:4px}
 .athletes-col::-webkit-scrollbar-thumb{background:var(--gray-200);border-radius:2px}
@@ -92,6 +92,7 @@ button,select,input,textarea{font-family:var(--font)}
 .athlete-grid.grid-2{grid-template-columns:1fr 1fr}
 .athlete-grid.grid-3{grid-template-columns:1fr 1fr 1fr}
 .athlete-grid.list-view{grid-template-columns:1fr}
+@media (max-width:768px){.athlete-grid .athlete-card{border-right:none}}
 
 .athlete-card{background:white;border-bottom:var(--border);border-right:var(--border);padding:16px;cursor:pointer;transition:background .12s;display:flex;flex-direction:column;gap:10px;animation:fade-up .2s ease both}
 .athlete-card:hover{background:var(--gray-50)}
@@ -270,7 +271,6 @@ button,select,input,textarea{font-family:var(--font)}
       <span style="color:var(--gray-400);font-size:13px">🔍</span>
       <input type="text" id="search-input" placeholder="Search by name, sport, location, pace…" oninput="handleSearch(this.value)">
     </div>
-    <div class="topbar-live"><div class="live-dot"></div>84,000+ athletes</div>
   </div>
   <div class="topbar-actions">
     <div class="icon-btn" onclick="nav('/notifications')">🔔<div class="notif-dot"></div></div>
@@ -313,41 +313,18 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="filter-zone">
     <div class="filter-row">
       <span class="f-group-label">Show</span>
-      <div class="f-pill on" data-group="show" onclick="setExclusive(this,'show')">All athletes</div>
-      <div class="f-pill" data-group="show" onclick="setExclusive(this,'show')">Following</div>
-      <div class="f-pill" data-group="show" onclick="setExclusive(this,'show')">Followers</div>
-      <div class="f-pill" data-group="show" onclick="setExclusive(this,'show')">Hackney RC</div>
-      <div class="f-pill" data-group="show" onclick="setExclusive(this,'show')">✦ Recommended</div>
-      <div class="f-sep"></div>
-      <span class="f-group-label">Level</span>
-      <div class="f-pill on" data-group="level" onclick="setExclusive(this,'level')">All levels</div>
-      <div class="f-pill" data-group="level" onclick="setExclusive(this,'level')">Advanced</div>
-      <div class="f-pill" data-group="level" onclick="setExclusive(this,'level')">Intermediate</div>
-      <div class="f-pill" data-group="level" onclick="setExclusive(this,'level')">Beginner</div>
-    </div>
-    <div class="filter-row">
-      <span class="f-group-label">Location</span>
-      <div class="f-pill on" data-group="loc" onclick="setExclusive(this,'loc')">Near me</div>
-      <div class="f-pill" data-group="loc" onclick="setExclusive(this,'loc')">London</div>
-      <div class="f-pill" data-group="loc" onclick="setExclusive(this,'loc')">UK</div>
-      <div class="f-pill" data-group="loc" onclick="setExclusive(this,'loc')">Global</div>
-      <div class="f-sep"></div>
-      <span class="f-group-label">Activity</span>
-      <div class="f-pill on" data-group="act" onclick="setExclusive(this,'act')">Active this week</div>
-      <div class="f-pill" data-group="act" onclick="setExclusive(this,'act')">Active this month</div>
-      <div class="f-pill" data-group="act" onclick="setExclusive(this,'act')">All time</div>
+      <div class="f-pill on" data-show="all" onclick="setShow(this,'all')">All athletes</div>
+      <div class="f-pill" data-show="following" onclick="setShow(this,'following')">Following</div>
       <div class="f-right">
-        <span class="athlete-count" id="athlete-count">48 athletes</span>
+        <span class="athlete-count" id="athlete-count">Loading…</span>
         <div class="view-toggle">
           <div class="vt-btn on" id="vt-grid" onclick="setView('grid')">⊞ Grid</div>
           <div class="vt-btn" id="vt-list" onclick="setView('list')">☰ List</div>
         </div>
-        <select class="sort-select" onchange="showToast('Sorted: '+this.value)">
-          <option>Sort: Most active</option>
-          <option>Sort: Nearest first</option>
-          <option>Sort: Points</option>
-          <option>Sort: New to Arenas</option>
-          <option>Sort: Mutual followers</option>
+        <select class="sort-select" onchange="setSort(this.value)">
+          <option value="followers">Sort: Most followers</option>
+          <option value="name">Sort: Name (A–Z)</option>
+          <option value="new">Sort: New to Arenas</option>
         </select>
       </div>
     </div>
@@ -357,540 +334,10 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="body-grid">
     <div class="athletes-col" id="athletes-col">
 
-      <!-- RECOMMENDED STRIP -->
-      <div id="rec-section">
-        <div class="section-hdr" style="position:relative;top:auto">
-          <span class="sh-title">✦ Recommended for you · <span style="font-weight:400;color:var(--gray-500)">based on your sports, location and training</span></span>
-          <span class="sh-link" onclick="showToast('Loading more recommendations…')">Refresh →</span>
-        </div>
-        <div class="rec-strip">
-          <div class="rec-card" style="animation-delay:.05s" onclick="openModal('priya')">
-            <div class="rc-av" style="background:var(--pink-light);color:#72243E">PR</div>
-            <div>
-              <div class="rc-name">Priya R.</div>
-              <div class="rc-handle">@priyaruns · Mumbai</div>
-            </div>
-            <div class="rc-why">Hackney RC · rank #4 · same pace bracket as you (4:20–4:30/km)</div>
-            <div class="rc-stats">
-              <div class="rc-stat"><strong>6,980</strong> pts</div>
-              <div class="rc-stat"><strong>62km</strong>/wk</div>
-              <div class="rc-stat"><strong>6d</strong> streak</div>
-            </div>
-            <button class="follow-btn default" onclick="event.stopPropagation();toggleFollow(this)">Follow</button>
-          </div>
-          <div class="rec-card" style="animation-delay:.1s" onclick="openModal('marco')">
-            <div class="rc-av" style="background:#FEF3C7;color:#92400E">MC</div>
-            <div>
-              <div class="rc-name">Marco C.</div>
-              <div class="rc-handle">@marcocycles · Milan</div>
-            </div>
-            <div class="rc-why">Similar FTP to you (241W vs your 241W) · both targeting Stelvio climbs</div>
-            <div class="rc-stats">
-              <div class="rc-stat"><strong>3.2</strong> W/kg</div>
-              <div class="rc-stat"><strong>88km</strong>/wk</div>
-              <div class="rc-stat"><strong>241W</strong> FTP</div>
-            </div>
-            <button class="follow-btn default" onclick="event.stopPropagation();toggleFollow(this)">Follow</button>
-          </div>
-          <div class="rec-card" style="animation-delay:.15s" onclick="openModal('omar')">
-            <div class="rc-av" style="background:#ECFDF5;color:#065F46">OB</div>
-            <div>
-              <div class="rc-name">Omar B.</div>
-              <div class="rc-handle">@omarbikes · London</div>
-            </div>
-            <div class="rc-why">0.6 mi from you · trains the same Hackney Marshes routes on Tuesdays</div>
-            <div class="rc-stats">
-              <div class="rc-stat"><strong>4,100</strong> pts</div>
-              <div class="rc-stat"><strong>21km</strong>/wk</div>
-              <div class="rc-stat"><strong>Hackney RC</strong></div>
-            </div>
-            <button class="follow-btn default" onclick="event.stopPropagation();toggleFollow(this)">Follow</button>
-          </div>
-          <div class="rec-card" style="animation-delay:.2s" onclick="openModal('kate')">
-            <div class="rc-av" style="background:#EEEDFE;color:#3C3489">KM</div>
-            <div>
-              <div class="rc-name">Kate M.</div>
-              <div class="rc-handle">@katemclimbs · Bristol</div>
-            </div>
-            <div class="rc-why">V5 climber — you're projecting V6. Following her beta could help your send.</div>
-            <div class="rc-stats">
-              <div class="rc-stat"><strong>V5</strong> grade</div>
-              <div class="rc-stat"><strong>3×</strong>/week</div>
-              <div class="rc-stat"><strong>Adv</strong></div>
-            </div>
-            <button class="follow-btn default" onclick="event.stopPropagation();toggleFollow(this)">Follow</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- SPORT TABS -->
-      <div class="sport-tabs" id="sport-tabs">
-        <div class="sport-tab on" onclick="setSportTab(this,'all')">All sports <span class="tab-count" id="tc-all">48</span></div>
-        <div class="sport-tab" onclick="setSportTab(this,'run')">🏃 Running <span class="tab-count" id="tc-run">28</span></div>
-        <div class="sport-tab" onclick="setSportTab(this,'cyc')">🚴 Cycling <span class="tab-count" id="tc-cyc">11</span></div>
-        <div class="sport-tab" onclick="setSportTab(this,'clm')">🧗 Climbing <span class="tab-count" id="tc-clm">6</span></div>
-        <div class="sport-tab" onclick="setSportTab(this,'swm')">🏊 Swimming <span class="tab-count" id="tc-swm">3</span></div>
-      </div>
-
       <!-- ATHLETE GRID -->
       <div class="athlete-grid grid-2" id="athlete-grid">
-
-        <div class="athlete-card" data-sport="run" data-name="Sofia L" style="animation-delay:.05s" onclick="openModal('sofia-l')">
-          <div class="ac-head">
-            <div class="ac-av" style="background:#FEF9C3;color:#854D0E">SL</div>
-            <div><div class="ac-name">Sofia L.</div><div class="ac-location">📍 Prague · @sofialopes</div></div>
-          </div>
-          <div class="ac-tags">
-            <span class="pill p-run">🏃 Running</span>
-            <span class="pill p-adv">Advanced</span>
-            <span class="pill p-club">Hackney RC</span>
-          </div>
-          <div class="ac-mini-stats">
-            <div class="ms-item"><span class="ms-val">9,840</span><span class="ms-label">pts</span></div>
-            <div class="ms-item"><span class="ms-val">88km</span><span class="ms-label">this week</span></div>
-            <div class="ms-item"><span class="ms-val">21d</span><span class="ms-label">streak</span></div>
-          </div>
-          <div class="ac-sparkline-wrap">
-            <div class="sparkline-label"><span>8 weeks</span><span>peak: 94km</span></div>
-            <div class="ac-sparkline">
-              <div class="spark-bar" style="height:48%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:58%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:35%;background:var(--gray-200)"></div>
-              <div class="spark-bar" style="height:72%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:68%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:100%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:82%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:93%;background:var(--orange)"></div>
-            </div>
-          </div>
-          <div class="ac-footer">
-            <div class="ac-mutual">142 followers · coach · Hackney RC</div>
-            <button class="follow-btn following" onclick="event.stopPropagation();toggleFollow(this)">Following</button>
-          </div>
-        </div>
-
-        <div class="athlete-card" data-sport="run" data-name="Yuki T" style="animation-delay:.1s" onclick="openModal('yuki')">
-          <div class="ac-head">
-            <div class="ac-av" style="background:#FCE7F3;color:#9D174D">YT</div>
-            <div><div class="ac-name">Yuki T.</div><div class="ac-location">📍 Tokyo · @yukitri</div></div>
-          </div>
-          <div class="ac-tags">
-            <span class="pill p-run">🏃 Running</span>
-            <span class="pill p-adv">Advanced</span>
-            <span class="pill p-club">Hackney RC</span>
-          </div>
-          <div class="ac-mini-stats">
-            <div class="ms-item"><span class="ms-val">7,610</span><span class="ms-label">pts</span></div>
-            <div class="ms-item"><span class="ms-val">68km</span><span class="ms-label">this week</span></div>
-            <div class="ms-item"><span class="ms-val">14d</span><span class="ms-label">streak</span></div>
-          </div>
-          <div class="ac-sparkline-wrap">
-            <div class="sparkline-label"><span>8 weeks</span><span>peak: 72km</span></div>
-            <div class="ac-sparkline">
-              <div class="spark-bar" style="height:52%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:75%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:82%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:65%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:100%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:90%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:86%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:94%;background:var(--orange)"></div>
-            </div>
-          </div>
-          <div class="ac-footer">
-            <div class="ac-mutual">98 followers · 3 mutual follows</div>
-            <button class="follow-btn following" onclick="event.stopPropagation();toggleFollow(this)">Following</button>
-          </div>
-        </div>
-
-        <div class="athlete-card" data-sport="run" data-name="Alena L" style="animation-delay:.15s" onclick="openModal('alena')">
-          <div class="ac-head">
-            <div class="ac-av" style="background:#E0F2FE;color:#0369A1">AL</div>
-            <div><div class="ac-name">Alena L.</div><div class="ac-location">📍 London · @alenaprague</div></div>
-          </div>
-          <div class="ac-tags">
-            <span class="pill p-run">🏃 Running</span>
-            <span class="pill p-adv">Advanced</span>
-            <span class="pill p-club">Hackney RC</span>
-            <span class="pill p-near">0.4 mi</span>
-          </div>
-          <div class="ac-mini-stats">
-            <div class="ms-item"><span class="ms-val">7,220</span><span class="ms-label">pts</span></div>
-            <div class="ms-item"><span class="ms-val">71km</span><span class="ms-label">this week</span></div>
-            <div class="ms-item"><span class="ms-val">6d</span><span class="ms-label">streak</span></div>
-          </div>
-          <div class="ac-sparkline-wrap">
-            <div class="sparkline-label"><span>8 weeks</span><span>peak: 80km</span></div>
-            <div class="ac-sparkline">
-              <div class="spark-bar" style="height:30%;background:var(--gray-200)"></div>
-              <div class="spark-bar" style="height:50%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:62%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:78%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:88%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:100%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:84%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:88%;background:var(--orange)"></div>
-            </div>
-          </div>
-          <div class="ac-footer">
-            <div class="ac-mutual">76 followers · nearby · Hackney RC</div>
-            <button class="follow-btn following" onclick="event.stopPropagation();toggleFollow(this)">Following</button>
-          </div>
-        </div>
-
-        <div class="athlete-card" data-sport="clm" data-name="Sofia R" style="animation-delay:.2s" onclick="openModal('sofia-r')">
-          <div class="ac-head">
-            <div class="ac-av" style="background:var(--purple-light);color:#5B21B6">SR</div>
-            <div><div class="ac-name">Sofia R.</div><div class="ac-location">📍 Barcelona · @sofiaboulders</div></div>
-          </div>
-          <div class="ac-tags">
-            <span class="pill p-clm">🧗 Climbing</span>
-            <span class="pill p-adv">Advanced</span>
-            <span class="pill p-similar">✦ Similar level</span>
-          </div>
-          <div class="ac-mini-stats">
-            <div class="ms-item"><span class="ms-val">V7</span><span class="ms-label">top grade</span></div>
-            <div class="ms-item"><span class="ms-val">3×</span><span class="ms-label">per week</span></div>
-            <div class="ms-item"><span class="ms-val">14d</span><span class="ms-label">streak</span></div>
-          </div>
-          <div class="ac-sparkline-wrap">
-            <div class="sparkline-label"><span>8 weeks sessions</span><span>max: 4/wk</span></div>
-            <div class="ac-sparkline">
-              <div class="spark-bar" style="height:75%;background:var(--purple)"></div>
-              <div class="spark-bar" style="height:100%;background:var(--purple)"></div>
-              <div class="spark-bar" style="height:50%;background:var(--gray-200)"></div>
-              <div class="spark-bar" style="height:75%;background:var(--purple)"></div>
-              <div class="spark-bar" style="height:75%;background:var(--purple)"></div>
-              <div class="spark-bar" style="height:100%;background:var(--purple)"></div>
-              <div class="spark-bar" style="height:75%;background:var(--purple)"></div>
-              <div class="spark-bar" style="height:100%;background:var(--purple)"></div>
-            </div>
-          </div>
-          <div class="ac-footer">
-            <div class="ac-mutual">203 followers · V7 sender</div>
-            <button class="follow-btn following" onclick="event.stopPropagation();toggleFollow(this)">Following</button>
-          </div>
-        </div>
-
-        <div class="athlete-card" data-sport="cyc" data-name="Marco C" style="animation-delay:.25s" onclick="openModal('marco')">
-          <div class="ac-head">
-            <div class="ac-av" style="background:#FEF3C7;color:#92400E">MC</div>
-            <div><div class="ac-name">Marco C.</div><div class="ac-location">📍 Milan · @marcocycles</div></div>
-          </div>
-          <div class="ac-tags">
-            <span class="pill p-cyc">🚴 Cycling</span>
-            <span class="pill p-adv">Advanced</span>
-            <span class="pill p-similar">✦ Similar FTP</span>
-          </div>
-          <div class="ac-mini-stats">
-            <div class="ms-item"><span class="ms-val">241W</span><span class="ms-label">FTP</span></div>
-            <div class="ms-item"><span class="ms-val">88km</span><span class="ms-label">this week</span></div>
-            <div class="ms-item"><span class="ms-val">3.2</span><span class="ms-label">W/kg</span></div>
-          </div>
-          <div class="ac-sparkline-wrap">
-            <div class="sparkline-label"><span>8 weeks</span><span>peak: 112km</span></div>
-            <div class="ac-sparkline">
-              <div class="spark-bar" style="height:55%;background:var(--blue)"></div>
-              <div class="spark-bar" style="height:70%;background:var(--blue)"></div>
-              <div class="spark-bar" style="height:65%;background:var(--blue)"></div>
-              <div class="spark-bar" style="height:80%;background:var(--blue)"></div>
-              <div class="spark-bar" style="height:70%;background:var(--gray-200)"></div>
-              <div class="spark-bar" style="height:100%;background:var(--blue)"></div>
-              <div class="spark-bar" style="height:90%;background:var(--blue)"></div>
-              <div class="spark-bar" style="height:78%;background:var(--blue)"></div>
-            </div>
-          </div>
-          <div class="ac-footer">
-            <div class="ac-mutual">164 followers · 9-day streak</div>
-            <button class="follow-btn following" onclick="event.stopPropagation();toggleFollow(this)">Following</button>
-          </div>
-        </div>
-
-        <div class="athlete-card" data-sport="run" data-name="Tom R" style="animation-delay:.3s" onclick="openModal('tom')">
-          <div class="ac-head">
-            <div class="ac-av" style="background:var(--purple-light);color:#5B21B6">TR</div>
-            <div><div class="ac-name">Tom R.</div><div class="ac-location">📍 London · @tomruns</div></div>
-          </div>
-          <div class="ac-tags">
-            <span class="pill p-run">🏃 Running</span>
-            <span class="pill p-int">Intermediate</span>
-            <span class="pill p-club">Hackney RC</span>
-            <span class="pill p-near">1.2 mi</span>
-          </div>
-          <div class="ac-mini-stats">
-            <div class="ms-item"><span class="ms-val">5,880</span><span class="ms-label">pts</span></div>
-            <div class="ms-item"><span class="ms-val">21km</span><span class="ms-label">this week</span></div>
-            <div class="ms-item"><span class="ms-val">4d</span><span class="ms-label">streak</span></div>
-          </div>
-          <div class="ac-sparkline-wrap">
-            <div class="sparkline-label"><span>8 weeks</span><span>peak: 38km</span></div>
-            <div class="ac-sparkline">
-              <div class="spark-bar" style="height:45%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:60%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:100%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:30%;background:var(--gray-200)"></div>
-              <div class="spark-bar" style="height:55%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:70%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:48%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:55%;background:var(--orange)"></div>
-            </div>
-          </div>
-          <div class="ac-footer">
-            <div class="ac-mutual">41 followers · nearby</div>
-            <button class="follow-btn default" onclick="event.stopPropagation();toggleFollow(this)">Follow</button>
-          </div>
-        </div>
-
-        <div class="athlete-card" data-sport="swm" data-name="Yuki Nakamura" style="animation-delay:.35s" onclick="openModal('yuki-n')">
-          <div class="ac-head">
-            <div class="ac-av" style="background:var(--teal-light);color:#134E4A">YN</div>
-            <div><div class="ac-name">Yuki N.</div><div class="ac-location">📍 London · @yukinswims</div></div>
-          </div>
-          <div class="ac-tags">
-            <span class="pill p-swm">🏊 Swimming</span>
-            <span class="pill p-adv">Advanced</span>
-            <span class="pill p-near">3.2 mi</span>
-          </div>
-          <div class="ac-mini-stats">
-            <div class="ms-item"><span class="ms-val">1:28</span><span class="ms-label">/100m</span></div>
-            <div class="ms-item"><span class="ms-val">18km</span><span class="ms-label">this week</span></div>
-            <div class="ms-item"><span class="ms-val">Open</span><span class="ms-label">water</span></div>
-          </div>
-          <div class="ac-sparkline-wrap">
-            <div class="sparkline-label"><span>8 weeks</span><span>peak: 22km</span></div>
-            <div class="ac-sparkline">
-              <div class="spark-bar" style="height:65%;background:var(--teal)"></div>
-              <div class="spark-bar" style="height:80%;background:var(--teal)"></div>
-              <div class="spark-bar" style="height:70%;background:var(--teal)"></div>
-              <div class="spark-bar" style="height:40%;background:var(--gray-200)"></div>
-              <div class="spark-bar" style="height:85%;background:var(--teal)"></div>
-              <div class="spark-bar" style="height:100%;background:var(--teal)"></div>
-              <div class="spark-bar" style="height:75%;background:var(--teal)"></div>
-              <div class="spark-bar" style="height:82%;background:var(--teal)"></div>
-            </div>
-          </div>
-          <div class="ac-footer">
-            <div class="ac-mutual">88 followers</div>
-            <button class="follow-btn default" onclick="event.stopPropagation();toggleFollow(this)">Follow</button>
-          </div>
-        </div>
-
-        <div class="athlete-card" data-sport="run" data-name="Priya R" style="animation-delay:.4s" onclick="openModal('priya')">
-          <div class="ac-head">
-            <div class="ac-av" style="background:var(--pink-light);color:#72243E">PR</div>
-            <div><div class="ac-name">Priya R.</div><div class="ac-location">📍 Mumbai · @priyaruns</div></div>
-          </div>
-          <div class="ac-tags">
-            <span class="pill p-run">🏃 Running</span>
-            <span class="pill p-adv">Advanced</span>
-            <span class="pill p-club">Hackney RC</span>
-            <span class="pill p-similar">✦ Same pace</span>
-          </div>
-          <div class="ac-mini-stats">
-            <div class="ms-item"><span class="ms-val">6,980</span><span class="ms-label">pts</span></div>
-            <div class="ms-item"><span class="ms-val">62km</span><span class="ms-label">this week</span></div>
-            <div class="ms-item"><span class="ms-val">4:24</span><span class="ms-label">avg pace</span></div>
-          </div>
-          <div class="ac-sparkline-wrap">
-            <div class="sparkline-label"><span>8 weeks</span><span>peak: 68km</span></div>
-            <div class="ac-sparkline">
-              <div class="spark-bar" style="height:50%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:60%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:68%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:75%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:80%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:100%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:90%;background:var(--orange)"></div>
-              <div class="spark-bar" style="height:91%;background:var(--orange)"></div>
-            </div>
-          </div>
-          <div class="ac-footer">
-            <div class="ac-mutual">54 followers · rank #4 Hackney RC</div>
-            <button class="follow-btn default" onclick="event.stopPropagation();toggleFollow(this)">Follow</button>
-          </div>
-        </div>
-
+        <div id="athlete-grid-loading" style="grid-column:1/-1;text-align:center;padding:56px 24px;color:var(--gray-400);font-size:13px">Loading athletes…</div>
       </div>
-
-      <!-- NEARBY SECTION -->
-      <div id="nearby-section">
-        <div class="section-hdr" style="position:relative;top:auto;margin-top:0">
-          <span class="sh-title">📍 Athletes near you · London</span>
-          <span class="sh-link" onclick="showToast('Opening map view…')">See on map →</span>
-        </div>
-        <div class="nearby-grid">
-          <div class="nearby-card" style="animation-delay:.05s" onclick="openModal('alena')">
-            <div class="nb-dist">0.4 mi</div>
-            <div class="nb-av" style="background:#E0F2FE;color:#0369A1">AL</div>
-            <div class="nb-info">
-              <div class="nb-name">Alena L.</div>
-              <div class="nb-meta">Running · Advanced · 71km this week</div>
-              <div class="nb-tags"><span class="pill p-club">Hackney RC</span></div>
-            </div>
-            <button class="follow-btn following btn-sm" onclick="event.stopPropagation();toggleFollow(this)">Following</button>
-          </div>
-          <div class="nearby-card" style="animation-delay:.1s" onclick="openModal('omar')">
-            <div class="nb-dist">0.6 mi</div>
-            <div class="nb-av" style="background:#ECFDF5;color:#065F46">OB</div>
-            <div class="nb-info">
-              <div class="nb-name">Omar B.</div>
-              <div class="nb-meta">Cycling · Intermediate · 21km this week</div>
-              <div class="nb-tags"><span class="pill p-club">Hackney RC</span></div>
-            </div>
-            <button class="follow-btn default btn-sm" onclick="event.stopPropagation();toggleFollow(this)">Follow</button>
-          </div>
-          <div class="nearby-card" style="animation-delay:.15s" onclick="openModal('tom')">
-            <div class="nb-dist">1.2 mi</div>
-            <div class="nb-av" style="background:var(--purple-light);color:#5B21B6">TR</div>
-            <div class="nb-info">
-              <div class="nb-name">Tom R.</div>
-              <div class="nb-meta">Running · Intermediate · 4:30/km avg</div>
-              <div class="nb-tags"><span class="pill p-club">Hackney RC</span></div>
-            </div>
-            <button class="follow-btn default btn-sm" onclick="event.stopPropagation();toggleFollow(this)">Follow</button>
-          </div>
-          <div class="nearby-card" style="animation-delay:.2s" onclick="openModal('jake')">
-            <div class="nb-dist">2.8 mi</div>
-            <div class="nb-av" style="background:#EEEDFE;color:#3C3489">JH</div>
-            <div class="nb-info">
-              <div class="nb-name">Jake H.</div>
-              <div class="nb-meta">Running · Advanced · 4:10/km · 52km this week</div>
-              <div class="nb-tags"><span class="pill p-int" style="background:var(--gray-100);color:var(--gray-600);border-color:var(--gray-200)">No clubs yet</span></div>
-            </div>
-            <button class="follow-btn default btn-sm" onclick="event.stopPropagation();toggleFollow(this)">Follow</button>
-          </div>
-          <div class="nearby-card" style="animation-delay:.25s" onclick="openModal('rachel')">
-            <div class="nb-dist">3.4 mi</div>
-            <div class="nb-av" style="background:#FEF9C3;color:#854D0E">RH</div>
-            <div class="nb-info">
-              <div class="nb-name">Rachel H.</div>
-              <div class="nb-meta">Running · Coach · Club organiser</div>
-              <div class="nb-tags"><span class="pill p-club">Hackney RC</span></div>
-            </div>
-            <button class="follow-btn default btn-sm" onclick="event.stopPropagation();toggleFollow(this)">Follow</button>
-          </div>
-          <div class="nearby-card" style="animation-delay:.3s" onclick="openModal('yuki-n')">
-            <div class="nb-dist">3.2 mi</div>
-            <div class="nb-av" style="background:var(--teal-light);color:#134E4A">YN</div>
-            <div class="nb-info">
-              <div class="nb-name">Yuki N.</div>
-              <div class="nb-meta">Swimming · Advanced · 1:28/100m</div>
-              <div class="nb-tags"><span class="pill p-int" style="background:var(--gray-100);color:var(--gray-600);border-color:var(--gray-200)">No clubs yet</span></div>
-            </div>
-            <button class="follow-btn default btn-sm" onclick="event.stopPropagation();toggleFollow(this)">Follow</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="load-more">
-        <button class="load-btn" onclick="loadMore()">Load more athletes</button>
-      </div>
-
-    </div>
-
-    <!-- SIDEBAR -->
-    <div class="sidebar-col">
-
-      <!-- Your following -->
-      <div class="side-card">
-        <div class="sc-header">
-          <span class="sc-title">People you follow</span>
-          <span class="sc-link" onclick="showToast('Opening full following list…')">All 89 →</span>
-        </div>
-        <div class="following-item" onclick="openModal('sofia-l')">
-          <div class="fi-av" style="background:#FEF9C3;color:#854D0E">SL</div>
-          <div class="fi-name">Sofia L.</div>
-          <div class="fi-meta">🔥 21d · 88km</div>
-        </div>
-        <div class="following-item" onclick="openModal('yuki')">
-          <div class="fi-av" style="background:#FCE7F3;color:#9D174D">YT</div>
-          <div class="fi-name">Yuki T.</div>
-          <div class="fi-meta">🔥 14d · 68km</div>
-        </div>
-        <div class="following-item" onclick="openModal('alena')">
-          <div class="fi-av" style="background:#E0F2FE;color:#0369A1">AL</div>
-          <div class="fi-name">Alena L.</div>
-          <div class="fi-meta">🔥 6d · 71km</div>
-        </div>
-        <div class="following-item" onclick="openModal('sofia-r')">
-          <div class="fi-av" style="background:var(--purple-light);color:#5B21B6">SR</div>
-          <div class="fi-name">Sofia R.</div>
-          <div class="fi-meta">V7 sent ✓</div>
-        </div>
-        <div class="following-item" onclick="openModal('marco')">
-          <div class="fi-av" style="background:#FEF3C7;color:#92400E">MC</div>
-          <div class="fi-name">Marco C.</div>
-          <div class="fi-meta">🔥 9d · 88km</div>
-        </div>
-      </div>
-
-      <!-- Network stats -->
-      <div class="side-card">
-        <div class="sc-header"><span class="sc-title">Your network</span></div>
-        <div class="network-stats">
-          <div class="ns-item">
-            <div class="ns-val">89</div>
-            <div class="ns-label">Following</div>
-          </div>
-          <div class="ns-item">
-            <div class="ns-val">142</div>
-            <div class="ns-label">Followers</div>
-            <div class="ns-delta">↑ +4 this week</div>
-          </div>
-        </div>
-        <div style="padding:8px 14px;border-top:var(--border);font-size:12px;color:var(--gray-600)">
-          Priya R., Jake H. and 2 others followed you this week
-        </div>
-      </div>
-
-      <!-- Sport breakdown of your network -->
-      <div class="side-card">
-        <div class="sc-header"><span class="sc-title">Your network by sport</span></div>
-        <div class="sport-bar-row">
-          <span class="sbar-sport">🏃 Running</span>
-          <div class="sbar-track"><div class="sbar-fill" style="width:71%;background:var(--orange)"></div></div>
-          <span class="sbar-count">63</span>
-        </div>
-        <div class="sport-bar-row">
-          <span class="sbar-sport">🚴 Cycling</span>
-          <div class="sbar-track"><div class="sbar-fill" style="width:18%;background:var(--blue)"></div></div>
-          <span class="sbar-count">16</span>
-        </div>
-        <div class="sport-bar-row">
-          <span class="sbar-sport">🧗 Climbing</span>
-          <div class="sbar-track"><div class="sbar-fill" style="width:7%;background:var(--purple)"></div></div>
-          <span class="sbar-count">6</span>
-        </div>
-        <div class="sport-bar-row">
-          <span class="sbar-sport">🏊 Swimming</span>
-          <div class="sbar-track"><div class="sbar-fill" style="width:4%;background:var(--teal)"></div></div>
-          <span class="sbar-count">4</span>
-        </div>
-      </div>
-
-      <!-- Clubs to join -->
-      <div class="side-card">
-        <div class="sc-header">
-          <span class="sc-title">Clubs to discover</span>
-          <span class="sc-link" onclick="showToast('Browsing all clubs…')">Browse all →</span>
-        </div>
-        <div class="club-suggest" onclick="showToast('Opening South London CC…')">
-          <div class="cs-icon" style="background:var(--blue-light)">🚴</div>
-          <div style="flex:1"><div class="cs-name">South London CC</div><div class="cs-meta">64 members · Cycling · South London</div></div>
-          <button class="btn btn-sm" onclick="event.stopPropagation();showToast('Request sent!')">Join</button>
-        </div>
-        <div class="club-suggest" onclick="showToast('Opening East End Climbers…')">
-          <div class="cs-icon" style="background:var(--purple-light)">🧗</div>
-          <div style="flex:1"><div class="cs-name">East End Climbers</div><div class="cs-meta">28 members · Bouldering · Bethnal Green</div></div>
-          <button class="btn btn-sm" onclick="event.stopPropagation();showToast('Request sent!')">Join</button>
-        </div>
-        <div class="club-suggest" onclick="showToast('Opening London Tri Club…')">
-          <div class="cs-icon" style="background:var(--pink-light)">🔱</div>
-          <div style="flex:1"><div class="cs-name">London Tri Club</div><div class="cs-meta">120 members · Triathlon · All London</div></div>
-          <button class="btn btn-sm" onclick="event.stopPropagation();showToast('Request sent!')">Join</button>
-        </div>
-      </div>
-
     </div>
   </div>
 </div>
@@ -923,316 +370,9 @@ button,select,input,textarea{font-family:var(--font)}
 <div class="toast" id="toast"></div>
 
 <script>
-const athleteData = {
-  'sofia-l':{
-    av:'SL',avBg:'#FEF9C3',avColor:'#854D0E',
-    name:'Sofia L.',handle:'@sofialopes · Prague, CZ',
-    heroBg:'var(--gray-900)',
-    tags:['🏃 Running','Advanced','Coach','Hackney RC'],
-    tagStyles:['background:rgba(249,115,22,.2);color:#FDBA74;border-color:rgba(249,115,22,.3)','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.15)','background:rgba(16,185,129,.2);color:#6EE7B7;border-color:rgba(16,185,129,.25)','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.15)'],
-    stats:[{v:'9,840',l:'Points'},{v:'88km',l:'This week'},{v:'21d',l:'Streak'},{v:'142',l:'Followers'}],
-    bio:'Long-distance runner and Hackney RC coach. Marathon PB: 3:08. Training group meets Tuesday evenings and Saturday mornings at London Fields.',
-    following:true,
-    activity:{sport:'🏃 Running',sportStyle:'background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74',desc:'Sunday progression long run — 18.2km. Held 4:22 for the back half. That\'s 94.2km this month!',stats:['18.2 km','4:24/km','144 bpm','1:20:04'],ai:'Negative split execution excellent — second half 4:22 vs 4:26 first half. HR only rose 6 bpm. Full recovery recommended tomorrow.'}
-  },
-  'yuki':{
-    av:'YT',avBg:'#FCE7F3',avColor:'#9D174D',
-    name:'Yuki T.',handle:'@yukitri · Tokyo, JP',
-    heroBg:'var(--gray-900)',
-    tags:['🏃 Running','Advanced','Hackney RC'],
-    tagStyles:['background:rgba(249,115,22,.2);color:#FDBA74;border-color:rgba(249,115,22,.3)','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.15)','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.15)'],
-    stats:[{v:'7,610',l:'Points'},{v:'68km',l:'This week'},{v:'14d',l:'Streak'},{v:'98',l:'Followers'}],
-    bio:'Running coach and triathlete based in Tokyo. Sub-3 marathoner. Member of Hackney RC remotely — follows the leaderboard closely from Japan.',
-    following:true,
-    activity:{sport:'🏃 Running',sportStyle:'background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74',desc:'Tempo block — 3×5km at 3:58/km. Felt controlled throughout. Fitness is coming together.',stats:['15.0 km','4:02/km','171 bpm'],ai:'Tempo execution was solid. HR at 171 is within your threshold for this effort. The ×3 repeat structure shows excellent pacing discipline.'}
-  },
-  'alena':{
-    av:'AL',avBg:'#E0F2FE',avColor:'#0369A1',
-    name:'Alena L.',handle:'@alenaprague · London, UK',
-    heroBg:'var(--gray-900)',
-    tags:['🏃 Running','Advanced','Hackney RC','0.4 mi away'],
-    tagStyles:['background:rgba(249,115,22,.2);color:#FDBA74;border-color:rgba(249,115,22,.3)','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.15)','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.15)','background:rgba(59,130,246,.2);color:#93C5FD;border-color:rgba(59,130,246,.3)'],
-    stats:[{v:'7,220',l:'Points'},{v:'71km',l:'This week'},{v:'6d',l:'Streak'},{v:'76',l:'Followers'}],
-    bio:'Czech runner now based in London. Just completed the 100km May Run challenge — first in Hackney RC. Running the Hackney Half in May.',
-    following:true,
-    activity:{sport:'🏃 Running',sportStyle:'background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74',desc:'Week 3 of marathon build — biggest week yet at 71.4km and it felt manageable. 100km May Run done ✓',stats:['71.4 km','4:30/km','138 bpm'],ai:'Excellent volume management — your aerobic base is clearly strong. The consistent 4:30 pace across 5+ hour training weeks is very impressive.'}
-  },
-  'sofia-r':{
-    av:'SR',avBg:'#F5F3FF',avColor:'#5B21B6',
-    name:'Sofia R.',handle:'@sofiaboulders · Barcelona, ES',
-    heroBg:'var(--gray-900)',
-    tags:['🧗 Climbing','Advanced','V7 climber'],
-    tagStyles:['background:rgba(139,92,246,.2);color:#C4B5FD;border-color:rgba(139,92,246,.3)','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.15)','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.15)'],
-    stats:[{v:'V7',l:'Top grade'},{v:'3×/wk',l:'Sessions'},{v:'14d',l:'Streak'},{v:'203',l:'Followers'}],
-    bio:'Boulderer based in Barcelona projecting V8 at Montserrat. Ex-competition climber. Posts detailed beta in comments — follow for technique breakdowns.',
-    following:true,
-    activity:{sport:'🧗 Climbing',sportStyle:'background:var(--purple-light);color:#5B21B6;border:1px solid #C4B5FD',desc:'Sent the V7 at Montserrat after 3 weeks of projecting. Crux was the undercling sequence. Beta in comments.',stats:['V7 sent','3 weeks','project'],ai:'Sending a 3-week project shows excellent persistence. Session volume has been well-managed — the send was earned through smart training, not luck.'}
-  },
-  'marco':{
-    av:'MC',avBg:'#FEF3C7',avColor:'#92400E',
-    name:'Marco C.',handle:'@marcocycles · Milan, IT',
-    heroBg:'var(--gray-900)',
-    tags:['🚴 Cycling','Advanced','Similar FTP'],
-    tagStyles:['background:rgba(59,130,246,.2);color:#93C5FD;border-color:rgba(59,130,246,.3)','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border-color:rgba(255,255,255,.15)','background:rgba(255,210,30,.2);color:#FDE68A;border-color:rgba(255,210,30,.3)'],
-    stats:[{v:'241W',l:'FTP'},{v:'88km',l:'This week'},{v:'3.2',l:'W/kg'},{v:'164',l:'Followers'}],
-    bio:'Cyclist based in Milan targeting gran fondos in the Alps. Weekly rides up Stelvio during summer. Group ride Saturday AM — DM to join.',
-    following:true,
-    activity:{sport:'🚴 Cycling',sportStyle:'background:var(--blue-light);color:#1E40AF;border:1px solid #93C5FD',desc:'Stelvio approach — 241W normalised for the full climb which is a PR by 18W. Group ride open Saturday.',stats:['88 km','241W','1,240m'],ai:'241W normalised on Stelvio is outstanding. Your FTP test result is now clearly underestimating your capability — schedule a new test this week.'}
-  },
-  'tom':{
-    av:'TR',avBg:'#F5F3FF',avColor:'#5B21B6',
-    name:'Tom R.',handle:'@tomruns · London, UK',
-    heroBg:'var(--gray-900)',
-    tags:['🏃 Running','Intermediate','Hackney RC','1.2 mi away'],
-    tagStyles:['background:rgba(249,115,22,.2);color:#FDBA74','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)','background:rgba(59,130,246,.2);color:#93C5FD'],
-    stats:[{v:'5,880',l:'Points'},{v:'21km',l:'This week'},{v:'4d',l:'Streak'},{v:'41',l:'Followers'}],
-    bio:'Social runner based in East London. Hackney RC Tuesday track sessions. Working toward a sub-25 5K — down from 27:30 last year.',
-    following:false,
-    activity:{sport:'🏃 Running',sportStyle:'background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74',desc:'Tuesday track session with Hackney RC — 6×800m at 5K pace. Felt strong on the last two reps.',stats:['4.8 km','4:30/km','158 bpm'],ai:'Pacing improvement on the final two reps suggests your aerobic fitness is progressing well. Keep these track sessions weekly.'}
-  },
-  'priya':{
-    av:'PR',avBg:'#FBEAF0',avColor:'#72243E',
-    name:'Priya R.',handle:'@priyaruns · Mumbai, IN',
-    heroBg:'var(--gray-900)',
-    tags:['🏃 Running','Advanced','Hackney RC','Same pace'],
-    tagStyles:['background:rgba(249,115,22,.2);color:#FDBA74','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)','background:rgba(255,210,30,.2);color:#FDE68A'],
-    stats:[{v:'6,980',l:'Points'},{v:'62km',l:'This week'},{v:'4:24',l:'Avg pace'},{v:'54',l:'Followers'}],
-    bio:'Runner and product designer based in Mumbai. Competing remotely with Hackney RC. HM PB 1:56 and chasing sub-1:50. AI coaching fan.',
-    following:false,
-    activity:{sport:'🏃 Running',sportStyle:'background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74',desc:'Morning long run in Mumbai — humidity is no joke but pace held well throughout the 16km.',stats:['16 km','4:26/km','152 bpm'],ai:'HR management in high humidity is excellent — 152 bpm average at 4:26 pace shows strong heat adaptation. Great aerobic base work.'}
-  },
-  'omar':{
-    av:'OB',avBg:'#ECFDF5',avColor:'#065F46',
-    name:'Omar B.',handle:'@omarbikes · London, UK',
-    heroBg:'var(--gray-900)',
-    tags:['🚴 Cycling','Intermediate','Hackney RC','0.6 mi away'],
-    tagStyles:['background:rgba(59,130,246,.2);color:#93C5FD','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)','background:rgba(59,130,246,.2);color:#93C5FD'],
-    stats:[{v:'4,100',l:'Points'},{v:'21km',l:'This week'},{v:'4d',l:'Streak'},{v:'29',l:'Followers'}],
-    bio:'Cyclist and occasional runner based in Hackney. Commutes by bike daily and does weekend leisure rides. Working on getting a power meter.',
-    following:false,
-    activity:{sport:'🚴 Cycling',sportStyle:'background:var(--blue-light);color:#1E40AF;border:1px solid #93C5FD',desc:'Evening loop through Victoria Park and back — casual 21km to wind down after a long week.',stats:['21 km','25km/h','138 bpm'],ai:'Solid Zone 2 effort — HR of 138 is perfect recovery pace. These easy rides are building your aerobic base more than you might think.'}
-  },
-  'kate':{
-    av:'KM',avBg:'#EEEDFE',avColor:'#3C3489',
-    name:'Kate M.',handle:'@katemclimbs · Bristol, UK',
-    heroBg:'var(--gray-900)',
-    tags:['🧗 Climbing','Advanced','V5 climber'],
-    tagStyles:['background:rgba(139,92,246,.2);color:#C4B5FD','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)','background:rgba(255,210,30,.2);color:#FDE68A'],
-    stats:[{v:'V5',l:'Top grade'},{v:'3×/wk',l:'Sessions'},{v:'Projecting',l:'V6'},{v:'88',l:'Followers'}],
-    bio:'Boulderer and route setter at The Climbing Academy Bristol. Projecting a V6 compression problem at Avon Gorge. Posts climbing journals weekly.',
-    following:false,
-    activity:{sport:'🧗 Climbing',sportStyle:'background:var(--purple-light);color:#5B21B6;border:1px solid #C4B5FD',desc:'V5 flash at the climbing gym — felt like the strongest session in months. Starting a V6 project next week.',stats:['V5 flash','2h 30m','6 problems'],ai:'A flash at your current limit shows your technique has improved significantly. The next training block should focus on the specific movement type of your V6 project.'}
-  },
-  'yuki-n':{
-    av:'YN',avBg:'#F0FDFA',avColor:'#134E4A',
-    name:'Yuki N.',handle:'@yukinswims · London, UK',
-    heroBg:'var(--gray-900)',
-    tags:['🏊 Swimming','Advanced','Open water'],
-    tagStyles:['background:rgba(20,184,166,.2);color:#5EEAD4','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)'],
-    stats:[{v:'1:28',l:'/100m pace'},{v:'18km',l:'This week'},{v:'88',l:'Followers'},{v:'3.2 mi',l:'From you'}],
-    bio:'Open water swimmer and triathlete. Swims at Hampstead Heath Ponds year-round. Training for the Tooting Bec open water season.',
-    following:false,
-    activity:{sport:'🏊 Swimming',sportStyle:'background:var(--teal-light);color:#134E4A;border:1px solid #5EEAD4',desc:'Long pool session — 4km at mixed pace. Open water preparation work, focusing on sighting drills.',stats:['4 km','1:28/100m','132 bpm'],ai:'Your pace consistency across the 4km set is excellent — deviation of only 3s/100m across all intervals indicates strong pacing control.'}
-  },
-  'jake':{
-    av:'JH',avBg:'#EEEDFE',avColor:'#3C3489',
-    name:'Jake H.',handle:'@jakehurst · London, UK',
-    heroBg:'var(--gray-900)',
-    tags:['🏃 Running','Advanced','4:10/km pace'],
-    tagStyles:['background:rgba(249,115,22,.2);color:#FDBA74','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)','background:rgba(255,210,30,.2);color:#FDE68A'],
-    stats:[{v:'52km',l:'This week'},{v:'4:10',l:'Avg pace'},{v:'2.8 mi',l:'From you'},{v:'67',l:'Followers'}],
-    bio:'Freelance photographer and runner. No club yet — looking for a Tuesday track group in Hackney. Sub-3 marathon ambition.',
-    following:false,
-    activity:{sport:'🏃 Running',sportStyle:'background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74',desc:'Early morning tempo — 12km at threshold pace. New pair of shoes making a real difference.',stats:['12 km','4:08/km','162 bpm'],ai:'Excellent threshold work — 162 bpm at 4:08 is very efficient for your fitness level. This is exactly the right training to reach sub-3 marathon form.'}
-  },
-  'rachel':{
-    av:'RH',avBg:'#FEF9C3',avColor:'#854D0E',
-    name:'Rachel H.',handle:'@rachelhackney · London, UK',
-    heroBg:'var(--gray-900)',
-    tags:['🏃 Running','Coach','Hackney RC organiser'],
-    tagStyles:['background:rgba(249,115,22,.2);color:#FDBA74','background:rgba(16,185,129,.2);color:#6EE7B7;border-color:rgba(16,185,129,.25)','background:rgba(255,255,255,.1);color:rgba(255,255,255,.8)'],
-    stats:[{v:'48',l:'Members coached'},{v:'5 yrs',l:'Coaching'},{v:'142',l:'Followers'},{v:'3.4 mi',l:'From you'}],
-    bio:'Head coach at Hackney Running Club. Tuesday evenings, Saturday long runs. All abilities welcome. DM to join the club.',
-    following:false,
-    activity:{sport:'🏃 Running',sportStyle:'background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74',desc:'Club session — 10×400m with the Tuesday group. Proud of how the newer members are progressing.',stats:['6 km','4:45/km','145 bpm'],ai:'As a coach running alongside athletes, your controlled HR shows excellent pacing awareness. You\'re modelling exactly the right behaviour for your athletes.'}
-  }
-};
-
-let currentSport = 'all';
-let currentView = 'grid';
-
-function openModal(id) {
-  const a = athleteData[id];
-  if (!a) return;
-  document.getElementById('modal-av').textContent = a.av;
-  document.getElementById('modal-av').style.cssText = 'width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;flex-shrink:0;border:3px solid rgba(255,255,255,.15);position:relative;z-index:1;background:'+a.avBg+';color:'+a.avColor;
-  document.getElementById('modal-name').textContent = a.name;
-  document.getElementById('modal-handle').textContent = a.handle;
-  document.getElementById('modal-tags').innerHTML = a.tags.map((t,i)=>`<span class="mh-tag" style="${a.tagStyles[i]||''}">${t}</span>`).join('');
-  document.getElementById('modal-stats').innerHTML = a.stats.map(s=>`<div class="modal-stat"><div class="mv">${s.v}</div><div class="ml">${s.l}</div></div>`).join('');
-  document.getElementById('modal-bio-section').innerHTML = a.bio ? `<div><div class="modal-section-title">About</div><div style="font-size:13px;color:var(--gray-600);line-height:1.65;">${a.bio}</div></div>` : '';
-  if (a.activity) {
-    const act = a.activity;
-    document.getElementById('modal-recent').innerHTML = `
-      <div>
-        <div class="modal-section-title">Latest activity</div>
-        <div class="recent-activity">
-          <div class="ra-head">
-            <div style="font-size:13px;font-weight:600;color:var(--gray-900)">Recent activity</div>
-            <div class="ra-sport-tag" style="${act.sportStyle}">${act.sport}</div>
-          </div>
-          <div style="font-size:12px;color:var(--gray-600)">${act.desc}</div>
-          <div class="ra-stats">${act.stats.map(s=>`<div class="ra-stat">${s}</div>`).join('')}</div>
-          <div class="ra-ai"><div style="width:16px;height:16px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:700;color:var(--gray-900);flex-shrink:0;margin-top:1px">AI</div><span>${act.ai}</span></div>
-        </div>
-      </div>`;
-  }
-  const isFollowing = a.following;
-  document.getElementById('modal-actions').innerHTML = `
-    <button class="btn btn-yellow btn-sm" id="modal-follow-btn" onclick="modalToggleFollow()" style="justify-content:center">${isFollowing ? '✓ Following' : 'Follow'}</button>
-    <button class="btn btn-sm" onclick="showToast('Opening message…')" style="justify-content:center">💬 Message</button>`;
-  document.getElementById('modal-follow-btn').style.background = isFollowing ? 'var(--green-light)' : '';
-  document.getElementById('modal-follow-btn').style.color = isFollowing ? '#166534' : '';
-  document.getElementById('modal-follow-btn').style.borderColor = isFollowing ? '#86EFAC' : '';
-  document.getElementById('modal-profile').classList.add('open');
-}
-
-let modalFollowing = false;
-function modalToggleFollow() {
-  modalFollowing = !modalFollowing;
-  const btn = document.getElementById('modal-follow-btn');
-  if (modalFollowing) {
-    btn.textContent = '✓ Following';
-    btn.style.background = 'var(--green-light)';
-    btn.style.color = '#166634';
-    btn.style.borderColor = '#86EFAC';
-    showToast('✓ Following — their activities will appear in your feed');
-  } else {
-    btn.textContent = 'Follow';
-    btn.style.background = 'var(--yellow)';
-    btn.style.color = 'var(--gray-900)';
-    btn.style.borderColor = 'var(--yellow-dark)';
-    showToast('Unfollowed');
-  }
-}
-
 function closeModal(e) {
   if (!e || e.target.classList.contains('modal-overlay'))
     document.getElementById('modal-profile').classList.remove('open');
-}
-
-function toggleFollow(btn) {
-  const following = btn.classList.contains('following');
-  btn.classList.toggle('following', !following);
-  btn.classList.toggle('default', following);
-  btn.textContent = following ? 'Follow' : 'Following';
-  showToast(following ? 'Unfollowed' : '✓ Following — their activities will appear in your feed');
-}
-
-function setExclusive(el, group) {
-  document.querySelectorAll(`[data-group="${group}"]`).forEach(p => p.classList.remove('on'));
-  el.classList.add('on');
-  showToast('Filter applied: ' + el.textContent.trim());
-}
-
-function setSportTab(el, sport) {
-  document.querySelectorAll('.sport-tab').forEach(t => t.classList.remove('on'));
-  el.classList.add('on');
-  currentSport = sport;
-  const cards = document.querySelectorAll('.athlete-card');
-  let visible = 0;
-  cards.forEach(c => {
-    const show = sport === 'all' || c.dataset.sport === sport;
-    c.style.display = show ? 'flex' : 'none';
-    if (show) visible++;
-  });
-  document.getElementById('athlete-count').textContent = visible + ' athletes';
-  fixGridBorders();
-}
-
-function fixGridBorders() {
-  const grid = document.getElementById('athlete-grid');
-  const isGrid2 = grid.classList.contains('grid-2');
-  if (!isGrid2) return;
-  const vis = [...document.querySelectorAll('.athlete-card')].filter(c => c.style.display !== 'none');
-  vis.forEach((c, i) => {
-    c.style.borderRight = (i % 2 === 0) ? 'var(--border)' : 'none';
-  });
-}
-
-function setView(type) {
-  currentView = type;
-  ['grid', 'list'].forEach(v => document.getElementById('vt-' + v).classList.toggle('on', v === type));
-  const grid = document.getElementById('athlete-grid');
-  if (type === 'grid') {
-    grid.className = 'athlete-grid grid-2';
-    document.querySelectorAll('.athlete-card').forEach(c => {
-      const sw = c.querySelector('.ac-sparkline-wrap');
-      if (sw) sw.style.display = 'flex';
-    });
-  } else {
-    grid.className = 'athlete-grid list-view';
-    document.querySelectorAll('.athlete-card').forEach(c => {
-      const sw = c.querySelector('.ac-sparkline-wrap');
-      if (sw) sw.style.display = 'none';
-    });
-  }
-  fixGridBorders();
-  showToast(type === 'list' ? 'List view' : 'Grid view');
-}
-
-function handleSearch(val) {
-  const q = val.toLowerCase().trim();
-  const cards = document.querySelectorAll('.athlete-card');
-  let visible = 0;
-  cards.forEach(c => {
-    const text = c.textContent.toLowerCase();
-    const show = !q || text.includes(q);
-    c.style.display = show ? 'flex' : 'none';
-    if (show) visible++;
-  });
-  document.getElementById('athlete-count').textContent = (q ? visible : 48) + ' athletes';
-  document.getElementById('rec-section').style.display = q ? 'none' : 'block';
-  document.getElementById('nearby-section').style.display = q ? 'none' : 'block';
-  fixGridBorders();
-}
-
-function loadMore() {
-  const grid = document.getElementById('athlete-grid');
-  const extras = [
-    {av:'JO',bg:'#FFF7ED',col:'#9A3412',name:'Jamie O.',handle:'@jamieo · Birmingham',sport:'run',tags:['🏃 Running','Intermediate'],pts:'3,200',km:'18km',streak:'5d',bars:[40,55,48,62,70,58,65,50]},
-    {av:'KW',bg:'#F0FDFA',col:'#134E4A',name:'Kai W.',handle:'@kaiswims · London',sport:'swm',tags:['🏊 Swimming','Advanced'],pts:'2,800',km:'14km',streak:'8d',bars:[60,70,65,80,75,90,85,88]},
-  ];
-  extras.forEach((e, i) => {
-    const c = document.createElement('div');
-    c.className = 'athlete-card';
-    c.dataset.sport = e.sport;
-    c.dataset.name = e.name;
-    c.style.animationDelay = (i * 0.1) + 's';
-    c.onclick = () => showToast('Opening ' + e.name + '\'s profile…');
-    c.innerHTML = `
-      <div class="ac-head">
-        <div class="ac-av" style="background:${e.bg};color:${e.col}">${e.av}</div>
-        <div><div class="ac-name">${e.name}</div><div class="ac-location">📍 ${e.handle.split(' · ')[1] || 'UK'}</div></div>
-      </div>
-      <div class="ac-tags">${e.tags.map(t=>`<span class="pill" style="background:var(--gray-100);color:var(--gray-600);border-color:var(--gray-200)">${t}</span>`).join('')}</div>
-      <div class="ac-mini-stats">
-        <div class="ms-item"><span class="ms-val">${e.pts}</span><span class="ms-label">pts</span></div>
-        <div class="ms-item"><span class="ms-val">${e.km}</span><span class="ms-label">this week</span></div>
-        <div class="ms-item"><span class="ms-val">${e.streak}</span><span class="ms-label">streak</span></div>
-      </div>
-      <div class="ac-sparkline-wrap">
-        <div class="sparkline-label"><span>8 weeks</span></div>
-        <div class="ac-sparkline">${e.bars.map(h=>`<div class="spark-bar" style="height:${h}%;background:${e.sport==='run'?'var(--orange)':e.sport==='cyc'?'var(--blue)':e.sport==='swm'?'var(--teal)':'var(--purple)'}"></div>`).join('')}</div>
-      </div>
-      <div class="ac-footer">
-        <div class="ac-mutual">New to Arenas</div>
-        <button class="follow-btn default" onclick="event.stopPropagation();toggleFollow(this)">Follow</button>
-      </div>`;
-    grid.appendChild(c);
-  });
-  document.querySelector('.load-more').innerHTML = '<p style="font-size:13px;color:var(--gray-400);padding:16px">All athletes in your area loaded</p>';
-  fixGridBorders();
 }
 
 function showToast(msg) {
@@ -1256,7 +396,7 @@ function showToast(msg) {
 })();
 </script>
 <script>
-// ── REAL ATHLETES (from window.ARENAS_DATA) ──
+// ── REAL ATHLETES (from window.ARENAS_DATA): grid + follow + filter + sort + search ──
 (function() {
   const data = window.ARENAS_DATA;
   if (!data) return;
@@ -1265,16 +405,13 @@ function showToast(msg) {
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
-  // Update the logged-in user's initials in the nav.
+  // Update the logged-in user's identity in the nav + sidebar footer.
   const myName = (data.myProfile && data.myProfile.name) || 'Athlete';
   const myHandle = ((data.myProfile && data.myProfile.handle) || 'athlete').replace(/^@+/, '');
   const myInitials = myName.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
   document.querySelectorAll('.user-av').forEach(el => {
     if (el.textContent.trim() === 'JK') el.textContent = myInitials;
   });
-  // Also fix the sidebar-footer avatar + name + handle (none have classes) by
-  // matching their text content, scoped to .sidebar-footer so content avatars
-  // elsewhere stay untouched.
   document.querySelectorAll('.sidebar-footer div').forEach(el => {
     if (el.childElementCount !== 0) return;
     const t = el.textContent.trim();
@@ -1283,34 +420,10 @@ function showToast(msg) {
     else if (t === '@jamiek · Pro') el.textContent = '@' + myHandle + ' · Pro';
   });
 
-  // Hide the hardcoded "recommended" and "nearby" strips, the demo "load more"
-  // button, and override search so cleared searches don't re-show fake sections.
-  const recSection = document.getElementById('rec-section');
-  const nearbySection = document.getElementById('nearby-section');
-  const loadMoreEl = document.querySelector('.load-more');
-  if (recSection) recSection.style.display = 'none';
-  if (nearbySection) nearbySection.style.display = 'none';
-  if (loadMoreEl) loadMoreEl.style.display = 'none';
-
   const athletes = data.athletes || [];
   const countEl = document.getElementById('athlete-count');
-  if (countEl) countEl.textContent = athletes.length + ' athlete' + (athletes.length === 1 ? '' : 's');
-
   const grid = document.getElementById('athlete-grid');
-
-  // Empty state when no other users have joined yet.
-  if (!athletes.length) {
-    if (grid) {
-      grid.className = 'athlete-grid';
-      grid.innerHTML =
-        '<div style="grid-column:1/-1;text-align:center;padding:56px 24px;background:white">' +
-        '<div style="font-size:36px;margin-bottom:12px">👥</div>' +
-        '<h3 style="font-size:16px;font-weight:600;color:var(--gray-900);margin-bottom:6px">No athletes yet</h3>' +
-        '<p style="font-size:13px;color:var(--gray-500);line-height:1.6">As more people join Arenas they will appear here.</p>' +
-        '</div>';
-    }
-    return;
-  }
+  if (!grid) return;
 
   const sportColors = {
     running:'background:#FFF7ED;color:#9A3412;border-color:#FDBA74',
@@ -1331,10 +444,31 @@ function showToast(msg) {
     {bg:'#F0FDFA',color:'#134E4A'},{bg:'#FBEAF0',color:'#72243E'}
   ];
 
-  if (!grid) return;
-  grid.className = 'athlete-grid grid-2';
-  grid.innerHTML = athletes.map((a, i) => {
-    const av = avColors[i % avColors.length];
+  // ── View / filter / sort / search state ──
+  let view = 'grid';       // 'grid' | 'list'
+  let show = 'all';        // 'all' | 'following'
+  let sort = 'followers';  // 'followers' | 'name' | 'new'
+  let query = '';
+
+  function searchText(a){
+    return [a.name, a.handle, a.location, (a.sports || []).join(' '), a.level]
+      .join(' ').toLowerCase();
+  }
+
+  function visibleList(){
+    let list = athletes.slice();
+    if (show === 'following') list = list.filter(a => a.isFollowing);
+    if (query) list = list.filter(a => searchText(a).includes(query));
+    list.sort(function(a, b){
+      if (sort === 'name') return (a.name || '').localeCompare(b.name || '');
+      if (sort === 'new')  return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+      return (b.followerCount || 0) - (a.followerCount || 0);
+    });
+    return list;
+  }
+
+  function cardHTML(a, i){
+    const av = avColors[athletes.indexOf(a) % avColors.length];
     const sports = a.sports || [];
     const primary = sports[0] || null;
     const sportStyle = primary ? (sportColors[primary] || '') : '';
@@ -1343,7 +477,7 @@ function showToast(msg) {
     const followers = a.followerCount || 0;
     return '' +
       '<div class="athlete-card" data-sport="' + esc(primary || 'all') + '" data-name="' + esc(a.name || 'Athlete') + '"' +
-        ' data-user-id="' + esc(a.id) + '" style="animation-delay:' + (i * 0.05) + 's" onclick="openAthleteModal(\'' + esc(a.id) + '\')">' +
+        ' data-user-id="' + esc(a.id) + '" style="animation-delay:' + (i * 0.03) + 's" onclick="openAthleteModal(\'' + esc(a.id) + '\')">' +
         '<div class="ac-head">' +
           '<div class="ac-av" style="background:' + av.bg + ';color:' + av.color + '">' + esc(a.initials) + '</div>' +
           '<div>' +
@@ -1368,25 +502,59 @@ function showToast(msg) {
           '</button>' +
         '</div>' +
       '</div>';
-  }).join('');
-  if (typeof fixGridBorders === 'function') fixGridBorders();
+  }
 
-  // Clean search override: filter real cards, never re-show the fake strips.
-  window.handleSearch = function(val) {
-    const q = (val || '').toLowerCase().trim();
-    let visible = 0;
-    document.querySelectorAll('.athlete-card').forEach(c => {
-      const show = !q || c.textContent.toLowerCase().includes(q);
-      c.style.display = show ? 'flex' : 'none';
-      if (show) visible++;
-    });
-    if (countEl) countEl.textContent = (q ? visible : athletes.length) + ' athlete' + ((q ? visible : athletes.length) === 1 ? '' : 's');
-    if (typeof fixGridBorders === 'function') fixGridBorders();
+  function emptyState(title, sub){
+    return '<div style="grid-column:1/-1;text-align:center;padding:56px 24px;background:white">' +
+      '<div style="font-size:36px;margin-bottom:12px">👥</div>' +
+      '<h3 style="font-size:16px;font-weight:600;color:var(--gray-900);margin-bottom:6px">' + esc(title) + '</h3>' +
+      '<p style="font-size:13px;color:var(--gray-500);line-height:1.6">' + esc(sub) + '</p>' +
+      '</div>';
+  }
+
+  function render(){
+    const list = visibleList();
+    if (countEl) countEl.textContent = list.length + ' athlete' + (list.length === 1 ? '' : 's');
+    if (!athletes.length){
+      grid.className = 'athlete-grid';
+      grid.innerHTML = emptyState('No athletes yet', 'As more people join Arenas they will appear here.');
+      return;
+    }
+    if (!list.length){
+      grid.className = 'athlete-grid';
+      if (show === 'following') grid.innerHTML = emptyState('Not following anyone yet', 'Follow athletes and they will show up here.');
+      else if (query) grid.innerHTML = emptyState('No matches', 'No athletes match your search.');
+      else grid.innerHTML = emptyState('No athletes', 'Nothing to show right now.');
+      return;
+    }
+    grid.className = 'athlete-grid ' + (view === 'list' ? 'list-view' : 'grid-2');
+    grid.innerHTML = list.map(cardHTML).join('');
+  }
+
+  // ── Public handlers referenced by inline markup ──
+  window.setView = function(type){
+    view = (type === 'list') ? 'list' : 'grid';
+    ['grid','list'].forEach(v => { const b = document.getElementById('vt-' + v); if (b) b.classList.toggle('on', v === view); });
+    render();
+  };
+  window.setShow = function(el, val){
+    show = (val === 'following') ? 'following' : 'all';
+    document.querySelectorAll('[data-show]').forEach(p => p.classList.remove('on'));
+    if (el) el.classList.add('on');
+    render();
+  };
+  window.setSort = function(val){
+    sort = (val === 'name' || val === 'new') ? val : 'followers';
+    render();
+  };
+  window.handleSearch = function(val){
+    query = (val || '').toLowerCase().trim();
+    render();
   };
 
   function syncFollowUI(id, isFollowing) {
     // The in-memory athlete model is the source of truth for the follower count;
-    // every visible counter (card footer, card mini-stat, open modal) is derived
+    // every visible counter (card footer, card mini-stat, open modal) derives
     // from it so they never drift apart.
     const a = athletes.find(x => x.id === id);
     if (a) {
@@ -1396,7 +564,6 @@ function showToast(msg) {
     }
     const followers = a ? (a.followerCount || 0) : 0;
     const followerText = followers + ' follower' + (followers === 1 ? '' : 's');
-
     const cardBtn = document.getElementById('follow-btn-' + id);
     if (cardBtn) {
       cardBtn.classList.toggle('following', isFollowing);
@@ -1411,7 +578,6 @@ function showToast(msg) {
         if (firstStat) firstStat.textContent = followers;
       }
     }
-
     const modalBtn = document.getElementById('modal-follow-btn');
     if (modalBtn && modalBtn.dataset.userId === id) {
       modalBtn.disabled = false;
@@ -1421,9 +587,11 @@ function showToast(msg) {
       const firstMv = statsEl && statsEl.querySelector('.modal-stat .mv');
       if (firstMv) firstMv.textContent = followers;
     }
+    // When viewing "Following", a change in membership must drop/keep the card.
+    if (show === 'following') render();
   }
 
-  window.handleFollow = async function(userId, btn) {
+  window.handleFollow = async function(userId, btn){
     const wasFollowing = btn.classList.contains('following');
     btn.disabled = true;
     btn.textContent = wasFollowing ? 'Unfollowing…' : 'Following…';
@@ -1445,7 +613,7 @@ function showToast(msg) {
     }
   };
 
-  window.openAthleteModal = function(userId) {
+  window.openAthleteModal = function(userId){
     const a = athletes.find(x => x.id === userId);
     if (!a) return;
     const av = avColors[athletes.indexOf(a) % avColors.length];
@@ -1483,7 +651,7 @@ function showToast(msg) {
     modal.classList.add('open');
   };
 
-  window.handleModalFollow = async function(userId) {
+  window.handleModalFollow = async function(userId){
     const a = athletes.find(x => x.id === userId);
     if (!a) return;
     const wasFollowing = a.isFollowing;
@@ -1504,6 +672,8 @@ function showToast(msg) {
       if (modalBtn) { modalBtn.disabled = false; modalBtn.textContent = wasFollowing ? '✓ Following' : 'Follow'; }
     }
   };
+
+  render();
 })();
 </script>
 <script>
