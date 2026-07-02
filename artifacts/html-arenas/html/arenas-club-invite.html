@@ -40,7 +40,6 @@ button,select,input,textarea{font-family:var(--font)}
 .topbar-logo{width:var(--sidebar-w);padding:0 16px;display:flex;align-items:center;gap:8px;border-right:var(--border);flex-shrink:0;height:100%}
 .logo-icon{width:28px;height:28px;background:var(--yellow);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
 .logo-text{font-size:15px;font-weight:600;color:var(--gray-900)}
-.club-badge{font-size:10px;font-weight:600;background:var(--yellow-light);color:#7a5c00;border:1px solid #fde68a;padding:1px 6px;border-radius:10px;margin-left:auto;white-space:nowrap}
 .topbar-center{flex:1;padding:0 20px;display:flex;align-items:center;gap:10px}
 .topbar-actions{display:flex;align-items:center;gap:8px;margin-left:auto}
 .notif-btn{width:34px;height:34px;border-radius:7px;border:var(--border);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;position:relative}
@@ -244,7 +243,6 @@ button,select,input,textarea{font-family:var(--font)}
   /* ── Topbar: fit everything at 375px without clipping ── */
   .topbar { padding: 0 12px 0 0; }
   .topbar-logo { width: auto; padding: 0 12px; border-right: none; }
-  .club-badge { display: none; }
   .topbar-center { padding: 0 8px; gap: 6px; min-width: 0; overflow: hidden; }
   .topbar-center > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .topbar-center > span:last-child { display: none; }
@@ -332,9 +330,6 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="nav-section-label">Analytics</div>
   <div class="nav-item" onclick="nav('/clubs/dashboard#feed')"><span class="nav-icon">🏃</span> Club feed</div>
   <div class="nav-item" onclick="nav('/clubs/dashboard#reports')"><span class="nav-icon">📋</span> Reports</div>
-  <div class="nav-section-label">Settings</div>
-  <div class="nav-item" onclick="nav('/clubs/dashboard#settings')"><span class="nav-icon">⚙️</span> Club settings</div>
-  <div class="nav-item" onclick="nav('/clubs/dashboard#billing')"><span class="nav-icon">💳</span> Billing</div>
   <div class="sidebar-footer">
     <div class="sf-row">
       <div class="sf-av"></div>

@@ -51,6 +51,28 @@ targets, but old rows persist.
 **How to apply:** any time you compare accumulated progress to a stored goal
 target in this app, gate on the target being strictly positive first.
 
+## Layout (two-column desktop, July 2026 rework)
+
+- `#tab-feed` uses `.cf-cols` grid (head `<style>`): `minmax(0,1fr) 300px`,
+  max-width 980px, padding 14px. Left `.cf-main` = filter pills + `#cf-feed-list`;
+  right `.cf-side` (sticky top:14px — this page's `.main` is `overflow-y:auto`,
+  so sticky works, unlike the athlete-shell `overflow:hidden` trap) = composer +
+  `#cf-milestones` + `#cf-glance`.
+- Mobile ≤900px: single column, `.cf-side{order:-1}` puts the composer above the
+  pills; `.cf-side-extra{display:none !important}` hides milestones/glance —
+  `!important` is REQUIRED because `renderCfSidebar` sets inline
+  `display:block` on the milestones card.
+- `renderCfSidebar(memberCount)` feeds both side cards from the same
+  `cfFeedItems` payload (no fabricated numbers): milestones card auto-hides when
+  no `type==='milestone'` items; glance = real memberCount + ≤3 `join` items or
+  an honest "No new members in the last 14 days" line. All names `esc()`'d.
+- Honesty cleanup: "Club Pro" badge/plan copy removed from dashboard topbar,
+  sidebar footer (now just "N members"), and the my-profile mock club card;
+  Settings nav ("Club settings"/"Billing" → deceptive /profile redirects) and
+  the `#settings`/`#billing` hash branch removed from dashboard AND the invite
+  page sidebar. Unknown hashes fall through to Overview. Only remaining
+  "Club Pro" mentions are on /for-clubs (deferred pricing pass).
+
 ## Client (IIFE before `</body>`)
 
 Self-contained IIFE: local `esc`/`B`/`timeAgo`/`initialsOf`, `avColors`,
