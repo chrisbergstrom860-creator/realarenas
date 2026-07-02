@@ -297,11 +297,10 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="nav-section-label">My clubs</div>
   <div class="nav-section-label">Account</div>
   <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">⚙️</span> Settings</div>
-  <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">💳</span> Pro plan</div>
   <div class="sidebar-footer">
     <div style="display:flex;align-items:center;gap:9px">
       <div style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">JK</div>
-      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div><div style="font-size:10px;color:var(--gray-500)">@jamiek · Pro</div></div>
+      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div><div style="font-size:10px;color:var(--gray-500)">@jamiek</div></div>
     </div>
   </div>
 </aside>
@@ -417,7 +416,7 @@ function showToast(msg) {
     const t = el.textContent.trim();
     if (t === 'JK') el.textContent = myInitials;
     else if (t === 'Jamie King') el.textContent = myName;
-    else if (t === '@jamiek · Pro') el.textContent = '@' + myHandle + ' · Pro';
+    else if (t === '@jamiek') el.textContent = '@' + myHandle;
   });
 
   const athletes = data.athletes || [];

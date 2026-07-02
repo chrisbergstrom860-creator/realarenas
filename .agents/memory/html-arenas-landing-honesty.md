@@ -26,3 +26,6 @@ live/real framing (e.g. replace pulsing green dot with a neutral static one).
 so **"Every sport"** is the honest *breadth* framing while **"8 sports supported"** is
 the honest *hard number* — the two can coexist. The decorative 20-sport scroll strip
 and the 12 signup sport-chips are aspirational, not a support claim.
+
+## App-shell honesty (same rule)
+Fabricated subscription-status UI was removed from all main-app pages: "· Pro" footer suffixes, "💳 Pro plan" nav items, "✦ Pro" hero tag, and the fake Plan/billing card on my-profile settings. Payments don't exist — never reintroduce Pro-status labels in the app shell. Pro mentions in /for-clubs, landing pricing marketing, and arenas-terms.html are honest future-tense copy and are intentionally kept.
