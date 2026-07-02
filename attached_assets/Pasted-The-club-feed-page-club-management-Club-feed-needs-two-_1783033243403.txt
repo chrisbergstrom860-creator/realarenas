@@ -1,0 +1,22 @@
+The club feed page (club-management "Club feed") needs two things: a real-vs-fake check, then a two-column rework. Investigate FIRST and report — don't change anything yet:
+INVESTIGATION:
+
+THE FEED CONTENT: the club feed shows "Chris Bergstrom posted a note," "just joined the club" events, with Likes. Is this REAL data (real club posts/join events from a real club-feed endpoint) or hardcoded fake? Report the data source.
+THE COMPOSER: "Post an announcement to all members" — does it actually work end-to-end? Does posting create a real announcement that persists and appears in members' feeds ("Posts appear in all member feeds with a Coach badge" — is that claim true)? Report.
+THE FILTER PILLS (All / Activities / Posts / RSVPs / Milestones): do they filter real content, or cosmetic? Per-pill report. Specifically "Milestones" — is there real milestone data (e.g. the "just joined" events?), or is that pill empty/fake?
+THE "Club Pro" BADGE (top-left next to the Arenas logo on club pages): hardcoded or wired to a real plan field? Payments don't exist and nobody has subscribed, so a "Club Pro" status claim is fabricated. Confirm, and find all instances across the club pages.
+THE "Billing" NAV ITEM (SETTINGS section of the club sidebar): what does clicking it do — real page, stub, toast, dead? Report what's behind it.
+
+THEN THE PLAN (report before building):
+
+LAYOUT — two-column desktop, single-column mobile:
+
+Left (main): the filter pills + the feed stream, KEPT filterable (filters stay on desktop AND mobile).
+Right (sidebar, desktop only): move the "Post an announcement" composer here as a persistent action card, plus a Milestones card IF AND ONLY IF milestone data is real — if Milestones is fake/empty, do NOT fabricate a card; propose real alternatives (e.g. real club stats like member count, recent joins, or nothing extra).
+Mobile: single column, composer above the feed as it is now, filters kept. Essentially mobile stays as-is.
+
+
+"Club Pro" badge: plan to REMOVE the false status badge (all instances) — nobody has a plan; claiming one is fabricated status.
+"Billing": based on what you find behind it, propose: remove it until payments exist, or point it somewhere honest. Report what's there first.
+
+Report the investigation + your layout plan, then hold for my confirmation before editing.
