@@ -4,6 +4,12 @@
 <script>
 window.BASE = window.location.pathname.startsWith('/html') ? '/html' : '';
 window.nav = function(path){ window.location.href = window.BASE + path; };
+// No-op stubs so the topbar/members search handlers never throw if the page is
+// served without injected ARENAS_DATA (they are replaced by the real
+// implementations in the members-table script once data is present).
+window.applyMemberFilter = function(){};
+window.syncTopbarMemberSearch = function(){};
+window.openMembersTab = function(){};
 document.addEventListener('DOMContentLoaded', function(){
   if (window.BASE === '') {
     document.querySelectorAll('[href^="/html/"]').forEach(function(el){ el.setAttribute('href', el.getAttribute('href').slice(5)); });
@@ -284,7 +290,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
   <div class="topbar-center">
     <div class="topbar-search">
       <span style="color:var(--gray-400);font-size:13px">🔍</span>
-      <input type="text" placeholder="Search members, events, challenges…">
+      <input type="text" placeholder="Search members…" oninput="syncTopbarMemberSearch(this.value)" onkeydown="if(event.key==='Enter'&&!event.isComposing)openMembersTab()">
     </div>
     <span class="topbar-club-name club-name">Hackney Running Club</span>
     <span class="topbar-role">Coach · Admin</span>
@@ -452,8 +458,8 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-      <input type="text" placeholder="Search members…" style="padding:7px 12px;border:var(--border);border-radius:7px;font-size:13px;outline:none;width:220px">
-      <select style="padding:7px 12px;border:var(--border);border-radius:7px;font-size:13px;background:white;outline:none;cursor:pointer"><option>All roles</option><option>Member</option><option>Coach</option><option>Admin</option></select>
+      <input type="text" id="members-search" placeholder="Search members…" oninput="applyMemberFilter()" style="padding:7px 12px;border:var(--border);border-radius:7px;font-size:13px;outline:none;width:220px">
+      <select id="members-role" onchange="applyMemberFilter()" style="padding:7px 12px;border:var(--border);border-radius:7px;font-size:13px;background:white;outline:none;cursor:pointer"><option value="">All roles</option><option value="member">Member</option><option value="coach">Coach</option><option value="admin">Admin</option></select>
     </div>
     <div class="card">
       <table class="member-table">
@@ -962,55 +968,84 @@ document.addEventListener('DOMContentLoaded', function () {
     return el;
   }
 
-  // Members tab table.
+  // Members tab table — re-rendered live by the search box + role filter.
+  // Both the tab's own controls and the topbar search feed into this.
   var tbody = document.getElementById('members-tbody');
   var emptyEl = document.getElementById('members-empty');
   var shownEl = document.getElementById('members-shown');
-  if (tbody) {
+  function renderMembersTable() {
+    if (!tbody) return;
+    var qEl = document.getElementById('members-search');
+    var rEl = document.getElementById('members-role');
+    var q = ((qEl && qEl.value) || '').toLowerCase().trim();
+    var roleFilter = ((rEl && rEl.value) || '').toLowerCase();
+    var list = members.filter(function (m) {
+      if (roleFilter && String(m.role || 'member').toLowerCase() !== roleFilter) return false;
+      if (q && ((m.name || '') + ' @' + (m.handle || '')).toLowerCase().indexOf(q) === -1) return false;
+      return true;
+    });
     tbody.innerHTML = '';
-    if (members.length === 0) {
-      if (emptyEl) emptyEl.style.display = 'block';
-    } else {
-      members.forEach(function (m, i) {
-        var tr = document.createElement('tr');
-
-        var tdMember = document.createElement('td');
-        var cell = document.createElement('div');
-        cell.className = 'member-name-cell';
-        cell.appendChild(avatarEl(m.name, i));
-        var info = document.createElement('div');
-        var nameEl = document.createElement('div');
-        nameEl.className = 'member-name';
-        nameEl.textContent = m.name || 'Member';
-        var handleEl = document.createElement('div');
-        handleEl.className = 'member-handle';
-        handleEl.textContent = '@' + (m.handle || 'member');
-        info.appendChild(nameEl);
-        info.appendChild(handleEl);
-        cell.appendChild(info);
-        tdMember.appendChild(cell);
-
-        var tdRole = document.createElement('td');
-        var pill = document.createElement('span');
-        var role = String(m.role || 'member').toLowerCase();
-        pill.className = 'pill ' + (role === 'member' ? 'pill-rest' : 'pill-active');
-        pill.style.fontSize = '10px';
-        pill.textContent = roleLabel(role);
-        tdRole.appendChild(pill);
-
-        var tdJoined = document.createElement('td');
-        tdJoined.style.fontFamily = 'var(--mono)';
-        tdJoined.style.fontSize = '12px';
-        tdJoined.textContent = formatJoined(m.joined_at);
-
-        tr.appendChild(tdMember);
-        tr.appendChild(tdRole);
-        tr.appendChild(tdJoined);
-        tbody.appendChild(tr);
-      });
+    if (emptyEl) {
+      if (list.length === 0) {
+        emptyEl.textContent = members.length === 0
+          ? "No members yet — invite people to your club and they'll appear here once they join."
+          : 'No members match your search.';
+        emptyEl.style.display = 'block';
+      } else {
+        emptyEl.style.display = 'none';
+      }
     }
+    list.forEach(function (m) {
+      var i = members.indexOf(m); // stable avatar colour regardless of filtering
+      var tr = document.createElement('tr');
+
+      var tdMember = document.createElement('td');
+      var cell = document.createElement('div');
+      cell.className = 'member-name-cell';
+      cell.appendChild(avatarEl(m.name, i));
+      var info = document.createElement('div');
+      var nameEl = document.createElement('div');
+      nameEl.className = 'member-name';
+      nameEl.textContent = m.name || 'Member';
+      var handleEl = document.createElement('div');
+      handleEl.className = 'member-handle';
+      handleEl.textContent = '@' + (m.handle || 'member');
+      info.appendChild(nameEl);
+      info.appendChild(handleEl);
+      cell.appendChild(info);
+      tdMember.appendChild(cell);
+
+      var tdRole = document.createElement('td');
+      var pill = document.createElement('span');
+      var role = String(m.role || 'member').toLowerCase();
+      pill.className = 'pill ' + (role === 'member' ? 'pill-rest' : 'pill-active');
+      pill.style.fontSize = '10px';
+      pill.textContent = roleLabel(role);
+      tdRole.appendChild(pill);
+
+      var tdJoined = document.createElement('td');
+      tdJoined.style.fontFamily = 'var(--mono)';
+      tdJoined.style.fontSize = '12px';
+      tdJoined.textContent = formatJoined(m.joined_at);
+
+      tr.appendChild(tdMember);
+      tr.appendChild(tdRole);
+      tr.appendChild(tdJoined);
+      tbody.appendChild(tr);
+    });
+    if (shownEl) shownEl.textContent = list.length;
   }
-  if (shownEl) shownEl.textContent = members.length;
+  window.applyMemberFilter = renderMembersTable;
+  window.syncTopbarMemberSearch = function (val) {
+    var si = document.getElementById('members-search');
+    if (si) si.value = val;
+    renderMembersTable();
+  };
+  window.openMembersTab = function () {
+    var el = document.querySelector(".nav-item[onclick*=\"setTab('members'\"]");
+    if (typeof window.setTab === 'function') window.setTab('members', el);
+  };
+  renderMembersTable();
 
   // Overview "Recent members" card.
   var recent = document.getElementById('recent-members');

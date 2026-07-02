@@ -33,3 +33,4 @@
 - [html-arenas distance units](html-arenas-distance-units.md) — app-wide parseDistanceKm ignores units (swim metres → ~1000× inflation, known/deferred); profile "km logged" uses a separate unit-aware parser; header has 0 fabricated numbers.
 - [html-arenas reset/confirm](html-arenas-password-reset.md) — server-side token_hash+verifyOtp (no browser supabase-js); whitelist OTP type per endpoint (confirm=signup, reset=recovery) or a recovery token replays into auto-login.
 - [html-arenas sticky filter offset](html-arenas-sticky-scrollport.md) — sticky bars inside .main (overflow:hidden = the scrollport, already below topbar) must use top:0 not top:56px, else 56px gap + first row occluded.
+- [html-arenas search wiring](html-arenas-search.md) — search is athletes-only via /athletes?q= deep link; dashboard member-filter globals need head-script stubs; Enter handlers need !event.isComposing.

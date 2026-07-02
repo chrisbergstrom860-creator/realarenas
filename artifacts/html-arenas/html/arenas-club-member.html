@@ -275,7 +275,7 @@ button,select,input,textarea{font-family:var(--font)}/* ── LAYOUT ── *//
   <div class="topbar-center">
     <div class="topbar-search">
       <span style="color:var(--gray-400);font-size:13px">🔍</span>
-      <input type="text" placeholder="Search athletes, events, challenges…">
+      <input type="text" placeholder="Search athletes…" onkeydown="if(event.key==='Enter'&&!event.isComposing&&this.value.trim())nav('/athletes?q='+encodeURIComponent(this.value.trim()))">
     </div>
     <div class="topbar-club-pill" onclick="setTab('overview',null)">
       <div class="tc-icon">🏃</div>

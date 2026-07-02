@@ -450,6 +450,17 @@ function showToast(msg) {
   let sort = 'followers';  // 'followers' | 'name' | 'new'
   let query = '';
 
+  // Deep-link support: /athletes?q=term — the topbar search on the other
+  // athlete-facing pages lands here with the query prefilled and applied.
+  (function () {
+    var q0 = new URLSearchParams(location.search).get('q');
+    if (q0 && q0.trim()) {
+      query = q0.toLowerCase().trim();
+      var si = document.getElementById('search-input');
+      if (si) si.value = q0.trim();
+    }
+  })();
+
   function searchText(a){
     return [a.name, a.handle, a.location, (a.sports || []).join(' '), a.level]
       .join(' ').toLowerCase();
