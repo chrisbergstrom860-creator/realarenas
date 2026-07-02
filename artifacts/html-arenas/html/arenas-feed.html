@@ -315,12 +315,10 @@ button,select,input,textarea{font-family:var(--font)}
       </div>
       <div class="filter-bar" id="filter-bar">
         <div class="f-pill on" onclick="setFilter(this,'all')">All</div>
-        <div class="f-pill" onclick="setFilter(this,'run')">🏃 Running</div>
-        <div class="f-pill" onclick="setFilter(this,'cyc')">🚴 Cycling</div>
-        <div class="f-pill" onclick="setFilter(this,'clm')">🧗 Climbing</div>
+        <div class="f-pill" onclick="setFilter(this,'running')">🏃 Running</div>
+        <div class="f-pill" onclick="setFilter(this,'cycling')">🚴 Cycling</div>
+        <div class="f-pill" onclick="setFilter(this,'climbing')">🧗 Climbing</div>
         <div class="f-pill" onclick="setFilter(this,'clubs')">🤝 Clubs only</div>
-        <div class="f-pill" onclick="setFilter(this,'ai')">✦ AI insights</div>
-        <select class="f-sort" onchange="showToast('Feed sorted')"><option>Latest first</option><option>Top kudos</option><option>AI insights first</option><option>Following only</option></select>
       </div>
     </div>
 
@@ -360,315 +358,6 @@ button,select,input,textarea{font-family:var(--font)}
     </div>
 
     <div class="feed-items" id="feed-items">
-
-      <!-- 1. AI COACHING NUDGE -->
-      <div class="feed-item-wrap" data-type="ai" style="animation-delay:.05s">
-        <div class="ai-nudge">
-          <div class="ai-nudge-inner">
-            <div class="ai-orb">AI</div>
-            <div style="flex:1">
-              <div class="ai-nudge-label">✦ Your AI coach · personalised for <span class="user-name">Jamie King</span></div>
-              <div class="ai-nudge-text">Your training load this week is <strong>42% above your 4-week average</strong> — a level that typically precedes fatigue or injury. Based on your HR drift in yesterday's ride (avg 162 bpm vs your zone 3 target of 150), your body is asking for recovery. A rest day today puts you in the best shape for Sunday's long run, and you're still fully on track for the London Marathon if you taper smartly from here.</div>
-              <div class="ai-actions">
-                <div class="ai-btn primary" onclick="showToast('Rest day logged — great call!')">Mark rest day →</div>
-                <div class="ai-btn" onclick="showToast('Opening your load data…')">See load data</div>
-                <div class="ai-btn" onclick="dismissNudge()">Dismiss</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 2. ACTIVITY CARD — Sofia running, AI open -->
-      <div class="feed-item-wrap" data-type="run" style="animation-delay:.1s">
-        <div class="ac-wrap">
-          <div class="ac-body">
-            <div class="ac-head">
-              <div class="ac-av" style="background:#FEF9C3;color:#854D0E">SL</div>
-              <div>
-                <div class="ac-user-name" onclick="showToast('Opening Sofia\'s profile…')">Sofia L.</div>
-                <div class="ac-user-meta">34 min ago · London, UK · Hackney RC</div>
-              </div>
-              <div class="ac-sport-tag" style="background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74">🏃 Running</div>
-            </div>
-            <div class="ac-stats-row">
-              <div class="ac-stat"><div class="sv">18.2</div><div class="sl">km</div></div>
-              <div class="ac-stat"><div class="sv">1:20:04</div><div class="sl">time</div></div>
-              <div class="ac-stat"><div class="sv">4:24</div><div class="sl">/km</div></div>
-              <div class="ac-stat"><div class="sv">144</div><div class="sl">bpm</div></div>
-              <div class="ac-stat"><div class="sv">+610</div><div class="sl">elev m</div></div>
-              <div class="ac-stat"><div class="sv">782</div><div class="sl">kcal</div></div>
-            </div>
-            <div class="ac-desc">Sunday progression long run done. Held 4:22 for the back half which felt really solid. That's 94.2km this month — going to break 100km before May 31 🎯</div>
-            <div class="ac-ai-panel">
-              <div class="ac-ai-icon">AI</div>
-              <div class="ac-ai-text"><strong>AI Coach:</strong> Negative split execution was excellent — second half avg 4:22 vs 4:26 first half. HR only rose 6 bpm across the whole run, which indicates very strong aerobic base. Full recovery recommended tomorrow before any intensity work. This is race-ready form.</div>
-            </div>
-          </div>
-          <div class="ac-footer">
-            <button class="ac-action liked" onclick="toggleLike(this,'28')">👍 28 kudos</button>
-            <button class="ac-action" onclick="openModal('comment')">💬 9 comments</button>
-            <button class="ac-action" onclick="showToast('Route saved!')">📍 Save route</button>
-            <div class="ac-meta-right"><span class="ai-tag">✦ AI</span> #1 Hackney RC</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 3. CLUB UPDATE CARD — Event RSVP -->
-      <div class="feed-item-wrap" data-type="clubs" style="animation-delay:.15s">
-        <div class="club-update">
-          <div class="cu-banner">
-            <div class="cu-club-icon" style="background:var(--orange-light)">🏃</div>
-            <span class="cu-label">Hackney Running Club</span>
-            <span style="font-size:11px;color:var(--gray-400);margin-left:auto">1h ago</span>
-          </div>
-          <div class="cu-body">
-            <div class="cu-title">London Half Marathon — RSVP closes in 8 days</div>
-            <div class="cu-text">34 members confirmed, 8 still pending. <strong>Coach Rachel says:</strong> <em>"Meet at the start village 6:30 AM. Use club code HRC2026 for group booking. Bring your club vest — we're aiming for a group photo at the finish."</em></div>
-            <div style="height:5px;background:var(--gray-100);border-radius:3px;overflow:hidden;display:flex;margin-bottom:8px">
-              <div style="width:70%;background:var(--green)"></div>
-              <div style="width:16%;background:var(--orange)"></div>
-            </div>
-            <div class="cu-tags">
-              <span class="pill pill-green">34 going</span>
-              <span class="pill pill-run">8 pending</span>
-              <span class="pill pill-yellow">Your RSVP: pending</span>
-            </div>
-          </div>
-          <div class="cu-footer">
-            <button class="btn btn-yellow btn-sm" onclick="rsvpGoing(this)">✓ I'm going</button>
-            <button class="btn btn-sm" onclick="showToast('Declined — Rachel notified')">Can't make it</button>
-            <button class="btn btn-sm" onclick="showToast('Opening event details…')">More info →</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 4. ACTIVITY CARD — Marco cycling -->
-      <div class="feed-item-wrap" data-type="cyc" style="animation-delay:.2s">
-        <div class="ac-wrap">
-          <div class="ac-body">
-            <div class="ac-head">
-              <div class="ac-av" style="background:#FEF3C7;color:#92400E">MC</div>
-              <div>
-                <div class="ac-user-name" onclick="showToast('Opening Marco\'s profile…')">Marco C.</div>
-                <div class="ac-user-meta">2h ago · Milan, IT</div>
-              </div>
-              <div class="ac-sport-tag" style="background:var(--blue-light);color:#1E40AF;border:1px solid #93C5FD">🚴 Cycling</div>
-            </div>
-            <div class="ac-stats-row">
-              <div class="ac-stat"><div class="sv">88</div><div class="sl">km</div></div>
-              <div class="ac-stat"><div class="sv">241</div><div class="sl">avg W</div></div>
-              <div class="ac-stat"><div class="sv">3.2</div><div class="sl">W/kg</div></div>
-              <div class="ac-stat"><div class="sv">1,240</div><div class="sl">elev m</div></div>
-              <div class="ac-stat"><div class="sv">3:02</div><div class="sl">time</div></div>
-            </div>
-            <div class="ac-desc">Stelvio approach — held 241W normalised for the full climb which is a personal record by 18W. Saturday group ride open, DM to join. Cap 12 riders, 3 spots left.</div>
-          </div>
-          <div class="ac-footer">
-            <button class="ac-action" onclick="toggleLike(this,'14')">👍 14 kudos</button>
-            <button class="ac-action" onclick="openModal('comment')">💬 6 comments</button>
-            <button class="ac-action" onclick="showToast('Opening AI analysis…')">✦ AI coach</button>
-            <div class="ac-meta-right"><span class="ai-tag">✦ AI</span></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 5. ACHIEVEMENT CARD — Alena -->
-      <div class="feed-item-wrap" data-type="all" style="animation-delay:.25s">
-        <div class="ach-card">
-          <div class="ach-banner">🏅 Achievement unlocked — Hackney Running Club</div>
-          <div class="ach-body">
-            <div class="ach-medal">🏅</div>
-            <div>
-              <div class="ach-title">Alena L. completed the 100km May Run! First in the club.</div>
-              <div class="ach-sub">Alena hit 104.2km — the first Hackney RC member to complete the May challenge. She earned 500 club points, the May Run badge, and moves to rank #3 on the all-time leaderboard. Who's next?</div>
-              <div style="display:flex;gap:5px;margin-top:8px">
-                <span class="pill pill-yellow">500 pts earned</span>
-                <span class="pill pill-green">↑ Rank #3 all time</span>
-              </div>
-            </div>
-          </div>
-          <div class="ach-footer">
-            <button class="btn btn-yellow btn-sm" onclick="showToast('🎉 Kudos sent to Alena!')">🎉 Send kudos</button>
-            <button class="btn btn-sm" onclick="showToast('Opening challenge page…')">See full challenge →</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 6. CHALLENGE UPDATE CARD — Your progress -->
-      <div class="feed-item-wrap" data-type="all" style="animation-delay:.3s">
-        <div class="ch-card">
-          <div class="ch-body">
-            <div class="ch-header">
-              <div>
-                <div class="ch-name">⚡ 100km May Run — your progress</div>
-                <div style="font-size:12px;color:var(--gray-500);margin-top:1px">Club challenge · 44 participants · private</div>
-              </div>
-              <div class="ch-days">9 days left</div>
-            </div>
-            <div class="prog-label"><span>Your total</span><span style="font-family:var(--mono);font-weight:600;color:var(--gray-900)">62.4 / 100 km</span></div>
-            <div class="prog-track"><div class="prog-fill" style="width:62%;background:var(--orange)"></div></div>
-            <div class="prog-note">4.2 km/day needed to finish · you're rank #5 of 44</div>
-            <div class="ch-mini-lb">
-              <div class="ch-lb-col"><div class="ch-lb-rank">🥇 #1</div><div class="ch-lb-val">104.2</div><div class="ch-lb-name">Alena L.</div></div>
-              <div class="ch-lb-col"><div class="ch-lb-rank">#2</div><div class="ch-lb-val">94.2</div><div class="ch-lb-name">Sofia L.</div></div>
-              <div class="ch-lb-col you"><div class="ch-lb-rank">you · #5</div><div class="ch-lb-val">62.4</div><div class="ch-lb-name">Jamie K.</div></div>
-            </div>
-          </div>
-          <div class="ch-footer">
-            <button class="btn btn-yellow btn-sm" onclick="showToast('Opening activity log…')">Log a run →</button>
-            <button class="btn btn-sm" onclick="showToast('Opening full challenge…')">Full leaderboard</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 7. EVENT DISCOVERY CARD -->
-      <div class="feed-item-wrap" data-type="all" style="animation-delay:.35s">
-        <div class="ev-card">
-          <div class="ev-rec-banner">📍 Recommended event · 2.4 km away · matches your sports</div>
-          <div class="ev-body">
-            <div class="ev-date-box"><div class="ed">19</div><div class="em">Apr</div></div>
-            <div class="ev-info">
-              <div class="ev-name">Victoria Park Parkrun — Hackney RC Takeover</div>
-              <div class="ev-meta">Victoria Park, London · Free to enter · 9:00 AM start · 5km · All paces welcome</div>
-              <div class="ev-tags">
-                <span class="pill pill-run">Running</span>
-                <span class="pill pill-green">22 clubmates going</span>
-                <span class="pill pill-yellow">Free</span>
-              </div>
-            </div>
-          </div>
-          <div style="margin:0 20px 12px;background:var(--yellow-light);border:1px solid #fde68a;border-radius:7px;padding:9px 12px;font-size:12px;color:#7a5c00">
-            <strong>Coach Rachel's note:</strong> No registration — just show up in your club vest. We'll do a group photo at the finish. Great way to meet new members!
-          </div>
-          <div class="ev-footer">
-            <div style="font-size:12px;color:var(--gray-500)">Coach Rachel organised · 22 members confirmed</div>
-            <div style="display:flex;gap:7px">
-              <button class="btn btn-yellow btn-sm" onclick="rsvpGoing(this)">✓ I'm going</button>
-              <button class="btn btn-sm" onclick="showToast('Opening event details…')">More info</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 8. ACTIVITY CARD — Sofia R. climbing -->
-      <div class="feed-item-wrap" data-type="clm" style="animation-delay:.4s">
-        <div class="ac-wrap">
-          <div class="ac-body">
-            <div class="ac-head">
-              <div class="ac-av" style="background:#F5F3FF;color:#5B21B6">SR</div>
-              <div>
-                <div class="ac-user-name" onclick="showToast('Opening Sofia R.\'s profile…')">Sofia R.</div>
-                <div class="ac-user-meta">4h ago · Barcelona, ES</div>
-              </div>
-              <div class="ac-sport-tag" style="background:var(--purple-light);color:#5B21B6;border:1px solid #C4B5FD">🧗 Climbing</div>
-            </div>
-            <div class="ac-stats-row">
-              <div class="ac-stat"><div class="sv">V7</div><div class="sl">top grade</div></div>
-              <div class="ac-stat"><div class="sv">Sent ✓</div><div class="sl">status</div></div>
-              <div class="ac-stat"><div class="sv">3 wks</div><div class="sl">project</div></div>
-              <div class="ac-stat"><div class="sv">2h 30m</div><div class="sl">session</div></div>
-            </div>
-            <div class="ac-desc">Finally sent the V7 at Montserrat after 3 weeks of projecting. The crux was the undercling sequence into the heel hook — will post beta video in comments for anyone working it.</div>
-            <div class="ac-ai-panel">
-              <div class="ac-ai-icon">AI</div>
-              <div class="ac-ai-text"><strong>AI Coach:</strong> Sending a 3-week project shows excellent mental persistence — the success rate on problems at this difficulty usually requires 4–6 sessions. Your session volume has been well-managed this cycle, which likely contributed to the send today.</div>
-            </div>
-          </div>
-          <div class="ac-footer">
-            <button class="ac-action" onclick="toggleLike(this,'41')">👍 41 kudos</button>
-            <button class="ac-action" onclick="openModal('comment')">💬 17 comments</button>
-            <button class="ac-action" onclick="showToast('Activity link copied!')">🔗 Share</button>
-            <div class="ac-meta-right"><span class="ai-tag">✦ AI</span></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 9. ACTIVITY CARD — Yuki running, no AI panel -->
-      <div class="feed-item-wrap" data-type="run" style="animation-delay:.45s">
-        <div class="ac-wrap">
-          <div class="ac-body">
-            <div class="ac-head">
-              <div class="ac-av" style="background:#FCE7F3;color:#9D174D">YT</div>
-              <div>
-                <div class="ac-user-name" onclick="showToast('Opening Yuki\'s profile…')">Yuki T.</div>
-                <div class="ac-user-meta">5h ago · Tokyo, JP · Hackney RC</div>
-              </div>
-              <div class="ac-sport-tag" style="background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74">🏃 Running</div>
-            </div>
-            <div class="ac-stats-row">
-              <div class="ac-stat"><div class="sv">15.0</div><div class="sl">km</div></div>
-              <div class="ac-stat"><div class="sv">4:02</div><div class="sl">/km</div></div>
-              <div class="ac-stat"><div class="sv">171</div><div class="sl">bpm</div></div>
-              <div class="ac-stat"><div class="sv">60:30</div><div class="sl">time</div></div>
-            </div>
-            <div class="ac-desc">Tempo block — 3×5km at 3:58/km with 3min jog recovery. Felt controlled throughout. Fitness is coming together ahead of the race.</div>
-          </div>
-          <div class="ac-footer">
-            <button class="ac-action" onclick="toggleLike(this,'19')">👍 19 kudos</button>
-            <button class="ac-action" onclick="openModal('comment')">💬 4 comments</button>
-            <button class="ac-action" onclick="showToast('Opening AI analysis…')">✦ AI coach</button>
-            <div class="ac-meta-right"><span class="ai-tag">✦ AI</span></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 10. CLUB UPDATE — Challenge nudge -->
-      <div class="feed-item-wrap" data-type="clubs" style="animation-delay:.5s">
-        <div class="club-update">
-          <div class="cu-banner">
-            <div class="cu-club-icon" style="background:var(--orange-light)">🏃</div>
-            <span class="cu-label">Hackney Running Club · Challenge update</span>
-            <span style="font-size:11px;color:var(--gray-400);margin-left:auto">6h ago</span>
-          </div>
-          <div class="cu-body">
-            <div class="cu-title">⚡ 7-day streak — 5 members at risk of breaking it</div>
-            <div class="cu-text">Omar B., Tom R., and 3 others haven't logged an activity in the last 48 hours. Today is the last day to keep the streak alive and earn this week's 100 points.</div>
-            <div class="cu-tags">
-              <span class="pill pill-run">39 on streak</span>
-              <span style="background:var(--red-light);color:#A32D2D;border-color:#FECACA;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid;display:inline-block">5 at risk</span>
-            </div>
-          </div>
-          <div class="cu-footer">
-            <button class="btn btn-sm" onclick="showToast('Nudge sent to 5 at-risk members!')">📢 Nudge teammates</button>
-            <button class="btn btn-sm" onclick="showToast('Opening challenge…')">View leaderboard →</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 11. ACTIVITY CARD — Alena running -->
-      <div class="feed-item-wrap" data-type="run" style="animation-delay:.55s">
-        <div class="ac-wrap">
-          <div class="ac-body">
-            <div class="ac-head">
-              <div class="ac-av" style="background:#E0F2FE;color:#0369A1">AL</div>
-              <div>
-                <div class="ac-user-name" onclick="showToast('Opening Alena\'s profile…')">Alena L.</div>
-                <div class="ac-user-meta">8h ago · London, UK · Hackney RC</div>
-              </div>
-              <div class="ac-sport-tag" style="background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74">🏃 Running</div>
-            </div>
-            <div class="ac-stats-row">
-              <div class="ac-stat"><div class="sv">71.4</div><div class="sl">km</div></div>
-              <div class="ac-stat"><div class="sv">4:30</div><div class="sl">/km</div></div>
-              <div class="ac-stat"><div class="sv">138</div><div class="sl">bpm</div></div>
-              <div class="ac-stat"><div class="sv">5:21</div><div class="sl">total</div></div>
-            </div>
-            <div class="ac-desc">Week 3 of marathon build — biggest week yet and it felt manageable. The Arenas AI coach flagged my HR drift on Wednesday which saved me from going too hard. 100km May Run done ✓ thanks Hackney RC for the motivation!</div>
-          </div>
-          <div class="ac-footer">
-            <button class="ac-action liked" onclick="toggleLike(this,'31')">👍 31 kudos</button>
-            <button class="ac-action" onclick="openModal('comment')">💬 14 comments</button>
-            <button class="ac-action" onclick="showToast('Activity link copied!')">🔗 Share</button>
-            <div class="ac-meta-right"><span class="ai-tag">✦ AI</span> ⚡ Challenge done!</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- LOAD MORE -->
-      <div class="load-more">
-        <button class="load-more-btn" onclick="showToast('Loading more activities…')">Load more activities</button>
-      </div>
 
     </div>
   </div>
@@ -725,73 +414,6 @@ button,select,input,textarea{font-family:var(--font)}
 
 </div>
 
-<!-- MODALS -->
-<!-- Comment modal -->
-<div class="modal-overlay" id="modal-comment" onclick="closeModals(event)">
-  <div class="modal">
-    <div class="modal-header">
-      <div><div style="font-size:17px;font-weight:700;color:var(--gray-900)">Comments</div></div>
-      <button class="modal-close" onclick="closeModals()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div style="display:flex;flex-direction:column;gap:12px">
-        <div style="display:flex;gap:9px;align-items:flex-start">
-          <div style="width:28px;height:28px;border-radius:50%;background:#FEF9C3;color:#854D0E;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0;margin-top:2px">SL</div>
-          <div style="background:var(--gray-50);border-radius:0 10px 10px 10px;padding:9px 12px;font-size:13px;color:var(--gray-700);line-height:1.55">Great effort! What's your fuelling strategy for long runs over 15km? I've been struggling with energy at the 12km mark.</div>
-        </div>
-        <div style="display:flex;gap:9px;align-items:flex-start">
-          <div style="width:28px;height:28px;border-radius:50%;background:#FFF7ED;color:#9A3412;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0;margin-top:2px">JK</div>
-          <div style="background:var(--yellow-light);border-radius:10px 10px 10px 0;padding:9px 12px;font-size:13px;color:#7a5c00;line-height:1.55">Thanks Sofia! Gel every 45 min starting at km 8, electrolytes at km 12. Keeps the energy stable right to the end. Try the AI coach — it flagged my exact same issue last month!</div>
-        </div>
-      </div>
-      <div style="display:flex;gap:9px;align-items:center;padding-top:4px;border-top:var(--border)">
-        <div style="width:28px;height:28px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:var(--gray-900);flex-shrink:0">JK</div>
-        <input type="text" placeholder="Add a comment…" class="form-input" style="flex:1;border-radius:20px">
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="closeModals();showToast('Comment posted!')">Post comment</button>
-      <button class="btn" onclick="closeModals()">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<!-- Notifications modal -->
-<div class="modal-overlay" id="modal-notifications" onclick="closeModals(event)">
-  <div class="modal">
-    <div class="modal-header">
-      <div><div style="font-size:17px;font-weight:700;color:var(--gray-900)">Notifications</div></div>
-      <button class="modal-close" onclick="closeModals()">✕</button>
-    </div>
-    <div class="modal-body" style="padding:0;gap:0">
-      <div style="padding:10px 20px;border-bottom:var(--border);background:var(--yellow-light);display:flex;align-items:center;gap:10px">
-        <div style="width:32px;height:32px;border-radius:8px;background:var(--orange-light);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">📅</div>
-        <div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Coach Rachel invited you to London Half Marathon</div><div style="font-size:11px;color:var(--gray-500);margin-top:2px">RSVP by Apr 6 · 34 clubmates going</div></div>
-        <div style="display:flex;gap:5px"><button class="btn btn-sm btn-yellow" onclick="closeModals();showToast('✓ Going!')">Going</button><button class="btn btn-sm" onclick="closeModals()">No</button></div>
-      </div>
-      <div style="padding:10px 20px;border-bottom:var(--border);display:flex;align-items:center;gap:10px">
-        <div style="width:32px;height:32px;border-radius:8px;background:var(--purple-light);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">⚡</div>
-        <div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--gray-900)">7-day streak at risk — log something today</div><div style="font-size:11px;color:var(--gray-500);margin-top:2px">Challenge ends Monday · 100 pts at stake</div></div>
-        <button class="btn btn-sm btn-yellow" onclick="closeModals();openModal('log-activity')">Log now</button>
-      </div>
-      <div style="padding:10px 20px;border-bottom:var(--border);display:flex;align-items:center;gap:10px">
-        <div style="width:32px;height:32px;border-radius:8px;background:var(--yellow-light);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🎉</div>
-        <div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Alena L. completed the 100km challenge!</div><div style="font-size:11px;color:var(--gray-500);margin-top:2px">First in Hackney RC · send her kudos</div></div>
-        <button class="btn btn-sm" onclick="closeModals();showToast('🎉 Kudos sent!')">👍 Kudos</button>
-      </div>
-      <div style="padding:10px 20px;border-bottom:var(--border);display:flex;align-items:center;gap:10px">
-        <div style="width:32px;height:32px;border-radius:8px;background:var(--green-light);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">↑</div>
-        <div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--gray-900)">You moved to rank #5 on Hackney RC</div><div style="font-size:11px;color:var(--gray-500);margin-top:2px">Up 3 places this week · 540 pts to #4</div></div>
-      </div>
-      <div style="padding:10px 20px;display:flex;align-items:center;gap:10px">
-        <div style="width:32px;height:32px;border-radius:8px;background:var(--orange-light);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">👍</div>
-        <div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Sofia L. and 5 others gave kudos on your run</div><div style="font-size:11px;color:var(--gray-500);margin-top:2px">Today · 6 kudos · 3 comments</div></div>
-      </div>
-    </div>
-    <div class="modal-footer"><button class="btn" style="flex:1;justify-content:center" onclick="closeModals()">Mark all read</button></div>
-  </div>
-</div>
-
 <div class="toast" id="toast"></div>
 
 <script>
@@ -803,20 +425,17 @@ function setFilter(el, type) {
   activeFilter = type;
   const items = document.querySelectorAll('.feed-item-wrap');
   items.forEach(item => {
-    const t = item.dataset.type;
-    const show = type === 'all' || t === type || t === 'all';
-    item.style.display = show ? 'block' : 'none';
+    const t = item.dataset.type || 'all';
+    // The empty-state card is tagged 'all'; no real feed item ever is. Never
+    // filter it out, so an empty feed keeps its honest message under any pill.
+    if (t === 'all') return;
+    const show = type === 'all' || t === type;
+    item.style.display = show ? '' : 'none';
   });
-  const count = [...items].filter(i => i.style.display !== 'none').length;
-  showToast(type === 'all' ? 'Showing all activities' : 'Filtered to ' + el.textContent.trim() + ' — ' + count + ' posts');
-}
-
-// ── LIKE ──
-function toggleLike(btn, base) {
-  const liked = btn.classList.contains('liked');
-  btn.classList.toggle('liked', !liked);
-  const n = parseInt(base) + (liked ? 0 : 1);
-  btn.textContent = '👍 ' + (liked ? parseInt(base) : n) + ' kudos';
+  const count = [...items].filter(i => (i.dataset.type || 'all') !== 'all' && i.style.display !== 'none').length;
+  showToast(type === 'all'
+    ? 'Showing all activity'
+    : 'Filtered to ' + el.textContent.trim() + ' — ' + count + (count === 1 ? ' item' : ' items'));
 }
 
 // ── FOLLOW ── real follow/unfollow against the API; button reflects server state.
@@ -846,31 +465,6 @@ async function toggleFollow(btn) {
   } finally {
     btn.disabled = false;
   }
-}
-
-// ── RSVP ──
-function rsvpGoing(btn) {
-  btn.textContent = '✓ Going';
-  btn.className = 'btn btn-green btn-sm';
-  btn.disabled = true;
-  showToast('✓ RSVP confirmed — Coach Rachel has been notified!');
-}
-
-// ── DISMISS NUDGE ──
-function dismissNudge() {
-  const nudge = document.querySelector('.ai-nudge').closest('.feed-item-wrap');
-  nudge.style.transition = 'opacity 0.3s, transform 0.3s';
-  nudge.style.opacity = '0';
-  nudge.style.transform = 'translateY(-8px)';
-  setTimeout(() => { nudge.style.display = 'none'; }, 300);
-  showToast('AI coaching nudge dismissed for today');
-}
-
-// ── MODALS ──
-function openModal(id) { document.getElementById('modal-' + id).classList.add('open'); }
-function closeModals(e) {
-  if (!e || e.target.classList.contains('modal-overlay'))
-    document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
 }
 
 // ── TOAST ──
@@ -1016,8 +610,6 @@ function postCardHtml(post, opts) {
       <div class="pn-content">${escapeHtml(post.content)}</div>
       <div class="pn-footer">
         <button class="pn-action${o.liked ? ' liked' : ''}" onclick="likePost(this,'${post.id}')">👍 ${o.likes || 0} kudos</button>
-        <button class="pn-action" onclick="openModal('comment')">💬 Comment</button>
-        <button class="pn-action" onclick="showToast('Note link copied!')">🔗 Share</button>
         <span style="margin-left:auto;font-size:11px;color:var(--gray-400)">Training note</span>
       </div>
     </div>`;
@@ -1027,7 +619,7 @@ function addPostToFeed(post) {
   const feedItems = document.getElementById('feed-items');
   const card = document.createElement('div');
   card.className = 'feed-item-wrap';
-  card.dataset.type = 'all';
+  card.dataset.type = post.sport || 'note';
   card.innerHTML = postCardHtml(post, {});
   feedItems.insertBefore(card, feedItems.firstChild);
 }
@@ -1066,26 +658,12 @@ function renderInjectedPosts() {
     const wrap = card.closest('.feed-item-wrap');
     if (wrap) wrap.remove();
   });
-  // Not following anyone yet: nudge the user to discover other athletes. Their
-  // own posts (if any) still render below this banner.
-  if (data.followsNobody) {
-    const banner = document.createElement('div');
-    banner.className = 'feed-item-wrap';
-    banner.dataset.type = 'all';
-    banner.innerHTML = '<div class="post-note-card" style="text-align:center;padding:28px 20px;">'
-      + '<div style="font-size:28px;margin-bottom:8px;">👋</div>'
-      + '<div style="font-weight:600;font-size:15px;color:var(--gray-900);margin-bottom:4px;">Your feed is just getting started</div>'
-      + '<div style="font-size:13px;color:var(--gray-600);line-height:1.6;margin-bottom:14px;">Follow other athletes to see their training notes here.</div>'
-      + '<a href="' + (window.BASE || '') + '/athletes" class="btn btn-yellow btn-sm" style="display:inline-flex;text-decoration:none;">Discover athletes</a>'
-      + '</div>';
-    feedItems.appendChild(banner);
-  }
   if (!data.posts || data.posts.length === 0) return;
   // Render oldest-first with insertBefore so the newest post ends up on top.
   data.posts.slice().reverse().forEach(post => {
     const card = document.createElement('div');
     card.className = 'feed-item-wrap';
-    card.dataset.type = 'all';
+    card.dataset.type = post.sport || 'note';
     const isOwn = post.user_id === data.userId;
     const name = post.authorName || 'Athlete';
     const handle = post.authorHandle || 'athlete';
@@ -1161,7 +739,7 @@ function renderInjectedActivities() {
 
     const wrap = document.createElement('div');
     wrap.className = 'feed-item-wrap';
-    wrap.dataset.type = 'all';
+    wrap.dataset.type = a.sport || 'note';
     wrap.innerHTML = '' +
       '<div class="post-note-card" style="padding:16px 18px">' +
         '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">' +
@@ -1204,7 +782,7 @@ function renderFollowingRsvps() {
 
     const wrap = document.createElement('div');
     wrap.className = 'feed-item-wrap';
-    wrap.dataset.type = 'all';
+    wrap.dataset.type = 'clubs';
     wrap.innerHTML = '' +
       '<div class="post-note-card" style="padding:16px 18px">' +
         '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">' +
@@ -1228,9 +806,43 @@ function renderFollowingRsvps() {
   });
 }
 
+// Honest empty states — shown only when there is genuinely no real content in
+// the feed (no own/followed posts, no followed activities, no followed RSVPs).
+// Two distinct cases: following nobody vs. following people who haven't posted.
+function renderFeedEmptyState() {
+  const data = window.ARENAS_DATA || {};
+  const feedItems = document.getElementById('feed-items');
+  if (!feedItems) return;
+  const postCount = (data.posts && data.posts.length) || 0;
+  const actCount = (data.feedActivities && data.feedActivities.length) || 0;
+  const rsvpCount = (data.followingRsvps && data.followingRsvps.length) || 0;
+  if (postCount + actCount + rsvpCount > 0) return;
+  const base = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
+  const wrap = document.createElement('div');
+  wrap.className = 'feed-item-wrap';
+  wrap.dataset.type = 'all';
+  if (data.followsNobody) {
+    wrap.innerHTML = '<div class="post-note-card" style="text-align:center;padding:28px 20px;">'
+      + '<div style="font-size:28px;margin-bottom:8px;">👋</div>'
+      + '<div style="font-weight:600;font-size:15px;color:var(--gray-900);margin-bottom:4px;">Your feed is just getting started</div>'
+      + '<div style="font-size:13px;color:var(--gray-600);line-height:1.6;margin-bottom:14px;">Follow other athletes to see their training notes and activities here.</div>'
+      + '<a href="' + base + '/athletes" class="btn btn-yellow btn-sm" style="display:inline-flex;text-decoration:none;">Discover athletes</a>'
+      + '</div>';
+  } else {
+    wrap.innerHTML = '<div class="post-note-card" style="text-align:center;padding:28px 20px;">'
+      + '<div style="font-size:28px;margin-bottom:8px;">🌱</div>'
+      + '<div style="font-weight:600;font-size:15px;color:var(--gray-900);margin-bottom:4px;">No activity from the people you follow yet</div>'
+      + '<div style="font-size:13px;color:var(--gray-600);line-height:1.6;margin-bottom:14px;">When the athletes you follow share a training note or log an activity, it\'ll appear here. Share your own to get things going.</div>'
+      + '<a href="' + base + '/athletes" class="btn btn-yellow btn-sm" style="display:inline-flex;text-decoration:none;">Find more athletes</a>'
+      + '</div>';
+  }
+  feedItems.appendChild(wrap);
+}
+
 renderInjectedPosts();
 renderInjectedActivities();
 renderFollowingRsvps();
+renderFeedEmptyState();
 </script>
 <script>
 // Wire the logged-in user's real identity into the feed (server injects
