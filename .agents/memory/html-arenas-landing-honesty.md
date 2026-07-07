@@ -29,3 +29,4 @@ and the 12 signup sport-chips are aspirational, not a support claim.
 
 ## App-shell honesty (same rule)
 Fabricated subscription-status UI was removed from all main-app pages: "· Pro" footer suffixes, "💳 Pro plan" nav items, "✦ Pro" hero tag, and the fake Plan/billing card on my-profile settings. Payments don't exist — never reintroduce Pro-status labels in the app shell. Pro mentions in /for-clubs, landing pricing marketing, and arenas-terms.html are honest future-tense copy and are intentionally kept.
+Also removed from my-profile Clubs tab: fake Hackney club card + dead "Find clubs near you" search card (no club search/directory exists). Clubs tab markup starts empty (#clubs-list); JS renders real data.clubs or an invite-only empty state; subtitle links to BASE+/athletes.
