@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+window.BASE = window.location.pathname.startsWith('/html') ? '/html' : '';
+window.nav = function(path){ window.location.href = window.BASE + path; };
+document.addEventListener('DOMContentLoaded', function(){
+  if (window.BASE === '') {
+    document.querySelectorAll('[href^="/html/"]').forEach(function(el){ el.setAttribute('href', el.getAttribute('href').slice(5)); });
+    document.querySelectorAll('[action^="/html/"]').forEach(function(el){ el.setAttribute('action', el.getAttribute('action').slice(5)); });
+  }
+});
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arenas — Billing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/html/arenas.css">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+button{font-family:var(--font)}
+.notif-btn{width:34px;height:34px;border-radius:7px;border:var(--border);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;position:relative;transition:background .1s}
+.notif-btn:hover{background:var(--gray-50)}
+.main{display:block;max-width:820px;padding:28px 32px 60px}
+.page-title{font-size:22px;font-weight:700;color:var(--gray-900);letter-spacing:-.01em;margin-bottom:4px}
+.page-sub{font-size:13px;color:var(--gray-500);margin-bottom:20px}
+.founding-note{background:var(--yellow-light);border:1px solid #fde68a;border-radius:10px;padding:14px 16px;font-size:13px;color:#7a5c00;line-height:1.6;margin-bottom:22px}
+.bill-card{background:white;border:var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
+.bill-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap}
+.bill-card-title{font-size:15px;font-weight:600;color:var(--gray-900)}
+.plan-badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;border:1px solid var(--gray-200);background:var(--gray-50);color:var(--gray-600)}
+.plan-badge.paid{background:var(--yellow-light);border-color:#fde68a;color:#7a5c00}
+.bill-card-desc{font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:14px}
+.btn{padding:8px 16px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;border:var(--border);transition:all .13s;display:inline-flex;align-items:center;gap:6px;background:white;color:var(--gray-700)}
+.btn:hover{background:var(--gray-50)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn-yellow{background:var(--yellow);color:var(--gray-900);border-color:var(--yellow-dark);font-weight:600}
+.btn-yellow:hover{background:var(--yellow-dark)}
+.disclosure{font-size:11px;color:var(--gray-400);line-height:1.5;margin-top:10px;max-width:480px}
+.section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--gray-400);margin:26px 0 10px}
+.muted-line{font-size:13px;color:var(--gray-400)}
+.err-note{background:var(--gray-50);border:var(--border);border-radius:10px;padding:14px 16px;font-size:13px;color:var(--gray-500);line-height:1.6}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="topbar-logo" onclick="nav('/feed')" style="cursor:pointer">
+    <div class="logo-icon">🏟</div>
+    <span class="logo-text">Arenas</span>
+  </div>
+  <div class="topbar-center"></div>
+  <div class="topbar-actions">
+    <div class="notif-btn" onclick="nav('/notifications')">🔔<div class="notif-dot"></div></div>
+    <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
+      <div class="user-av user-initials" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">·</div>
+      <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
+        <a href="/html/profile" style="display:block;padding:10px 14px;font-size:13px;color:#111827;text-decoration:none">My profile</a>
+        <a href="/html/auth/logout" style="display:block;padding:10px 14px;font-size:13px;color:#DC2626;text-decoration:none;border-top:1px solid #f3f4f6">Log out</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="nav-section-label">My Arenas</div>
+  <div class="nav-item" onclick="nav('/feed')"><span class="nav-icon">🏠</span> Feed</div>
+  <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">👤</span> My profile</div>
+  <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">📅</span> Events</div>
+  <div class="nav-item" onclick="nav('/leaderboards')"><span class="nav-icon">🏆</span> Leaderboards</div>
+  <div class="nav-item" onclick="nav('/challenges')"><span class="nav-icon">⚡</span> Challenges</div>
+  <div class="nav-item" onclick="nav('/profile#activities')"><span class="nav-icon">➕</span> Log activity</div>
+  <div class="nav-item" onclick="nav('/athletes')"><span class="nav-icon">👥</span> Athletes</div>
+  <div class="nav-section-label">My clubs</div>
+  <div class="nav-section-label">Account</div>
+  <div class="nav-item active"><span class="nav-icon">💳</span> Billing</div>
+  <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">⚙️</span> Settings</div>
+  <div class="sidebar-footer">
+    <div style="display:flex;align-items:center;gap:9px">
+      <div class="user-initials" style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">·</div>
+      <div><div class="user-name" style="font-size:12px;font-weight:600;color:var(--gray-900)"></div><div style="font-size:10px;color:var(--gray-500)"><span class="user-handle"></span></div></div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="page-title">Billing</div>
+  <div class="page-sub">Your plan, your clubs' plans, and how payments work.</div>
+
+  <div class="founding-note">
+    <strong>Free during the founding period.</strong> Every feature is currently included at no cost, and you are not being charged anything unless you choose to upgrade below. Paid plans exist to support the build — they are entirely optional right now.
+  </div>
+
+  <div id="billing-root"><div class="muted-line">Loading…</div></div>
+</div>
+
+</div>
+
+<script>
+// Render the billing state from server-injected data only. Every plan label,
+// button, and state on this page reflects what the server found in the
+// subscriptions table — nothing is fabricated client-side.
+(function () {
+  var data = window.ARENAS_DATA || {};
+  var b = data.billing || null;
+  var root = document.getElementById('billing-root');
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  if (!b) {
+    root.innerHTML = '<div class="err-note">Billing information could not be loaded right now. Please refresh the page or try again later.</div>';
+    return;
+  }
+
+  function disclosure(price) {
+    return '<div class="disclosure">Renews automatically every month at $' + price +
+      '/month and continues until you cancel. Cancel anytime via Manage billing — it opens a secure Stripe portal where you can cancel or update your payment method.</div>';
+  }
+
+  var html = '';
+
+  // ── Your plan ──
+  html += '<div class="section-label">Your plan</div>';
+  html += '<div class="bill-card">';
+  if (b.userPlan === 'pro') {
+    html += '<div class="bill-card-head"><div class="bill-card-title">Pro</div><span class="plan-badge paid">$9 / month</span></div>';
+    html += '<div class="bill-card-desc">Your individual Pro subscription is active. It renews automatically each month at $9/month until you cancel.</div>';
+    if (b.configured) {
+      html += '<button class="btn" onclick="openPortal(\'pro\', null, this)">Manage billing</button>';
+      html += '<div class="disclosure">Manage billing opens a secure Stripe portal where you can cancel your subscription or update your payment method.</div>';
+    }
+  } else {
+    html += '<div class="bill-card-head"><div class="bill-card-title">Free</div><span class="plan-badge">$0 / month</span></div>';
+    html += '<div class="bill-card-desc">You are on the free plan and are not being charged anything. Pro is $9/month, billed monthly — no trial, no annual lock-in.</div>';
+    if (b.configured) {
+      html += '<button class="btn btn-yellow" onclick="startCheckout(\'pro\', null, this)">Upgrade to Pro →</button>';
+      html += disclosure(9);
+    } else {
+      html += '<div class="muted-line">Billing is not configured on this server, so upgrading is unavailable.</div>';
+    }
+  }
+  html += '</div>';
+
+  // ── Clubs you manage ──
+  html += '<div class="section-label">Clubs you manage</div>';
+  var clubs = b.managedClubs || [];
+  if (!clubs.length) {
+    html += '<div class="muted-line">You don\u2019t manage any clubs. Club Pro applies to clubs where you are an admin or coach.</div>';
+  } else {
+    clubs.forEach(function (c) {
+      html += '<div class="bill-card">';
+      if (c.plan === 'club_pro') {
+        html += '<div class="bill-card-head"><div class="bill-card-title">' + esc(c.name) + '</div><span class="plan-badge paid">Club Pro · $29 / month</span></div>';
+        html += '<div class="bill-card-desc">This club\u2019s Club Pro subscription is active. It renews automatically each month at $29/month until canceled.</div>';
+        if (b.configured) {
+          html += '<button class="btn" onclick="openPortal(\'club\', \'' + esc(c.id) + '\', this)">Manage billing</button>';
+          html += '<div class="disclosure">Manage billing opens a secure Stripe portal where you can cancel the club\u2019s subscription or update the payment method.</div>';
+        }
+      } else {
+        html += '<div class="bill-card-head"><div class="bill-card-title">' + esc(c.name) + '</div><span class="plan-badge">Free</span></div>';
+        html += '<div class="bill-card-desc">This club is on the free plan and is not being charged anything. Club Pro is a flat $29/month for the whole club \u2014 no per-member fees.</div>';
+        if (b.configured) {
+          html += '<button class="btn btn-yellow" onclick="startCheckout(\'club\', \'' + esc(c.id) + '\', this)">Upgrade to Club Pro →</button>';
+          html += disclosure(29);
+        } else {
+          html += '<div class="muted-line">Billing is not configured on this server, so upgrading is unavailable.</div>';
+        }
+      }
+      html += '</div>';
+    });
+  }
+
+  root.innerHTML = html;
+})();
+
+// Checkout + portal wiring. Both endpoints return { url } on success.
+async function startCheckout(kind, clubId, btn) {
+  var endpoint = kind === 'pro' ? '/api/billing/checkout/pro' : '/api/billing/checkout/club/' + encodeURIComponent(clubId);
+  if (btn) btn.disabled = true;
+  try {
+    var r = await fetch(window.BASE + endpoint, { method: 'POST' });
+    if (r.status === 409) { window.location.reload(); return; }
+    var d = {};
+    try { d = await r.json(); } catch (e) { d = {}; }
+    if (r.ok && d.url) { window.location.href = d.url; return; }
+    alert('Could not start checkout right now — please try again later.');
+  } catch (err) {
+    alert('Could not start checkout right now — please try again later.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+async function openPortal(kind, clubId, btn) {
+  var endpoint = kind === 'pro' ? '/api/billing/portal/pro' : '/api/billing/portal/club/' + encodeURIComponent(clubId);
+  if (btn) btn.disabled = true;
+  try {
+    var r = await fetch(window.BASE + endpoint, { method: 'POST' });
+    var d = {};
+    try { d = await r.json(); } catch (e) { d = {}; }
+    if (r.ok && d.url) { window.location.href = d.url; return; }
+    alert('Could not open the billing portal right now — please try again later.');
+  } catch (err) {
+    alert('Could not open the billing portal right now — please try again later.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+</script>
+<script>
+// Identity: swap placeholder initials/name/handle for the logged-in viewer.
+(function () {
+  var data = window.ARENAS_DATA;
+  if (!data || !data.profile) return;
+  var p = data.profile;
+  var name = p.name || 'Athlete';
+  var handle = (p.handle || 'athlete').replace(/^@+/, '');
+  var initials = (name.trim().split(/\s+/).map(function (w) { return w[0]; }).join('').slice(0, 2) || 'A').toUpperCase();
+  document.querySelectorAll('.user-initials').forEach(function (el) { el.textContent = initials; });
+  document.querySelectorAll('.user-name').forEach(function (el) { el.textContent = name; });
+  document.querySelectorAll('.user-handle').forEach(function (el) { el.textContent = '@' + handle; });
+})();
+</script>
+<script>
+// Shared "My clubs" sidebar renderer — identical on every athlete-facing page so
+// the sidebar always reflects the viewer's real club memberships
+// (window.ARENAS_DATA.clubs) from the same Supabase query. No hardcoded club data
+// lives in the static HTML.
+(function () {
+  var clubs = (window.ARENAS_DATA && window.ARENAS_DATA.clubs) || [];
+  var label = null;
+  document.querySelectorAll('.sidebar .nav-section-label').forEach(function (l) {
+    if (/^\s*my clubs\s*$/i.test(l.textContent || '')) label = l;
+  });
+  if (!label) return;
+  var parent = label.parentNode;
+  var sib = label.nextElementSibling;
+  while (sib && sib.classList && sib.classList.contains('nav-item')) {
+    var next = sib.nextElementSibling;
+    sib.remove();
+    sib = next;
+  }
+  var anchor = label.nextElementSibling;
+  var sportIcons = { running: '🏃', cycling: '🚴', climbing: '🧗', swimming: '🏊', football: '⚽', triathlon: '🔱', hiking: '🥾', yoga: '🧘', weightlifting: '🏋️' };
+  if (!clubs.length) {
+    var empty = document.createElement('div');
+    empty.className = 'nav-item';
+    empty.style.cssText = 'color:var(--gray-400);cursor:default';
+    empty.textContent = 'No clubs yet';
+    parent.insertBefore(empty, anchor);
+    return;
+  }
+  clubs.forEach(function (club) {
+    var item = document.createElement('div');
+    item.className = 'nav-item';
+    item.onclick = function () {
+      if (typeof nav !== 'function') return;
+      if (club.role === 'admin' || club.role === 'coach') { nav('/clubs/dashboard?club=' + club.id); }
+      else { nav('/clubs/member/' + club.id); }
+    };
+    var ic = document.createElement('span');
+    ic.className = 'nav-icon';
+    ic.textContent = sportIcons[club.sport] || '🏟';
+    item.appendChild(ic);
+    item.appendChild(document.createTextNode(' ' + (club.name || 'Club')));
+    parent.insertBefore(item, anchor);
+  });
+})();
+</script>
+</body>
+</html>

@@ -6,7 +6,7 @@ description: Payments build decisions — plans, subscriptions table, SDK except
 # html-arenas Stripe & plan model
 
 ## Locked product decisions
-- Individual Pro **$9/month monthly-only** (the landing page's "billed annually / $12 monthly" copy is WRONG and slated for removal); Club Pro **$29/month monthly-only**, purchased by a club's coach/admin on behalf of the club. Test mode only until told otherwise. No trials — landing-page "14-day trial" copy is fabricated and slated for removal.
+- Individual Pro **$9/month monthly-only**; Club Pro **flat $29/month monthly-only** (no per-member fees), purchased by a club's coach/admin on behalf of the club. Test mode only until told otherwise. No trials, no annual — all fabricated landing copy ($12/annual/14-day trial/per-member) was removed in the Session ④ honesty pass; repo greps for those terms should stay clean (legit non-pricing "14-day" uses: invite expiry windows, streak-challenge names, Fortnight badge; `trialing` status handling in webhook code is also legit).
 
 ## Data model
 - Single `subscriptions` table in Supabase (user-created via SQL editor — service role can't run DDL): polymorphic `owner_type ('user'|'club')` + `owner_id`, `plan ('pro'|'club_pro')`, `stripe_customer_id`, `stripe_subscription_id`, `status`, `current_period_end`, `cancel_at_period_end`, unique(owner_type, owner_id).
@@ -24,6 +24,8 @@ description: Payments build decisions — plans, subscriptions table, SDK except
 
 ## Checkout start flow
 - POST BASE+/api/billing/checkout/pro and /club/:clubId (requireAuth; club gated by getClubRole+isClubManagerRole = admin/coach, same bar as invites); 503 no stripe/price, 409 already-paid. GET /billing/success + /billing/canceled pages (requirePageAuth, standalone-card style like club-join).
+- **No-id club checkout** POST /api/billing/checkout/club (no :clubId): resolves the caller's OWN managed clubs server-side — none → `{redirect: BASE+'/for-clubs'}`, first free club → checkout `{url}`, all paid → 409. Used by marketing-page CTAs (landing `startUpgrade`, for-clubs `startClubUpgrade`) where no club context exists; 401 → client sends to signup. Limitation: a logged-in manager-less user lands on /for-clubs whose wizard creates a NEW account via /auth/signup-club.
+- **Billing page** GET /billing (requirePageAuth) + html/arenas-billing.html: renders plan cards purely from injected ARENAS_DATA.billing {configured, userPlan, managedClubs[{id,name,role,plan}]}; CA auto-renewal (ARL) disclosure text must sit adjacent to EVERY upgrade button app-wide (landing, for-clubs, billing page). Billing nav item exists in all 8 shell-page sidebars; `billing: null` in ATHLETE_NAV_ACTIVE keys the mobile bottom nav.
 - **Metadata contract (webhook depends on it):** `{owner_type, owner_id}` on BOTH session AND subscription_data.metadata; `initiated_by` (user id) on session metadata only — success page rejects sessions where initiated_by ≠ logged-in user. client_reference_id = "type:id".
 - Customer reuse reads the subscriptions table (any-status row) → a canceled owner's re-subscribe reuses the same stripe_customer_id (verified live). Success page stays honest: "features aren't switched on yet" until gating ships.
 

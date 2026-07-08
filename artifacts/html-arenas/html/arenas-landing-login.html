@@ -818,13 +818,12 @@ html { scroll-behavior: smooth; }
           <div class="pricing-divider"></div>
           <div class="pricing-features">
             <div class="pricing-feat"><span class="pfeat-tick">✓</span> Activity feed across all sports</div>
-            <div class="pricing-feat"><span class="pfeat-tick">✓</span> 5 AI coach analyses per month</div>
-            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Follow up to 50 athletes</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Activity logging & personal stats</div>
             <div class="pricing-feat"><span class="pfeat-tick">✓</span> Event discovery & RSVP</div>
             <div class="pricing-feat"><span class="pfeat-tick">✓</span> Weekly leaderboards</div>
-            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Up to 3 active challenges</div>
-            <div class="pricing-feat"><span class="pfeat-cross">✗</span> <span style="color:var(--gray-400)">Unlimited AI coaching</span></div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Challenges</div>
             <div class="pricing-feat"><span class="pfeat-cross">✗</span> <span style="color:var(--gray-400)">Training analytics & trends</span></div>
+            <div class="pricing-feat"><span class="pfeat-cross">✗</span> <span style="color:var(--gray-400)">Training load tracking</span></div>
           </div>
           <div class="pricing-cta">
             <button class="btn btn-primary btn-full" onclick="showPage('login'); setMode('signup')">Get started free</button>
@@ -835,49 +834,49 @@ html { scroll-behavior: smooth; }
         <div class="pricing-card featured">
           <div class="pricing-popular">Most popular</div>
           <div class="pricing-name">Pro</div>
-          <div class="pricing-desc">Unlimited AI coaching and deep training analytics for serious athletes.</div>
+          <div class="pricing-desc">Deep training analytics for serious athletes.</div>
           <div class="pricing-price"><span class="pricing-amount">$9</span><span class="pricing-period">/ month</span></div>
-          <div class="pricing-billed">Billed annually — or $12/mo monthly</div>
+          <div class="pricing-billed">Billed monthly · cancel anytime</div>
+          <div class="pricing-billed" style="color:#7a5c00;background:var(--yellow-light);border:1px solid #fde68a;border-radius:6px;padding:6px 10px;margin-top:8px">Free during the founding period — every feature is included at no cost right now. Upgrading is optional.</div>
           <div class="pricing-divider"></div>
           <div class="pricing-features">
             <div class="pricing-feat"><span class="pfeat-tick">✓</span> Everything in Free</div>
-            <div class="pricing-feat"><span class="pfeat-tick">✓</span> <strong>Unlimited AI coach analyses</strong></div>
             <div class="pricing-feat"><span class="pfeat-tick">✓</span> Full training analytics & trends</div>
-            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Training load & recovery scoring</div>
-            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Unlimited follows & connections</div>
-            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Unlimited active challenges</div>
-            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Priority event matching</div>
-            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Export your data anytime</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Training load tracking</div>
+            <div class="pricing-feat" style="color:var(--gray-400)"><span style="color:var(--gray-300)">✦</span> AI coaching — coming soon</div>
           </div>
           <div class="pricing-cta">
-            <button class="btn btn-yellow btn-full" onclick="showPage('login'); setMode('signup')">Start Pro free for 14 days →</button>
+            <button class="btn btn-yellow btn-full" onclick="startUpgrade('pro', this)">Upgrade to Pro →</button>
+            <div style="font-size:11px;color:var(--gray-400);line-height:1.5;margin-top:8px;text-align:center">Renews automatically every month at $9/month and continues until you cancel. Cancel anytime via Manage billing on your Billing page.</div>
           </div>
         </div>
 
-        <!-- Club -->
+        <!-- Club Pro -->
         <div class="pricing-card">
-          <div class="pricing-name">Club</div>
+          <div class="pricing-name">Club Pro</div>
           <div class="pricing-desc">For running clubs, cycling teams, gyms, and sports organisations.</div>
           <div class="pricing-price"><span class="pricing-amount">$29</span><span class="pricing-period">/ month</span></div>
-          <div class="pricing-billed">Up to 25 members — $1/mo per additional member</div>
+          <div class="pricing-billed">One flat rate for the whole club · cancel anytime</div>
+          <div class="pricing-billed" style="color:#7a5c00;background:var(--yellow-light);border:1px solid #fde68a;border-radius:6px;padding:6px 10px;margin-top:8px">Free during the founding period — every feature is included at no cost right now. Upgrading is optional.</div>
           <div class="pricing-divider"></div>
           <div class="pricing-features">
-            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Everything in Pro for all members</div>
-            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Club dashboard & group feed</div>
-            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Coach oversight of member stats</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Club dashboard & club feed</div>
             <div class="pricing-feat"><span class="pfeat-tick">✓</span> Private club leaderboards</div>
-            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Bulk event sign-ups</div>
             <div class="pricing-feat"><span class="pfeat-tick">✓</span> Club challenges & points</div>
-            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Dedicated support</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Training load monitoring</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> At-risk member flags</div>
+            <div class="pricing-feat"><span class="pfeat-tick">✓</span> Monthly coach report</div>
+            <div class="pricing-feat" style="color:var(--gray-400)"><span style="color:var(--gray-300)">✦</span> AI coaching — coming soon</div>
           </div>
           <div class="pricing-cta">
-            <button class="btn btn-primary btn-full" onclick="showPage('login'); setMode('signup')">Start Club trial</button>
+            <button class="btn btn-primary btn-full" onclick="startUpgrade('club', this)">Upgrade to Club Pro →</button>
+            <div style="font-size:11px;color:var(--gray-400);line-height:1.5;margin-top:8px;text-align:center">Renews automatically every month at $29/month and continues until you cancel. Cancel anytime via Manage billing on your Billing page.</div>
           </div>
         </div>
 
       </div>
       <div style="text-align:center;margin-top:20px;font-size:13px;color:var(--gray-500)">
-        All plans include a 14-day free trial · Cancel anytime · No long-term contracts
+        Cancel anytime · No long-term contracts
       </div>
     </div>
   </div>
@@ -891,7 +890,7 @@ html { scroll-behavior: smooth; }
         <div class="section-title" style="max-width:380px">The team dashboard your club has been waiting for</div>
         <p style="font-size:15px;color:var(--gray-500);line-height:1.7;margin-bottom:28px;max-width:380px">Whether you run a parkrun group, a cycling collective, or a multi-sport club — Arenas gives coaches and organisers a single view of every member's training, events, and progress.</p>
         <button class="btn btn-primary btn-lg" onclick="showPage('login'); setMode('signup')">Set up your club →</button>
-        <div style="font-size:13px;color:var(--gray-400);margin-top:10px">From $29/month · First month free</div>
+        <div style="font-size:13px;color:var(--gray-400);margin-top:10px">Free to start · Club Pro is a flat $29/month</div>
       </div>
       <div class="clubs-right">
         <div class="club-feat">
@@ -911,8 +910,8 @@ html { scroll-behavior: smooth; }
         <div class="club-feat">
           <div class="club-feat-icon">📅</div>
           <div class="club-feat-text">
-            <h4>Bulk event sign-ups</h4>
-            <p>Register your whole club for a race in one step. Members get a notification, the coach sees who's confirmed, and attendance is tracked automatically.</p>
+            <h4>Club event management</h4>
+            <p>Create club events, collect RSVPs, and see who's going at a glance. Members RSVP in one click and coaches always know who's confirmed.</p>
           </div>
         </div>
       </div>
@@ -1133,6 +1132,28 @@ html { scroll-behavior: smooth; }
 
 <script>
 // ── PAGE ROUTING ──
+// Upgrade-aware pricing CTAs. Logged-in visitors go straight to a real Stripe
+// checkout; logged-out visitors (401) fall back to the signup flow exactly as
+// before. 409 (already subscribed) routes to the Billing page.
+async function startUpgrade(kind, btn) {
+  var endpoint = kind === 'pro' ? '/api/billing/checkout/pro' : '/api/billing/checkout/club';
+  if (btn) btn.disabled = true;
+  try {
+    var r = await fetch(window.BASE + endpoint, { method: 'POST' });
+    if (r.status === 401) { showPage('login'); setMode('signup'); return; }
+    if (r.status === 409) { window.nav('/billing'); return; }
+    var d = {};
+    try { d = await r.json(); } catch (e) { d = {}; }
+    if (r.ok && d.url) { window.location.href = d.url; return; }
+    if (r.ok && d.redirect) { window.location.href = d.redirect; return; }
+    alert('Billing is unavailable right now — please try again later.');
+  } catch (err) {
+    alert('Billing is unavailable right now — please try again later.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function showPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');

@@ -335,6 +335,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="nav-item" onclick="nav('/athletes')"><span class="nav-icon">👥</span> Athletes</div>
   <div class="nav-section-label">My clubs</div>
   <div class="nav-section-label">Account</div>
+  <div class="nav-item" onclick="nav('/billing')"><span class="nav-icon">💳</span> Billing</div>
   <div class="nav-item" onclick="setTab('settings')"><span class="nav-icon">⚙️</span> Settings</div>
   <div class="sidebar-footer">
     <div class="sf-row">
@@ -756,26 +757,10 @@ function setTab(id) {
   window.scrollTo({ top: document.getElementById('profile-hero-section').offsetHeight + 56, behavior: 'smooth' });
 }
 
-// ── CALENDAR ──
-function buildCalendar() {
-  const grid = document.getElementById('cal-grid');
-  const types = ['cd-rest','cd-light','cd-hard','cd-hard','cd-med','cd-light','cd-rest',
-    'cd-hard','cd-light','cd-rest','cd-light','cd-hard','cd-med','cd-rest',
-    'cd-hard','cd-hard','cd-med','cd-light','cd-rest','cd-race','cd-light',
-    'cd-hard','cd-hard','cd-rest','cd-med','cd-light','cd-hard','cd-today'];
-  const labels = ['','','','','','','','M','T','W','T','F','S','S','M','T','W','T','F','S','S','M','T','W','T','F','S','↓'];
-  for (let i = 0; i < 28; i++) {
-    const d = document.createElement('div');
-    d.className = 'cal-day ' + (types[i] || 'cd-rest');
-    d.title = types[i] === 'cd-rest' ? 'Rest day' : types[i] === 'cd-race' ? 'Race day!' : types[i] === 'cd-today' ? 'Today' : 'Activity logged';
-    d.textContent = labels[i] || '';
-    if (types[i] === 'cd-today') d.style.outline = '2px solid var(--gray-900)';
-    grid.appendChild(d);
-  }
-}
-buildCalendar();
-
 // ── INTERACTIONS ──
+// (The old buildCalendar() mock-calendar script was removed: its #cal-grid
+// markup no longer exists, so it threw a TypeError on load that also killed
+// the statements after it in this script block.)
 function toggleLike(btn) {
   const liked = btn.classList.contains('liked');
   btn.classList.toggle('liked', !liked);

@@ -576,7 +576,10 @@ button,select,input,textarea{font-family:var(--font)}
           <div class="price-feature"><span class="pf-check">✓</span> Monthly coach report</div>
           <div class="price-feature" style="color:var(--gray-400)"><span style="color:var(--gray-300)">✦</span> AI coaching — coming soon</div>
         </div>
-        <div class="price-cta"><button class="btn btn-yellow btn-full btn-lg" onclick="openSignup()">Start your club →</button></div>
+        <div class="price-cta">
+          <button class="btn btn-yellow btn-full btn-lg" onclick="startClubUpgrade(this)">Get Club Pro →</button>
+          <div style="font-size:11px;color:var(--gray-400);line-height:1.5;margin-top:8px;text-align:center">Renews automatically every month at $29/month and continues until you cancel. Cancel anytime via Manage billing on your Billing page.</div>
+        </div>
       </div>
     </div>
   </div>
@@ -875,6 +878,28 @@ button,select,input,textarea{font-family:var(--font)}
 let currentStep = 1;
 const totalSteps = 5;
 let adminSports = [];
+
+// Upgrade-aware Club Pro CTA. Logged-in club managers go straight to a real
+// Stripe checkout for their club; logged-out visitors (401) fall back to the
+// signup wizard exactly as before. Managers with no club get routed to club
+// creation by the server ({redirect}); already-subscribed (409) → Billing page.
+async function startClubUpgrade(btn) {
+  if (btn) btn.disabled = true;
+  try {
+    var r = await fetch(window.BASE + '/api/billing/checkout/club', { method: 'POST' });
+    if (r.status === 401) { openSignup(); return; }
+    if (r.status === 409) { window.nav('/billing'); return; }
+    var d = {};
+    try { d = await r.json(); } catch (e) { d = {}; }
+    if (r.ok && d.url) { window.location.href = d.url; return; }
+    if (r.ok && d.redirect) { window.location.href = d.redirect; return; }
+    alert('Billing is unavailable right now — please try again later.');
+  } catch (err) {
+    alert('Billing is unavailable right now — please try again later.');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
 
 // ── OPEN / CLOSE ──
 function openSignup() {

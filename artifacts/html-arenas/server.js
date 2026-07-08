@@ -523,7 +523,7 @@ function athleteBottomNav(activeKey) {
     + bnItem(activeKey, 'profile', "nav('/profile')", '👤', 'Profile', false)
     + '</nav>';
 }
-const ATHLETE_NAV_ACTIVE = { feed: 'feed', profile: 'profile', events: 'events', leaderboards: 'ranks', challenges: null, athletes: null, notifications: null };
+const ATHLETE_NAV_ACTIVE = { feed: 'feed', profile: 'profile', events: 'events', leaderboards: 'ranks', challenges: null, athletes: null, notifications: null, billing: null };
 
 // Club pages (coach dashboard + member home) navigate by switching tabs/sections
 // in place via setTab(), not by loading a new URL, so their bottom nav calls
@@ -5103,6 +5103,86 @@ app.post(BASE + '/api/billing/checkout/club/:clubId', requireAuth, async (req, r
   } catch (err) {
     console.log('Club checkout error:', err.message);
     return res.status(500).json({ error: 'Could not start checkout' });
+  }
+});
+
+// Start Club Pro checkout without an explicit club id (used by the marketing
+// pricing CTAs, which don't know the caller's clubs). Resolves the caller's
+// managed clubs (admin/coach) server-side: checkout starts for the first
+// managed club still on the free plan; a caller who manages no club is routed
+// to club creation ({redirect}); all managed clubs already subscribed → 409.
+app.post(BASE + '/api/billing/checkout/club', requireAuth, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Billing is not configured' });
+  const priceId = (process.env.STRIPE_PRICE_CLUB_PRO || '').trim();
+  if (!priceId) return res.status(503).json({ error: 'Billing is not configured' });
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Billing is not configured' });
+  try {
+    const { data: mems } = await supabaseAdmin
+      .from('memberships')
+      .select('club_id, role')
+      .eq('user_id', req.user.id);
+    const managed = (mems || []).filter(m => isClubManagerRole(m.role) && m.club_id);
+    if (managed.length === 0) {
+      return res.json({ redirect: BASE + '/for-clubs' });
+    }
+    for (const m of managed) {
+      const plan = await getClubPlan(m.club_id);
+      if (plan !== 'club_pro') {
+        const session = await createBillingCheckout({
+          req, ownerType: 'club', ownerId: m.club_id, priceId
+        });
+        return res.json({ url: session.url });
+      }
+    }
+    return res.status(409).json({ error: 'already subscribed' });
+  } catch (err) {
+    console.log('Club checkout (auto) error:', err.message);
+    return res.status(500).json({ error: 'Could not start checkout' });
+  }
+});
+
+// Billing page. Shows the honest current state: the viewer's individual plan
+// (getUserPlan), the plan of every club they manage (getClubPlan), upgrade
+// buttons with auto-renewal disclosures when free, and Manage billing (Stripe
+// portal) when subscribed. Rendered from injected data only — no fabrication.
+app.get(BASE + '/billing', requirePageAuth, async (req, res) => {
+  const servePlain = () => res.type('html').send(
+    injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-billing.html'), 'utf8'), 'billing')
+  );
+  try {
+    if (!supabaseAdmin) return servePlain();
+    const userPlan = await getUserPlan(req.user.id);
+    const clubs = await getSidebarClubs(req.user.id);
+    const { data: mems } = await supabaseAdmin
+      .from('memberships')
+      .select('role, club_id, clubs:club_id (id, name, sport)')
+      .eq('user_id', req.user.id);
+    const managedClubs = [];
+    for (const m of (mems || [])) {
+      if (!isClubManagerRole(m.role)) continue;
+      const c = Array.isArray(m.clubs) ? m.clubs[0] : m.clubs;
+      if (!c || !c.id) continue;
+      managedClubs.push({
+        id: c.id,
+        name: c.name || 'Club',
+        role: m.role,
+        plan: await getClubPlan(c.id)
+      });
+    }
+    const data = {
+      userId: req.user.id,
+      profile: displayFromUser(req.user),
+      clubs,
+      billing: { configured: !!stripe, userPlan, managedClubs }
+    };
+    const html = injectBottomNav(
+      injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-billing.html'), 'utf8'), data),
+      'billing'
+    );
+    res.type('html').send(html);
+  } catch (err) {
+    console.log('Billing page error:', err.message);
+    servePlain();
   }
 });
 
