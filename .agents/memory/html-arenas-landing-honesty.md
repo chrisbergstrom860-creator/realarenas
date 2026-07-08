@@ -27,6 +27,9 @@ so **"Every sport"** is the honest *breadth* framing while **"8 sports supported
 the honest *hard number* — the two can coexist. The decorative 20-sport scroll strip
 and the 12 signup sport-chips are aspirational, not a support claim.
 
+## AI-coaching claims (same rule)
+AI coaching does not exist yet. Hero sub, how-it-works step 2, and the club-join perk list now describe real features (leaderboards, events/challenges, training load/streaks/PRs) with AI labeled "coming soon" where mentioned. STILL PRESENT-TENSE (flagged, not yet fixed): the "AI-powered coaching" feature card + "✦ AI Coach" badge, the stats-band "AI / Coaching on every activity" tile, and the auth-modal subtitle + "AI Coaching" stat on the same landing file. The hero/product-preview mockup cards with "AI analysed" badges are labeled product previews and are acceptable.
+
 ## /for-clubs honesty pass (same rule)
 The clubs marketing page (`arenas-for-clubs.html`) got the full pass: no testimonials, no traction numbers, mock dashboard labeled "Product preview" with a generic club name, AI/device-sync claims future-tense "coming soon", pricing is 2 real tiers (Starter free / Pro $29) — Elite deleted. The signup wizard is 5 steps (plan-selection step deleted); review step shows "Free · founding period" note instead of an order summary, no trial language. Wizard invite rows are REAL (see html-arenas-invites.md). Don't reintroduce a plan step or fake tiers before payments exist.
 
