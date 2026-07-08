@@ -29,6 +29,20 @@ const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
     })
   : null;
 
+// ── STRIPE ──
+// Deliberate exception to the plain-fetch pattern (cf. sendEmail): we use the
+// official SDK because stripe.webhooks.constructEvent is needed for webhook
+// signature verification. Test mode only for now. Degrades gracefully like
+// Resend: with no STRIPE_SECRET_KEY, `stripe` is null and every caller must
+// no-op (never crash) — check `if (!stripe)` before use.
+let stripe = null;
+if (process.env.STRIPE_SECRET_KEY) {
+  const Stripe = require('stripe');
+  stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+} else {
+  console.log('[stripe skipped: no STRIPE_SECRET_KEY] Billing features disabled');
+}
+
 // ── EMAIL (Resend) ──
 // Sender identity uses the verified Resend domain (send.realarenas.com).
 const EMAIL_FROM = 'Arenas <noreply@send.realarenas.com>';
@@ -814,6 +828,41 @@ async function getClubRole(userId, clubId) {
 
 function isClubManagerRole(role) {
   return role === 'admin' || role === 'coach';
+}
+
+// ── PLAN RESOLUTION (subscriptions table) ──
+// A subscription row counts as paid only while status is 'active' or
+// 'past_due' (grace window while Stripe retries a failed payment). No row,
+// any other status, or any error resolves to the free plan — plan lookups
+// must never break a request. NOT wired into any route yet (no gating).
+const PAID_SUB_STATUSES = ['active', 'past_due'];
+
+async function getPaidSubscription(ownerType, ownerId) {
+  if (!supabaseAdmin || !ownerId) return null;
+  try {
+    const { data } = await supabaseAdmin
+      .from('subscriptions')
+      .select('plan, status')
+      .eq('owner_type', ownerType)
+      .eq('owner_id', ownerId)
+      .limit(1);
+    const row = (Array.isArray(data) && data[0]) || null;
+    return row && PAID_SUB_STATUSES.includes(row.status) ? row : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+// Returns 'pro' or 'free'.
+async function getUserPlan(userId) {
+  const sub = await getPaidSubscription('user', userId);
+  return sub && sub.plan === 'pro' ? 'pro' : 'free';
+}
+
+// Returns 'club_pro' or 'free'.
+async function getClubPlan(clubId) {
+  const sub = await getPaidSubscription('club', clubId);
+  return sub && sub.plan === 'club_pro' ? 'club_pro' : 'free';
 }
 
 // Inject a server-built object into a page as window.<varName>, escaping `<`
