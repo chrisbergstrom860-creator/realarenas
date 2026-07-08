@@ -286,6 +286,33 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
       return res.redirect(BASE + '/for-clubs?error=membership');
     }
 
+    // Send any member invites queued in the signup wizard. Best-effort: the
+    // club is already created, so invite failures must never fail the signup.
+    try {
+      let queued = [];
+      try { queued = JSON.parse(req.body.invites || '[]'); } catch (err) { queued = []; }
+      if (Array.isArray(queued) && queued.length > 0) {
+        queued = queued.slice(0, 50);
+        const userByEmail = {};
+        (await listAllAuthUsers()).forEach(u => { if (u.email) userByEmail[u.email.toLowerCase()] = u; });
+        const inviter = displayFromUser(data.user);
+        for (const inv of queued) {
+          await createClubInviteRecord({
+            clubId: club.id,
+            inviterUser: data.user,
+            email: inv && inv.email,
+            role: inv && inv.role,
+            req,
+            userByEmail,
+            clubName: club_name,
+            inviterName: inviter.name
+          });
+        }
+      }
+    } catch (err) {
+      // Invites are best-effort during signup — never block the redirect.
+    }
+
     setSession(res, signInData.session);
     return res.redirect(BASE + '/clubs/dashboard');
   } catch (err) {
@@ -5032,7 +5059,71 @@ app.post(BASE + '/api/clubs/:clubId/invites', requireAuth, async (req, res) => {
   }
 });
 
-// Create many invites at once (used by the invite form and CSV/paste import).
+// Create a single club invite: dedupe against pending invites and existing
+// members, insert the row, send the email (fire-and-forget) and, for existing
+// Arenas users, an in-app notification. Shared by the bulk-invite endpoint and
+// the club signup wizard. Returns { status: 'sent'|'skipped'|'failed', ... }.
+async function createClubInviteRecord({ clubId, inviterUser, email, role, req, userByEmail, clubName, inviterName }) {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const irole = ['member', 'coach', 'admin'].includes(role) ? role : 'member';
+  if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+    return { status: 'failed', email: cleanEmail, reason: 'invalid_email' };
+  }
+  try {
+    const { data: existing } = await supabaseAdmin
+      .from('club_invites')
+      .select('id')
+      .eq('club_id', clubId)
+      .eq('email', cleanEmail)
+      .eq('status', 'pending')
+      .maybeSingle();
+    if (existing) return { status: 'skipped', email: cleanEmail, reason: 'already_pending' };
+
+    const existingUser = userByEmail[cleanEmail] || null;
+    if (existingUser) {
+      const memberRole = await getClubRole(existingUser.id, clubId);
+      if (memberRole) return { status: 'skipped', email: cleanEmail, reason: 'already_member' };
+    }
+
+    const token = generateInviteToken();
+    const { error } = await supabaseAdmin
+      .from('club_invites')
+      .insert({
+        club_id: clubId,
+        invited_by: inviterUser.id,
+        email: cleanEmail,
+        role: irole,
+        token,
+        status: 'pending',
+        expires_at: new Date(Date.now() + INVITE_TTL_MS).toISOString()
+      });
+    if (error) return { status: 'failed', email: cleanEmail, reason: 'db' };
+    const joinUrl = `${publicBaseUrl(req)}/join/${token}`;
+
+    // Everyone invited gets the email (fire-and-forget, never blocks the row).
+    const invEmail = buildInviteEmail({ clubName, inviterName, joinUrl, role: irole });
+    sendEmail({ to: cleanEmail, subject: invEmail.subject, html: invEmail.html, text: invEmail.text });
+
+    if (existingUser) {
+      // Existing Arenas users ALSO get an in-app notification.
+      await createNotification({
+        userId: existingUser.id,
+        type: 'club',
+        title: 'Club invite',
+        body: `${inviterName} invited you to join ${clubName} on Arenas`,
+        link: `/join/${token}`,
+        actorId: inviterUser.id,
+        entityId: clubId
+      });
+      return { status: 'sent', email: cleanEmail, joinUrl, existingUser: true };
+    }
+    return { status: 'sent', email: cleanEmail, joinUrl, existingUser: false };
+  } catch (err) {
+    return { status: 'failed', email: cleanEmail, reason: 'db' };
+  }
+}
+
+// Create many invites at once (used by the club dashboard invite form).
 app.post(BASE + '/api/clubs/:clubId/invites/bulk', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.status(503).json({ error: 'Server not configured' });
   const { clubId } = req.params;
@@ -5057,62 +5148,19 @@ app.post(BASE + '/api/clubs/:clubId/invites/bulk', requireAuth, async (req, res)
 
   const results = { sent: [], skipped: [], failed: [] };
   for (const raw of incoming) {
-    const email = (raw && raw.email || '').trim().toLowerCase();
-    const irole = ['member', 'coach', 'admin'].includes(raw && raw.role) ? raw.role : 'member';
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { results.failed.push({ email, reason: 'invalid_email' }); continue; }
-    try {
-      const { data: existing } = await supabaseAdmin
-        .from('club_invites')
-        .select('id')
-        .eq('club_id', clubId)
-        .eq('email', email)
-        .eq('status', 'pending')
-        .maybeSingle();
-      if (existing) { results.skipped.push({ email, reason: 'already_pending' }); continue; }
-
-      const existingUser = userByEmail[email] || null;
-      if (existingUser) {
-        const memberRole = await getClubRole(existingUser.id, clubId);
-        if (memberRole) { results.skipped.push({ email, reason: 'already_member' }); continue; }
-      }
-
-      const token = generateInviteToken();
-      const { error } = await supabaseAdmin
-        .from('club_invites')
-        .insert({
-          club_id: clubId,
-          invited_by: req.user.id,
-          email,
-          role: irole,
-          token,
-          status: 'pending',
-          expires_at: new Date(Date.now() + INVITE_TTL_MS).toISOString()
-        });
-      if (error) { results.failed.push({ email, reason: 'db' }); continue; }
-      const joinUrl = `${publicBaseUrl(req)}/join/${token}`;
-
-      // Everyone invited gets the email (fire-and-forget, never blocks the row).
-      const invEmail = buildInviteEmail({ clubName, inviterName: inviter.name, joinUrl, role: irole });
-      sendEmail({ to: email, subject: invEmail.subject, html: invEmail.html, text: invEmail.text });
-
-      if (existingUser) {
-        // Existing Arenas users ALSO get an in-app notification.
-        await createNotification({
-          userId: existingUser.id,
-          type: 'club',
-          title: 'Club invite',
-          body: `${inviter.name} invited you to join ${clubName} on Arenas`,
-          link: `/join/${token}`,
-          actorId: req.user.id,
-          entityId: clubId
-        });
-        results.sent.push({ email, joinUrl, existingUser: true });
-      } else {
-        results.sent.push({ email, joinUrl, existingUser: false });
-      }
-    } catch (err) {
-      results.failed.push({ email, reason: 'db' });
-    }
+    const r = await createClubInviteRecord({
+      clubId,
+      inviterUser: req.user,
+      email: raw && raw.email,
+      role: raw && raw.role,
+      req,
+      userByEmail,
+      clubName,
+      inviterName: inviter.name
+    });
+    if (r.status === 'sent') results.sent.push({ email: r.email, joinUrl: r.joinUrl, existingUser: r.existingUser });
+    else if (r.status === 'skipped') results.skipped.push({ email: r.email, reason: r.reason });
+    else results.failed.push({ email: r.email, reason: r.reason });
   }
   return res.json({ success: true, ...results });
 });

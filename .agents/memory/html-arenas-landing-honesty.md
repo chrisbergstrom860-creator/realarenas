@@ -27,6 +27,9 @@ so **"Every sport"** is the honest *breadth* framing while **"8 sports supported
 the honest *hard number* — the two can coexist. The decorative 20-sport scroll strip
 and the 12 signup sport-chips are aspirational, not a support claim.
 
+## /for-clubs honesty pass (same rule)
+The clubs marketing page (`arenas-for-clubs.html`) got the full pass: no testimonials, no traction numbers, mock dashboard labeled "Product preview" with a generic club name, AI/device-sync claims future-tense "coming soon", pricing is 2 real tiers (Starter free / Pro $29) — Elite deleted. The signup wizard is 5 steps (plan-selection step deleted); review step shows "Free · founding period" note instead of an order summary, no trial language. Wizard invite rows are REAL (see html-arenas-invites.md). Don't reintroduce a plan step or fake tiers before payments exist.
+
 ## App-shell honesty (same rule)
 Fabricated subscription-status UI was removed from all main-app pages: "· Pro" footer suffixes, "💳 Pro plan" nav items, "✦ Pro" hero tag, and the fake Plan/billing card on my-profile settings. Payments don't exist — never reintroduce Pro-status labels in the app shell. Pro mentions in /for-clubs, landing pricing marketing, and arenas-terms.html are honest future-tense copy and are intentionally kept.
 Also removed from my-profile Clubs tab: fake Hackney club card + dead "Find clubs near you" search card (no club search/directory exists). Clubs tab markup starts empty (#clubs-list); JS renders real data.clubs or an invite-only empty state; subtitle links to BASE+/athletes.

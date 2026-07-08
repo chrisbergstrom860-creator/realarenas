@@ -73,11 +73,7 @@ button,select,input,textarea{font-family:var(--font)}
 .hero-btn-secondary{padding:13px 24px;background:rgba(255,255,255,.08);color:white;border-radius:9px;font-size:15px;font-weight:500;cursor:pointer;border:1px solid rgba(255,255,255,.15);transition:all .13s}
 .hero-btn-secondary:hover{background:rgba(255,255,255,.14)}
 .hero-social-proof{display:flex;align-items:center;gap:12px;margin-top:20px}
-.hsp-avs{display:flex}
-.hsp-av{width:28px;height:28px;border-radius:50%;border:2px solid var(--gray-900);margin-left:-8px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0}
-.hsp-av:first-child{margin-left:0}
 .hsp-text{font-size:12px;color:var(--gray-500)}
-.hsp-text strong{color:rgba(255,255,255,.7)}
 
 /* Dashboard preview card */
 .hero-preview{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:var(--radius-xl);overflow:hidden;animation:float 6s ease-in-out infinite}
@@ -96,13 +92,6 @@ button,select,input,textarea{font-family:var(--font)}
 .hp-m-bar{height:4px;border-radius:2px;flex:1;background:rgba(255,255,255,.1);overflow:hidden}
 .hp-m-fill{height:100%;border-radius:2px}
 .hp-m-status{font-size:9px;padding:1px 6px;border-radius:10px;font-weight:500;flex-shrink:0}
-.hp-ai-card{background:rgba(255,210,30,.08);border:1px solid rgba(255,210,30,.2);border-radius:7px;padding:8px 10px;margin-top:8px;font-size:10px;color:rgba(255,210,30,.8);line-height:1.5}
-
-/* ── STATS BAR ── */
-.stats-bar{background:var(--yellow);padding:20px 40px;display:flex;justify-content:center;gap:60px}
-.stat-item{text-align:center}
-.stat-val{font-size:28px;font-weight:800;color:var(--gray-900);font-family:var(--mono);line-height:1}
-.stat-label{font-size:12px;color:var(--gray-700);margin-top:3px;font-weight:500}
 
 /* ── SPORT STRIP ── */
 .sport-strip{background:white;border-top:var(--border);border-bottom:var(--border);padding:14px 40px;display:flex;gap:8px;overflow-x:auto;align-items:center}
@@ -142,18 +131,8 @@ button,select,input,textarea{font-family:var(--font)}
 .hiw-title{font-size:16px;font-weight:700;color:var(--gray-900);margin-bottom:4px}
 .hiw-desc{font-size:13px;color:var(--gray-500);line-height:1.65}
 
-/* ── TESTIMONIALS ── */
-.testimonials-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-.testi-card{background:white;border:var(--border);border-radius:var(--radius-lg);padding:22px;display:flex;flex-direction:column;gap:12px}
-.testi-stars{color:var(--yellow-dark);font-size:14px;letter-spacing:2px}
-.testi-quote{font-size:14px;color:var(--gray-700);line-height:1.7;font-style:italic}
-.testi-author{display:flex;align-items:center;gap:10px;padding-top:8px;border-top:var(--border)}
-.ta-av{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}
-.ta-name{font-size:13px;font-weight:600;color:var(--gray-900)}
-.ta-role{font-size:11px;color:var(--gray-500)}
-
 /* ── PRICING ── */
-.pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;align-items:start}
+.pricing-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;align-items:start;max-width:760px;margin:0 auto}
 .price-card{background:white;border:var(--border);border-radius:var(--radius-xl);overflow:hidden;transition:border-color .13s,box-shadow .13s}
 .price-card:hover{border-color:var(--gray-300);box-shadow:var(--shadow-md)}
 .price-card.featured{border-color:var(--yellow-dark);box-shadow:0 0 0 1px var(--yellow-dark)}
@@ -260,17 +239,6 @@ button,select,input,textarea{font-family:var(--font)}
 .handle-preview{font-size:11px;color:var(--gray-500);margin-top:3px;font-family:var(--mono)}
 .handle-preview span{color:var(--gray-900);font-weight:500}
 
-/* Club size / plan select */
-.plan-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:6px}
-.plan-card{border:var(--border);border-radius:var(--radius-lg);padding:14px;cursor:pointer;transition:all .13s;position:relative}
-.plan-card:hover{border-color:var(--gray-400)}
-.plan-card.selected{border-color:var(--yellow-dark);background:var(--yellow-light)}
-.plan-card.featured-plan{border-color:var(--gray-300)}
-.pc-badge{position:absolute;top:-8px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:700;background:var(--yellow);color:var(--gray-900);padding:2px 8px;border-radius:10px;white-space:nowrap}
-.pc-name{font-size:14px;font-weight:700;color:var(--gray-900);margin-bottom:2px}
-.pc-price{font-size:12px;font-family:var(--mono);color:var(--gray-500);margin-bottom:8px}
-.pc-features{font-size:11px;color:var(--gray-500);line-height:1.7}
-
 /* Invite table */
 .invite-table-wrap{border:var(--border);border-radius:var(--radius);overflow:hidden}
 .invite-table{width:100%;border-collapse:collapse}
@@ -285,33 +253,6 @@ button,select,input,textarea{font-family:var(--font)}
 .inv-del:hover{background:var(--red-light);color:var(--red);border-color:#FECACA}
 .add-row{padding:8px 10px;border-top:var(--border);font-size:12px;color:var(--gray-500);cursor:pointer;background:var(--gray-50);transition:background .1s}
 .add-row:hover{background:var(--gray-100);color:var(--gray-700)}
-
-/* Integrations */
-.integration-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
-.int-card{border:var(--border);border-radius:var(--radius-lg);padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all .13s;position:relative}
-.int-card:hover{border-color:var(--gray-300);background:var(--gray-50)}
-.int-card.connected{border-color:var(--green);background:var(--green-light)}
-.int-icon{font-size:24px;flex-shrink:0;width:36px;text-align:center}
-.int-name{font-size:13px;font-weight:600;color:var(--gray-900)}
-.int-desc{font-size:11px;color:var(--gray-500);margin-top:1px}
-.int-status{font-size:10px;font-weight:600;margin-left:auto;flex-shrink:0;padding:2px 8px;border-radius:10px}
-.int-status.conn{background:var(--green-light);color:#166534;border:1px solid #86EFAC}
-.int-status.add{background:var(--gray-100);color:var(--gray-500);border:var(--border)}
-
-/* Order summary */
-.order-summary{background:var(--gray-900);border-radius:var(--radius-lg);padding:18px 20px;margin-top:14px}
-.os-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-400);margin-bottom:10px}
-.os-row{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.07)}
-.os-row:last-child{border-bottom:none;font-weight:700;color:white;font-size:15px;margin-top:5px}
-.os-row span:first-child{color:var(--gray-400)}
-.os-row span:last-child{color:rgba(255,255,255,.8);font-family:var(--mono)}
-
-/* Toggle */
-.toggle-row{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--gray-700);margin-bottom:8px}
-.toggle{width:36px;height:20px;border-radius:10px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
-.toggle.on{background:var(--green)}.toggle.off{background:var(--gray-300)}
-.toggle::after{content:'';position:absolute;top:2px;width:16px;height:16px;border-radius:50%;background:white;transition:left .2s;box-shadow:var(--shadow)}
-.toggle.on::after{left:18px}.toggle.off::after{left:2px}
 
 /* Step navigation */
 .sm-footer{padding:20px 28px 24px;display:flex;gap:10px;align-items:center;border-top:var(--border);background:var(--gray-50);margin-top:24px;flex-shrink:0}
@@ -365,16 +306,12 @@ button,select,input,textarea{font-family:var(--font)}
   .hero-glow { width: 320px; height: 320px; top: -60px; right: -60px; }
   .hp-stat-row { grid-template-columns: repeat(2, 1fr); }
 
-  /* Yellow stats bar — wrap its row of stats */
-  .stats-bar { flex-wrap: wrap; gap: 18px 28px; padding: 18px 20px; }
-
   /* Section spacing + headings */
   .section { padding: 56px 20px; }
   .section-title { font-size: 26px; }
 
   /* Multi-column content grids -> single column */
   .features-grid { grid-template-columns: 1fr; }
-  .testimonials-grid { grid-template-columns: 1fr; }
   .pricing-grid { grid-template-columns: 1fr; }
   .price-amount { font-size: 30px; }
 
@@ -388,8 +325,6 @@ button,select,input,textarea{font-family:var(--font)}
   /* Signup modal — collapse inner grids so the multi-step flow is usable */
   .signup-overlay { padding: 12px; }
   .form-row { grid-template-columns: 1fr; }
-  .plan-cards { grid-template-columns: 1fr; }
-  .integration-grid { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -418,19 +353,12 @@ button,select,input,textarea{font-family:var(--font)}
     <div>
       <div class="hero-eyebrow">✦ Built for club coaches and admins</div>
       <h1 class="hero-title">Your club deserves<br>better than a <span>spreadsheet</span></h1>
-      <p class="hero-sub">Arenas gives running clubs, cycling teams, and climbing gyms a private dashboard for tracking member training, managing events, and running leaderboard challenges — all with AI coaching built in.</p>
+      <p class="hero-sub">Arenas gives running clubs, cycling teams, and climbing gyms a private dashboard for tracking member training, managing events, and running leaderboard challenges — with AI coaching coming soon.</p>
       <div class="hero-actions">
         <button class="hero-btn-primary" onclick="openSignup()">Start your club free →</button>
       </div>
       <div class="hero-social-proof">
-        <div class="hsp-avs">
-          <div class="hsp-av" style="background:#FEF9C3;color:#854D0E">RC</div>
-          <div class="hsp-av" style="background:#FCE7F3;color:#9D174D">MT</div>
-          <div class="hsp-av" style="background:#E0F2FE;color:#0369A1">KL</div>
-          <div class="hsp-av" style="background:#F5F3FF;color:#5B21B6">DW</div>
-          <div class="hsp-av" style="background:var(--gray-200);color:var(--gray-600);font-size:7px">+12</div>
-        </div>
-        <div class="hsp-text"><strong>16 club coaches</strong> joined this month · no credit card required</div>
+        <div class="hsp-text">Free to start · no credit card required</div>
       </div>
     </div>
     <div class="hero-preview">
@@ -438,7 +366,8 @@ button,select,input,textarea{font-family:var(--font)}
         <div class="hp-dot" style="background:#EF4444"></div>
         <div class="hp-dot" style="background:#F59E0B"></div>
         <div class="hp-dot" style="background:#10B981"></div>
-        <div class="hp-title">Hackney RC · Coach Dashboard</div>
+        <div style="font-size:10px;font-weight:600;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.06em;margin-left:6px">Product preview</div>
+        <div class="hp-title">Riverside Run Club · Coach Dashboard</div>
       </div>
       <div class="hp-body">
         <div class="hp-stat-row">
@@ -466,19 +395,10 @@ button,select,input,textarea{font-family:var(--font)}
           <div class="hp-m-bar"><div class="hp-m-fill" style="width:28%;background:#EF4444"></div></div>
           <div class="hp-m-status" style="background:rgba(239,68,68,.15);color:#EF4444">Risk</div>
         </div>
-        <div class="hp-ai-card">✦ AI: David hasn't logged in 5 days — consider reaching out before Tuesday's session.</div>
       </div>
     </div>
   </div>
 </section>
-
-<!-- STATS BAR -->
-<div class="stats-bar">
-  <div class="stat-item"><div class="stat-val">2,400+</div><div class="stat-label">Club members tracked</div></div>
-  <div class="stat-item"><div class="stat-val">48</div><div class="stat-label">Clubs on Arenas</div></div>
-  <div class="stat-item"><div class="stat-val">94%</div><div class="stat-label">Member retention rate</div></div>
-  <div class="stat-item"><div class="stat-val">3 min</div><div class="stat-label">Setup time</div></div>
-</div>
 
 <!-- SPORT STRIP -->
 <div class="sport-strip">
@@ -523,8 +443,8 @@ button,select,input,textarea{font-family:var(--font)}
       </div>
       <div class="feat-card">
         <div class="feat-icon" style="background:var(--green-light)">✦</div>
-        <div class="feat-title">AI coaching for every member</div>
-        <div class="feat-desc">Every activity gets an AI coaching analysis — HR trends, pacing, recovery recommendations. You coach the group. Arenas coaches the individual.</div>
+        <div class="feat-title">AI coaching for every member — coming soon</div>
+        <div class="feat-desc">Our next build: every activity will get an AI coaching analysis — HR trends, pacing, recovery recommendations. You'll coach the group. Arenas will coach the individual.</div>
       </div>
       <div class="feat-card">
         <div class="feat-icon" style="background:var(--orange-light)">✉️</div>
@@ -554,13 +474,13 @@ button,select,input,textarea{font-family:var(--font)}
           <tr><td>Activity feed</td><td><span class="cross">✕</span></td><td><span class="check">✓</span></td><td><span class="check">✓</span></td></tr>
           <tr><td>Private leaderboard</td><td>Manual spreadsheet</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td></tr>
           <tr><td>Training load monitoring</td><td><span class="cross">✕</span></td><td><span class="cross">✕</span></td><td><span class="check">✓</span></td></tr>
-          <tr><td>AI coaching per member</td><td><span class="cross">✕</span></td><td><span class="cross">✕</span></td><td><span class="check">✓</span></td></tr>
+          <tr><td>AI coaching per member</td><td><span class="cross">✕</span></td><td><span class="cross">✕</span></td><td>Coming soon</td></tr>
           <tr><td>Club challenges</td><td><span class="cross">✕</span></td><td>Basic</td><td><span class="check">✓</span></td></tr>
           <tr><td>Event management + RSVPs</td><td>WhatsApp polls</td><td><span class="cross">✕</span></td><td><span class="check">✓</span></td></tr>
           <tr><td>Email invite system</td><td><span class="cross">✕</span></td><td><span class="cross">✕</span></td><td><span class="check">✓</span></td></tr>
           <tr><td>Coach dashboard</td><td><span class="cross">✕</span></td><td><span class="cross">✕</span></td><td><span class="check">✓</span></td></tr>
           <tr><td>Cross-sport support</td><td><span class="check">✓</span></td><td>Running &amp; cycling only</td><td><span class="check">✓</span></td></tr>
-          <tr><td>Injury risk alerts</td><td><span class="cross">✕</span></td><td><span class="cross">✕</span></td><td><span class="check">✓</span></td></tr>
+          <tr><td>At-risk member flags</td><td><span class="cross">✕</span></td><td><span class="cross">✕</span></td><td><span class="check">✓</span></td></tr>
         </tbody>
       </table>
     </div>
@@ -570,7 +490,7 @@ button,select,input,textarea{font-family:var(--font)}
 <!-- HOW IT WORKS -->
 <div id="how-it-works">
   <div class="section">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:start">
+    <div style="max-width:660px">
       <div>
         <div class="section-label">Setup in minutes</div>
         <h2 class="section-title">Your club is live<br>before Tuesday's session</h2>
@@ -594,7 +514,7 @@ button,select,input,textarea{font-family:var(--font)}
             <div class="hiw-num">3</div>
             <div>
               <div class="hiw-title">Invite your members</div>
-              <div class="hiw-desc">Paste their emails or upload a CSV. Each member gets a personalised invite with your name on it. One click and they're in.</div>
+              <div class="hiw-desc">Add their emails and each member gets a personalised invite with your name on it. One click and they're in.</div>
             </div>
           </div>
           <div class="hiw-step">
@@ -609,26 +529,6 @@ button,select,input,textarea{font-family:var(--font)}
             <div>
               <div class="hiw-title">Coach with real data</div>
               <div class="hiw-desc">See training load, flag at-risk members, set challenges, manage events. Everything you used to do manually, done for you.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div style="padding-top:60px">
-        <div class="testimonials-grid" style="grid-template-columns:1fr">
-          <div class="testi-card">
-            <div class="testi-stars">★★★★★</div>
-            <div class="testi-quote">"I used to spend an hour every Sunday updating a Google Sheet with everyone's weekly mileage. Arenas does it automatically and the training load colours tell me instantly who I need to check in with."</div>
-            <div class="testi-author">
-              <div class="ta-av" style="background:#FEF9C3;color:#854D0E">RH</div>
-              <div><div class="ta-name">Rachel H.</div><div class="ta-role">Head Coach · Hackney Running Club · 48 members</div></div>
-            </div>
-          </div>
-          <div class="testi-card">
-            <div class="testi-stars">★★★★★</div>
-            <div class="testi-quote">"The AI coaching angle was what sold me. Every member gets individual feedback on their workouts even when I can't be there. It's like having an assistant coach for each person."</div>
-            <div class="testi-author">
-              <div class="ta-av" style="background:#E0F2FE;color:#0369A1">KL</div>
-              <div><div class="ta-name">Karen L.</div><div class="ta-role">Coach · South London Cycling Club · 64 members</div></div>
             </div>
           </div>
         </div>
@@ -651,14 +551,13 @@ button,select,input,textarea{font-family:var(--font)}
           <div class="price-desc">For small clubs just getting started. No credit card required.</div>
         </div>
         <div class="price-body">
-          <div class="price-feature"><span class="pf-check">✓</span> Up to 25 members</div>
           <div class="price-feature"><span class="pf-check">✓</span> Private leaderboard</div>
           <div class="price-feature"><span class="pf-check">✓</span> Club activity feed</div>
           <div class="price-feature"><span class="pf-check">✓</span> Email invite system</div>
-          <div class="price-feature"><span class="pf-check">✓</span> Basic event management</div>
-          <div class="price-feature" style="color:var(--gray-400)"><span style="color:var(--gray-300)">✓</span> 5 AI analyses/member/month</div>
+          <div class="price-feature"><span class="pf-check">✓</span> Event management</div>
+          <div class="price-feature"><span class="pf-check">✓</span> Club challenges</div>
           <div class="price-feature" style="color:var(--gray-400)"><span style="color:var(--gray-300)">✕</span> Training load monitoring</div>
-          <div class="price-feature" style="color:var(--gray-400)"><span style="color:var(--gray-300)">✕</span> Injury risk alerts</div>
+          <div class="price-feature" style="color:var(--gray-400)"><span style="color:var(--gray-300)">✕</span> At-risk member flags</div>
         </div>
         <div class="price-cta"><button class="btn btn-full" style="border-color:var(--gray-300)" onclick="openSignup()">Get started free →</button></div>
       </div>
@@ -670,34 +569,14 @@ button,select,input,textarea{font-family:var(--font)}
           <div class="price-desc">For serious clubs that want the full coaching toolkit.</div>
         </div>
         <div class="price-body">
-          <div class="price-feature"><span class="pf-check">✓</span> Up to 100 members</div>
           <div class="price-feature"><span class="pf-check">✓</span> Everything in Starter</div>
-          <div class="price-feature"><span class="pf-check">✓</span> Unlimited AI coaching</div>
           <div class="price-feature"><span class="pf-check">✓</span> Training load monitoring</div>
-          <div class="price-feature"><span class="pf-check">✓</span> Injury risk alerts</div>
-          <div class="price-feature"><span class="pf-check">✓</span> Advanced challenges</div>
+          <div class="price-feature"><span class="pf-check">✓</span> At-risk member flags</div>
           <div class="price-feature"><span class="pf-check">✓</span> Coach notes on events</div>
-          <div class="price-feature"><span class="pf-check">✓</span> Bulk CSV import</div>
-        </div>
-        <div class="price-cta"><button class="btn btn-yellow btn-full btn-lg" onclick="openSignup()">Start 14-day free trial →</button></div>
-      </div>
-      <div class="price-card">
-        <div class="price-header">
-          <div class="price-name">Club Elite</div>
-          <div class="price-amount">$79<span>/month</span></div>
-          <div class="price-desc">For large clubs, multi-squad setups, and performance academies.</div>
-        </div>
-        <div class="price-body">
-          <div class="price-feature"><span class="pf-check">✓</span> Up to 250 members</div>
-          <div class="price-feature"><span class="pf-check">✓</span> Everything in Pro</div>
-          <div class="price-feature"><span class="pf-check">✓</span> Multi-squad management</div>
-          <div class="price-feature"><span class="pf-check">✓</span> Custom club branding</div>
-          <div class="price-feature"><span class="pf-check">✓</span> Priority support</div>
-          <div class="price-feature"><span class="pf-check">✓</span> API access</div>
           <div class="price-feature"><span class="pf-check">✓</span> Monthly coach report</div>
-          <div class="price-feature"><span class="pf-check">✓</span> Custom challenges</div>
+          <div class="price-feature" style="color:var(--gray-400)"><span style="color:var(--gray-300)">✦</span> AI coaching — coming soon</div>
         </div>
-        <div class="price-cta"><button class="btn btn-full" style="border-color:var(--gray-300)" onclick="showToast('Contacting sales…')">Contact sales →</button></div>
+        <div class="price-cta"><button class="btn btn-yellow btn-full btn-lg" onclick="openSignup()">Start your club →</button></div>
       </div>
     </div>
   </div>
@@ -710,7 +589,7 @@ button,select,input,textarea{font-family:var(--font)}
   <p class="cta-sub">Set up your club in 5 minutes. No credit card required for Starter.</p>
   <div class="cta-actions">
     <button class="hero-btn-primary" onclick="openSignup()" style="animation:none">Start your club free →</button>
-    <button class="hero-btn-secondary" onclick="nav('/clubs/dashboard')">See the dashboard</button>
+    <button class="hero-btn-secondary" onclick="openSignup()">Set up your club →</button>
   </div>
 </div>
 
@@ -746,11 +625,10 @@ button,select,input,textarea{font-family:var(--font)}
 
     <!-- Progress -->
     <div class="sm-progress">
-      <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:16.66%"></div></div>
-      <div class="progress-label"><span id="progress-text">Step 1 of 6</span><span id="progress-pct">17%</span></div>
+      <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:20%"></div></div>
+      <div class="progress-label"><span id="progress-text">Step 1 of 5</span><span id="progress-pct">20%</span></div>
       <div class="step-dots" id="step-dots">
         <div class="step-dot current"></div>
-        <div class="step-dot"></div>
         <div class="step-dot"></div>
         <div class="step-dot"></div>
         <div class="step-dot"></div>
@@ -763,7 +641,7 @@ button,select,input,textarea{font-family:var(--font)}
 
       <!-- ── STEP 1: Create account ── -->
       <div class="signup-step active" id="step-1">
-        <div class="step-eyebrow">Step 1 of 6 · Account</div>
+        <div class="step-eyebrow">Step 1 of 5 · Account</div>
         <h2 class="step-title">Create your Arenas account</h2>
         <p class="step-sub">Your personal account is separate from your club — you train and compete as an athlete too. Takes 60 seconds.</p>
         <div class="error-banner" id="err-1"></div>
@@ -779,7 +657,7 @@ button,select,input,textarea{font-family:var(--font)}
         </div>
         <div class="form-field">
           <label class="form-label">Email address</label>
-          <input class="form-input" type="email" id="admin-email" placeholder="rachel@hackneyrc.com" autocomplete="email">
+          <input class="form-input" type="email" id="admin-email" placeholder="you@example.com" autocomplete="email">
           <div class="form-hint">You'll use this to log in. Club invite emails are sent on your behalf from this address.</div>
         </div>
         <div class="form-field">
@@ -818,21 +696,21 @@ button,select,input,textarea{font-family:var(--font)}
 
       <!-- ── STEP 2: Club details ── -->
       <div class="signup-step" id="step-2">
-        <div class="step-eyebrow">Step 2 of 6 · Your club</div>
+        <div class="step-eyebrow">Step 2 of 5 · Your club</div>
         <h2 class="step-title">Tell us about your club</h2>
         <p class="step-sub">This is your club's public profile on Arenas. You can update everything later from your settings.</p>
         <div class="error-banner" id="err-2"></div>
         <div class="form-field">
           <label class="form-label">Club name</label>
-          <input class="form-input" type="text" id="club-name" placeholder="Hackney Running Club" oninput="updateHandle(this.value)">
+          <input class="form-input" type="text" id="club-name" placeholder="Riverside Run Club" oninput="updateHandle(this.value)">
         </div>
         <div class="form-field">
           <label class="form-label">Club handle</label>
           <div style="position:relative">
-            <input class="form-input" type="text" id="club-handle" placeholder="hackneyrc" style="padding-left:100px">
+            <input class="form-input" type="text" id="club-handle" placeholder="riversiderun" style="padding-left:100px">
             <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--gray-400);font-family:var(--mono)">arenas.io/</span>
           </div>
-          <div class="handle-preview" id="handle-preview">arenas.io/<span>hackneyrc</span></div>
+          <div class="handle-preview" id="handle-preview">arenas.io/<span>yourclub</span></div>
         </div>
         <div class="form-field">
           <label class="form-label">Primary sport</label>
@@ -874,49 +752,12 @@ button,select,input,textarea{font-family:var(--font)}
         </div>
       </div>
 
-      <!-- ── STEP 3: Club size & plan ── -->
+      <!-- ── STEP 3: Invite members ── -->
       <div class="signup-step" id="step-3">
-        <div class="step-eyebrow">Step 3 of 6 · Plan</div>
-        <h2 class="step-title">How big is your club?</h2>
-        <p class="step-sub">We'll suggest the right plan. You can change it anytime — and everything is free for the first 14 days.</p>
-        <div class="error-banner" id="err-3"></div>
-        <div class="form-field" style="margin-bottom:20px">
-          <label class="form-label">Current member count</label>
-          <select class="form-select" id="club-size" onchange="suggestPlan(this.value)">
-            <option value="">How many members do you have?</option>
-            <option value="small">1–10 members · just starting out</option>
-            <option value="medium">11–25 members · growing club</option>
-            <option value="large">26–100 members · established club</option>
-            <option value="xl">100+ members · large or multi-squad</option>
-          </select>
-        </div>
-        <div class="plan-cards" id="plan-cards">
-          <div class="plan-card" id="plan-starter" onclick="selectPlan('starter',this)">
-            <div class="pc-name">Club Starter</div>
-            <div class="pc-price">$0 / month</div>
-            <div class="pc-features">Up to 25 members<br>Private leaderboard<br>Basic events<br>5 AI analyses/member</div>
-          </div>
-          <div class="plan-card featured-plan" id="plan-pro" onclick="selectPlan('pro',this)">
-            <div class="pc-badge">Most popular</div>
-            <div class="pc-name">Club Pro</div>
-            <div class="pc-price">$29 / month</div>
-            <div class="pc-features">Up to 100 members<br>Unlimited AI coaching<br>Training load monitoring<br>Injury risk alerts</div>
-          </div>
-          <div class="plan-card" id="plan-elite" onclick="selectPlan('elite',this)">
-            <div class="pc-name">Club Elite</div>
-            <div class="pc-price">$79 / month</div>
-            <div class="pc-features">Up to 250 members<br>Multi-squad<br>Custom branding<br>API access</div>
-          </div>
-        </div>
-        <div id="plan-suggestion" style="display:none;margin-top:12px;background:var(--yellow-light);border:1px solid #fde68a;border-radius:var(--radius);padding:10px 14px;font-size:13px;color:#7a5c00"></div>
-      </div>
-
-      <!-- ── STEP 4: Invite members ── -->
-      <div class="signup-step" id="step-4">
-        <div class="step-eyebrow">Step 4 of 6 · Invite members</div>
+        <div class="step-eyebrow">Step 3 of 5 · Invite members</div>
         <h2 class="step-title">Invite your first members</h2>
         <p class="step-sub">Add their emails below. Each person gets a personalised invite with your name on it. They click, create an account, and auto-join your club. You can skip this and invite later.</p>
-        <div class="error-banner" id="err-4"></div>
+        <div class="error-banner" id="err-3"></div>
         <div class="invite-table-wrap">
           <table class="invite-table">
             <thead>
@@ -945,53 +786,48 @@ button,select,input,textarea{font-family:var(--font)}
           <div class="add-row" onclick="addInviteRow()">+ Add another member</div>
         </div>
         <div style="font-size:12px;color:var(--gray-400);margin-top:8px;display:flex;justify-content:space-between">
-          <span>Invites sent from <strong style="color:var(--gray-600)">clubs@arenas.io</strong> on your behalf</span>
+          <span>Each person gets an email invite with a join link to your club</span>
           <span id="invite-count">2 invites</span>
         </div>
       </div>
 
-      <!-- ── STEP 5: Integrations ── -->
-      <div class="signup-step" id="step-5">
-        <div class="step-eyebrow">Step 5 of 6 · Integrations</div>
+      <!-- ── STEP 4: Integrations ── -->
+      <div class="signup-step" id="step-4">
+        <div class="step-eyebrow">Step 4 of 5 · Integrations</div>
         <h2 class="step-title">Device sync — coming soon</h2>
         <p class="step-sub">Members log their activities in a few taps from day one. Automatic device sync is on the way — you don't need to set anything up here.</p>
-        <div class="error-banner" id="err-5"></div>
+        <div class="error-banner" id="err-4"></div>
         <div style="background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:16px 18px;font-size:13px;color:var(--gray-600);line-height:1.6">
           <strong style="color:var(--gray-900)">Coming soon:</strong> one-tap sync from Strava, Garmin, Wahoo and COROS, so member activities flow in without manual logging. Until then, manual logging keeps your club dashboard fully up to date — nothing to configure now.
         </div>
       </div>
 
-      <!-- ── STEP 6: Review & launch ── -->
-      <div class="signup-step" id="step-6">
-        <div class="step-eyebrow">Step 6 of 6 · Launch</div>
+      <!-- ── STEP 5: Review & launch ── -->
+      <div class="signup-step" id="step-5">
+        <div class="step-eyebrow">Step 5 of 5 · Launch</div>
         <h2 class="step-title">Review and launch your club</h2>
         <p class="step-sub">Everything looks good? Hit launch and your club goes live instantly.</p>
-        <div class="error-banner" id="err-6"></div>
+        <div class="error-banner" id="err-5"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
           <div style="background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:14px 16px">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-400);margin-bottom:8px">Your account</div>
-            <div style="font-size:13px;font-weight:600;color:var(--gray-900)" id="review-name">Rachel Henderson</div>
-            <div style="font-size:12px;color:var(--gray-500)" id="review-email">rachel@hackneyrc.com</div>
+            <div style="font-size:13px;font-weight:600;color:var(--gray-900)" id="review-name">—</div>
+            <div style="font-size:12px;color:var(--gray-500)" id="review-email">—</div>
             <div style="font-size:11px;color:var(--gray-400);margin-top:4px" id="review-sports">🏃 Running</div>
           </div>
           <div style="background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:14px 16px">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-400);margin-bottom:8px">Your club</div>
-            <div style="font-size:13px;font-weight:600;color:var(--gray-900)" id="review-club">Hackney Running Club</div>
-            <div style="font-size:12px;color:var(--gray-500)" id="review-handle">arenas.io/hackneyrc</div>
-            <div style="font-size:11px;color:var(--gray-400);margin-top:4px" id="review-plan">Club Pro · $29/month</div>
+            <div style="font-size:13px;font-weight:600;color:var(--gray-900)" id="review-club">—</div>
+            <div style="font-size:12px;color:var(--gray-500)" id="review-handle">—</div>
+            <div style="font-size:11px;color:var(--gray-400);margin-top:4px" id="review-plan">Free · founding period</div>
           </div>
         </div>
         <div style="background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px">
           <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-400);margin-bottom:8px">Invites queued</div>
           <div style="font-size:13px;color:var(--gray-700)" id="review-invites">2 member invites ready to send</div>
         </div>
-        <div class="order-summary" id="order-summary">
-          <div class="os-title">Order summary</div>
-          <div class="os-row"><span id="os-plan-name">Club Pro</span><span id="os-plan-price">$29/month</span></div>
-          <div class="os-row"><span>14-day free trial</span><span style="color:var(--green)">−$29.00</span></div>
-          <div class="os-row"><span>Due today</span><span>$0.00</span></div>
-        </div>
-        <div style="margin-top:12px;font-size:12px;color:var(--gray-400);text-align:center">By launching you agree to our <a href="/html/terms" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">Terms of Service</a>. You won't be charged until your trial ends. Cancel anytime.</div>
+        <div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:var(--radius);padding:14px 16px;font-size:13px;color:#7a5c00;line-height:1.6"><strong>Free during the founding period.</strong> All features are included at no cost while Arenas is getting started. Paid plans come later — you'll never be charged unless you set up billing yourself.</div>
+        <div style="margin-top:12px;font-size:12px;color:var(--gray-400);text-align:center">By launching you agree to our <a href="/html/terms" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">Terms of Service</a>.</div>
       </div>
 
     </div>
@@ -999,7 +835,7 @@ button,select,input,textarea{font-family:var(--font)}
     <!-- Footer nav -->
     <div class="sm-footer">
       <button class="step-back-btn" id="back-btn" onclick="goBack()" disabled>← Back</button>
-      <span class="step-counter" id="step-counter">Step 1 of 6</span>
+      <span class="step-counter" id="step-counter">Step 1 of 5</span>
       <button class="step-next-btn" id="next-btn" onclick="goNext()">Continue →</button>
     </div>
 
@@ -1037,10 +873,8 @@ button,select,input,textarea{font-family:var(--font)}
 
 <script>
 let currentStep = 1;
-const totalSteps = 6;
-let selectedPlanId = 'pro';
+const totalSteps = 5;
 let adminSports = [];
-let connectedIntegrations = [];
 
 // ── OPEN / CLOSE ──
 function openSignup() {
@@ -1089,7 +923,7 @@ function showStep(n) {
   document.getElementById('step-' + n).classList.add('active');
   currentStep = n;
   updateProgress();
-  if (n === 6) populateReview();
+  if (n === 5) populateReview();
 }
 
 function goNext() {
@@ -1133,10 +967,6 @@ function validateStep(n) {
     if (!handle) { showErr(2,'Please choose a club handle.'); return false; }
     if (!sport) { showErr(2,'Please select your primary sport.'); return false; }
     window.clubData = { name, handle, sport, city: document.getElementById('club-city').value, desc: document.getElementById('club-desc').value };
-  }
-  if (n === 3) {
-    if (!selectedPlanId) { showErr(3,'Please select a plan.'); return false; }
-    window.planData = { plan: selectedPlanId };
   }
   return true;
 }
@@ -1189,29 +1019,6 @@ function updateHandle(name) {
 }
 
 // ── STEP 3 helpers ──
-function suggestPlan(size) {
-  const suggestion = document.getElementById('plan-suggestion');
-  const map = {
-    small: {plan:'starter',msg:'✦ Club Starter looks right for your size — free, up to 25 members.'},
-    medium: {plan:'starter',msg:'✦ Club Starter fits your current size, but Club Pro unlocks AI coaching for every member — most growing clubs upgrade within 3 months.'},
-    large: {plan:'pro',msg:'✦ Club Pro is the right fit — up to 100 members, full AI coaching, training load monitoring, and injury alerts.'},
-    xl: {plan:'elite',msg:'✦ Club Elite handles up to 250 members and includes multi-squad management and custom branding.'}
-  };
-  if (!map[size]) { suggestion.style.display='none'; return; }
-  const m = map[size];
-  selectPlan(m.plan, document.getElementById('plan-' + m.plan));
-  suggestion.textContent = m.msg;
-  suggestion.style.display = 'block';
-}
-function selectPlan(id, card) {
-  document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
-  card.classList.add('selected');
-  selectedPlanId = id;
-}
-// Select pro by default
-window.onload = () => selectPlan('pro', document.getElementById('plan-pro'));
-
-// ── STEP 4 helpers ──
 function validateInviteEmail(inp) {
   const ok = !inp.value || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inp.value);
   inp.classList.toggle('error', !ok && inp.value.length > 4);
@@ -1235,47 +1042,18 @@ function updateInviteCount() {
   document.getElementById('invite-count').textContent = n + ' invite' + (n !== 1 ? 's' : '');
 }
 
-// ── STEP 5 helpers ──
-function toggleIntegration(id) {
-  const card = document.getElementById('int-' + id);
-  const status = document.getElementById('int-status-' + id);
-  const connected = card.classList.contains('connected');
-  card.classList.toggle('connected', !connected);
-  status.textContent = connected ? 'Connect' : '✓ Connected';
-  status.className = 'int-status ' + (connected ? 'add' : 'conn');
-  if (!connected) connectedIntegrations.push(id);
-  else connectedIntegrations = connectedIntegrations.filter(i => i !== id);
-  showToast(connected ? id + ' disconnected' : '✓ ' + id.charAt(0).toUpperCase() + id.slice(1) + ' connected!');
-}
-function toggleT(el) {
-  const on = el.classList.contains('on');
-  el.classList.toggle('on',!on); el.classList.toggle('off',on);
-}
-
-// ── STEP 6: Review ──
+// ── STEP 5: Review ──
 function populateReview() {
   const d = window.adminData || {};
   const c = window.clubData || {};
-  const p = window.planData || {plan:'pro'};
   document.getElementById('review-name').textContent = d.name || '—';
   document.getElementById('review-email').textContent = d.email || '—';
   document.getElementById('review-sports').textContent = d.sports && d.sports.length ? d.sports.map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join(', ') : 'Not specified';
   document.getElementById('review-club').textContent = c.name || '—';
   document.getElementById('review-handle').textContent = c.handle ? 'arenas.io/' + c.handle : '—';
-  const planNames = {starter:'Club Starter · Free',pro:'Club Pro · $29/month',elite:'Club Elite · $79/month'};
-  document.getElementById('review-plan').textContent = planNames[p.plan] || planNames['pro'];
   const inviteRows = document.querySelectorAll('#invite-rows tr');
-  const validInvites = [...inviteRows].filter(r => r.querySelector('input[type=email]')?.value.includes('@')).length;
+  const validInvites = [...inviteRows].filter(r => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.querySelector('input[type=email]')?.value || '')).length;
   document.getElementById('review-invites').textContent = validInvites ? validInvites + ' member invite' + (validInvites !== 1 ? 's' : '') + ' ready to send' : 'No invites added — you can invite members from your dashboard';
-  // Order summary
-  const planPrices = {starter:'Free',pro:'$29/month',elite:'$79/month'};
-  document.getElementById('os-plan-name').textContent = {starter:'Club Starter',pro:'Club Pro',elite:'Club Elite'}[p.plan] || 'Club Pro';
-  document.getElementById('os-plan-price').textContent = planPrices[p.plan] || '$29/month';
-  if (p.plan === 'starter') {
-    document.getElementById('order-summary').style.display = 'none';
-  } else {
-    document.getElementById('order-summary').style.display = 'block';
-  }
 }
 
 function launchClub() {
@@ -1288,6 +1066,12 @@ function launchClub() {
   const nextBtn = document.getElementById('next-btn');
   nextBtn.disabled = true;
   nextBtn.textContent = 'Launching…';
+  const invites = [...document.querySelectorAll('#invite-rows tr')].map(tr => {
+    const email = (tr.querySelector('input[type=email]')?.value || '').trim();
+    const name = (tr.querySelector('input[type=text]')?.value || '').trim();
+    const role = (tr.querySelector('select')?.value || 'Member').toLowerCase();
+    return { email, name, role };
+  }).filter(r => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email));
   const fields = {
     email: a.email,
     password: a.password,
@@ -1295,7 +1079,8 @@ function launchClub() {
     club_name: c.name,
     handle: c.handle,
     sport: c.sport,
-    city: c.city || ''
+    city: c.city || '',
+    invites: JSON.stringify(invites)
   };
   const form = document.createElement('form');
   form.method = 'POST';

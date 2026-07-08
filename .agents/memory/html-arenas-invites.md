@@ -40,6 +40,12 @@ description: Design rules for the club invite/join feature (personal vs open lin
 - **Canonical origin (Host-spoof hardening):** `publicBaseUrl(req)` prefers `process.env.PUBLIC_BASE_URL` (trailing slash stripped) when set, returning `PUBLIC_BASE_URL + BASE`; falls back to request `Host`/`x-forwarded-proto` when unset (dev unchanged). Set `PUBLIC_BASE_URL` in prod so trusted-sender invite links can't be poisoned by a spoofed Host. Override applies globally (all absolute links + join-page renders), not just emails.
 - Supabase **auth** emails (signup confirm, password reset) are entirely separate (Supabase SMTP) and were intentionally NOT touched.
 
+## Signup wizard invites are REAL (shared helper)
+- The /for-clubs signup wizard's invite rows serialize into a hidden `invites` JSON field on the signup form POST; the `signup-club` handler parses it (cap 50) and creates real invite rows AFTER membership insert.
+- One shared `createClubInviteRecord()` helper owns single-invite semantics (dedupe pending → skip existing members → insert → fire-and-forget email → in-app notif for existing users); both the bulk endpoint and signup use it. Never fork this logic again.
+- **Why:** duplicated invite loops drift (the single/bulk/resend email bug history). Signup invites must be best-effort: entire block is wrapped in try/catch, invalid JSON degrades to [] — invite failure must NEVER fail signup (club/account already created).
+- Self-invite of the signing-up admin is auto-skipped as `already_member` (they're in the auth-user map and already hold the admin membership).
+
 ## Invite page (arenas-club-invite.html) is real-machinery-only after honesty cleanup
 - The only REAL recipient entry is the manual "Add email addresses" table (addRow/delRow) → `sendInvites()` → bulk POST. Expiry is fixed server-side (14d), shown as static text (the old dropdown was cosmetic).
 - **Both bulk-import surfaces were fabricated and were REMOVED**: the "Import CSV" tab (drop-zone/`simulateDrop`/fake "10 members detected" results/`importAndGo`) and the "Paste list" modal never parsed input or added any rows — their submit just showed a toast. Do NOT re-add either as a stub; if a real importer is wanted, it must actually parse and populate `#invite-rows`.
