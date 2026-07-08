@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Checkout · Arenas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --yellow:#FFD21E;--yellow-dark:#E6B800;--yellow-light:#FFF9E0;
+  --gray-50:#F9FAFB;--gray-100:#F3F4F6;--gray-200:#E5E7EB;--gray-300:#D1D5DB;
+  --gray-400:#9CA3AF;--gray-500:#6B7280;--gray-600:#4B5563;--gray-700:#374151;
+  --gray-800:#1F2937;--gray-900:#111827;
+  --green:#10B981;--green-light:#ECFDF5;--red:#EF4444;--red-light:#FEF2F2;
+  --font:'Source Sans 3',sans-serif;--mono:'IBM Plex Mono',monospace;
+  --border:1px solid var(--gray-200);--radius:8px;--radius-lg:12px;
+  --shadow-md:0 10px 30px rgba(0,0,0,0.10);
+}
+body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);font-size:14px;line-height:1.5;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.wrap{width:100%;max-width:460px}
+.brand{display:flex;align-items:center;gap:9px;justify-content:center;margin-bottom:18px}
+.logo-icon{width:30px;height:30px;background:var(--yellow);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:16px}
+.logo-text{font-size:17px;font-weight:700;color:var(--gray-900)}
+.card{background:white;border:var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);overflow:hidden}
+.card-top{background:var(--gray-900);color:white;padding:22px 26px}
+.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--yellow);font-weight:700;margin-bottom:8px}
+.card-top h1{font-size:21px;font-weight:700;line-height:1.25;letter-spacing:-0.01em}
+.card-body{padding:24px 26px;display:flex;flex-direction:column;gap:16px}
+.line-item{background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:13px 15px;display:flex;justify-content:space-between;align-items:center}
+.li-name{font-size:14px;font-weight:700;color:var(--gray-900)}
+.li-price{font-family:var(--mono);font-size:13px;color:var(--gray-700)}
+.ok-box{background:var(--green-light);border:1px solid #A7F3D0;color:#065F46;border-radius:var(--radius);padding:10px 13px;font-size:13px;display:flex;gap:8px}
+.ok-box .tick{font-weight:700;flex-shrink:0}
+.note{background:var(--yellow-light);border:1px solid #F3E4A4;color:#7A5D00;border-radius:var(--radius);padding:10px 13px;font-size:13px;line-height:1.55}
+.alert{background:var(--red-light);border:1px solid #FECACA;color:#A32D2D;border-radius:var(--radius);padding:10px 13px;font-size:13px}
+.testmode{font-size:11px;font-family:var(--mono);color:var(--gray-500);background:var(--gray-100);border:var(--border);border-radius:999px;padding:3px 10px;align-self:center}
+.btn{padding:12px 18px;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid transparent;width:100%;text-align:center;display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:all .13s;text-decoration:none}
+.btn-yellow{background:var(--yellow);color:var(--gray-900);border-color:var(--yellow-dark)}
+.btn-yellow:hover{background:var(--yellow-dark)}
+.muted{font-size:12px;color:var(--gray-400);text-align:center;line-height:1.6}
+.state{text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center;padding:8px 0}
+.state .emoji{font-size:40px}
+.state h2{font-size:18px;font-weight:700;color:var(--gray-900)}
+.state p{font-size:13px;color:var(--gray-500)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><div class="logo-icon">🏟</div><span class="logo-text">Arenas</span></div>
+  <div class="card" id="card"></div>
+</div>
+<script>
+(function(){
+  var D = window.BILLING_DATA || { status: 'error' };
+  var baseUrl = D.baseUrl || '';
+  var card = document.getElementById('card');
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function backBtn(label){ return '<a class="btn btn-yellow" href="'+esc(baseUrl)+'/feed">'+esc(label||'Back to Arenas')+'</a>'; }
+  function stateCard(emoji, title, body){
+    return '<div class="card-body"><div class="state"><div class="emoji">'+emoji+'</div><h2>'+esc(title)+'</h2><p>'+esc(body)+'</p></div>'+backBtn()+'</div>';
+  }
+
+  if (D.status === 'ok' && D.sessionStatus === 'complete' && D.paymentStatus === 'paid') {
+    var amount = (typeof D.amountTotal === 'number')
+      ? (D.amountTotal/100).toFixed(2) + ' ' + String(D.currency||'').toUpperCase() + ' / month'
+      : '';
+    card.innerHTML =
+      '<div class="card-top"><div class="eyebrow">Checkout complete</div><h1>Payment received</h1></div>'+
+      '<div class="card-body">'+
+        '<div class="ok-box"><span class="tick">✓</span><span>Stripe has confirmed your payment and your <strong>'+esc(D.planLabel)+'</strong> subscription is set up.</span></div>'+
+        '<div class="line-item"><span class="li-name">'+esc(D.planLabel)+'</span><span class="li-price">'+esc(amount)+'</span></div>'+
+        '<div class="note"><strong>One more step on our side:</strong> plan features aren\u2019t switched on in Arenas just yet. Activation is handled automatically as we finish rolling out billing \u2014 there\u2019s nothing more you need to do.</div>'+
+        (D.livemode ? '' : '<span class="testmode">Stripe test mode \u2014 no real money moved</span>')+
+        backBtn()+
+        '<p class="muted">A receipt from Stripe is on its way to your email.</p>'+
+      '</div>';
+  } else if (D.status === 'ok') {
+    card.innerHTML =
+      '<div class="card-top"><div class="eyebrow">Checkout</div><h1>Payment not completed</h1></div>'+
+      '<div class="card-body">'+
+        '<div class="alert">Stripe reports this checkout as \u201c'+esc(D.sessionStatus)+' / '+esc(D.paymentStatus)+'\u201d. You have not been charged and no subscription is active.</div>'+
+        backBtn()+
+      '</div>';
+  } else if (D.status === 'forbidden') {
+    card.innerHTML = stateCard('🔒', 'Not your checkout', 'This confirmation link belongs to a different account.');
+  } else if (D.status === 'missing') {
+    card.innerHTML = stateCard('🤔', 'Nothing to confirm', 'This page needs a checkout reference to show anything.');
+  } else if (D.status === 'unavailable') {
+    card.innerHTML = stateCard('⚙️', 'Billing unavailable', 'Billing is not configured right now. Please try again later.');
+  } else {
+    card.innerHTML = stateCard('😕', 'Checkout not found', 'We couldn\u2019t find that checkout. If you completed a payment, your email receipt from Stripe is the source of truth.');
+  }
+})();
+</script>
+</body>
+</html>

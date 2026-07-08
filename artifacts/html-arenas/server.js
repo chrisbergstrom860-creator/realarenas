@@ -5008,6 +5008,142 @@ app.get(BASE + '/clubs/invite', requirePageAuth, async (req, res) => {
   }
 });
 
+// ── BILLING (Stripe Checkout) ──
+// Session ② of the payments build: checkout START only. NOTHING in this
+// section writes to the subscriptions table — the Session ③ webhook will be
+// its sole writer. A successful checkout with an empty table is correct here.
+
+// Read-only lookup of ANY subscription row for an owner (any status). Used to
+// reuse the existing Stripe customer so a re-subscriber keeps one customer
+// record instead of forking a second one.
+async function findAnySubscriptionRow(ownerType, ownerId) {
+  if (!supabaseAdmin || !ownerId) return null;
+  try {
+    const { data } = await supabaseAdmin
+      .from('subscriptions')
+      .select('stripe_customer_id')
+      .eq('owner_type', ownerType)
+      .eq('owner_id', ownerId)
+      .limit(1);
+    return (Array.isArray(data) && data[0]) || null;
+  } catch (err) {
+    return null;
+  }
+}
+
+// Shared Checkout Session builder. metadata.owner_type/owner_id is set BOTH on
+// the session AND on subscription_data so the Session ③ webhook can identify
+// the owner from customer.subscription.* events without extra lookups.
+// metadata.initiated_by is the logged-in user who started checkout — the
+// success page uses it to reject other users' session IDs.
+async function createBillingCheckout({ req, ownerType, ownerId, priceId }) {
+  const base = publicBaseUrl(req);
+  const params = {
+    mode: 'subscription',
+    line_items: [{ price: priceId, quantity: 1 }],
+    metadata: { owner_type: ownerType, owner_id: ownerId, initiated_by: req.user.id },
+    subscription_data: { metadata: { owner_type: ownerType, owner_id: ownerId } },
+    client_reference_id: ownerType + ':' + ownerId,
+    success_url: base + '/billing/success?session_id={CHECKOUT_SESSION_ID}',
+    cancel_url: base + '/billing/canceled'
+  };
+  const existing = await findAnySubscriptionRow(ownerType, ownerId);
+  if (existing && existing.stripe_customer_id) {
+    params.customer = existing.stripe_customer_id;
+  } else if (req.user.email) {
+    params.customer_email = req.user.email;
+  }
+  return stripe.checkout.sessions.create(params);
+}
+
+// Start Individual Pro checkout for the logged-in user.
+app.post(BASE + '/api/billing/checkout/pro', requireAuth, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Billing is not configured' });
+  const priceId = (process.env.STRIPE_PRICE_PRO || '').trim();
+  if (!priceId) return res.status(503).json({ error: 'Billing is not configured' });
+  try {
+    const plan = await getUserPlan(req.user.id);
+    if (plan === 'pro') return res.status(409).json({ error: 'already subscribed' });
+    const session = await createBillingCheckout({
+      req, ownerType: 'user', ownerId: req.user.id, priceId
+    });
+    return res.json({ url: session.url });
+  } catch (err) {
+    console.log('Pro checkout error:', err.message);
+    return res.status(500).json({ error: 'Could not start checkout' });
+  }
+});
+
+// Start Club Pro checkout for a club. Same authorization bar as every other
+// club-management action (admin/coach via getClubRole); plain members 403.
+app.post(BASE + '/api/billing/checkout/club/:clubId', requireAuth, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Billing is not configured' });
+  const priceId = (process.env.STRIPE_PRICE_CLUB_PRO || '').trim();
+  if (!priceId) return res.status(503).json({ error: 'Billing is not configured' });
+  const { clubId } = req.params;
+  const role = await getClubRole(req.user.id, clubId);
+  if (!isClubManagerRole(role && role.role)) {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
+  try {
+    const plan = await getClubPlan(clubId);
+    if (plan === 'club_pro') return res.status(409).json({ error: 'already subscribed' });
+    const session = await createBillingCheckout({
+      req, ownerType: 'club', ownerId: clubId, priceId
+    });
+    return res.json({ url: session.url });
+  } catch (err) {
+    console.log('Club checkout error:', err.message);
+    return res.status(500).json({ error: 'Could not start checkout' });
+  }
+});
+
+// Post-checkout landing. Retrieves the Checkout Session server-side and shows
+// an HONEST confirmation of what Stripe reports — it deliberately does NOT
+// claim plan features are active (activation arrives with the Session ③
+// webhook) and writes nothing to the database.
+app.get(BASE + '/billing/success', requirePageAuth, async (req, res) => {
+  const sessionId = typeof req.query.session_id === 'string' ? req.query.session_id.trim() : '';
+  let data = { status: 'error' };
+  if (!stripe) {
+    data = { status: 'unavailable' };
+  } else if (!sessionId) {
+    data = { status: 'missing' };
+  } else {
+    try {
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      const meta = session.metadata || {};
+      if (meta.initiated_by !== req.user.id) {
+        // Someone else's session ID (or a session we didn't create): reject.
+        data = { status: 'forbidden' };
+      } else {
+        data = {
+          status: 'ok',
+          sessionStatus: session.status,          // complete | open | expired
+          paymentStatus: session.payment_status,  // paid | unpaid | no_payment_required
+          planLabel: meta.owner_type === 'club' ? 'Club Pro' : 'Individual Pro',
+          amountTotal: session.amount_total,
+          currency: session.currency,
+          livemode: !!session.livemode
+        };
+      }
+    } catch (err) {
+      data = { status: 'notfound' };
+    }
+  }
+  data.baseUrl = BASE;
+  const html = injectNamedData(
+    fs.readFileSync(path.join(HTML, 'arenas-billing-success.html'), 'utf8'),
+    'BILLING_DATA', data
+  );
+  res.type('html').send(html);
+});
+
+// Cancel landing: nothing was created or charged; static reassurance page.
+app.get(BASE + '/billing/canceled', requirePageAuth, (req, res) => {
+  res.type('html').send(fs.readFileSync(path.join(HTML, 'arenas-billing-canceled.html'), 'utf8'));
+});
+
 // ── CLUB INVITES API ──
 // Create a single personal email invite. Only club admins/coaches may invite.
 app.post(BASE + '/api/clubs/:clubId/invites', requireAuth, async (req, res) => {

@@ -22,5 +22,17 @@ description: Payments build decisions — plans, subscriptions table, SDK except
 ## Env vars
 - `STRIPE_SECRET_KEY`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_CLUB_PRO` set in Replit; must ALSO be set in Railway separately before prod (plus `STRIPE_WEBHOOK_SECRET` later — signing secret DIFFERS per environment: Stripe CLI listener secret in dev vs dashboard endpoint secret in prod).
 
-## Session ② plan (agreed shape)
-- Hosted Checkout (subscription mode, metadata owner_type/owner_id) + webhook at BASE+/api/stripe/webhook handling checkout.session.completed / customer.subscription.updated / .deleted / invoice.payment_failed → upsert subscriptions; Customer Portal for self-serve cancel. **Webhook route needs `express.raw()` mounted before the global body parsers** or signature verification fails.
+## Session ② DONE (checkout start flow)
+- POST BASE+/api/billing/checkout/pro and /club/:clubId (requireAuth; club gated by getClubRole+isClubManagerRole = admin/coach, same bar as invites); 503 no stripe/price, 409 already-paid. GET /billing/success + /billing/canceled pages (requirePageAuth, standalone-card style like club-join).
+- **Metadata contract (webhook depends on it):** `{owner_type, owner_id}` on BOTH session AND subscription_data.metadata; `initiated_by` (user id) on session metadata only — success page rejects sessions where initiated_by ≠ logged-in user. client_reference_id = "type:id".
+- Success page is deliberately honest: "features aren't switched on yet" note, no DB writes anywhere in Session ② (table verified 0 rows after two completed test checkouts).
+- Customer reuse reads the subscriptions table → until the Session ③ webhook writes rows, EVERY checkout creates a fresh Stripe customer (observed 3 customers for one test user). Not a bug; resolves itself after Session ③.
+
+## Session ③ next (webhook + portal)
+- Webhook at BASE+/api/stripe/webhook handling checkout.session.completed / customer.subscription.updated / .deleted / invoice.payment_failed → upsert subscriptions keyed on unique(owner_type,owner_id); Customer Portal for self-serve cancel. **Webhook route needs `express.raw()` mounted before the global body parsers** or signature verification fails. Webhook is the SOLE writer to subscriptions.
+
+## E2E testing hosted checkout (hard-won)
+- Pin ONE origin end-to-end: success_url is derived from the host of the request that CREATED the session (publicBaseUrl). Creating sessions via curl on localhost while the browser logs in on the dev domain (or vice versa) bounces the success page to /landing — cookie lives on the other host. Create sessions AND log in on $REPLIT_DEV_DOMAIN.
+- Playwright agent must hard-verify login (load /feed, assert no redirect) BEFORE opening checkout — its UI login can fail silently and the payment still completes, wasting the run.
+- Stripe Link's "Save my information" checkbox adds a required phone field that fails validation for the test agent — instruct it to uncheck/avoid Link ("Pay without Link").
+- Test cleanup: stripe.subscriptions.cancel each test sub, checkout.sessions.expire leftover open sessions, then delete Supabase test users/club.

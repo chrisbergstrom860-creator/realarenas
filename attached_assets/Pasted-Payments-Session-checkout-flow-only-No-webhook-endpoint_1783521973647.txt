@@ -1,0 +1,17 @@
+Payments Session ②: checkout flow only. No webhook endpoint, no Customer Portal — those are Session ③. Critical constraint: nothing in this session writes to the subscriptions table. The webhook (next session) will be the sole writer. If checkout succeeds and the table stays empty, that is correct for now.
+Build:
+
+Two checkout-start endpoints, both behind requireAuth:
+
+POST /api/billing/checkout/pro — Individual Pro for the logged-in user.
+POST /api/billing/checkout/club/:clubId — Club Pro. Verify the caller is an owner/admin-level manager of that club using the existing role helpers (same bar as other club-management actions); members/coaches without management rights get 403.
+
+
+Guards before creating a session: call the existing getUserPlan/getClubPlan first. If already paid, return 409 with a clear JSON message ("already subscribed") — no duplicate checkouts.
+Customer reuse: before creating a session, query subscriptions for ANY existing row for that owner (any status, read-only is fine — the no-writes rule is about inserts/updates). If one exists, pass its stripe_customer_id to the Checkout Session so re-subscribers keep one Stripe customer. Otherwise let Checkout create the customer.
+Checkout Session creation: mode: 'subscription', the correct price from STRIPE_PRICE_PRO/STRIPE_PRICE_CLUB_PRO, and — important — set metadata: { owner_type, owner_id } both at the session level AND in subscription_data.metadata, plus client_reference_id. The subscription-level metadata is what lets Session ③'s customer.subscription.updated/deleted handlers identify the owner without extra lookups. Build success_url (with ?session_id={CHECKOUT_SESSION_ID}) and cancel_url via the existing publicBaseUrl() helper.
+Success and cancel pages, matching the app's existing page patterns: the success page (behind requirePageAuth) retrieves the Checkout Session server-side by session_id, verifies it belongs to the logged-in user (reject others' session IDs), and shows an honest confirmation of payment status pulled from Stripe — it must NOT claim plan features are active yet and must NOT write anything to the database. The cancel page is a simple "checkout canceled, nothing was charged" with a link back.
+Graceful degradation: if the Stripe client is null (missing key), both endpoints return 503 with a clear message, matching the Resend pattern.
+
+Then test end-to-end in test mode: log in as a test user, hit the Pro checkout endpoint, complete the hosted checkout with card 4242 4242 4242 4242 (any future expiry, any CVC), land on the success page, and confirm (a) Stripe dashboard shows the test subscription, (b) the success page shows the honest confirmation, (c) the subscriptions table has zero rows — expected until Session ③. Repeat for a club you manage, and verify the 409 guard by attempting a second Pro checkout for the same user... actually the guard reads the still-empty table, so verify the 409 logic with a temporary reasoning walk-through instead of live data, and confirm the 403 on the club endpoint using a non-manager member.
+Report what was built, the test results including the Stripe dashboard state, and anything unexpected. Touch nothing else.
