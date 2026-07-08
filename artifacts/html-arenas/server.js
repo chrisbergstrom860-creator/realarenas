@@ -147,6 +147,14 @@ function buildInviteEmail({ clubName, inviterName, joinUrl, role }) {
   return { subject, html, text };
 }
 
+// ── STRIPE WEBHOOK RAW BODY ──
+// stripe.webhooks.constructEvent verifies the signature over the EXACT raw
+// request bytes, so this one path must get express.raw BEFORE the global
+// JSON/urlencoded parsers below (they would consume and re-serialize the
+// body, breaking verification). body-parser marks the request as parsed
+// (req._body), so the global parsers skip it afterwards.
+app.use(BASE + '/api/stripe/webhook', express.raw({ type: 'application/json' }));
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser(process.env.SESSION_SECRET));
@@ -5009,9 +5017,9 @@ app.get(BASE + '/clubs/invite', requirePageAuth, async (req, res) => {
 });
 
 // ── BILLING (Stripe Checkout) ──
-// Session ② of the payments build: checkout START only. NOTHING in this
-// section writes to the subscriptions table — the Session ③ webhook will be
-// its sole writer. A successful checkout with an empty table is correct here.
+// Checkout START only. NOTHING in this section writes to the subscriptions
+// table — the webhook below is its sole writer. A successful checkout only
+// becomes an active plan once the checkout.session.completed event lands.
 
 // Read-only lookup of ANY subscription row for an owner (any status). Used to
 // reuse the existing Stripe customer so a re-subscriber keeps one customer
@@ -5142,6 +5150,248 @@ app.get(BASE + '/billing/success', requirePageAuth, async (req, res) => {
 // Cancel landing: nothing was created or charged; static reassurance page.
 app.get(BASE + '/billing/canceled', requirePageAuth, (req, res) => {
   res.type('html').send(fs.readFileSync(path.join(HTML, 'arenas-billing-canceled.html'), 'utf8'));
+});
+
+// ── BILLING (Stripe webhook) ──
+// The webhook is the SOLE writer to the subscriptions table; everything else
+// (plan helpers, customer reuse) only reads it. The raw-body mount for this
+// path lives up top, BEFORE the global body parsers — signature verification
+// needs the exact request bytes.
+
+// Map a Stripe price ID to our plan value. Falls back to the owner type so a
+// rotated/unknown price ID can't silently drop a paid row (logged upstream).
+function planFromPrice(priceId, ownerType) {
+  if (priceId && priceId === (process.env.STRIPE_PRICE_CLUB_PRO || '').trim()) return 'club_pro';
+  if (priceId && priceId === (process.env.STRIPE_PRICE_PRO || '').trim()) return 'pro';
+  return ownerType === 'club' ? 'club_pro' : 'pro';
+}
+
+// current_period_end moved from the subscription object to its items on newer
+// Stripe API versions — check both. Returns an ISO timestamp or null.
+function subPeriodEndIso(sub) {
+  const item = sub && sub.items && sub.items.data && sub.items.data[0];
+  const unix = (sub && sub.current_period_end) || (item && item.current_period_end) || null;
+  return unix ? new Date(unix * 1000).toISOString() : null;
+}
+
+// The invoice→subscription link also moved across Stripe API versions: older
+// payloads have invoice.subscription, newer ones nest it under
+// parent.subscription_details. Check both, then the line items.
+function invoiceSubscriptionId(invoice) {
+  if (!invoice) return null;
+  const direct = invoice.subscription;
+  if (typeof direct === 'string') return direct;
+  if (direct && direct.id) return direct.id;
+  const details = invoice.parent && invoice.parent.subscription_details;
+  if (details) {
+    if (typeof details.subscription === 'string') return details.subscription;
+    if (details.subscription && details.subscription.id) return details.subscription.id;
+  }
+  const line = invoice.lines && invoice.lines.data && invoice.lines.data[0];
+  if (line) {
+    if (typeof line.subscription === 'string') return line.subscription;
+    const lp = line.parent && line.parent.subscription_item_details;
+    if (lp && typeof lp.subscription === 'string') return lp.subscription;
+  }
+  return null;
+}
+
+// Owner identity from a subscription's own metadata (the contract set at
+// checkout: subscription_data.metadata = { owner_type, owner_id }).
+function subscriptionOwner(sub) {
+  const meta = (sub && sub.metadata) || {};
+  if ((meta.owner_type === 'user' || meta.owner_type === 'club') && meta.owner_id) {
+    return { ownerType: meta.owner_type, ownerId: meta.owner_id };
+  }
+  return null;
+}
+
+// Upsert the single row per owner from a Stripe subscription object, keyed on
+// unique(owner_type, owner_id) so replayed and out-of-order events converge
+// on the same final row. Throws on DB failure so the webhook answers 500 and
+// Stripe retries the event.
+async function upsertSubscriptionRow(sub, ownerType, ownerId) {
+  const item = sub.items && sub.items.data && sub.items.data[0];
+  const priceId = item && item.price && item.price.id;
+  const row = {
+    owner_type: ownerType,
+    owner_id: ownerId,
+    plan: planFromPrice(priceId, ownerType),
+    stripe_customer_id:
+      typeof sub.customer === 'string' ? sub.customer : (sub.customer && sub.customer.id) || null,
+    stripe_subscription_id: sub.id,
+    status: sub.status,
+    current_period_end: subPeriodEndIso(sub),
+    cancel_at_period_end: !!sub.cancel_at_period_end,
+    updated_at: new Date().toISOString()
+  };
+  const { error } = await supabaseAdmin
+    .from('subscriptions')
+    .upsert(row, { onConflict: 'owner_type,owner_id' });
+  if (error) throw new Error('subscriptions upsert failed: ' + error.message);
+}
+
+app.post(BASE + '/api/stripe/webhook', async (req, res) => {
+  const whSecret = (process.env.STRIPE_WEBHOOK_SECRET || '').trim();
+  if (!stripe || !whSecret) {
+    console.log('[stripe webhook skipped: no', !stripe ? 'STRIPE_SECRET_KEY]' : 'STRIPE_WEBHOOK_SECRET]');
+    return res.status(503).send('Billing not configured');
+  }
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], whSecret);
+  } catch (err) {
+    console.log('[stripe webhook] invalid signature:', err.message);
+    return res.status(400).send('Invalid signature');
+  }
+  try {
+    if (!supabaseAdmin) throw new Error('supabaseAdmin not configured');
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object;
+        const meta = session.metadata || {};
+        if (session.mode !== 'subscription' || !session.subscription) break; // not a billing checkout
+        if (!((meta.owner_type === 'user' || meta.owner_type === 'club') && meta.owner_id)) {
+          console.log('[stripe webhook] completed session missing owner metadata:', session.id);
+          break;
+        }
+        const subId =
+          typeof session.subscription === 'string' ? session.subscription : session.subscription.id;
+        const sub = await stripe.subscriptions.retrieve(subId);
+        // Same stale guard as sub.updated: a redelivered completed event for
+        // an OLD session (possible only after earlier 5xx + retry) must not
+        // let its now-canceled subscription clobber a newer re-subscribe row.
+        const { data: prior } = await supabaseAdmin
+          .from('subscriptions')
+          .select('stripe_subscription_id')
+          .eq('owner_type', meta.owner_type)
+          .eq('owner_id', meta.owner_id)
+          .limit(1);
+        const priorRow = (Array.isArray(prior) && prior[0]) || null;
+        const subPaying = PAID_SUB_STATUSES.includes(sub.status) || sub.status === 'trialing';
+        if (priorRow && priorRow.stripe_subscription_id && priorRow.stripe_subscription_id !== sub.id && !subPaying) {
+          console.log('[stripe webhook] stale completed ignored:', sub.id, '(row has', priorRow.stripe_subscription_id + ')');
+          break;
+        }
+        await upsertSubscriptionRow(sub, meta.owner_type, meta.owner_id);
+        console.log('[stripe webhook] checkout completed →', meta.owner_type, meta.owner_id, '=', sub.status);
+        break;
+      }
+      case 'customer.subscription.updated': {
+        const sub = event.data.object;
+        const owner = subscriptionOwner(sub);
+        if (!owner) {
+          console.log('[stripe webhook] sub.updated missing owner metadata:', sub.id);
+          break;
+        }
+        // Upsert (not update): this event can arrive BEFORE
+        // checkout.session.completed and must produce the same final row.
+        // One guard on top of the spec: a non-paying update for an OLD
+        // subscription must not clobber a row that has since moved to a
+        // different (newer) subscription — e.g. a late-retried "canceled"
+        // update for the previous subscription after a re-subscribe.
+        const { data: existing } = await supabaseAdmin
+          .from('subscriptions')
+          .select('stripe_subscription_id')
+          .eq('owner_type', owner.ownerType)
+          .eq('owner_id', owner.ownerId)
+          .limit(1);
+        const row = (Array.isArray(existing) && existing[0]) || null;
+        const paying = PAID_SUB_STATUSES.includes(sub.status) || sub.status === 'trialing';
+        if (row && row.stripe_subscription_id && row.stripe_subscription_id !== sub.id && !paying) {
+          console.log('[stripe webhook] stale sub.updated ignored:', sub.id, '(row has', row.stripe_subscription_id + ')');
+          break;
+        }
+        await upsertSubscriptionRow(sub, owner.ownerType, owner.ownerId);
+        console.log('[stripe webhook] sub.updated →', owner.ownerType, owner.ownerId, '=', sub.status);
+        break;
+      }
+      case 'customer.subscription.deleted': {
+        const sub = event.data.object;
+        // Keep the row (stripe_customer_id is reused at next checkout); just
+        // flip status — the plan helpers treat anything outside
+        // active/past_due as free. The stale-event guard is inherent in
+        // matching BY subscription ID: a delete for an old subscription finds
+        // no row once the owner re-subscribed under a new one.
+        const { data, error } = await supabaseAdmin
+          .from('subscriptions')
+          .update({ status: 'canceled', cancel_at_period_end: !!sub.cancel_at_period_end, updated_at: new Date().toISOString() })
+          .eq('stripe_subscription_id', sub.id)
+          .select('owner_type, owner_id');
+        if (error) throw new Error('subscriptions cancel update failed: ' + error.message);
+        console.log('[stripe webhook] sub.deleted', sub.id, data && data.length ? '→ row canceled' : '→ no matching row (stale, ignored)');
+        break;
+      }
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object;
+        const subId = invoiceSubscriptionId(invoice);
+        if (!subId) {
+          console.log('[stripe webhook] payment_failed without a subscription:', invoice.id);
+          break;
+        }
+        // Same inherent stale guard: match by subscription ID only.
+        const { data, error } = await supabaseAdmin
+          .from('subscriptions')
+          .update({ status: 'past_due', updated_at: new Date().toISOString() })
+          .eq('stripe_subscription_id', subId)
+          .select('owner_type, owner_id');
+        if (error) throw new Error('subscriptions past_due update failed: ' + error.message);
+        console.log('[stripe webhook] payment_failed', subId, data && data.length ? '→ past_due' : '→ no matching row (stale, ignored)');
+        break;
+      }
+      default:
+        break; // every other event type is acknowledged and ignored
+    }
+    return res.status(200).json({ received: true });
+  } catch (err) {
+    console.error('[stripe webhook] handler failed:', event.type, '—', err.message);
+    return res.status(500).send('Webhook handler failed'); // Stripe retries on 500
+  }
+});
+
+// ── BILLING (Customer Portal) ──
+// Self-serve subscription management (cancel, update card, invoices) via
+// Stripe's hosted portal. Looks up the owner's stripe_customer_id from the
+// subscriptions table (any status — a canceled owner can still open the
+// portal for history); 404 with a clear message when there's nothing yet.
+
+async function createPortalSession({ req, ownerType, ownerId }) {
+  const row = await findAnySubscriptionRow(ownerType, ownerId);
+  if (!row || !row.stripe_customer_id) return null;
+  return stripe.billingPortal.sessions.create({
+    customer: row.stripe_customer_id,
+    return_url: publicBaseUrl(req) + '/feed'
+  });
+}
+
+app.post(BASE + '/api/billing/portal/pro', requireAuth, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Billing is not configured' });
+  try {
+    const portal = await createPortalSession({ req, ownerType: 'user', ownerId: req.user.id });
+    if (!portal) return res.status(404).json({ error: 'No subscription found for your account' });
+    return res.json({ url: portal.url });
+  } catch (err) {
+    console.log('Pro portal error:', err.message);
+    return res.status(500).json({ error: 'Could not open billing portal' });
+  }
+});
+
+// Same authorization bar as club checkout: admin/coach only.
+app.post(BASE + '/api/billing/portal/club/:clubId', requireAuth, async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Billing is not configured' });
+  const { clubId } = req.params;
+  const role = await getClubRole(req.user.id, clubId);
+  if (!isClubManagerRole(role && role.role)) {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
+  try {
+    const portal = await createPortalSession({ req, ownerType: 'club', ownerId: clubId });
+    if (!portal) return res.status(404).json({ error: 'No subscription found for this club' });
+    return res.json({ url: portal.url });
+  } catch (err) {
+    console.log('Club portal error:', err.message);
+    return res.status(500).json({ error: 'Could not open billing portal' });
+  }
 });
 
 // ── CLUB INVITES API ──
