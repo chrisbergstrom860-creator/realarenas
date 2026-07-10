@@ -38,6 +38,11 @@ button{font-family:var(--font)}
 .btn-yellow{background:var(--yellow);color:var(--gray-900);border-color:var(--yellow-dark);font-weight:600}
 .btn-yellow:hover{background:var(--yellow-dark)}
 .disclosure{font-size:11px;color:var(--gray-400);line-height:1.5;margin-top:10px;max-width:480px}
+.plan-feats{list-style:none;margin:12px 0 4px;padding:0;display:flex;flex-direction:column;gap:7px}
+.plan-feats li{font-size:13px;color:var(--gray-700);display:flex;gap:8px;align-items:flex-start;line-height:1.45}
+.plan-feats .fk{color:var(--green);font-weight:700;flex-shrink:0}
+.plan-feats li.soon{color:var(--gray-400)}
+.plan-feats li.soon .fk{color:var(--gray-300)}
 .section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--gray-400);margin:26px 0 10px}
 .muted-line{font-size:13px;color:var(--gray-400)}
 .err-note{background:var(--gray-50);border:var(--border);border-radius:10px;padding:14px 16px;font-size:13px;color:var(--gray-500);line-height:1.6}
@@ -134,6 +139,14 @@ button{font-family:var(--font)}
   if (b.userPlan === 'pro') {
     html += '<div class="bill-card-head"><div class="bill-card-title">Pro</div><span class="plan-badge paid">$9 / month</span></div>';
     html += '<div class="bill-card-desc">Your individual Pro subscription is active. It renews automatically each month at $9/month until you cancel.</div>';
+    html += '<ul class="plan-feats">' +
+      '<li><span class="fk">\u2713</span> Everything in Free</li>' +
+      '<li><span class="fk">\u2713</span> Join & create individual challenges</li>' +
+      '<li><span class="fk">\u2713</span> Full training analytics & trends</li>' +
+      '<li><span class="fk">\u2713</span> Training load tracking</li>' +
+      '<li class="soon"><span class="fk">\u2726</span> Set goals & track progress \u2014 coming soon</li>' +
+      '<li class="soon"><span class="fk">\u2726</span> AI coaching \u2014 coming soon</li>' +
+      '</ul>';
     if (b.configured) {
       html += '<button class="btn" onclick="openPortal(\'pro\', null, this)">Manage billing</button>';
       html += '<div class="disclosure">Manage billing opens a secure Stripe portal where you can cancel your subscription or update your payment method.</div>';
@@ -141,6 +154,12 @@ button{font-family:var(--font)}
   } else {
     html += '<div class="bill-card-head"><div class="bill-card-title">Free</div><span class="plan-badge">$0 / month</span></div>';
     html += '<div class="bill-card-desc">You are on the free plan and are not being charged anything. Pro is $9/month, billed monthly — no trial, no annual lock-in.</div>';
+    html += '<ul class="plan-feats">' +
+      '<li><span class="fk">\u2713</span> Activity feed across all sports</li>' +
+      '<li><span class="fk">\u2713</span> Activity logging & personal stats</li>' +
+      '<li><span class="fk">\u2713</span> Event discovery & RSVP</li>' +
+      '<li><span class="fk">\u2713</span> View weekly leaderboards</li>' +
+      '</ul>';
     if (b.configured) {
       html += '<button class="btn btn-yellow" onclick="startCheckout(\'pro\', null, this)">Upgrade to Pro →</button>';
       html += disclosure(9);
