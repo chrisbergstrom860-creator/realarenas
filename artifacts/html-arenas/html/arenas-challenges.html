@@ -339,7 +339,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
       <h1>Challenges 🏆</h1>
       <p>Personalised to your sports — Running, Cycling & Climbing. Earn points, beat friends, hit milestones.</p>
       <div class="header-stats">
-        <div class="header-stat"><div class="stat-dot" style="background:#10B981"></div> <strong id="active-count">3</strong> active challenges</div>
+        <div class="header-stat"><div class="stat-dot" style="background:#10B981"></div> <strong id="active-count">0</strong> active challenges</div>
         <div class="header-stat"><div class="stat-dot" style="background:#FFD21E"></div> <strong>1,240</strong> pts earned this month</div>
         <div class="header-stat"><div class="stat-dot" style="background:#3B82F6"></div> <strong>340</strong> challenges available</div>
         <div class="header-stat"><div class="stat-dot" style="background:#8B5CF6"></div> <strong>14</strong> day longest streak</div>
@@ -354,10 +354,10 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 <!-- TABS BAR -->
 <div class="tabs-bar">
   <div class="tabs-inner">
-    <button class="main-tab active" id="tab-btn-mine" onclick="setTab('mine')">My challenges <span class="tab-count">3</span></button>
-    <button class="main-tab" id="tab-btn-discover" onclick="setTab('discover')">Discover <span class="tab-count">340</span></button>
-    <button class="main-tab" id="tab-btn-friends" onclick="setTab('friends')">With friends <span class="tab-count">1</span></button>
-    <button class="main-tab" id="tab-btn-completed" onclick="setTab('completed')">Completed <span class="tab-count">7</span></button>
+    <button class="main-tab active" id="tab-btn-mine" onclick="setTab('mine')">My challenges <span class="tab-count">0</span></button>
+    <button class="main-tab" id="tab-btn-discover" onclick="setTab('discover')">Discover <span class="tab-count">0</span></button>
+    <button class="main-tab" id="tab-btn-friends" onclick="setTab('friends')">With friends <span class="tab-count">0</span></button>
+    <button class="main-tab" id="tab-btn-completed" onclick="setTab('completed')">Completed <span class="tab-count">0</span></button>
     <div class="tabs-spacer"></div>
   </div>
 </div>
@@ -366,237 +366,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 
     <!-- ═══ MY CHALLENGES TAB ═══ -->
     <div id="tab-mine" style="flex-direction:column">
-
-      <!-- Stat summary -->
-      <div class="stat-cards">
-        <div class="stat-card">
-          <div class="sc-label">Active challenges</div>
-          <div class="sc-value">3</div>
-          <div class="sc-sub">Across 3 sports</div>
-        </div>
-        <div class="stat-card">
-          <div class="sc-label">Points this month</div>
-          <div class="sc-value">1,240</div>
-          <div class="sc-delta">↑ +340 this week</div>
-        </div>
-        <div class="stat-card">
-          <div class="sc-label">Current streak</div>
-          <div class="sc-value">6</div>
-          <div class="sc-sub">days · best: 14</div>
-        </div>
-        <div class="stat-card">
-          <div class="sc-label">Challenges won</div>
-          <div class="sc-value">4</div>
-          <div class="sc-sub">of 7 completed</div>
-        </div>
-      </div>
-
-      <!-- Featured challenge -->
-      <div class="ch-card featured fade-in" onclick="openModal('run100')">
-        <div class="featured-banner">
-          <div class="featured-banner-left">⭐ Featured — ends in 9 days</div>
-          <div class="featured-banner-right">
-            <span class="tag tag-run">Running</span>
-            <span class="tag tag-com">44 joined</span>
-          </div>
-        </div>
-        <div class="ch-head">
-          <div class="ch-sport-icon" style="background:#FFF7ED">🏃</div>
-          <div class="ch-info">
-            <div class="ch-name">100km May Run</div>
-            <div class="ch-sub">Running · Distance challenge · Community · May 2026</div>
-            <div class="ch-tags">
-              <span class="tag tag-run">Running</span>
-              <span class="tag tag-com">✓ Joined</span>
-              <span class="tag tag-pts">+500 pts</span>
-            </div>
-          </div>
-        </div>
-        <div class="ch-progress">
-          <div class="prog-header">
-            <span class="prog-label">Your progress</span>
-            <span class="prog-value">62 / 100 km</span>
-          </div>
-          <div class="prog-track">
-            <div class="prog-fill" style="width:62%;background:#F97316"></div>
-          </div>
-          <div class="prog-note">
-            <span>38 km remaining — ~4.2 km/day to finish on time</span>
-            <span>Rank #5 of 44</span>
-          </div>
-        </div>
-        <div class="streak-wrap">
-          <div class="streak-title">Your activity log this month</div>
-          <div class="streak-grid">
-            <div class="s-day s-done" title="May 1">1</div>
-            <div class="s-day s-done" title="May 2">2</div>
-            <div class="s-day s-done" title="May 3">3</div>
-            <div class="s-day s-miss" title="May 4">4</div>
-            <div class="s-day s-done" title="May 5">5</div>
-            <div class="s-day s-done" title="May 6">6</div>
-            <div class="s-day s-done" title="May 7">7</div>
-            <div class="s-day s-done" title="May 8">8</div>
-            <div class="s-day s-done" title="May 9">9</div>
-            <div class="s-day s-miss" title="May 10">10</div>
-            <div class="s-day s-done" title="May 11">11</div>
-            <div class="s-day s-done" title="May 12">12</div>
-            <div class="s-day s-done" title="May 13">13</div>
-            <div class="s-day s-done" title="May 14">14</div>
-            <div class="s-day s-done" title="May 15 - Today">15</div>
-            <div class="s-day s-fut" title="May 16">16</div>
-            <div class="s-day s-fut" title="May 17">17</div>
-            <div class="s-day s-fut" title="May 18">18</div>
-            <div class="s-day s-fut" title="May 19">19</div>
-            <div class="s-day s-fut" title="May 20">20</div>
-            <div class="s-day s-fut" title="May 21">21</div>
-          </div>
-        </div>
-        <!-- Challenge leaderboard -->
-        <div class="ch-lb">
-          <div class="ch-lb-title">Challenge leaderboard</div>
-          <div class="lb-row">
-            <span class="lb-rank r1">1</span>
-            <div class="lb-av" style="background:#FEF9C3;color:#854D0E">SL</div>
-            <div class="lb-name">Sofia L. <span class="lb-loc">· Prague</span></div>
-            <span class="lb-score">94.2 km</span>
-            <span class="trend trend-up">↑ +1</span>
-          </div>
-          <div class="lb-row">
-            <span class="lb-rank r2">2</span>
-            <div class="lb-av" style="background:#E0F2FE;color:#0369A1">AL</div>
-            <div class="lb-name">Alena L. <span class="lb-loc">· London</span></div>
-            <span class="lb-score">88.1 km</span>
-            <span class="trend trend-eq">—</span>
-          </div>
-          <div class="lb-row">
-            <span class="lb-rank r3">3</span>
-            <div class="lb-av" style="background:#F5F3FF;color:#5B21B6">TR</div>
-            <div class="lb-name">Tom R. <span class="lb-loc">· London</span></div>
-            <span class="lb-score">76.4 km</span>
-            <span class="trend trend-up">↑ +2</span>
-          </div>
-          <div class="lb-row">
-            <span class="lb-rank">4</span>
-            <div class="lb-av" style="background:#FCE7F3;color:#9D174D">YT</div>
-            <div class="lb-name">Yuki T. <span class="lb-loc">· Tokyo</span></div>
-            <span class="lb-score">71.0 km</span>
-            <span class="trend trend-dn">↓ −1</span>
-          </div>
-          <div class="lb-row is-you">
-            <span class="lb-rank">5</span>
-            <div class="lb-av" style="background:#FFF7ED;color:#9A3412">JK</div>
-            <div class="lb-name">Jamie K. <span class="lb-loc">· London</span></div>
-            <span class="lb-score" style="color:#D97706;font-weight:700">62.4 km</span>
-            <span class="trend trend-up">↑ +3</span>
-            <span class="you-tag">you</span>
-          </div>
-          <div class="lb-row">
-            <span class="lb-rank">6</span>
-            <div class="lb-av" style="background:#F0FDF4;color:#166534">OB</div>
-            <div class="lb-name">Omar B. <span class="lb-loc">· Dubai</span></div>
-            <span class="lb-score">58.9 km</span>
-            <span class="trend trend-dn">↓ −2</span>
-          </div>
-        </div>
-        <div class="ch-footer">
-          <div class="ch-footer-left">
-            <div class="attending-avs">
-              <div class="att-av" style="background:#FEF9C3;color:#854D0E">SL</div>
-              <div class="att-av" style="background:#E0F2FE;color:#0369A1">AL</div>
-              <div class="att-av" style="background:#F5F3FF;color:#5B21B6">TR</div>
-              <div class="att-av" style="background:#FCE7F3;color:#9D174D">YT</div>
-              <div class="att-av" style="background:var(--gray-100);color:var(--gray-500);font-size:8px">+40</div>
-            </div>
-            <span class="att-count">44 athletes joined</span>
-          </div>
-          <div class="ch-footer-right">
-            <span class="days-left">9 days left</span>
-            <button class="join-btn joined" onclick="event.stopPropagation()">✓ Joined</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Two active challenges -->
-      <div class="cards-grid-2">
-        <div class="ch-card fade-in" onclick="openModal('cyc100')">
-          <div class="ch-head">
-            <div class="ch-sport-icon" style="background:#EFF6FF">🚴</div>
-            <div class="ch-info">
-              <div class="ch-name">Cycling Century</div>
-              <div class="ch-sub">Cycling · Distance · Solo · May 2026</div>
-              <div class="ch-tags">
-                <span class="tag tag-cyc">Cycling</span>
-                <span class="tag tag-solo">Solo</span>
-                <span class="tag tag-pts">+350 pts</span>
-              </div>
-            </div>
-          </div>
-          <div class="ch-desc-wrap">
-            <div class="ch-desc">Ride 100 miles in a single calendar month. Indoor and outdoor rides both count. One of Arenas' most popular solo targets.</div>
-          </div>
-          <div class="ch-progress">
-            <div class="prog-header">
-              <span class="prog-label">Progress</span>
-              <span class="prog-value">88 / 100 mi</span>
-            </div>
-            <div class="prog-track">
-              <div class="prog-fill" style="width:88%;background:#3B82F6"></div>
-            </div>
-            <div class="prog-note">
-              <span>12 mi remaining — just one ride away</span>
-              <span style="color:#10B981;font-weight:600">Almost there!</span>
-            </div>
-          </div>
-          <div class="ch-footer">
-            <span class="days-left">21 days left</span>
-            <button class="join-btn leave" onclick="event.stopPropagation();leaveChallenge(this)">✓ Joined</button>
-          </div>
-        </div>
-
-        <div class="ch-card fade-in" onclick="openModal('clm5')">
-          <div class="ch-head">
-            <div class="ch-sport-icon" style="background:#F5F3FF">🧗</div>
-            <div class="ch-info">
-              <div class="ch-name">V6+ send streak</div>
-              <div class="ch-sub">Climbing · Session streak · Solo · Ongoing</div>
-              <div class="ch-tags">
-                <span class="tag tag-clm">Climbing</span>
-                <span class="tag tag-solo">Solo</span>
-                <span class="tag tag-pts">+200 pts</span>
-              </div>
-            </div>
-          </div>
-          <div class="ch-desc-wrap">
-            <div class="ch-desc">Send at least one V6 or harder problem in 5 separate climbing sessions. Tracks your grade progression over time.</div>
-          </div>
-          <div class="ch-progress">
-            <div class="prog-header">
-              <span class="prog-label">Progress</span>
-              <span class="prog-value">3 / 5 sessions</span>
-            </div>
-            <div class="prog-track">
-              <div class="prog-fill" style="width:60%;background:#8B5CF6"></div>
-            </div>
-            <div class="prog-note">
-              <span>2 sessions remaining — ongoing</span>
-            </div>
-          </div>
-          <div class="streak-wrap" style="padding-top:0">
-            <div class="streak-title">Session log</div>
-            <div style="display:flex;gap:8px;align-items:center">
-              <div class="s-day s-done" style="width:32px;height:32px;font-size:11px;border-radius:7px">✓</div>
-              <div class="s-day s-done" style="width:32px;height:32px;font-size:11px;border-radius:7px">✓</div>
-              <div class="s-day s-done" style="width:32px;height:32px;font-size:11px;border-radius:7px">✓</div>
-              <div class="s-day s-fut" style="width:32px;height:32px;font-size:11px;border-radius:7px">4</div>
-              <div class="s-day s-fut" style="width:32px;height:32px;font-size:11px;border-radius:7px">5</div>
-            </div>
-          </div>
-          <div class="ch-footer">
-            <span class="days-left">Ongoing</span>
-            <button class="join-btn leave" onclick="event.stopPropagation();leaveChallenge(this)">✓ Joined</button>
-          </div>
-        </div>
-      </div>
+      <div class="challenges-loading" style="text-align:center;padding:48px 24px;color:var(--gray-400);font-size:13px">Loading your challenges…</div>
     </div>
 
     <!-- ═══ DISCOVER TAB ═══ -->
@@ -622,56 +392,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 
     <!-- ═══ FRIENDS TAB ═══ -->
     <div id="tab-friends" style="display:none;flex-direction:column;gap:14px">
-
-      <div class="h2h-card fade-in" onclick="openModal('h2h1')">
-        <div class="ch-head" style="border-bottom:var(--border)">
-          <div class="ch-sport-icon" style="background:#FFF7ED">🏃</div>
-          <div class="ch-info">
-            <div class="ch-name">Jamie vs Tom — weekly km</div>
-            <div class="ch-sub">Running · Head-to-head · Resets every Monday</div>
-            <div class="ch-tags">
-              <span class="tag tag-run">Running</span>
-              <span class="tag tag-h2h">Head-to-head</span>
-              <span class="tag tag-pts">+150 pts</span>
-            </div>
-          </div>
-        </div>
-        <div class="h2h-body">
-          <div class="h2h-player">
-            <div class="h2h-av" style="background:#FFF7ED;color:#9A3412">JK</div>
-            <div class="h2h-name">You</div>
-            <div class="h2h-score" style="color:#F97316">24.8</div>
-            <div class="h2h-unit">km this week</div>
-          </div>
-          <div class="h2h-vs">vs</div>
-          <div class="h2h-player">
-            <div class="h2h-av" style="background:#F0FDF4;color:#166534">TR</div>
-            <div class="h2h-name">Tom R.</div>
-            <div class="h2h-score" style="color:var(--gray-400)">21.3</div>
-            <div class="h2h-unit">km this week</div>
-          </div>
-        </div>
-        <div class="h2h-progress">
-          <div class="h2h-bar-wrap">
-            <div class="h2h-bar-fill" style="width:54%;background:#F97316"></div>
-          </div>
-          <div class="h2h-labels">
-            <span style="color:#F97316;font-weight:600">You're leading by 3.5 km</span>
-            <span>7 days left · resets Monday</span>
-          </div>
-        </div>
-        <div class="ch-footer" style="border-top:var(--border)">
-          <span style="font-size:13px;color:var(--gray-500)">Tom logged a 5.2km run yesterday</span>
-          <button class="join-btn" onclick="event.stopPropagation();showToast('Trash talk sent to Tom!')">💬 Trash talk</button>
-        </div>
-      </div>
-
-      <div class="empty-state fade-in">
-        <div class="empty-icon">🤝</div>
-        <h3>Challenge more friends</h3>
-        <p>Go head-to-head across any of your sports — distance, pace, or activity count. Your friends get a notification.</p>
-        <button class="btn btn-primary" onclick="openCreateModal()">+ Start a head-to-head</button>
-      </div>
+      <div class="challenges-loading" style="text-align:center;padding:48px 24px;color:var(--gray-400);font-size:13px">Loading club challenges…</div>
     </div>
 
     <!-- ═══ COMPLETED TAB ═══ -->
@@ -696,62 +417,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
       </div>
 
       <div style="display:flex;flex-direction:column;gap:10px" id="completed-list">
-        <div class="completed-card fade-in" onclick="openModal('run100-apr')">
-          <div class="comp-medal">🥇</div>
-          <div class="comp-info">
-            <div class="comp-name">100km April Run</div>
-            <div class="comp-detail">Running · Completed Apr 28, 2026 · 106.2 km logged · Rank #2 of 38</div>
-          </div>
-          <div class="comp-pts">+500 pts</div>
-        </div>
-        <div class="completed-card fade-in" onclick="openModal('cyc-q1')">
-          <div class="comp-medal">🥈</div>
-          <div class="comp-info">
-            <div class="comp-name">Cycling 500km — Q1</div>
-            <div class="comp-detail">Cycling · Completed Mar 31, 2026 · 512 km logged · Rank #5 of 62</div>
-          </div>
-          <div class="comp-pts">+300 pts</div>
-        </div>
-        <div class="completed-card fade-in" onclick="openModal('streak14')">
-          <div class="comp-medal">🏅</div>
-          <div class="comp-info">
-            <div class="comp-name">14-day run streak</div>
-            <div class="comp-detail">Running · Completed Feb 14, 2026 · 14 consecutive days · Solo</div>
-          </div>
-          <div class="comp-pts">+200 pts</div>
-        </div>
-        <div class="completed-card fade-in" onclick="openModal('clm-v6')">
-          <div class="comp-medal">🥉</div>
-          <div class="comp-info">
-            <div class="comp-name">First V6 send</div>
-            <div class="comp-detail">Climbing · Completed Jan 22, 2026 · Fontainebleau · Solo</div>
-          </div>
-          <div class="comp-pts">+150 pts</div>
-        </div>
-        <div class="completed-card fade-in">
-          <div class="comp-medal">🏅</div>
-          <div class="comp-info">
-            <div class="comp-name">5K under 25 min</div>
-            <div class="comp-detail">Running · Completed Dec 9, 2025 · Parkrun London · Performance</div>
-          </div>
-          <div class="comp-pts">+250 pts</div>
-        </div>
-        <div class="completed-card fade-in">
-          <div class="comp-medal">🏅</div>
-          <div class="comp-info">
-            <div class="comp-name">November cycling 300km</div>
-            <div class="comp-detail">Cycling · Completed Nov 30, 2025 · 318 km logged · Community</div>
-          </div>
-          <div class="comp-pts">+300 pts</div>
-        </div>
-        <div class="completed-card fade-in">
-          <div class="comp-medal">🏅</div>
-          <div class="comp-info">
-            <div class="comp-name">100 activities milestone</div>
-            <div class="comp-detail">All sports · Completed Oct 14, 2025 · Lifetime achievement</div>
-          </div>
-          <div class="comp-pts">+250 pts</div>
-        </div>
+        <div class="challenges-loading" style="text-align:center;padding:48px 24px;color:var(--gray-400);font-size:13px">Loading completed challenges…</div>
       </div>
     </div>
 
@@ -1019,14 +685,11 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 
 <script>
 // ── DATA ──
-const discoverChallenges = [
-  { id:'d1', sport:'running', icon:'🏃', iconBg:'#FFF7ED', name:'5K every day in June', sub:'Running · Daily streak · Community', tags:['run','com'], tagLabels:['Running','Community'], pts:600, joined:212, start:'Starts Jun 1', desc:'Run at least 5km every day in June. All paces welcome — treadmill counts. The community shares daily check-ins.', type:'community' },
-  { id:'d2', sport:'cycling', icon:'🚴', iconBg:'#EFF6FF', name:'1,000 km summer', sub:'Cycling · Distance · Community', tags:['cyc','com'], tagLabels:['Cycling','Community'], pts:800, joined:88, start:'Starts Jun 1', desc:'Ride 1,000 km between June and August. Indoor and outdoor rides both count. Perfect for Granfondo prep.', type:'community' },
-  { id:'d3', sport:'climbing', icon:'🧗', iconBg:'#F5F3FF', name:'Project a V7 in 30 days', sub:'Climbing · Grade · Solo', tags:['clm','solo'], tagLabels:['Climbing','Solo'], pts:400, joined:34, start:'Join anytime', desc:'Send your first V7 within 30 days of joining. Log your sessions and track your progression session by session.', type:'solo' },
-  { id:'d4', sport:'running', icon:'🏃', iconBg:'#FFF7ED', name:'Sub-25 5K club', sub:'Running · Performance · Community', tags:['run','com'], tagLabels:['Running','Performance'], pts:250, joined:1200, start:'Always open', desc:'Log a verified sub-25 minute 5K at any race or parkrun. Community celebrates every milestone with kudos.', type:'performance' },
-  { id:'d5', sport:'cycling', icon:'🚴', iconBg:'#EFF6FF', name:'Morning rides — 30 days', sub:'Cycling · Streak · Solo', tags:['cyc','solo'], tagLabels:['Cycling','Solo'], pts:300, joined:56, start:'Join anytime', desc:'Complete a ride before 9am on 20 of the next 30 days. Log your rides to track your streak.', type:'solo' },
-  { id:'d6', sport:'running', icon:'🏃', iconBg:'#FFF7ED', name:'Half marathon prep — 8 weeks', sub:'Running · Distance · Community', tags:['run','com'], tagLabels:['Running','Community'], pts:500, joined:144, start:'Starts Jun 1', desc:'Follow an 8-week structured programme building to half marathon distance. Weekly targets set by the community coach.', type:'community' },
-];
+// Prototype discover data removed — the real public-challenge list comes from
+// GET /api/challenges via window.renderDiscover() in the data script below.
+// Kept as an empty array so the legacy renderer (used only as a fallback if
+// ARENAS_DATA is ever missing) renders an empty state, never fabricated cards.
+const discoverChallenges = [];
 
 let joinedDiscover = new Set();
 
@@ -1192,7 +855,10 @@ function showToast(msg) {
 }
 
 // ── INIT ──
-renderDiscover();
+// Real challenge data (including the public/discover list) is loaded by the
+// data script below via loadChallenges(); the prototype discover renderer is
+// intentionally NOT invoked here, so no fabricated cards paint before the real
+// fetch resolves.
 </script>
 </div>
 <script>
@@ -1408,18 +1074,28 @@ renderDiscover();
     const ac = document.getElementById('active-count'); if (ac) ac.textContent = mineActive;
   }
 
+  // Resolve every container to its empty state. Used on load failure so the
+  // initial "Loading…" placeholders never get stuck on screen.
+  function renderEmptyAll() {
+    renderMine([]);
+    renderCompleted([]);
+    renderFriends([]);
+    window.renderDiscover('all');
+    updateCounts({ myChallenges: [], clubChallenges: [], publicChallenges: [] });
+  }
+
   window.loadChallenges = async function () {
     try {
       const res = await fetch(B + '/api/challenges');
       const result = await res.json();
-      if (result.error) { console.log('Challenges load error:', result.error); return; }
+      if (result.error) { console.log('Challenges load error:', result.error); renderEmptyAll(); return; }
       lastResult = result;
       renderMine(result.myChallenges || []);
       renderCompleted(result.myChallenges || []);
       renderFriends(result.clubChallenges || []);
       window.renderDiscover('all');
       updateCounts(result);
-    } catch (err) { console.log('Could not load challenges:', err); }
+    } catch (err) { console.log('Could not load challenges:', err); renderEmptyAll(); }
   };
 
   // ── JOIN / LEAVE / LEADERBOARD ──

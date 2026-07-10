@@ -78,6 +78,26 @@ shows until a manual refresh. The Events tab already uses the hash+reload form.
 - mine → active myChallenges; completed (#completed-list) → finished myChallenges
 - friends (#tab-friends) → clubChallenges; discover (#discover-grid) → publicChallenges
 
+## Live containers must ship EMPTY — no prototype cards (flash bug)
+
+The four data-bound containers — `#tab-mine`, `#tab-friends`, `#completed-list`,
+`#discover-grid` — must render EMPTY at parse time (neutral `.challenges-loading`
+placeholders, and `discoverChallenges = []` with NO parse-time `renderDiscover()`
+init call). `loadChallenges()` fetches `/api/challenges` and overwrites each
+container's innerHTML with real data (or the empty state), so ANY hardcoded
+prototype card there "appears then disappears" = a cosmetic flash. This is NOT a
+gating bug: `computeProLocked` only swaps Join/Create buttons into upgrade CTAs;
+it never removes/hides a card, and `GET /api/challenges` is `requireAuth`-only
+(ungated), so free users always receive the full public list.
+**Why:** a free user with the flag on reported challenge cards flashing in then
+vanishing — it was leftover prototype markup being wiped, not the gate.
+**How to apply:** never reintroduce mock cards into these containers; keep the
+static tab-count badges + `#active-count` at 0 (JS `updateCounts` fills them);
+`loadChallenges` error/catch calls `renderEmptyAll()` (which also zeroes counts)
+so the "Loading…" placeholders never get stuck on a fetch failure. Persistent
+mock chrome that is NOT overwritten by JS (right-sidebar widgets, the other
+header stats, the unused `modalData`) does not flash and is left as-is.
+
 ## Tab-panel flex direction + gap (layout gotcha)
 
 `setTab(tab)` toggles the chosen panel to `display:flex` (mine/completed/friends)
