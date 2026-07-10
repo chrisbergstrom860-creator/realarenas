@@ -63,9 +63,7 @@ body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);fon
   }
 
   if (D.status === 'ok' && D.sessionStatus === 'complete' && D.paymentStatus === 'paid') {
-    var amount = (typeof D.amountTotal === 'number')
-      ? (D.amountTotal/100).toFixed(2) + ' ' + String(D.currency||'').toUpperCase() + ' / month'
-      : '';
+    var amount = D.priceLabel || '';
     card.innerHTML =
       '<div class="card-top"><div class="eyebrow">Checkout complete</div><h1>Payment received</h1></div>'+
       '<div class="card-body">'+

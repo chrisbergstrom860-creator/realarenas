@@ -10,6 +10,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
 const { createClient } = require('@supabase/supabase-js');
+const { subscriptionPriceLabel, PRICE_FALLBACK_LABEL } = require('./billing-price');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -5328,13 +5329,30 @@ app.get(BASE + '/billing/success', requirePageAuth, async (req, res) => {
         // Someone else's session ID (or a session we didn't create): reject.
         data = { status: 'forbidden' };
       } else {
+        // Derive the recurring-price label from the REAL subscription price
+        // object via the SAME helper the confirmation email uses, so the page
+        // and the email share exactly one code path and can't drift or go
+        // stale. subscriptionPriceLabel already substitutes the neutral,
+        // non-stale fallback if the price object is unreadable.
+        let priceLabel = PRICE_FALLBACK_LABEL;
+        try {
+          const subId =
+            typeof session.subscription === 'string'
+              ? session.subscription
+              : session.subscription && session.subscription.id;
+          if (subId) {
+            const sub = await stripe.subscriptions.retrieve(subId);
+            priceLabel = subscriptionPriceLabel(sub);
+          }
+        } catch (err) {
+          // Non-fatal: priceLabel stays the neutral fallback (no numeric guess).
+        }
         data = {
           status: 'ok',
           sessionStatus: session.status,          // complete | open | expired
           paymentStatus: session.payment_status,  // paid | unpaid | no_payment_required
           planLabel: meta.owner_type === 'club' ? 'Club Pro' : 'Individual Pro',
-          amountTotal: session.amount_total,
-          currency: session.currency,
+          priceLabel,                             // "$9/month" from the real price, or neutral fallback
           livemode: !!session.livemode
         };
       }
@@ -5484,9 +5502,12 @@ app.post(BASE + '/api/stripe/webhook', async (req, res) => {
         await upsertSubscriptionRow(sub, meta.owner_type, meta.owner_id);
         console.log('[stripe webhook] checkout completed →', meta.owner_type, meta.owner_id, '=', sub.status);
         // Queue the ARL-compliant confirmation email for the paying subscriber.
-        // owner_type maps 1:1 to product (user → Individual Pro $9, club → Club
-        // Pro $29) because the two checkout flows use distinct prices. Gated on
-        // subPaying so we never "confirm" an incomplete/unpaid subscription.
+        // owner_type maps 1:1 to product (user → Individual Pro, club → Club
+        // Pro) because the two checkout flows use distinct prices. The price
+        // string is derived from the REAL subscription price object at send
+        // time (never hardcoded) so a Stripe price change can't leave the ARL
+        // email stating a stale amount. Gated on subPaying so we never
+        // "confirm" an incomplete/unpaid subscription.
         const confirmTo =
           (session.customer_details && session.customer_details.email) ||
           session.customer_email ||
@@ -5495,7 +5516,7 @@ app.post(BASE + '/api/stripe/webhook', async (req, res) => {
           const isClub = meta.owner_type === 'club';
           const conf = buildSubscriptionConfirmationEmail({
             planLabel: isClub ? 'Club Pro' : 'Individual Pro',
-            priceLabel: isClub ? '$29/month' : '$9/month',
+            priceLabel: subscriptionPriceLabel(sub),
             manageUrl: publicBaseUrl(req) + '/billing'
           });
           confirmationEmail = { to: confirmTo, subject: conf.subject, html: conf.html, text: conf.text };
