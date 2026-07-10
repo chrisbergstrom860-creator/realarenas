@@ -62,3 +62,7 @@ replit.nix
 # (unreferenced; kept on disk but untracked so it stops polluting diffs).
 # See .agents/memory/html-arenas-opengraph-asset.md
 artifacts/html-arenas/public/opengraph.jpg
+
+# Pasted task-prompt brief (internal planning note; not served, not deployed).
+# Kept on disk but untracked so it stops polluting the repo.
+attached_assets/Pasted-New-build-plan-gating-for-the-revised-Pro-tier-Decision_1783653391030.txt

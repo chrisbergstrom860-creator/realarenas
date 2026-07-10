@@ -3053,15 +3053,25 @@ app.post(BASE + '/api/challenges/create', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
   const b = req.body || {};
   const { title, description, sport, goal_type, goal_target, goal_unit, start_date, end_date, visibility, invitees, club_id } = b;
+  // Authorization (UNCONDITIONAL — independent of PLAN_GATES_ENABLED). Creating a
+  // challenge scoped to a club is a club-management action, so the caller must be
+  // an admin/coach of THAT club. This is access control, not plan gating, so it
+  // must run whether or not the plan gates are enabled. It also stops anyone from
+  // tagging a challenge into a club they don't belong to (namespace spoofing).
+  let isClubMgr = false;
+  if (club_id) {
+    const clubRole = await getClubRole(req.user.id, club_id);
+    isClubMgr = !!(clubRole && isClubManagerRole(clubRole.role));
+    if (!isClubMgr) {
+      return res.status(403).json({ error: 'not_club_manager' });
+    }
+  }
   // Individual Pro gate (dormant unless PLAN_GATES_ENABLED). Club challenges are
-  // a club-scoped feature, NOT the individual Pro tier, so an admin/coach of the
-  // target club is exempt. Verifying the club role here also stops a free user
-  // from dodging the gate by tagging an individual challenge with a club_id.
-  // Flag off => the whole block is skipped and behaviour is identical to today.
-  if (PLAN_GATES_ENABLED) {
-    const clubRole = club_id ? await getClubRole(req.user.id, club_id) : null;
-    const isClubMgr = !!(clubRole && isClubManagerRole(clubRole.role));
-    if (!isClubMgr && (await getUserPlan(req.user.id)) === 'free') {
+  // a club-scoped feature, NOT the individual Pro tier, so a club admin/coach
+  // (already verified above) is exempt; only individual creates require Pro.
+  // Flag off => this block is skipped and behaviour is identical to today.
+  if (PLAN_GATES_ENABLED && !isClubMgr) {
+    if ((await getUserPlan(req.user.id)) === 'free') {
       return res.status(403).json({ error: 'pro_required', feature: 'challenge_create', upgrade: '/billing' });
     }
   }
