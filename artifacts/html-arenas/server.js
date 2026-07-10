@@ -147,6 +147,62 @@ function buildInviteEmail({ clubName, inviterName, joinUrl, role }) {
   return { subject, html, text };
 }
 
+// Build the subscription-confirmation email sent after a successful checkout.
+// Written for California Automatic Renewal Law (ARL) compliance: it confirms
+// the exact plan and price, states plainly that the subscription auto-renews
+// monthly and continues until canceled, and gives clear self-serve cancel
+// instructions (Billing → Manage billing → Stripe portal). planLabel/priceLabel
+// are server-derived constants, not user input, but everything interpolated is
+// escaped defensively. Returns { subject, html, text }.
+function buildSubscriptionConfirmationEmail({ planLabel, priceLabel, manageUrl }) {
+  const plan = escapeHtml(planLabel);
+  const price = escapeHtml(priceLabel);
+  const url = escapeHtml(manageUrl);
+  const subject = 'Your Arenas Pro subscription is confirmed';
+  const html = `<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 16px">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e4e4e7">
+        <tr><td style="background:#18181b;padding:22px 28px">
+          <span style="color:#fde047;font-size:20px;font-weight:800;letter-spacing:-.02em">🏆 Arenas</span>
+        </td></tr>
+        <tr><td style="padding:28px">
+          <h1 style="margin:0 0 14px;font-size:20px;color:#18181b">You're all set 🎉</h1>
+          <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.55">Thanks for subscribing. Your <strong>${plan}</strong> subscription is now active at <strong>${price}</strong>.</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;background:#fafafa;border:1px solid #e4e4e7;border-radius:10px">
+            <tr><td style="padding:14px 16px;color:#3f3f46;font-size:14px;line-height:1.55">
+              <strong>Automatic renewal:</strong> This subscription renews automatically every month at ${price} and continues until you cancel.
+            </td></tr>
+          </table>
+          <p style="margin:0 0 8px;color:#18181b;font-size:15px;line-height:1.55"><strong>How to cancel</strong></p>
+          <p style="margin:0 0 18px;color:#3f3f46;font-size:14px;line-height:1.55">You can cancel anytime — log in to Arenas, open <strong>Billing</strong>, and click <strong>Manage billing</strong>. That opens a secure Stripe portal where you can cancel your subscription.</p>
+          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 4px">
+            <tr><td style="border-radius:10px;background:#fde047">
+              <a href="${url}" style="display:inline-block;padding:13px 26px;font-size:15px;font-weight:700;color:#18181b;text-decoration:none">Go to Billing &rarr;</a>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="padding:18px 28px;border-top:1px solid #e4e4e7;background:#fafafa">
+          <p style="margin:0;color:#a1a1aa;font-size:12px;line-height:1.5">Arenas &mdash; every sport, one community. You're receiving this because you started a subscription on Arenas.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+  </body></html>`;
+  const text = [
+    `Thanks for subscribing. Your ${planLabel} subscription is now active at ${priceLabel}.`,
+    '',
+    `Automatic renewal: This subscription renews automatically every month at ${priceLabel} and continues until you cancel.`,
+    '',
+    `How to cancel: You can cancel anytime — log in to Arenas, open Billing, and click Manage billing. That opens a secure Stripe portal where you can cancel your subscription.`,
+    '',
+    `Manage your subscription: ${manageUrl}`,
+    '',
+    `Arenas — every sport, one community. You're receiving this because you started a subscription on Arenas.`
+  ].join('\n');
+  return { subject, html, text };
+}
+
 // ── STRIPE WEBHOOK RAW BODY ──
 // stripe.webhooks.constructEvent verifies the signature over the EXACT raw
 // request bytes, so this one path must get express.raw BEFORE the global
@@ -5393,6 +5449,11 @@ app.post(BASE + '/api/stripe/webhook', async (req, res) => {
   }
   try {
     if (!supabaseAdmin) throw new Error('supabaseAdmin not configured');
+    // Populated by checkout.session.completed; the confirmation email is sent
+    // AFTER the 200 response below (fire-and-forget) so a send failure can never
+    // turn a successful webhook into a 500 — which would make Stripe retry and
+    // re-run the upsert.
+    let confirmationEmail = null;
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object;
@@ -5422,6 +5483,25 @@ app.post(BASE + '/api/stripe/webhook', async (req, res) => {
         }
         await upsertSubscriptionRow(sub, meta.owner_type, meta.owner_id);
         console.log('[stripe webhook] checkout completed →', meta.owner_type, meta.owner_id, '=', sub.status);
+        // Queue the ARL-compliant confirmation email for the paying subscriber.
+        // owner_type maps 1:1 to product (user → Individual Pro $9, club → Club
+        // Pro $29) because the two checkout flows use distinct prices. Gated on
+        // subPaying so we never "confirm" an incomplete/unpaid subscription.
+        const confirmTo =
+          (session.customer_details && session.customer_details.email) ||
+          session.customer_email ||
+          null;
+        if (subPaying && confirmTo) {
+          const isClub = meta.owner_type === 'club';
+          const conf = buildSubscriptionConfirmationEmail({
+            planLabel: isClub ? 'Club Pro' : 'Individual Pro',
+            priceLabel: isClub ? '$29/month' : '$9/month',
+            manageUrl: publicBaseUrl(req) + '/billing'
+          });
+          confirmationEmail = { to: confirmTo, subject: conf.subject, html: conf.html, text: conf.text };
+        } else if (subPaying) {
+          console.log('[stripe webhook] completed but no customer email to confirm:', session.id);
+        }
         break;
       }
       case 'customer.subscription.updated': {
@@ -5489,7 +5569,17 @@ app.post(BASE + '/api/stripe/webhook', async (req, res) => {
       default:
         break; // every other event type is acknowledged and ignored
     }
-    return res.status(200).json({ received: true });
+    res.status(200).json({ received: true });
+    // Non-critical, post-response: send the confirmation email fire-and-forget.
+    // sendEmail never throws (it degrades to a log with no RESEND_API_KEY and
+    // returns { ok:false } on HTTP errors); the .catch is defensive only. The
+    // webhook has already answered 200, so nothing here can affect its outcome.
+    if (confirmationEmail) {
+      sendEmail(confirmationEmail).catch((err) =>
+        console.error('[stripe webhook] confirmation email error:', (err && err.message) || err)
+      );
+    }
+    return;
   } catch (err) {
     console.error('[stripe webhook] handler failed:', event.type, '—', err.message);
     return res.status(500).send('Webhook handler failed'); // Stripe retries on 500
