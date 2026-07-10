@@ -47,17 +47,21 @@ helper (mirrors notification enrichment) — there is no usable `profiles` table
   and `DELETE /api/challenges/:id`.
 - **DELETE /api/challenges/:id was added beyond the original 3-route spec** — the
   coach Cancel button needs it; the spec wrongly assumed it already existed.
-- **Known gap (intentionally out of scope):** `POST /api/challenges/create`
-  inserts `club_id` from the body with NO *unconditional* club-membership check —
-  any authed user can create a challenge inside any club (it then renders on that
-  club's coach dashboard). Same class of bug as the events club-scoped-write rule.
-  Add a flag-independent membership gate when `club_id` is supplied (NOT inside the
-  `PLAN_GATES_ENABLED` block — authz must not be flag-dependent). **Why deferred:**
-  task scope was the Challenges tab; create route is pre-existing and shared with
-  the main challenges page. NOTE: the plan-gating layer already resolves club role
-  from the supplied club_id when `PLAN_GATES_ENABLED` is on (free non-managers get
-  403), but that is a *plan* gate, not an authorization gate — see
-  html-arenas-stripe.md "Plan gating".
+- **Club-scoped create is authorized (FIXED).** `POST /api/challenges/create` now
+  runs an *unconditional* club-manager check at the top of the handler, OUTSIDE the
+  `PLAN_GATES_ENABLED` block: when `club_id` is supplied, resolve getClubRole +
+  isClubManagerRole; non-managers get `403 {"error":"not_club_manager"}` whether or
+  not the flag is on. **Why outside the flag:** this is authorization, not plan
+  gating — it must never depend on a feature flag. The plan gate defers to it
+  (computes `isClubMgr` once, then `if (PLAN_GATES_ENABLED && !isClubMgr)`), so a
+  verified manager is exempt and individual creates still need Pro when flag-on.
+  Previously the only club-role check lived inside the dormant flag block, so with
+  gating off any authed user could tag a challenge into a club they don't manage
+  (it rendered on that club's dashboard) — same class as the events club-write bug.
+- **Join has no analogous hole:** `/api/challenges/:id/join` reads the persisted
+  challenge's `club_id` from the DB, never from client input, so there is no
+  club-namespace-spoofing vector. (Join is permissive by design — any authed user
+  can join any challenge id — but that only adds the caller as a participant.)
 
 ## Same-route refresh after a write (gotcha)
 
