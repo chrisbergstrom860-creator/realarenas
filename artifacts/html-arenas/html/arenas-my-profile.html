@@ -1565,6 +1565,22 @@ if (window.location.hash === '#activities') {
   async function loadProfileStats() {
     var body = document.getElementById('sp-stats-body');
     if (!body) return;
+    // Plan gating (dormant unless PLAN_GATES_ENABLED is on server-side). A locked
+    // free user gets a clean upgrade panel instead of the analytics — and we skip
+    // the fetch entirely so the gated endpoint's 403 never produces a broken chart.
+    // proLocked is false whenever the server flag is off (today's behaviour).
+    var gating = window.ARENAS_DATA && window.ARENAS_DATA.gating;
+    if (gating && gating.proLocked) {
+      document.querySelectorAll('.sp-period').forEach(function (p) { p.style.display = 'none'; });
+      body.innerHTML =
+        '<div style="text-align:center;padding:48px 24px;max-width:440px;margin:0 auto">' +
+          '<div style="font-size:36px;margin-bottom:12px">📊</div>' +
+          '<div style="font-size:16px;font-weight:700;color:var(--gray-900);margin-bottom:8px">Training analytics is a Pro feature</div>' +
+          '<div style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:18px">Unlock your training load, weekly trends, sport breakdown, and personal records with Arenas Pro. Your activity log and personal stats stay free.</div>' +
+          '<button onclick="window.location.href=window.BASE + \'/billing\'" style="padding:9px 20px;border-radius:8px;font-size:13px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">🔒 Upgrade to Pro →</button>' +
+        '</div>';
+      return;
+    }
     try {
       var response = await fetch(window.BASE + '/api/profile/stats?period=' + encodeURIComponent(spPeriod));
       var r = await response.json();

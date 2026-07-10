@@ -873,6 +873,37 @@ async function getClubPlan(clubId) {
   return sub && sub.plan === 'club_pro' ? 'club_pro' : 'free';
 }
 
+// ── PLAN GATING (master switch) ──
+// Everything below gates ONLY when PLAN_GATES_ENABLED is truthy. Unset/false =>
+// zero gating anywhere and the app behaves exactly as it does today (founding
+// period). Flip on later alongside Stripe live mode to enforce the Pro tier.
+const PLAN_GATES_ENABLED = /^(1|true|yes|on)$/i.test(String(process.env.PLAN_GATES_ENABLED || '').trim());
+
+// Express middleware factory: gate an individual-scoped route behind the Pro
+// plan. Mirrors the requireEventManager / requireChallengeManager authorization
+// style (applied per route). When the flag is off it is a pure pass-through, so
+// behaviour is byte-identical to today. When on, a free user gets a structured
+// 403 the client turns into an honest upgrade affordance. Must run AFTER
+// requireAuth so req.user exists.
+function requireProPlan(feature) {
+  return async function (req, res, next) {
+    if (!PLAN_GATES_ENABLED) return next();
+    const plan = await getUserPlan(req.user.id);
+    if (plan !== 'free') return next();
+    return res.status(403).json({ error: 'pro_required', feature, upgrade: '/billing' });
+  };
+}
+
+// True when this request's user should see Pro features rendered as locked (flag
+// on AND free plan). Pages inject this so the client shows honest locked states
+// instead of calling endpoints that would 403. Only queries the plan when the
+// flag is on; never throws (any error resolves to unlocked = today's behaviour).
+async function computeProLocked(userId) {
+  if (!PLAN_GATES_ENABLED) return false;
+  try { return (await getUserPlan(userId)) === 'free'; }
+  catch (err) { return false; }
+}
+
 // Inject a server-built object into a page as window.<varName>, escaping `<`
 // so club/member names can't break out of the <script> tag. Mirrors
 // injectArenasData but supports page-specific variable names.
@@ -3022,6 +3053,18 @@ app.post(BASE + '/api/challenges/create', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
   const b = req.body || {};
   const { title, description, sport, goal_type, goal_target, goal_unit, start_date, end_date, visibility, invitees, club_id } = b;
+  // Individual Pro gate (dormant unless PLAN_GATES_ENABLED). Club challenges are
+  // a club-scoped feature, NOT the individual Pro tier, so an admin/coach of the
+  // target club is exempt. Verifying the club role here also stops a free user
+  // from dodging the gate by tagging an individual challenge with a club_id.
+  // Flag off => the whole block is skipped and behaviour is identical to today.
+  if (PLAN_GATES_ENABLED) {
+    const clubRole = club_id ? await getClubRole(req.user.id, club_id) : null;
+    const isClubMgr = !!(clubRole && isClubManagerRole(clubRole.role));
+    if (!isClubMgr && (await getUserPlan(req.user.id)) === 'free') {
+      return res.status(403).json({ error: 'pro_required', feature: 'challenge_create', upgrade: '/billing' });
+    }
+  }
   if (!title || !goal_type || !goal_target || !start_date || !end_date) {
     return res.json({ error: 'Missing required fields' });
   }
@@ -3076,6 +3119,17 @@ app.post(BASE + '/api/challenges/create', requireAuth, async (req, res) => {
 // Join a challenge (adds the viewer as a participant).
 app.post(BASE + '/api/challenges/:id/join', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
+  // Individual Pro gate (dormant unless PLAN_GATES_ENABLED). Joining a club's own
+  // challenge is a club-scoped feature, so club challenges are exempt; only
+  // individual/public challenges require Pro. Flag off => skipped entirely.
+  if (PLAN_GATES_ENABLED) {
+    const { data: ch } = await supabaseAdmin
+      .from('challenges').select('club_id').eq('id', req.params.id).maybeSingle();
+    const isClubChallenge = !!(ch && ch.club_id);
+    if (!isClubChallenge && (await getUserPlan(req.user.id)) === 'free') {
+      return res.status(403).json({ error: 'pro_required', feature: 'challenge_join', upgrade: '/billing' });
+    }
+  }
   const { error } = await supabaseAdmin
     .from('challenge_participants').insert({ challenge_id: req.params.id, user_id: req.user.id });
   if (error) return res.json({ error: error.message });
@@ -3085,7 +3139,8 @@ app.post(BASE + '/api/challenges/:id/join', requireAuth, async (req, res) => {
 });
 
 // Leave a challenge. The user_id filter enforces self-only removal even though
-// the service role bypasses RLS.
+// the service role bypasses RLS. Deliberately NOT behind the Pro gate: leaving
+// is an exit action, so gating it would trap a downgraded user in a challenge.
 app.delete(BASE + '/api/challenges/:id/leave', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
   await supabaseAdmin.from('challenge_participants').delete()
@@ -4061,7 +4116,8 @@ app.get(BASE + '/challenges', requirePageAuth, async (req, res) => {
       }));
     }
     const clubs = await getSidebarClubs(userId);
-    const challengeData = { userId, profile: displayFromUser(req.user), following, clubs };
+    const gating = { proLocked: await computeProLocked(userId) };
+    const challengeData = { userId, profile: displayFromUser(req.user), following, clubs, gating };
     const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-challenges.html'), 'utf8'), challengeData), 'challenges');
     res.send(html);
   } catch (err) {
@@ -4169,7 +4225,8 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
       membership: membership ? { role: membership.role, club } : null,
       clubs: userClubs,
       followingList,
-      followerList
+      followerList,
+      gating: { proLocked: await computeProLocked(req.user.id) }
     };
 
     const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-my-profile.html'), 'utf8'), profileData), 'profile');
@@ -4182,7 +4239,7 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
 // Profile stats & PRs computed from the signed-in user's own `activities`.
 // Hero stats and the sport breakdown respect the `period` filter; streaks,
 // the 12-week chart, and personal records are always all-time (per spec).
-app.get(BASE + '/api/profile/stats', requireAuth, async (req, res) => {
+app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analytics'), async (req, res) => {
   try {
     if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
     const period = req.query.period === 'month' || req.query.period === 'year' ? req.query.period : 'all';

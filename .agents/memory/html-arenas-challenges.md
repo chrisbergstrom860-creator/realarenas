@@ -48,12 +48,16 @@ helper (mirrors notification enrichment) — there is no usable `profiles` table
 - **DELETE /api/challenges/:id was added beyond the original 3-route spec** — the
   coach Cancel button needs it; the spec wrongly assumed it already existed.
 - **Known gap (intentionally out of scope):** `POST /api/challenges/create`
-  inserts `club_id` from the body with NO club-membership check — any authed user
-  can create a challenge inside any club (it then renders on that club's coach
-  dashboard). Same class of bug as the events club-scoped-write rule. Add a
-  membership gate when `club_id` is supplied. **Why deferred:** task scope was
-  the Challenges tab; create route is pre-existing and shared with the main
-  challenges page.
+  inserts `club_id` from the body with NO *unconditional* club-membership check —
+  any authed user can create a challenge inside any club (it then renders on that
+  club's coach dashboard). Same class of bug as the events club-scoped-write rule.
+  Add a flag-independent membership gate when `club_id` is supplied (NOT inside the
+  `PLAN_GATES_ENABLED` block — authz must not be flag-dependent). **Why deferred:**
+  task scope was the Challenges tab; create route is pre-existing and shared with
+  the main challenges page. NOTE: the plan-gating layer already resolves club role
+  from the supplied club_id when `PLAN_GATES_ENABLED` is on (free non-managers get
+  403), but that is a *plan* gate, not an authorization gate — see
+  html-arenas-stripe.md "Plan gating".
 
 ## Same-route refresh after a write (gotcha)
 

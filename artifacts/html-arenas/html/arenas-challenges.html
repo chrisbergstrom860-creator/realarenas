@@ -346,7 +346,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
       </div>
     </div>
     <div style="display:flex;align-items:flex-start;gap:10px;flex-shrink:0;margin-top:4px">
-      <button class="btn btn-yellow" onclick="openCreateModal()">+ Create challenge</button>
+      <button class="btn btn-yellow" id="create-challenge-btn" onclick="openCreateModal()">+ Create challenge</button>
     </div>
   </div>
 </div>
@@ -1218,6 +1218,19 @@ renderDiscover();
   const B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
   if (!data) return;
 
+  // Plan gating (dormant unless PLAN_GATES_ENABLED is on server-side). When a
+  // free user is locked, individual challenge create/join render as honest
+  // upgrade CTAs instead of real actions. Club challenges (c.club_id) stay free
+  // (club-scoped feature), leaving is never gated, and browsing + challenge
+  // leaderboards stay free. proLocked is false whenever the server flag is off,
+  // so this is a no-op in today's ungated build.
+  const proLocked = !!(data.gating && data.gating.proLocked);
+  window.goPro = function () { window.location.href = B + '/billing'; };
+  if (proLocked) {
+    const cb = document.getElementById('create-challenge-btn');
+    if (cb) { cb.textContent = '🔒 Create · Pro'; cb.setAttribute('title', 'Creating challenges is an Arenas Pro feature'); }
+  }
+
   function esc(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -1321,7 +1334,9 @@ renderDiscover();
             <button onclick="window.location.href=window.BASE + '/profile'" style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Log activity →</button>
             ${!c.isOwner ? `<button onclick="leaveChallenge('${esc(c.id)}',this)" style="padding:5px 12px;border-radius:7px;font-size:12px;border:1px solid #FECACA;background:var(--red-light);color:#A32D2D;cursor:pointer;margin-left:auto">Leave</button>` : ''}
           ` : `
-            <button onclick="joinChallenge('${esc(c.id)}',this)" style="padding:5px 14px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">Join challenge →</button>
+            ${(proLocked && !c.club_id)
+              ? `<button onclick="goPro()" title="Joining challenges is an Arenas Pro feature" style="padding:5px 14px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow-light);color:#7a5c00;cursor:pointer">🔒 Join · Pro feature</button>`
+              : `<button onclick="joinChallenge('${esc(c.id)}',this)" style="padding:5px 14px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">Join challenge →</button>`}
             <button onclick="viewLeaderboard('${esc(c.id)}')" style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">View leaderboard</button>
           `}
         </div>
@@ -1410,6 +1425,9 @@ renderDiscover();
   // ── JOIN / LEAVE / LEADERBOARD ──
   window.joinChallenge = async function (id, btn) {
     if (typeof id !== 'string') return;
+    // No blanket proLocked guard here: buildChallengeCard already renders the
+    // upgrade CTA for gated (non-club) challenges, so this only runs for actions
+    // the server allows (club challenges, or any challenge when the flag is off).
     if (btn) { btn.textContent = 'Joining…'; btn.disabled = true; }
     try {
       const res = await fetch(B + '/api/challenges/' + id + '/join', { method: 'POST' });
@@ -1423,6 +1441,7 @@ renderDiscover();
   window.leaveChallenge = async function (id, btn) {
     // Guard against the prototype's leaveChallenge(this) signature.
     if (typeof id !== 'string') return;
+    // Leaving is never gated (exit action) — no proLocked guard.
     if (!confirm('Leave this challenge? Your progress will be lost.')) return;
     try {
       await fetch(B + '/api/challenges/' + id + '/leave', { method: 'DELETE' });
@@ -1476,7 +1495,7 @@ renderDiscover();
   };
 
   // ── CREATE CHALLENGE MODAL (replaces the static prototype modal) ──
-  window.openCreateModal = function () { openCreateChallenge(); };
+  window.openCreateModal = function () { if (proLocked) return goPro(); openCreateChallenge(); };
   window.openCreateChallenge = function () {
     const existing = document.getElementById('create-challenge-overlay');
     if (existing) existing.remove();

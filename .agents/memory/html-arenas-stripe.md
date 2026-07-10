@@ -13,7 +13,18 @@ description: Payments build decisions — plans, subscriptions table, SDK except
 - **Why one table:** one webhook code path for both products; "free" = absence of a row; unique(owner_type,owner_id) is the idempotency anchor for webhook upserts.
 
 ## Plan resolution (server.js)
-- `getUserPlan(userId)` → 'pro'|'free', `getClubPlan(clubId)` → 'club_pro'|'free' via shared `getPaidSubscription()`. Paid = status in `PAID_SUB_STATUSES` ('active','past_due' grace). No row / other status / error / wrong plan value → free. Never throws. NOT wired into any route yet — gating deliberately deferred (founding period is free).
+- `getUserPlan(userId)` → 'pro'|'free', `getClubPlan(clubId)` → 'club_pro'|'free' via shared `getPaidSubscription()`. Paid = status in `PAID_SUB_STATUSES` ('active','past_due' grace). No row / other status / error / wrong plan value → free. Never throws.
+
+## Plan gating (DORMANT behind PLAN_GATES_ENABLED)
+- Gating is BUILT but **off by default**. `PLAN_GATES_ENABLED` env var (unset/false/0/no/off = zero gating, behaviorally identical to the ungated build). **Why dormant:** founding period is free; ship the mechanism now, flip the flag later without a redeploy.
+- **Free vs individual-Pro boundary** (only these three surfaces gate; everything else stays free — feed, activity logging, personal stats, event discovery/RSVP, leaderboard *viewing*):
+  - `POST /api/challenges/create` — individual create gated; club create EXEMPT when caller is admin/coach of the **supplied** club_id (getClubRole+isClubManagerRole).
+  - `POST /api/challenges/:id/join` — individual/public join gated; joining a challenge that has a `club_id` is EXEMPT.
+  - `GET /api/profile/stats` — training analytics (profile Stats tab) gated via `requireProPlan('training_analytics')` (the ONLY remaining requireProPlan usage).
+- **Rules that must hold:** create/join are SHARED by club + individual flows, so their gates must be club-aware inline (a blanket `requireProPlan` middleware broke "club features untouched" — club-dashboard posts create with visibility:'club',club_id). `DELETE /api/challenges/:id/leave` is **NEVER gated** (an exit action must not trap a downgraded user). Club-scoped features + coach's notes are entirely untouched.
+- **No bypass:** create gate resolves the club role from the *supplied* club_id, so a free user passing a foreign/non-member club_id gets 403 (no role → gated). Join gate keys off the persisted challenge's club_id, not client input.
+- **Client mirror** (`arenas-challenges.html`): `proLocked = gating.proLocked` (server-injected, true only when flag-on AND free). Join button locks only when `(proLocked && !c.club_id)`; individual create button + openCreateModal gate; joinChallenge/leaveChallenge carry NO blanket redirect. Pages inject `gating.proLocked` even when flag-off (value false) — so "behaviorally identical", not byte-identical.
+- **Pre-existing gap (out of scope, unchanged):** create still has no *unconditional* club-membership check when the flag is OFF (any user can tag any club_id, as today). Adding an authz check there is a separate flag-independent follow-up — do NOT put it inside the `if (PLAN_GATES_ENABLED)` block (authz must not be flag-dependent).
 
 ## Stripe client
 - Official `stripe` npm SDK is a **deliberate exception** to the repo's plain-fetch rule (needed for `stripe.webhooks.constructEvent`). Resend-style degradation: `stripe` is null without STRIPE_SECRET_KEY (logs `[stripe skipped: ...]`); every future caller must `if (!stripe)` no-op.
