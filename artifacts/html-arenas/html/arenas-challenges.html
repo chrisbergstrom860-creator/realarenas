@@ -426,134 +426,35 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
   <!-- RIGHT SIDEBAR -->
   <div class="right-col">
 
-    <!-- Points breakdown -->
+    <!-- Points breakdown (real: per-sport points for the current month) -->
     <div class="side-card">
-      <div class="side-title">Points breakdown — May</div>
-      <div class="pts-row">
-        <div class="pts-sport"><div class="pts-sport-dot" style="background:#F97316"></div> Running</div>
-        <span class="pts-val">680 pts</span>
-      </div>
-      <div class="pts-row">
-        <div class="pts-sport"><div class="pts-sport-dot" style="background:#3B82F6"></div> Cycling</div>
-        <span class="pts-val">410 pts</span>
-      </div>
-      <div class="pts-row">
-        <div class="pts-sport"><div class="pts-sport-dot" style="background:#8B5CF6"></div> Climbing</div>
-        <span class="pts-val">150 pts</span>
-      </div>
-      <div class="pts-total">
-        <span style="color:var(--gray-600)">Total this month</span>
-        <strong>1,240 pts</strong>
+      <div class="side-title" id="pts-breakdown-title">Points breakdown</div>
+      <div id="pts-breakdown-body">
+        <div style="padding:14px 16px;color:var(--gray-400);font-size:13px">Loading…</div>
       </div>
     </div>
 
-    <!-- Suggested for you -->
+    <!-- Suggested for you (real: public challenges from the same fetch) -->
     <div class="side-card">
       <div class="side-title">Suggested for you</div>
-      <div class="sug-row" onclick="setTab('discover');showToast('Showing 5K challenge')">
-        <div class="sug-icon" style="background:#FFF7ED">🏃</div>
-        <div class="sug-info">
-          <div class="sug-name">5K every day in June</div>
-          <div class="sug-meta">Running · Starts Jun 1 · 212 joined</div>
-        </div>
-        <span class="sug-pts">+600</span>
-      </div>
-      <div class="sug-row" onclick="setTab('discover');showToast('Showing summer challenge')">
-        <div class="sug-icon" style="background:#EFF6FF">🚴</div>
-        <div class="sug-info">
-          <div class="sug-name">1,000 km summer</div>
-          <div class="sug-meta">Cycling · Jun–Aug · 88 joined</div>
-        </div>
-        <span class="sug-pts">+800</span>
-      </div>
-      <div class="sug-row" onclick="setTab('discover');showToast('Showing V7 challenge')">
-        <div class="sug-icon" style="background:#F5F3FF">🧗</div>
-        <div class="sug-info">
-          <div class="sug-name">Project a V7 in 30 days</div>
-          <div class="sug-meta">Climbing · Join anytime · 34 joined</div>
-        </div>
-        <span class="sug-pts">+400</span>
-      </div>
-      <div class="sug-row" onclick="setTab('discover');showToast('Showing sub-25 challenge')">
-        <div class="sug-icon" style="background:#FFF7ED">🏃</div>
-        <div class="sug-info">
-          <div class="sug-name">Sub-25 5K club</div>
-          <div class="sug-meta">Running · Always open · 1.2k joined</div>
-        </div>
-        <span class="sug-pts">+250</span>
-      </div>
-      <div style="padding:10px 16px">
-        <button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:13px" onclick="setTab('discover')">Browse all challenges →</button>
+      <div id="suggested-body">
+        <div style="padding:14px 16px;color:var(--gray-400);font-size:13px">Loading…</div>
       </div>
     </div>
 
-    <!-- Friends activity -->
+    <!-- Friends activity (real: people you follow in public challenges) -->
     <div class="side-card">
       <div class="side-title">Friends in challenges</div>
-      <div class="friend-row">
-        <div class="fr-av" style="background:#FEF9C3;color:#854D0E">SL</div>
-        <div class="fr-info">
-          <div class="fr-name">Sofia L.</div>
-          <div class="fr-action">Leading 100km May Run — 94.2 km</div>
-        </div>
-        <span class="fr-time">2h ago</span>
-      </div>
-      <div class="friend-row">
-        <div class="fr-av" style="background:#F0FDF4;color:#166534">TR</div>
-        <div class="fr-info">
-          <div class="fr-name">Tom R.</div>
-          <div class="fr-action">Logged 5.2 km — head-to-head with you</div>
-        </div>
-        <span class="fr-time">5h ago</span>
-      </div>
-      <div class="friend-row">
-        <div class="fr-av" style="background:#E0F2FE;color:#0369A1">AL</div>
-        <div class="fr-info">
-          <div class="fr-name">Alena L.</div>
-          <div class="fr-action">Joined 5K every day in June</div>
-        </div>
-        <span class="fr-time">1d ago</span>
-      </div>
-      <div class="friend-row">
-        <div class="fr-av" style="background:#ECFDF5;color:#065F46">AM</div>
-        <div class="fr-info">
-          <div class="fr-name">Alena M.</div>
-          <div class="fr-action">Completed V7 send — Project a V7 done</div>
-        </div>
-        <span class="fr-time">2d ago</span>
+      <div id="friends-body">
+        <div style="padding:14px 16px;color:var(--gray-400);font-size:13px">Loading…</div>
       </div>
     </div>
 
-    <!-- Your streak -->
+    <!-- Your streak (real: current/best streak + this week's activity grid) -->
     <div class="side-card">
-      <div class="side-title">Your streak — May</div>
-      <div style="padding:12px 16px 16px">
-        <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--gray-900);margin-bottom:2px">6 <span style="font-size:15px;font-weight:400;color:var(--gray-500)">days</span></div>
-        <div style="font-size:12px;color:var(--gray-500);margin-bottom:14px">Current streak · best: 14 days</div>
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">
-          <div style="text-align:center;font-size:10px;color:var(--gray-400)">M</div>
-          <div style="text-align:center;font-size:10px;color:var(--gray-400)">T</div>
-          <div style="text-align:center;font-size:10px;color:var(--gray-400)">W</div>
-          <div style="text-align:center;font-size:10px;color:var(--gray-400)">T</div>
-          <div style="text-align:center;font-size:10px;color:var(--gray-400)">F</div>
-          <div style="text-align:center;font-size:10px;color:var(--gray-400)">S</div>
-          <div style="text-align:center;font-size:10px;color:var(--gray-400)">S</div>
-          <div class="s-day s-done" style="width:100%;aspect-ratio:1">✓</div>
-          <div class="s-day s-done" style="width:100%;aspect-ratio:1">✓</div>
-          <div class="s-day s-done" style="width:100%;aspect-ratio:1">✓</div>
-          <div class="s-day s-miss" style="width:100%;aspect-ratio:1">✗</div>
-          <div class="s-day s-done" style="width:100%;aspect-ratio:1">✓</div>
-          <div class="s-day s-done" style="width:100%;aspect-ratio:1">✓</div>
-          <div class="s-day s-done" style="width:100%;aspect-ratio:1">✓</div>
-          <div class="s-day s-done" style="width:100%;aspect-ratio:1">✓</div>
-          <div class="s-day s-done" style="width:100%;aspect-ratio:1">✓</div>
-          <div class="s-day s-miss" style="width:100%;aspect-ratio:1">✗</div>
-          <div class="s-day s-done" style="width:100%;aspect-ratio:1">✓</div>
-          <div class="s-day s-done" style="width:100%;aspect-ratio:1">✓</div>
-          <div class="s-day s-done" style="width:100%;aspect-ratio:1">✓</div>
-          <div class="s-day s-today" style="width:100%;aspect-ratio:1">T</div>
-        </div>
-        <div style="font-size:12px;color:var(--gray-500);margin-top:10px">Log an activity today to extend your streak to 7 days.</div>
+      <div class="side-title" id="streak-title">Your streak</div>
+      <div id="streak-body">
+        <div style="padding:14px 16px;color:var(--gray-400);font-size:13px">Loading…</div>
       </div>
     </div>
 
@@ -1063,6 +964,122 @@ function showToast(msg) {
       : `<div style="grid-column:1/-1">${emptyState('🔍', 'No public challenges found', 'Try a different sport filter, or create your own challenge.')}</div>`;
   };
 
+  // ── RIGHT SIDEBAR (all real, same load path; honest empty on error/empty) ──
+  const monthName = () => new Date().toLocaleString('en-US', { month: 'long' });
+
+  function renderPointsBreakdown(result) {
+    const title = document.getElementById('pts-breakdown-title');
+    const body = document.getElementById('pts-breakdown-body');
+    if (title) title.textContent = 'Points breakdown — ' + monthName();
+    if (!body) return;
+    const bySport = result.pointsBySport || [];
+    const total = result.pointsThisMonth || 0;
+    if (!bySport.length) {
+      body.innerHTML = '<div style="padding:12px 16px;color:var(--gray-500);font-size:13px">No points logged yet this month.</div>'
+        + '<div class="pts-total"><span style="color:var(--gray-600)">Total this month</span><strong>0 pts</strong></div>';
+      return;
+    }
+    const rows = bySport.map(function (s) {
+      const label = s.sport === 'any' ? 'Any sport' : cap(s.sport);
+      return '<div class="pts-row"><div class="pts-sport"><div class="pts-sport-dot" style="background:' + progressColor(s.sport) + '"></div> ' + esc(label) + '</div><span class="pts-val">' + (s.points || 0).toLocaleString() + ' pts</span></div>';
+    }).join('');
+    body.innerHTML = rows
+      + '<div class="pts-total"><span style="color:var(--gray-600)">Total this month</span><strong>' + total.toLocaleString() + ' pts</strong></div>';
+  }
+
+  function suggestSchedule(c) {
+    const start = new Date(c.start_date), now = new Date();
+    if (start > now) {
+      const d = Math.ceil((start - now) / 86400000);
+      return d <= 1 ? 'Starts tomorrow' : 'Starts in ' + d + ' days';
+    }
+    return daysLeftLabel(c.end_date);
+  }
+
+  function renderSuggested(result) {
+    const body = document.getElementById('suggested-body');
+    if (!body) return;
+    const items = (result.publicChallenges || []).slice(0, 4);
+    if (!items.length) {
+      body.innerHTML = '<div style="padding:14px 16px;color:var(--gray-500);font-size:13px">No public challenges to suggest right now. Create your own to get started.</div>';
+      return;
+    }
+    const rows = items.map(function (c) {
+      const label = c.sport === 'any' ? 'Any sport' : cap(c.sport);
+      const meta = esc(label) + ' · ' + esc(suggestSchedule(c)) + ' · ' + c.participantCount + ' joined';
+      const joinBtn = (proLocked && !c.club_id)
+        ? '<button onclick="event.stopPropagation();goPro()" title="Joining challenges is an Arenas Pro feature" style="padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0;border:1px solid var(--yellow-dark);background:var(--yellow-light);color:#7a5c00">🔒 Pro</button>'
+        : '<button onclick="event.stopPropagation();joinChallenge(\'' + esc(c.id) + '\',this)" style="padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900)">Join</button>';
+      return '<div class="sug-row" onclick="setTab(\'discover\')">'
+        + '<div class="sug-icon" style="' + sportColor(c.sport) + '">' + sportIcon(c.sport) + '</div>'
+        + '<div class="sug-info"><div class="sug-name">' + esc(c.title) + '</div><div class="sug-meta">' + meta + '</div></div>'
+        + joinBtn + '</div>';
+    }).join('');
+    body.innerHTML = rows
+      + '<div style="padding:10px 16px"><button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:13px" onclick="setTab(\'discover\')">Browse all challenges →</button></div>';
+  }
+
+  function renderFriendsCard(result) {
+    const body = document.getElementById('friends-body');
+    if (!body) return;
+    const friends = result.friendsInChallenges || [];
+    if (!friends.length) {
+      const msg = result.followsAnyone
+        ? 'No one you follow has joined a public challenge yet.'
+        : 'Follow other athletes to see the challenges they join.';
+      body.innerHTML = '<div style="padding:14px 16px;color:var(--gray-500);font-size:13px">' + msg + '</div>';
+      return;
+    }
+    const palette = [['#FEF9C3','#854D0E'],['#F0FDF4','#166534'],['#E0F2FE','#0369A1'],['#F5F3FF','#5B21B6'],['#ECFDF5','#065F46'],['#FBEAF0','#72243E']];
+    body.innerHTML = friends.map(function (f, i) {
+      const c = palette[i % palette.length];
+      const more = f.moreCount > 0 ? ' +' + f.moreCount + ' more' : '';
+      return '<div class="friend-row" style="cursor:default">'
+        + '<div class="fr-av" style="background:' + c[0] + ';color:' + c[1] + '">' + esc(initialsOf(f.name)) + '</div>'
+        + '<div class="fr-info"><div class="fr-name">' + esc(f.name) + '</div><div class="fr-action">In ' + esc(f.challengeTitle) + esc(more) + '</div></div>'
+        + '</div>';
+    }).join('');
+  }
+
+  function renderStreakCard(result) {
+    const title = document.getElementById('streak-title');
+    const body = document.getElementById('streak-body');
+    if (title) title.textContent = 'Your streak — ' + monthName();
+    if (!body) return;
+    const current = result.currentStreak || 0;
+    const best = result.longestStreak || 0;
+    const grid = result.weekGrid || [];
+    const heads = ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(function (d) {
+      return '<div style="text-align:center;font-size:10px;color:var(--gray-400)">' + d + '</div>';
+    }).join('');
+    const cells = grid.map(function (g) {
+      if (g.isFuture) return '<div class="s-day" style="width:100%;aspect-ratio:1;background:var(--gray-50);color:var(--gray-300)"></div>';
+      if (g.active) return '<div class="s-day s-done" style="width:100%;aspect-ratio:1">✓</div>';
+      if (g.isToday) return '<div class="s-day s-today" style="width:100%;aspect-ratio:1">T</div>';
+      return '<div class="s-day s-miss" style="width:100%;aspect-ratio:1">✗</div>';
+    }).join('');
+    const gridBlock = grid.length
+      ? '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">' + heads + cells + '</div>'
+      : '';
+    const todayActive = grid.some(function (g) { return g.isToday && g.active; });
+    const hint = current > 0
+      ? (todayActive ? 'Nice — you\'ve logged activity today.' : 'Log an activity today to extend your streak.')
+      : 'Log an activity to start a new streak.';
+    body.innerHTML = '<div style="padding:12px 16px 16px">'
+      + '<div style="font-size:28px;font-weight:700;font-family:var(--mono);color:var(--gray-900);margin-bottom:2px">' + current + ' <span style="font-size:15px;font-weight:400;color:var(--gray-500)">day' + (current !== 1 ? 's' : '') + '</span></div>'
+      + '<div style="font-size:12px;color:var(--gray-500);margin-bottom:14px">Current streak · best: ' + best + ' day' + (best !== 1 ? 's' : '') + '</div>'
+      + gridBlock
+      + '<div style="font-size:12px;color:var(--gray-500);margin-top:10px">' + hint + '</div>'
+      + '</div>';
+  }
+
+  function renderSidebar(result) {
+    renderPointsBreakdown(result);
+    renderSuggested(result);
+    renderFriendsCard(result);
+    renderStreakCard(result);
+  }
+
   function updateCounts(result) {
     const setCount = (btnId, n) => { const el = document.querySelector('#' + btnId + ' .tab-count'); if (el) el.textContent = n; };
     const mineActive = (result.myChallenges || []).filter(c => !isDone(c)).length;
@@ -1087,6 +1104,7 @@ function showToast(msg) {
     renderFriends([]);
     window.renderDiscover('all');
     updateCounts({ myChallenges: [], clubChallenges: [], publicChallenges: [] });
+    renderSidebar({});
   }
 
   window.loadChallenges = async function () {
@@ -1100,6 +1118,7 @@ function showToast(msg) {
       renderFriends(result.clubChallenges || []);
       window.renderDiscover('all');
       updateCounts(result);
+      renderSidebar(result);
     } catch (err) { console.log('Could not load challenges:', err); renderEmptyAll(); }
   };
 

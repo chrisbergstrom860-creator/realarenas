@@ -111,13 +111,28 @@ list is real too — injected from `req.user.user_metadata.sports` into
 **Why:** prototype header showed fake `1,240 pts` / `340 available` / `14 streak`
 and a hardcoded `Running, Cycling & Climbing`.
 **How to apply:** any stat that stays must be real + honest-zero + same load path.
-**Still fabricated (KNOWN, pending follow-up):** the right-sidebar cards —
-"Points breakdown — May" (incl. `1,240 pts` total), "Your streak — May"
-(`6 days · best 14`), "Suggested for you", "Friends in challenges" — are NOT
-overwritten by JS and now visibly contradict the honest header (a 0-pt user sees
-header 0 next to sidebar 1,240). Points-total + best-streak can reuse the values
-already returned by `/api/challenges`; suggestions can reuse `publicChallenges`;
-friends has no backing data (remove or wire a real source).
+**Right sidebar is now real too** (all four cards, same `/api/challenges` load,
+honest empty/zero states):
+- Points breakdown → `pointsBySport` (per-sport month points). The total row
+  shows `pointsThisMonth` (one round) so it matches the header exactly — do NOT
+  switch it to the sum of the per-sport rounded rows, or it can drift ±1 pt from
+  the header total.
+- Suggested → `publicChallenges.slice(0,4)` with **no points badge**: the
+  `challenges` table has NO points/reward column, so the old prototype `+600`
+  badges were fabricated. Join buttons replicate the main-grid gate
+  (`proLocked && !club_id` → 🔒 Pro / goPro, else joinChallenge).
+- Friends in challenges → people you follow who are in **public challenges only**
+  (`.eq('visibility','public')`) — never leak private/club challenge titles;
+  `followsAnyone` distinguishes "follow no one" vs "none in a public challenge".
+- Your streak → `currentStreak`/`longestStreak` + `weekGrid`; month label is the
+  real current month (client `toLocaleString`).
+
+**Dead trap (pre-existing, unreachable — safe to delete someday):** a legacy
+top-level `renderDiscover` + `discoverChallenges` + `modalData` (fabricated
+`pts:150` etc.) + `openDetailModal`/detail-modal still exist, but
+`window.renderDiscover =` overwrites the legacy global binding before any call, so
+the real `buildChallengeCard` renders instead and `modalData` never shows
+(`openDetailModal` with a real UUID bails on `if (!d) return`). Not visible now.
 
 ## Tab-panel flex direction + gap (layout gotcha)
 

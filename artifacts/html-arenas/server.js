@@ -2987,7 +2987,7 @@ app.get(BASE + '/api/profile/overview', requireAuth, async (req, res) => {
 // `profiles` table, no FK embeds).
 app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
   if (!supabaseAdmin) {
-    return res.json({ myChallenges: [], clubChallenges: [], publicChallenges: [], myJoinedIds: [], pointsThisMonth: 0, longestStreak: 0 });
+    return res.json({ myChallenges: [], clubChallenges: [], publicChallenges: [], myJoinedIds: [], pointsThisMonth: 0, longestStreak: 0, currentStreak: 0, pointsBySport: [], weekGrid: [], friendsInChallenges: [], followsAnyone: false });
   }
   const userId = req.user.id;
   const PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
@@ -3093,10 +3093,11 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
       };
     });
 
-    // ── Header stats for the signed-in user (real data, same load path) ──
+    // ── Header + sidebar stats for the signed-in user (real data, same load) ──
     // Best-effort: a failure here must never break the challenges payload, so it
-    // degrades to 0 (an honest empty value) rather than throwing.
-    let pointsThisMonth = 0, longestStreak = 0;
+    // degrades to honest zeros/empties rather than throwing.
+    let pointsThisMonth = 0, longestStreak = 0, currentStreak = 0;
+    let pointsBySport = [], weekGrid = [];
     try {
       const { data: userActs } = await supabaseAdmin
         .from('activities').select('sport, distance, date')
@@ -3104,13 +3105,22 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
       const acts = userActs || [];
       const mNow = new Date();
       const monthStart = new Date(mNow.getFullYear(), mNow.getMonth(), 1);
+      const monthActs = acts.filter((a) => new Date(a.date) >= monthStart);
       // "pts earned this month" — same SPORT_POINTS model used by leaderboards
       // and profile stats, over the current calendar month's activities.
-      pointsThisMonth = calculatePoints(acts.filter((a) => new Date(a.date) >= monthStart));
-      // "longest streak" — max consecutive active days (all-time), same logic as
-      // the profile stats page.
-      const activeDays = [...new Set(acts.map((a) => new Date(a.date).toDateString()))]
-        .map((d) => new Date(d)).sort((a, b) => a - b);
+      pointsThisMonth = calculatePoints(monthActs);
+      // Per-sport breakdown of that exact monthly total (only sports with points).
+      const bySport = {};
+      monthActs.forEach((a) => { const s = a.sport || 'other'; (bySport[s] = bySport[s] || []).push(a); });
+      pointsBySport = Object.keys(bySport)
+        .map((sport) => ({ sport, points: calculatePoints(bySport[sport]) }))
+        .filter((x) => x.points > 0)
+        .sort((a, b) => b.points - a.points);
+      // Distinct active days (local date strings) drive both streaks + the grid.
+      const daySet = new Set(acts.map((a) => new Date(a.date).toDateString()));
+      const activeDays = [...daySet].map((d) => new Date(d)).sort((a, b) => a - b);
+      // "longest streak" — max run of consecutive active days (all-time), same
+      // logic as the profile stats page.
       let streakRun = 0;
       for (let i = 0; i < activeDays.length; i++) {
         if (i === 0) streakRun = 1;
@@ -3120,8 +3130,60 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
         }
         if (streakRun > longestStreak) longestStreak = streakRun;
       }
+      // "current streak" — consecutive active days ending now; today may still be
+      // pending, so when today has no activity yet we count back from yesterday.
+      const probe = new Date();
+      if (!daySet.has(probe.toDateString())) probe.setDate(probe.getDate() - 1);
+      while (daySet.has(probe.toDateString())) { currentStreak++; probe.setDate(probe.getDate() - 1); }
+      // This week's grid (Mon→Sun): active day, today, and future (unfilled) cells.
+      const todayStr = new Date().toDateString();
+      const dow = (mNow.getDay() + 6) % 7; // 0 = Monday
+      const monday = new Date(mNow.getFullYear(), mNow.getMonth(), mNow.getDate() - dow);
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+        const ds = d.toDateString();
+        weekGrid.push({ active: daySet.has(ds), isToday: ds === todayStr, isFuture: d > mNow && ds !== todayStr });
+      }
     } catch (statErr) {
       console.log('Challenge header stats error:', statErr.message);
+    }
+
+    // ── "Friends in challenges" — people the viewer follows who have joined a
+    // PUBLIC challenge (private/club titles are never leaked). Honest empty when
+    // the viewer follows no one or none of them are in a public challenge. ──
+    let friendsInChallenges = [], followsAnyone = false;
+    try {
+      const { data: follows } = await supabaseAdmin
+        .from('follows').select('following_id').eq('follower_id', userId);
+      const followingIds = [...new Set((follows || []).map((f) => f.following_id).filter(Boolean))];
+      followsAnyone = followingIds.length > 0;
+      if (followingIds.length) {
+        const { data: fParts } = await supabaseAdmin
+          .from('challenge_participants').select('challenge_id, user_id')
+          .in('user_id', followingIds);
+        const fChallengeIds = [...new Set((fParts || []).map((p) => p.challenge_id).filter(Boolean))];
+        if (fChallengeIds.length) {
+          const { data: pubCh } = await supabaseAdmin
+            .from('challenges').select('id, title, sport')
+            .in('id', fChallengeIds).eq('visibility', 'public');
+          const pubMap = {};
+          (pubCh || []).forEach((c) => { pubMap[c.id] = c; });
+          const byUser = {};
+          (fParts || []).forEach((p) => {
+            const ch = pubMap[p.challenge_id];
+            if (ch) { (byUser[p.user_id] = byUser[p.user_id] || []).push(ch); }
+          });
+          const fNameMap = await buildUserDisplayMap(Object.keys(byUser));
+          friendsInChallenges = Object.keys(byUser).map((uid) => ({
+            name: (fNameMap[uid] || {}).name || 'Athlete',
+            sport: byUser[uid][0].sport,
+            challengeTitle: byUser[uid][0].title,
+            moreCount: byUser[uid].length - 1
+          })).slice(0, 6);
+        }
+      }
+    } catch (frErr) {
+      console.log('Challenge friends error:', frErr.message);
     }
 
     res.json({
@@ -3130,7 +3192,12 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
       publicChallenges: enrich(publicChallenges),
       myJoinedIds: myIds,
       pointsThisMonth,
-      longestStreak
+      longestStreak,
+      currentStreak,
+      pointsBySport,
+      weekGrid,
+      friendsInChallenges,
+      followsAnyone
     });
   } catch (err) {
     console.log('Challenges list error:', err.message);
