@@ -2987,7 +2987,7 @@ app.get(BASE + '/api/profile/overview', requireAuth, async (req, res) => {
 // `profiles` table, no FK embeds).
 app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
   if (!supabaseAdmin) {
-    return res.json({ myChallenges: [], clubChallenges: [], publicChallenges: [], myJoinedIds: [] });
+    return res.json({ myChallenges: [], clubChallenges: [], publicChallenges: [], myJoinedIds: [], pointsThisMonth: 0, longestStreak: 0 });
   }
   const userId = req.user.id;
   const PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
@@ -3093,11 +3093,44 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
       };
     });
 
+    // ── Header stats for the signed-in user (real data, same load path) ──
+    // Best-effort: a failure here must never break the challenges payload, so it
+    // degrades to 0 (an honest empty value) rather than throwing.
+    let pointsThisMonth = 0, longestStreak = 0;
+    try {
+      const { data: userActs } = await supabaseAdmin
+        .from('activities').select('sport, distance, date')
+        .eq('user_id', userId);
+      const acts = userActs || [];
+      const mNow = new Date();
+      const monthStart = new Date(mNow.getFullYear(), mNow.getMonth(), 1);
+      // "pts earned this month" — same SPORT_POINTS model used by leaderboards
+      // and profile stats, over the current calendar month's activities.
+      pointsThisMonth = calculatePoints(acts.filter((a) => new Date(a.date) >= monthStart));
+      // "longest streak" — max consecutive active days (all-time), same logic as
+      // the profile stats page.
+      const activeDays = [...new Set(acts.map((a) => new Date(a.date).toDateString()))]
+        .map((d) => new Date(d)).sort((a, b) => a - b);
+      let streakRun = 0;
+      for (let i = 0; i < activeDays.length; i++) {
+        if (i === 0) streakRun = 1;
+        else {
+          const diff = Math.round((activeDays[i] - activeDays[i - 1]) / 86400000);
+          streakRun = diff === 1 ? streakRun + 1 : 1;
+        }
+        if (streakRun > longestStreak) longestStreak = streakRun;
+      }
+    } catch (statErr) {
+      console.log('Challenge header stats error:', statErr.message);
+    }
+
     res.json({
       myChallenges: enrich(myChallenges),
       clubChallenges: enrich(clubChallenges),
       publicChallenges: enrich(publicChallenges),
-      myJoinedIds: myIds
+      myJoinedIds: myIds,
+      pointsThisMonth,
+      longestStreak
     });
   } catch (err) {
     console.log('Challenges list error:', err.message);
@@ -4184,7 +4217,9 @@ app.get(BASE + '/challenges', requirePageAuth, async (req, res) => {
     }
     const clubs = await getSidebarClubs(userId);
     const gating = { proLocked: await computeProLocked(userId) };
-    const challengeData = { userId, profile: displayFromUser(req.user), following, clubs, gating };
+    const meta = req.user.user_metadata || {};
+    const sports = Array.isArray(meta.sports) ? meta.sports.filter(Boolean) : [];
+    const challengeData = { userId, profile: displayFromUser(req.user), following, clubs, gating, sports };
     const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-challenges.html'), 'utf8'), challengeData), 'challenges');
     res.send(html);
   } catch (err) {

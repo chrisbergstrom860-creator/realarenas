@@ -337,12 +337,12 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
   <div class="page-header-inner">
     <div class="page-header-left">
       <h1>Challenges 🏆</h1>
-      <p>Personalised to your sports — Running, Cycling & Climbing. Earn points, beat friends, hit milestones.</p>
+      <p id="header-subtitle">Personalised to your sports — earn points, beat friends, and hit milestones.</p>
       <div class="header-stats">
-        <div class="header-stat"><div class="stat-dot" style="background:#10B981"></div> <strong id="active-count">0</strong> active challenges</div>
-        <div class="header-stat"><div class="stat-dot" style="background:#FFD21E"></div> <strong>1,240</strong> pts earned this month</div>
-        <div class="header-stat"><div class="stat-dot" style="background:#3B82F6"></div> <strong>340</strong> challenges available</div>
-        <div class="header-stat"><div class="stat-dot" style="background:#8B5CF6"></div> <strong>14</strong> day longest streak</div>
+        <div class="header-stat"><div class="stat-dot" style="background:#10B981"></div> <strong id="active-count">—</strong> active challenges</div>
+        <div class="header-stat"><div class="stat-dot" style="background:#FFD21E"></div> <strong id="pts-month">—</strong> pts earned this month</div>
+        <div class="header-stat"><div class="stat-dot" style="background:#3B82F6"></div> <strong id="challenges-available">—</strong> challenges available</div>
+        <div class="header-stat"><div class="stat-dot" style="background:#8B5CF6"></div> <strong id="longest-streak">—</strong> day longest streak</div>
       </div>
     </div>
     <div style="display:flex;align-items:flex-start;gap:10px;flex-shrink:0;margin-top:4px">
@@ -1071,7 +1071,12 @@ function showToast(msg) {
     setCount('tab-btn-discover', (result.publicChallenges || []).length);
     setCount('tab-btn-friends', (result.clubChallenges || []).length);
     setCount('tab-btn-completed', completed);
-    const ac = document.getElementById('active-count'); if (ac) ac.textContent = mineActive;
+    // Header stats strip — all real, honest-zero on empty, from this same load.
+    const setStat = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    setStat('active-count', mineActive);
+    setStat('pts-month', (result.pointsThisMonth || 0).toLocaleString());
+    setStat('challenges-available', (result.publicChallenges || []).length);
+    setStat('longest-streak', result.longestStreak || 0);
   }
 
   // Resolve every container to its empty state. Used on load failure so the
@@ -1367,6 +1372,22 @@ function showToast(msg) {
       if (submitBtn) { submitBtn.textContent = 'Create challenge →'; submitBtn.disabled = false; }
     }
   };
+
+  // Header subtitle — reflect the user's real sports (auth metadata). Keeps the
+  // generic server-rendered default when the user has no sports set, so no
+  // fabricated sport list is ever shown.
+  (function renderSubtitle() {
+    const el = document.getElementById('header-subtitle');
+    if (!el) return;
+    const sports = (data && Array.isArray(data.sports)) ? data.sports.filter(Boolean) : [];
+    if (!sports.length) return;
+    const cap = s => String(s).charAt(0).toUpperCase() + String(s).slice(1);
+    const labels = sports.map(cap);
+    const list = labels.length === 1
+      ? labels[0]
+      : labels.slice(0, -1).join(', ') + ' & ' + labels[labels.length - 1];
+    el.textContent = 'Personalised to your sports — ' + list + '. Earn points, beat friends, hit milestones.';
+  })();
 
   loadChallenges();
 })();

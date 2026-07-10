@@ -94,9 +94,30 @@ vanishing — it was leftover prototype markup being wiped, not the gate.
 **How to apply:** never reintroduce mock cards into these containers; keep the
 static tab-count badges + `#active-count` at 0 (JS `updateCounts` fills them);
 `loadChallenges` error/catch calls `renderEmptyAll()` (which also zeroes counts)
-so the "Loading…" placeholders never get stuck on a fetch failure. Persistent
-mock chrome that is NOT overwritten by JS (right-sidebar widgets, the other
-header stats, the unused `modalData`) does not flash and is left as-is.
+so the "Loading…" placeholders never get stuck on a fetch failure.
+
+## Header stats strip + subtitle are now real (no fabricated numbers)
+
+All four header stats are real and rendered from the SAME `/api/challenges` load
+via `updateCounts` (`—` placeholders pre-fetch, honest 0 on error/empty):
+`active-count`+`challenges-available` are client-derived (mineActive /
+`publicChallenges.length`, the latter capped at the discover `.limit(20)` — a
+floor, not fabrication); `pts-month` (`pointsThisMonth`) and `longest-streak`
+(`longestStreak`) are computed server-side in the `/api/challenges` handler from
+one `activities` fetch, reusing `calculatePoints` (current calendar month) and
+the profile-stats streak loop (max consecutive active days). The subtitle sport
+list is real too — injected from `req.user.user_metadata.sports` into
+`challengeData`, capitalized client-side, with a generic no-sport-list default.
+**Why:** prototype header showed fake `1,240 pts` / `340 available` / `14 streak`
+and a hardcoded `Running, Cycling & Climbing`.
+**How to apply:** any stat that stays must be real + honest-zero + same load path.
+**Still fabricated (KNOWN, pending follow-up):** the right-sidebar cards —
+"Points breakdown — May" (incl. `1,240 pts` total), "Your streak — May"
+(`6 days · best 14`), "Suggested for you", "Friends in challenges" — are NOT
+overwritten by JS and now visibly contradict the honest header (a 0-pt user sees
+header 0 next to sidebar 1,240). Points-total + best-streak can reuse the values
+already returned by `/api/challenges`; suggestions can reuse `publicChallenges`;
+friends has no backing data (remove or wire a real source).
 
 ## Tab-panel flex direction + gap (layout gotcha)
 
