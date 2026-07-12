@@ -35,3 +35,4 @@
 - [html-arenas sticky filter offset](html-arenas-sticky-scrollport.md) — sticky bars inside .main (overflow:hidden = the scrollport, already below topbar) must use top:0 not top:56px, else 56px gap + first row occluded.
 - [html-arenas Stripe/plans + gating](html-arenas-stripe.md) — $9 Pro / flat $29 Club Pro; webhook (raw-mount) sole subscriptions writer; /billing page + no-id club checkout; ARL text by every upgrade CTA; plan gating LIVE (founding period over, all founding/free copy removed; create/join club-aware, leave never gated, stats gated).
 - [html-arenas search wiring](html-arenas-search.md) — search is athletes-only via /athletes?q= deep link; dashboard member-filter globals need head-script stubs; Enter handlers need !event.isComposing.
+- [html-arenas Pro badge](html-arenas-pro-badge.md) — PRO badge = real subscription, never PLAN_GATES_ENABLED; server string-injection after injectBottomNav; exact-match patterns are the fragility.

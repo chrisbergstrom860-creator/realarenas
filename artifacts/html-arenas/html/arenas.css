@@ -214,6 +214,25 @@ body {
   color: var(--red);
 }
 
+/* Individual Pro plan badge. Server-injected only for Pro subscribers —
+   free users' pages never contain this markup. */
+.pro-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 20px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  font-family: var(--mono);
+  background: var(--yellow);
+  color: var(--gray-900);
+  line-height: 1.7;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+.nav-item .pro-badge { margin-left: auto; }
+
 .notif-dot {
   position: absolute;
   top: 6px;

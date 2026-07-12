@@ -762,6 +762,29 @@ function injectBottomNav(html, pageKey) {
   return out;
 }
 
+// ── PRO BADGE ──
+// Server-side "PRO" badge for Individual Pro subscribers. Driven by the real
+// subscription (getUserPlan), deliberately NOT by PLAN_GATES_ENABLED — a paying
+// user sees their status even while gates are off. Free users' pages contain
+// zero badge markup (nothing client-guessed, no flash of wrong state). Targets:
+//   1. the sidebar "My profile" nav item (athlete shell pages + billing),
+//   2. the avatar-dropdown "My profile" row (every shell page; the only profile
+//      entry point on the club dashboard, and the mobile path to the profile —
+//      the bottom nav's cramped icon pills stay badge-free on purpose).
+const PRO_BADGE_HTML = '<span class="pro-badge">PRO</span>';
+function injectProBadge(html, isPro) {
+  if (!isPro) return html;
+  let out = html.replaceAll(
+    '👤</span> My profile</div>',
+    '👤</span> My profile ' + PRO_BADGE_HTML + '</div>'
+  );
+  out = out.replaceAll(
+    'text-decoration:none">My profile</a>',
+    'text-decoration:none">My profile ' + PRO_BADGE_HTML + '</a>'
+  );
+  return out;
+}
+
 // ── NOTIFICATIONS ──
 // Insert a notification row for a recipient. Best-effort: failures are logged
 // but never bubble up, so the triggering action (like/comment/follow) still
@@ -899,7 +922,7 @@ function isClubManagerRole(role) {
 // A subscription row counts as paid only while status is 'active' or
 // 'past_due' (grace window while Stripe retries a failed payment). No row,
 // any other status, or any error resolves to the free plan — plan lookups
-// must never break a request. NOT wired into any route yet (no gating).
+// must never break a request.
 const PAID_SUB_STATUSES = ['active', 'past_due'];
 
 async function getPaidSubscription(ownerType, ownerId) {
@@ -3713,7 +3736,7 @@ app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
     // Real right-rail widget data (weekly km, streak, club rank, follow suggestions).
     const sidebar = await buildFeedSidebar(req.user.id);
     const userData = { profile: displayFromUser(req.user), userId: req.user.id, posts, followsNobody, feedActivities, followingRsvps, clubs: userClubs, week: sidebar.week, dayStrip: sidebar.dayStrip, currentStreak: sidebar.currentStreak, clubRank: sidebar.clubRank, followSuggestions: sidebar.followSuggestions };
-    const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), userData), 'feed');
+    const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), userData), 'feed'), (await getUserPlan(req.user.id)) === 'pro');
     res.type('html').send(html);
   } catch (err) {
     console.log('Feed data error:', err.message);
@@ -3793,7 +3816,7 @@ app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
     console.log('Athletes data error:', err.message);
   }
   try {
-    const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-athletes.html'), 'utf8'), athleteData), 'athletes');
+    const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-athletes.html'), 'utf8'), athleteData), 'athletes'), (await getUserPlan(req.user.id)) === 'pro');
     res.type('html').send(html);
   } catch (err) {
     console.log('Athletes render error:', err.message);
@@ -4232,7 +4255,7 @@ app.get(BASE + '/events', requirePageAuth, async (req, res) => {
     }));
     const clubs = await getSidebarClubs(userId);
     const eventData = { userId, profile: displayFromUser(req.user), following: followingList, clubs };
-    const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-events.html'), 'utf8'), eventData), 'events');
+    const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-events.html'), 'utf8'), eventData), 'events'), (await getUserPlan(req.user.id)) === 'pro');
     res.type('html').send(html);
   } catch (err) {
     console.log('Events page error:', err.message);
@@ -4260,7 +4283,7 @@ app.get(BASE + '/leaderboards', requirePageAuth, async (req, res) => {
     }
     const clubs = await getSidebarClubs(req.user.id);
     const lbData = { userId: req.user.id, profile: displayFromUser(req.user), clubName, clubs };
-    const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-leaderboards.html'), 'utf8'), lbData), 'leaderboards');
+    const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-leaderboards.html'), 'utf8'), lbData), 'leaderboards'), (await getUserPlan(req.user.id)) === 'pro');
     res.type('html').send(html);
   } catch (err) {
     console.log('Leaderboards page error:', err.message);
@@ -4287,7 +4310,7 @@ app.get(BASE + '/challenges', requirePageAuth, async (req, res) => {
     const meta = req.user.user_metadata || {};
     const sports = Array.isArray(meta.sports) ? meta.sports.filter(Boolean) : [];
     const challengeData = { userId, profile: displayFromUser(req.user), following, clubs, gating, sports };
-    const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-challenges.html'), 'utf8'), challengeData), 'challenges');
+    const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-challenges.html'), 'utf8'), challengeData), 'challenges'), (await getUserPlan(userId)) === 'pro');
     res.send(html);
   } catch (err) {
     console.log('Challenges page error:', err.message);
@@ -4398,7 +4421,11 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
       gating: { proLocked: await computeProLocked(req.user.id) }
     };
 
-    const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-my-profile.html'), 'utf8'), profileData), 'profile');
+    const isProUser = (await getUserPlan(req.user.id)) === 'pro';
+    let html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-my-profile.html'), 'utf8'), profileData), 'profile'), isProUser);
+    // Profile-header badge: the slot comment is stripped for everyone; only a
+    // Pro subscriber's page ever contains the badge markup.
+    html = html.replace('<!--PRO_BADGE_SLOT-->', isProUser ? PRO_BADGE_HTML : '');
     res.type('html').send(html);
   } catch (err) {
     console.log('Profile data error:', err.message);
@@ -4897,7 +4924,7 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
       userEmail: req.user.email
     };
 
-    const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-club-dashboard.html'), 'utf8'), clubData), 'club-dashboard');
+    const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-club-dashboard.html'), 'utf8'), clubData), 'club-dashboard'), (await getUserPlan(req.user.id)) === 'pro');
     res.type('html').send(html);
   } catch (err) {
     console.log('Dashboard data error:', err.message);
@@ -4950,7 +4977,7 @@ app.get(BASE + '/clubs/member/:clubId', requirePageAuth, async (req, res) => {
       userId: req.user.id,
       userEmail: req.user.email
     };
-    const html = injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-club-member.html'), 'utf8'), clubData), 'club-member');
+    const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-club-member.html'), 'utf8'), clubData), 'club-member'), (await getUserPlan(req.user.id)) === 'pro');
     res.type('html').send(html);
   } catch (err) {
     console.log('Club member data error:', err.message);
@@ -5401,9 +5428,12 @@ app.get(BASE + '/billing', requirePageAuth, async (req, res) => {
       clubs,
       billing: { configured: !!stripe, userPlan, managedClubs }
     };
-    const html = injectBottomNav(
-      injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-billing.html'), 'utf8'), data),
-      'billing'
+    const html = injectProBadge(
+      injectBottomNav(
+        injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-billing.html'), 'utf8'), data),
+        'billing'
+      ),
+      userPlan === 'pro'
     );
     res.type('html').send(html);
   } catch (err) {
