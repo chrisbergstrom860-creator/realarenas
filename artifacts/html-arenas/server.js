@@ -932,8 +932,8 @@ async function getClubPlan(clubId) {
 
 // ── PLAN GATING (master switch) ──
 // Everything below gates ONLY when PLAN_GATES_ENABLED is truthy. Unset/false =>
-// zero gating anywhere and the app behaves exactly as it does today (founding
-// period). Flip on later alongside Stripe live mode to enforce the Pro tier.
+// zero gating anywhere. Set alongside Stripe live mode to enforce the Pro tier
+// (live in production).
 const PLAN_GATES_ENABLED = /^(1|true|yes|on)$/i.test(String(process.env.PLAN_GATES_ENABLED || '').trim());
 
 // Express middleware factory: gate an individual-scoped route behind the Pro

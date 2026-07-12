@@ -15,8 +15,8 @@ description: Payments build decisions — plans, subscriptions table, SDK except
 ## Plan resolution (server.js)
 - `getUserPlan(userId)` → 'pro'|'free', `getClubPlan(clubId)` → 'club_pro'|'free' via shared `getPaidSubscription()`. Paid = status in `PAID_SUB_STATUSES` ('active','past_due' grace). No row / other status / error / wrong plan value → free. Never throws.
 
-## Plan gating (DORMANT behind PLAN_GATES_ENABLED)
-- Gating is BUILT but **off by default**. `PLAN_GATES_ENABLED` env var (unset/false/0/no/off = zero gating, behaviorally identical to the ungated build). **Why dormant:** founding period is free; ship the mechanism now, flip the flag later without a redeploy.
+## Plan gating (LIVE — controlled by PLAN_GATES_ENABLED)
+- **As of July 2026 the founding period is OVER: gates are live and Stripe charges real money.** All "free during the founding period / included at no cost / upgrading is optional" user-facing copy was removed (landing pricing cards, billing banner + its CSS, for-clubs step 5, checkout success page). Any future copy must never imply paid features are free or that upgrading is loss-free. `PLAN_GATES_ENABLED` env var still controls the mechanism (unset/false/0/no/off = zero gating).
 - **Free vs individual-Pro boundary** (only these three surfaces gate; everything else stays free — feed, activity logging, personal stats, event discovery/RSVP, leaderboard *viewing*):
   - `POST /api/challenges/create` — individual create gated; club create EXEMPT when caller is admin/coach of the **supplied** club_id (getClubRole+isClubManagerRole).
   - `POST /api/challenges/:id/join` — individual/public join gated; joining a challenge that has a `club_id` is EXEMPT.
@@ -40,7 +40,7 @@ description: Payments build decisions — plans, subscriptions table, SDK except
 - **No-id club checkout** POST /api/billing/checkout/club (no :clubId): resolves the caller's OWN managed clubs server-side — none → `{redirect: BASE+'/for-clubs'}`, first free club → checkout `{url}`, all paid → 409. Used by marketing-page CTAs (landing `startUpgrade`, for-clubs `startClubUpgrade`) where no club context exists; 401 → client sends to signup. Limitation: a logged-in manager-less user lands on /for-clubs whose wizard creates a NEW account via /auth/signup-club.
 - **Billing page** GET /billing (requirePageAuth) + html/arenas-billing.html: renders plan cards purely from injected ARENAS_DATA.billing {configured, userPlan, managedClubs[{id,name,role,plan}]}; CA auto-renewal (ARL) disclosure text must sit adjacent to EVERY upgrade button app-wide (landing, for-clubs, billing page). Billing nav item exists in all 8 shell-page sidebars; `billing: null` in ATHLETE_NAV_ACTIVE keys the mobile bottom nav.
 - **Metadata contract (webhook depends on it):** `{owner_type, owner_id}` on BOTH session AND subscription_data.metadata; `initiated_by` (user id) on session metadata only — success page rejects sessions where initiated_by ≠ logged-in user. client_reference_id = "type:id".
-- Customer reuse reads the subscriptions table (any-status row) → a canceled owner's re-subscribe reuses the same stripe_customer_id (verified live). Success page stays honest: "features aren't switched on yet" until gating ships.
+- Customer reuse reads the subscriptions table (any-status row) → a canceled owner's re-subscribe reuses the same stripe_customer_id (verified live). Success page copy now says features switch on automatically within seconds (the old "aren't switched on yet" note became false once gating went live and was removed).
 
 ## Webhook + Customer Portal (live, sole writer to subscriptions)
 - **Raw-mount rule:** `app.use(BASE + '/api/stripe/webhook', express.raw({type:'application/json'}))` must sit BEFORE the global urlencoded/json parsers or constructEvent fails. Path-scoped, so no other route is affected.

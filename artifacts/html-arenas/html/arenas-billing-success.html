@@ -69,7 +69,7 @@ body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);fon
       '<div class="card-body">'+
         '<div class="ok-box"><span class="tick">✓</span><span>Stripe has confirmed your payment and your <strong>'+esc(D.planLabel)+'</strong> subscription is set up.</span></div>'+
         '<div class="line-item"><span class="li-name">'+esc(D.planLabel)+'</span><span class="li-price">'+esc(amount)+'</span></div>'+
-        '<div class="note"><strong>One more step on our side:</strong> plan features aren\u2019t switched on in Arenas just yet. Activation is handled automatically as we finish rolling out billing \u2014 there\u2019s nothing more you need to do.</div>'+
+        '<div class="note"><strong>You\u2019re all set:</strong> your plan features switch on automatically, usually within a few seconds of payment. If something still looks locked, refresh the page.</div>'+
         (D.livemode ? '' : '<span class="testmode">Stripe test mode \u2014 no real money moved</span>')+
         backBtn()+
         '<p class="muted">A receipt from Stripe is on its way to your email.</p>'+
