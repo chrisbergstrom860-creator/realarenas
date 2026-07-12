@@ -292,6 +292,13 @@ button,select,input,textarea{font-family:var(--font)}
 .act-sport-chip:hover{border-color:var(--gray-400)}
 .act-sport-chip.selected{background:var(--yellow-light);border-color:#fde68a;color:#7a5c00}
 .act-feeling-chip{padding:5px 12px;border-radius:20px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer;transition:all .12s}
+.goal-type-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.goal-type-card{text-align:left;padding:10px 12px;border:var(--border);border-radius:10px;background:white;cursor:pointer;transition:all .12s;font-family:inherit}
+.goal-type-card:hover{border-color:var(--gray-400)}
+.goal-type-card.selected{background:var(--yellow-light);border-color:var(--yellow-dark)}
+.goal-type-card:disabled{opacity:.55;cursor:default}
+.goal-type-card .gt-title{font-size:12px;font-weight:600;color:var(--gray-900)}
+.goal-type-card .gt-desc{font-size:10px;color:var(--gray-500);margin-top:2px;line-height:1.4}
 .act-feeling-chip.selected{background:var(--yellow-light);border-color:#fde68a;color:#7a5c00}
 .activity-card-item{border-bottom:var(--border);padding:16px 20px;background:white}
 .activity-card-item:last-child{border-bottom:none}
@@ -395,6 +402,7 @@ button,select,input,textarea{font-family:var(--font)}
       <div class="htab active" id="htab-overview" onclick="setTab('overview')">Overview</div>
       <div class="htab" id="htab-activities" onclick="setTab('activities')">Activities <span class="tab-count">0</span></div>
       <div class="htab" id="htab-stats" onclick="setTab('stats')">Stats & PRs</div>
+      <div class="htab" id="htab-goals" onclick="setTab('goals')">Goals</div>
       <div class="htab" id="htab-achievements" onclick="setTab('achievements')">Achievements <span class="tab-count">0</span></div>
       <div class="htab" id="htab-clubs" onclick="setTab('clubs')">Clubs <span class="tab-count">0</span></div>
       <div class="htab" id="htab-following" onclick="setTab('following')">Following <span class="tab-count">0</span></div>
@@ -535,6 +543,20 @@ button,select,input,textarea{font-family:var(--font)}
   </div>
   <div id="sp-stats-body">
     <div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Loading stats…</div>
+  </div>
+</div>
+
+<!-- ═══ GOALS TAB ═══ -->
+<div class="tab-content" id="tab-goals">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:var(--border);background:white;flex-wrap:wrap">
+    <div>
+      <div style="font-size:13px;font-weight:600">Goals</div>
+      <div style="font-size:11px;color:var(--gray-500);margin-top:1px">Progress counts your logged activities · up to 5 active goals</div>
+    </div>
+    <div id="goals-header-action"></div>
+  </div>
+  <div id="goals-body">
+    <div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Loading goals…</div>
   </div>
 </div>
 
@@ -726,14 +748,37 @@ button,select,input,textarea{font-family:var(--font)}
 
 <div class="modal-overlay" id="modal-goal" onclick="closeModals(event)">
   <div class="modal">
-    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Add goal</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
+    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)" id="goal-modal-title">New goal</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
     <div class="modal-body">
-      <div class="form-field"><label class="form-label">Goal title</label><input class="form-input" type="text" placeholder="e.g. Sub-3:30 marathon"></div>
-      <div class="form-field"><label class="form-label">Sport</label><select class="form-select"><option>Running</option><option>Cycling</option><option>Climbing</option></select></div>
-      <div class="form-field"><label class="form-label">Target date</label><input class="form-input" type="date"></div>
-      <div class="form-field"><label class="form-label">Notes</label><textarea class="form-textarea" placeholder="What does hitting this goal mean to you?"></textarea></div>
+      <div class="form-field"><label class="form-label">Goal type</label>
+        <div class="goal-type-grid" id="g-type-grid">
+          <button type="button" class="goal-type-card" data-type="distance" onclick="selectGoalType('distance')"><div class="gt-title">📏 Distance</div><div class="gt-desc">Cover a total distance</div></button>
+          <button type="button" class="goal-type-card" data-type="frequency" onclick="selectGoalType('frequency')"><div class="gt-title">🔁 Frequency</div><div class="gt-desc">Train a number of times</div></button>
+          <button type="button" class="goal-type-card" data-type="duration" onclick="selectGoalType('duration')"><div class="gt-title">⏱ Duration</div><div class="gt-desc">Total hours of training</div></button>
+          <button type="button" class="goal-type-card" data-type="streak" onclick="selectGoalType('streak')"><div class="gt-title">🔥 Streak</div><div class="gt-desc">Train every day in a row</div></button>
+        </div>
+        <div class="form-hint" id="g-type-hint" style="display:none">A goal's type can't change after it's created — archive it and make a new one instead.</div>
+      </div>
+      <div class="form-field" id="g-sport-field"><label class="form-label">Sport</label><select id="g-sport" class="form-select"></select><div class="form-hint" id="g-sport-hint"></div></div>
+      <div class="form-row">
+        <div class="form-field"><label class="form-label" id="g-target-label">Target</label><input id="g-target" class="form-input" type="number" min="0" step="any" placeholder="e.g. 100"></div>
+        <div class="form-field" id="g-unit-field"><label class="form-label">Unit</label><select id="g-unit" class="form-select"><option value="km">km</option><option value="mi">mi</option></select></div>
+      </div>
+      <div class="form-field"><label class="form-label" id="g-period-label">Period</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap" id="g-period-chips">
+          <button type="button" class="act-sport-chip" data-period="weekly" onclick="selectGoalPeriod('weekly')">Weekly</button>
+          <button type="button" class="act-sport-chip" data-period="monthly" onclick="selectGoalPeriod('monthly')">Monthly</button>
+          <button type="button" class="act-sport-chip" data-period="custom" onclick="selectGoalPeriod('custom')">Custom dates</button>
+        </div>
+        <div class="form-hint" id="g-period-hint"></div>
+      </div>
+      <div class="form-row" id="g-custom-dates" style="display:none">
+        <div class="form-field"><label class="form-label">Start date <span id="g-start-hint" style="font-weight:400;color:var(--gray-400)">(today if blank)</span></label><input id="g-start" class="form-input" type="date"></div>
+        <div class="form-field"><label class="form-label" id="g-end-label">End date</label><input id="g-end" class="form-input" type="date"></div>
+      </div>
+      <div id="g-error" style="display:none;background:var(--red-light);border:1px solid #FECACA;border-radius:var(--radius);padding:10px 14px;font-size:13px;color:#A32D2D"></div>
     </div>
-    <div class="modal-footer"><button class="btn btn-yellow" style="flex:1;justify-content:center" onclick="closeModals();showToast('✓ Goal added!')">Save goal</button><button class="btn btn-ghost" onclick="closeModals()">Cancel</button></div>
+    <div class="modal-footer"><button class="btn btn-yellow" style="flex:1;justify-content:center" id="g-save" onclick="saveGoal()">Save goal</button><button class="btn btn-ghost" onclick="closeModals()">Cancel</button></div>
   </div>
 </div>
 
@@ -2003,6 +2048,342 @@ if (window.location.hash === '#activities') {
   var ovHtab = document.getElementById('htab-overview');
   if (ovHtab) ovHtab.addEventListener('click', loadProfileOverview);
   loadProfileOverview();
+})();
+</script>
+<script>
+// ── GOALS TAB ──
+// Everything renders from GET /api/goals — the server computes progress/pct/
+// onTrack/state (linear pace math); this client NEVER recomputes any number.
+// Reads are ungated (lapsed subscribers keep their goals visible); creates and
+// edits are Pro-gated server-side, mirrored here via ARENAS_DATA.gating.
+// Goal fields are server enums/numbers (no user free text), so no escaping is
+// needed in card markup.
+(function () {
+  var GBASE = window.BASE || '';
+  var MAX_ACTIVE = 5; // mirrors the server cap; the server remains the boundary
+  var DISTANCE_SPORTS = ['running', 'cycling', 'swimming', 'hiking'];
+  var ALL_SPORTS = ['running', 'cycling', 'climbing', 'swimming', 'football', 'weightlifting', 'hiking', 'yoga'];
+  var SPORT_META = { running: ['🏃', 'Running'], cycling: ['🚴', 'Cycling'], climbing: ['🧗', 'Climbing'], swimming: ['🏊', 'Swimming'], football: ['⚽', 'Football'], weightlifting: ['🏋️', 'Weightlifting'], hiking: ['🥾', 'Hiking'], yoga: ['🧘', 'Yoga'] };
+  var TYPE_ICONS = { distance: '📏', frequency: '🔁', duration: '⏱', streak: '🔥' };
+
+  var proLocked = !!(window.ARENAS_DATA && window.ARENAS_DATA.gating && window.ARENAS_DATA.gating.proLocked);
+  var goalsData = null;   // last payload from the API
+  var editingGoal = null; // enriched goal being edited; null = creating
+  var fType = 'distance';
+  var fPeriod = 'weekly';
+
+  function fmtNum(n) {
+    var v = Math.round(Number(n) * 100) / 100;
+    return v.toLocaleString('en-GB', { maximumFractionDigits: 2 });
+  }
+  function unitWord(g) {
+    if (g.type === 'distance') return g.unit;
+    if (g.type === 'frequency') return Number(g.target) === 1 ? 'session' : 'sessions';
+    if (g.type === 'duration') return 'h';
+    return Number(g.target) === 1 ? 'day' : 'days';
+  }
+  function fmtLocalDate(s) { // 'YYYY-MM-DD' → '12 Jul' without UTC skew
+    if (!s) return '';
+    var p = String(s).split('-');
+    return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  }
+  function goalTitle(g) {
+    var t = fmtNum(g.target);
+    if (g.type === 'distance') {
+      var verb = { running: 'Run', cycling: 'Ride', swimming: 'Swim', hiking: 'Hike' }[g.sport] || 'Cover';
+      return verb + ' ' + t + ' ' + g.unit;
+    }
+    if (g.type === 'frequency') return t + ' ' + unitWord(g) + (g.sport ? ' of ' + SPORT_META[g.sport][1].toLowerCase() : '');
+    if (g.type === 'duration') return t + 'h of ' + (g.sport ? SPORT_META[g.sport][1].toLowerCase() : 'training');
+    return t + '-day streak';
+  }
+  function periodChip(g) {
+    if (g.period === 'weekly') return 'This week';
+    if (g.period === 'monthly') return new Date().toLocaleDateString('en-GB', { month: 'long' });
+    return 'By ' + fmtLocalDate(g.endDate);
+  }
+  function goalIcon(g) {
+    return (g.type === 'distance' && g.sport) ? SPORT_META[g.sport][0] : TYPE_ICONS[g.type];
+  }
+
+  function goalCard(g, readOnly) {
+    var done = g.state === 'completed', exp = g.state === 'expired';
+    var pace = done ? '✓ Completed' : exp ? 'Expired' : (g.onTrack ? 'On pace' : 'Behind pace');
+    var paceStyle = done ? 'background:#ECFDF5;color:#166534;border:0.5px solid #86EFAC'
+      : exp ? 'background:var(--red-light);color:#A32D2D;border:0.5px solid #FECACA'
+      : g.onTrack ? 'background:#ECFDF5;color:#166534;border:0.5px solid #86EFAC'
+      : 'background:#FFF7ED;color:#9A3412;border:0.5px solid #FED7AA';
+    var barColor = done ? '#10B981' : exp ? 'var(--gray-300)' : 'var(--yellow)';
+    var days = done ? '' : exp ? 'Window ended ' + fmtLocalDate(g.endDate) : (g.daysRemaining + (g.daysRemaining === 1 ? ' day left' : ' days left'));
+    var actions = '';
+    if (!readOnly && g.state === 'active') {
+      actions += '<button onclick="editGoal(\'' + g.id + '\')" style="padding:4px 10px;border:var(--border);border-radius:6px;background:white;font-size:11px;color:var(--gray-600);cursor:pointer">Edit</button>';
+    }
+    actions += '<button onclick="archiveGoal(\'' + g.id + '\')" style="padding:4px 10px;border:var(--border);border-radius:6px;background:white;font-size:11px;color:var(--gray-600);cursor:pointer">Archive</button>';
+    actions += '<button onclick="deleteGoal(\'' + g.id + '\')" style="padding:4px 10px;border:1px solid #FECACA;border-radius:6px;background:white;font-size:11px;color:#A32D2D;cursor:pointer">Delete</button>';
+    return '' +
+      '<div style="border:' + (done ? '1px solid #86EFAC' : 'var(--border)') + ';border-radius:var(--radius-lg);padding:14px;background:' + (done ? 'linear-gradient(135deg,#F7FEF9,#ECFDF5)' : exp ? 'var(--gray-50)' : 'white') + '">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
+          '<span style="font-size:16px">' + goalIcon(g) + '</span>' +
+          '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--gray-900)">' + goalTitle(g) + (done ? ' ✓' : '') + '</div>' +
+          '<div style="font-size:10px;color:var(--gray-400)">' + periodChip(g) + '</div></div>' +
+          '<span style="font-size:9px;font-weight:600;padding:2px 8px;border-radius:10px;flex-shrink:0;' + paceStyle + '">' + pace + '</span>' +
+        '</div>' +
+        '<div style="height:6px;background:var(--gray-100);border-radius:3px;overflow:hidden;margin-bottom:6px">' +
+          '<div style="width:' + g.pct + '%;height:100%;background:' + barColor + ';border-radius:3px"></div>' +
+        '</div>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;margin-bottom:10px">' +
+          '<span style="font-family:var(--mono);color:var(--gray-600)">' + fmtNum(g.progress) + ' of ' + fmtNum(g.target) + ' ' + unitWord(g) + '</span>' +
+          '<span style="color:var(--gray-400)">' + days + '</span>' +
+        '</div>' +
+        '<div style="display:flex;gap:6px;justify-content:flex-end">' + actions + '</div>' +
+      '</div>';
+  }
+
+  function archivedRow(g) {
+    return '' +
+      '<div style="display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:var(--border)">' +
+        '<span style="font-size:13px;filter:grayscale(1);opacity:.6">' + goalIcon(g) + '</span>' +
+        '<div style="flex:1;font-size:12px;color:var(--gray-500)">' + goalTitle(g) + ' <span style="font-size:10px;color:var(--gray-400)">· ' + g.period + '</span></div>' +
+        '<button onclick="deleteGoal(\'' + g.id + '\')" style="padding:3px 9px;border:1px solid #FECACA;border-radius:6px;background:white;font-size:10px;color:#A32D2D;cursor:pointer">Delete</button>' +
+      '</div>';
+  }
+
+  var upgradeBtn = '<button onclick="window.location.href=window.BASE + \'/billing\'" style="padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">🔒 Upgrade to Pro →</button>';
+
+  function render() {
+    var body = document.getElementById('goals-body');
+    var action = document.getElementById('goals-header-action');
+    if (!body || !goalsData) return;
+    var d = goalsData;
+
+    if (d.unavailable || d.error) {
+      action.innerHTML = '';
+      body.innerHTML = '<div style="text-align:center;padding:48px 24px"><div style="font-size:32px;margin-bottom:10px">🎯</div><div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:6px">Goals is temporarily unavailable</div><div style="font-size:12px;color:var(--gray-500)">Please try again in a moment.</div></div>';
+      return;
+    }
+
+    var active = d.active || [], archived = d.archived || [];
+
+    // Locked panel: free user with nothing to show (mirrors the Stats tab treatment).
+    if (proLocked && active.length + archived.length === 0) {
+      action.innerHTML = '';
+      body.innerHTML =
+        '<div style="text-align:center;padding:48px 24px;max-width:440px;margin:0 auto">' +
+          '<div style="font-size:36px;margin-bottom:12px">🎯</div>' +
+          '<div style="font-size:16px;font-weight:700;color:var(--gray-900);margin-bottom:8px">Set goals &amp; track progress is a Pro feature</div>' +
+          '<div style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:18px">Set weekly, monthly, or custom training goals — distance, sessions, hours, or streaks — and Arenas tracks your progress from every activity you log.</div>' +
+          '<button onclick="window.location.href=window.BASE + \'/billing\'" style="padding:9px 20px;border-radius:8px;font-size:13px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">🔒 Upgrade to Pro →</button>' +
+        '</div>';
+      return;
+    }
+
+    // Header action: Pro gets "+ New goal" (disabled at the cap); a lapsed
+    // subscriber sees the upgrade CTA instead (their goals stay read-only below).
+    if (proLocked) {
+      action.innerHTML = upgradeBtn;
+    } else if (active.length >= MAX_ACTIVE) {
+      action.innerHTML = '<button onclick="showToast(\'You can have up to 5 active goals — archive one to add another.\')" style="padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;border:var(--border);background:var(--gray-100);color:var(--gray-400);cursor:not-allowed" title="You can have up to 5 active goals — archive one to add another.">+ New goal</button>';
+    } else {
+      action.innerHTML = '<button onclick="openGoalForm()" style="padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">+ New goal</button>';
+    }
+
+    var html = '';
+    if (proLocked && active.length + archived.length > 0) {
+      html += '<div style="background:var(--yellow-light);border-bottom:1px solid #fde68a;padding:8px 16px;font-size:12px;color:#7a5c00">Your Pro plan has ended, so goals are read-only — you can still archive or delete them. Upgrade to edit or add goals.</div>';
+    }
+    if (!active.length) {
+      html += proLocked
+        ? '<div style="text-align:center;padding:32px 24px;font-size:13px;color:var(--gray-400)">No active goals.</div>'
+        : '<div style="text-align:center;padding:48px 24px"><div style="font-size:36px;margin-bottom:12px">🎯</div><div style="font-size:15px;font-weight:600;color:var(--gray-900);margin-bottom:6px">No goals yet</div><div style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:16px">Set a target — distance, sessions, hours, or a streak —<br>and your logged activities count toward it automatically.</div><button onclick="openGoalForm()" style="padding:8px 18px;border-radius:7px;font-size:13px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">+ Create your first goal</button></div>';
+    } else {
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px;padding:12px">' +
+        active.map(function (g) { return goalCard(g, proLocked); }).join('') + '</div>';
+    }
+    if (archived.length) {
+      html += '<details style="margin:0 12px 14px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
+        '<summary style="padding:10px 14px;font-size:12px;font-weight:600;color:var(--gray-500);cursor:pointer;background:var(--gray-50)">Archived goals · ' + archived.length + '</summary>' +
+        archived.map(archivedRow).join('') + '</details>';
+    }
+    body.innerHTML = html;
+  }
+
+  async function loadGoals() {
+    var body = document.getElementById('goals-body');
+    if (!body) return;
+    try {
+      var res = await fetch(GBASE + '/api/goals');
+      var d = await res.json();
+      if (!res.ok || d.error) { goalsData = { error: true }; }
+      else goalsData = d;
+    } catch (err) {
+      goalsData = { error: true };
+    }
+    render();
+  }
+
+  // ── Create/edit form ──
+  function show(id, on) { var el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; }
+  function setSportOptions() {
+    var sel = document.getElementById('g-sport');
+    var hint = document.getElementById('g-sport-hint');
+    if (fType === 'streak') { show('g-sport-field', false); return; }
+    show('g-sport-field', true);
+    var sports = fType === 'distance' ? DISTANCE_SPORTS : ALL_SPORTS;
+    var current = sel.value;
+    sel.innerHTML = '<option value="">' + (fType === 'distance' ? 'Any distance sport' : 'Any sport') + '</option>' +
+      sports.map(function (s) { return '<option value="' + s + '">' + SPORT_META[s][0] + ' ' + SPORT_META[s][1] + '</option>'; }).join('');
+    if (sports.indexOf(current) >= 0) sel.value = current;
+    hint.textContent = fType === 'distance' ? 'Distance goals cover running, cycling, swimming, and hiking.' : '';
+  }
+  function setPeriodHint() {
+    var hint = document.getElementById('g-period-hint');
+    var label = document.getElementById('g-period-label');
+    var endLabel = document.getElementById('g-end-label');
+    if (fType === 'streak') {
+      label.textContent = 'Deadline';
+      endLabel.textContent = 'Deadline date';
+      hint.textContent = fPeriod === 'custom'
+        ? 'Your streak counts every day you train. The deadline is when we check whether you hit it.'
+        : (fPeriod === 'weekly' ? 'Hit your streak by the end of this week (Sunday).' : 'Hit your streak by the end of this month.');
+    } else {
+      label.textContent = 'Period';
+      endLabel.textContent = 'End date';
+      hint.textContent = fPeriod === 'weekly'
+        ? 'Weekly goals track the current calendar week, Monday start.'
+        : fPeriod === 'monthly'
+          ? 'Monthly goals track the current calendar month.'
+          : 'Runs from the start date (' + (editingGoal ? 'unchanged if blank' : 'today if blank') + ') through the end date, inclusive.';
+    }
+    show('g-custom-dates', fPeriod === 'custom');
+  }
+  window.selectGoalType = function (t) {
+    if (editingGoal) return; // type is immutable on edit
+    fType = t;
+    document.querySelectorAll('#g-type-grid .goal-type-card').forEach(function (c) {
+      c.classList.toggle('selected', c.getAttribute('data-type') === t);
+    });
+    show('g-unit-field', t === 'distance');
+    document.getElementById('g-target-label').textContent =
+      t === 'distance' ? 'Target distance' : t === 'frequency' ? 'Target sessions' : t === 'duration' ? 'Target hours' : 'Target days in a row';
+    setSportOptions();
+    setPeriodHint();
+  };
+  window.selectGoalPeriod = function (p) {
+    fPeriod = p;
+    document.querySelectorAll('#g-period-chips .act-sport-chip').forEach(function (c) {
+      c.classList.toggle('selected', c.getAttribute('data-period') === p);
+    });
+    setPeriodHint();
+  };
+  function formError(msg) {
+    var el = document.getElementById('g-error');
+    el.textContent = msg;
+    el.style.display = msg ? 'block' : 'none';
+  }
+  window.openGoalForm = function (goal) {
+    editingGoal = goal || null;
+    document.getElementById('goal-modal-title').textContent = goal ? 'Edit goal' : 'New goal';
+    document.getElementById('g-save').textContent = goal ? 'Save changes' : 'Save goal';
+    show('g-type-hint', !!goal);
+    document.getElementById('g-start-hint').textContent = goal ? '(unchanged if blank)' : '(today if blank)';
+    document.querySelectorAll('#g-type-grid .goal-type-card').forEach(function (c) { c.disabled = !!goal; });
+    formError('');
+    fType = goal ? goal.type : 'distance';
+    fPeriod = goal ? goal.period : 'weekly';
+    document.querySelectorAll('#g-type-grid .goal-type-card').forEach(function (c) {
+      c.classList.toggle('selected', c.getAttribute('data-type') === fType);
+    });
+    document.querySelectorAll('#g-period-chips .act-sport-chip').forEach(function (c) {
+      c.classList.toggle('selected', c.getAttribute('data-period') === fPeriod);
+    });
+    show('g-unit-field', fType === 'distance');
+    document.getElementById('g-target-label').textContent =
+      fType === 'distance' ? 'Target distance' : fType === 'frequency' ? 'Target sessions' : fType === 'duration' ? 'Target hours' : 'Target days in a row';
+    setSportOptions();
+    setPeriodHint();
+    document.getElementById('g-target').value = goal ? goal.target : '';
+    document.getElementById('g-unit').value = (goal && goal.unit) || 'km';
+    document.getElementById('g-sport').value = (goal && goal.sport) || '';
+    document.getElementById('g-start').value = (goal && goal.startDate) || '';
+    document.getElementById('g-end').value = (goal && goal.endDate) || '';
+    openModal('goal');
+  };
+  window.editGoal = function (id) {
+    var g = (goalsData && goalsData.active || []).filter(function (x) { return x.id === id; })[0];
+    if (g) window.openGoalForm(g);
+  };
+  window.saveGoal = async function () {
+    // Client-side mirror of the server rules — the server remains the boundary.
+    var target = Number(document.getElementById('g-target').value);
+    if (!Number.isFinite(target) || target <= 0) return formError('Target must be a number greater than 0.');
+    var endDate = document.getElementById('g-end').value || null;
+    var startDate = document.getElementById('g-start').value || null;
+    if (fPeriod === 'custom') {
+      if (!endDate) return formError(fType === 'streak' ? 'Pick a deadline date.' : 'Custom goals need an end date.');
+      if (startDate && endDate < startDate) return formError('End date must be on or after the start date.');
+    }
+    var sportSel = document.getElementById('g-sport');
+    var body = {
+      sport: (fType === 'streak' ? null : sportSel.value || null),
+      target_value: target,
+      unit: fType === 'distance' ? document.getElementById('g-unit').value : null,
+      period: fPeriod
+    };
+    // Dates only apply to custom periods. start_date is only sent when the
+    // user picked one (the table defaults it to today; PATCHing it to null
+    // would violate the column's NOT NULL). The server itself clears end_date
+    // whenever the period moves away from custom.
+    if (fPeriod === 'custom') {
+      body.end_date = endDate;
+      if (startDate) body.start_date = startDate;
+    }
+    var url = GBASE + '/api/goals', method = 'POST';
+    if (editingGoal) { url += '/' + editingGoal.id; method = 'PATCH'; }
+    else { body.type = fType; }
+    var btn = document.getElementById('g-save');
+    btn.disabled = true;
+    try {
+      var res = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      var r = await res.json();
+      if (!res.ok) {
+        if (res.status === 403 && r.error === 'pro_required') return formError('Goals need an active Pro plan. Upgrade on the billing page to continue.');
+        return formError(r.message || 'Could not save the goal. Please try again.');
+      }
+      closeModals();
+      showToast(editingGoal ? '✓ Goal updated' : '✓ Goal created');
+      loadGoals();
+    } catch (err) {
+      formError('Could not save the goal. Please try again.');
+    } finally {
+      btn.disabled = false;
+    }
+  };
+  window.archiveGoal = async function (id) {
+    try {
+      var res = await fetch(GBASE + '/api/goals/' + id + '/archive', { method: 'POST' });
+      if (res.ok) { showToast('Goal archived'); loadGoals(); }
+      else { var r = await res.json(); showToast(r.message || 'Could not archive the goal.'); }
+    } catch (err) { showToast('Could not archive the goal.'); }
+  };
+  window.deleteGoal = async function (id) {
+    if (!confirm('Delete this goal permanently?')) return;
+    try {
+      var res = await fetch(GBASE + '/api/goals/' + id, { method: 'DELETE' });
+      if (res.ok) { showToast('Goal deleted'); loadGoals(); }
+      else { var r = await res.json(); showToast(r.message || 'Could not delete the goal.'); }
+    } catch (err) { showToast('Could not delete the goal.'); }
+  };
+
+  // Load on tab open (mirrors the Stats hook).
+  var goalsHtab = document.getElementById('htab-goals');
+  if (goalsHtab) goalsHtab.addEventListener('click', loadGoals);
+
+  // Deep link: /profile#goals opens the Goals tab.
+  if (window.location.hash === '#goals') {
+    if (typeof setTab === 'function') setTab('goals');
+    loadGoals();
+  }
 })();
 </script>
 <script>
