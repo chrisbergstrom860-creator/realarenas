@@ -36,4 +36,4 @@
 - [html-arenas Stripe/plans + gating](html-arenas-stripe.md) — $9 Pro / $29 Club Pro; raw-mount webhook is sole subscriptions writer; plan gating LIVE; gate details in topic file.
 - [html-arenas search wiring](html-arenas-search.md) — search is athletes-only via /athletes?q= deep link; dashboard member-filter globals need head-script stubs; Enter handlers need !event.isComposing.
 - [html-arenas Pro badge](html-arenas-pro-badge.md) — PRO badge = real subscription, never PLAN_GATES_ENABLED; server string-injection after injectBottomNav; exact-match patterns are the fragility.
-- [html-arenas goals](html-arenas-goals-mapping.md) — API + my-profile Goals tab live; server-truth enrichment (client never recomputes); Pro-gated writes, ungated reads/exits; copy flip pending (session ③).
+- [html-arenas goals](html-arenas-goals-mapping.md) — fully shipped (API, Goals tab, Overview mini-card, live pricing copy); server-truth enrichment, client never recomputes.

@@ -1864,10 +1864,13 @@ if (window.location.hash === '#activities') {
     try {
       var results = await Promise.all([
         fetch(OV_BASE + '/api/profile/overview'),
-        fetch(OV_BASE + '/api/profile/achievements')
+        fetch(OV_BASE + '/api/profile/achievements'),
+        fetch(OV_BASE + '/api/goals').catch(function () { return null; })
       ]);
       var r = await results[0].json();
       var ach = await results[1].json();
+      var goals = null;
+      try { goals = results[2] ? await results[2].json() : null; } catch (e2) { goals = null; }
       if (r.error) {
         body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Could not load overview.</div>';
         return;
@@ -1886,6 +1889,42 @@ if (window.location.hash === '#activities') {
         };
         return '<div style="flex:1;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;' + styles[d.state] + '">' + d.label + '</div>';
       }).join('');
+
+      // Goals mini-card — top 2 in-progress goals by urgency. Every number is
+      // server-computed (/api/goals enrichment); hidden entirely when there are
+      // no in-progress goals (covers free-locked and empty-pro automatically).
+      var goalsHtml = '';
+      var gf = window.__goalFmt;
+      if (gf && goals && !goals.error && !goals.unavailable) {
+        var ovGoals = (goals.active || []).filter(function (g) { return g.state === 'active'; })
+          .sort(function (a, b) { return (a.daysRemaining - b.daysRemaining) || (b.pct - a.pct); });
+        if (ovGoals.length > 0) {
+          goalsHtml =
+            '<div style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:12px;overflow:hidden">' +
+              '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between">' +
+                '<div style="font-size:12px;font-weight:600">🎯 My goals · ' + ovGoals.length + ' in progress</div>' +
+                '<span onclick="openGoalsTab()" style="font-size:11px;color:var(--gray-400);cursor:pointer">View all →</span>' +
+              '</div>' +
+              ovGoals.slice(0, 2).map(function (g) {
+                return '' +
+                  '<div onclick="openGoalsTab()" style="padding:10px 14px;border-bottom:var(--border);cursor:pointer" onmouseenter="this.style.background=\'var(--gray-50)\'" onmouseleave="this.style.background=\'white\'">' +
+                    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+                      '<span style="font-size:13px">' + gf.icon(g) + '</span>' +
+                      '<div style="font-size:12px;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + gf.title(g) + '</div>' +
+                      '<div style="font-size:10px;font-family:var(--mono);color:var(--gray-400)">' + g.daysRemaining + 'd left</div>' +
+                    '</div>' +
+                    '<div style="height:6px;background:var(--gray-100);border-radius:3px;overflow:hidden;margin-bottom:4px">' +
+                      '<div style="width:' + g.pct + '%;height:100%;background:var(--yellow);border-radius:3px"></div>' +
+                    '</div>' +
+                    '<div style="display:flex;justify-content:space-between;font-size:10px">' +
+                      '<span style="color:var(--gray-500);font-family:var(--mono)">' + gf.num(g.progress) + ' / ' + gf.num(g.target) + ' ' + gf.unit(g) + '</span>' +
+                      '<span style="color:' + (g.onTrack ? '#10B981' : '#9A3412') + '">' + (g.onTrack ? 'On pace' : 'Behind pace') + '</span>' +
+                    '</div>' +
+                  '</div>';
+              }).join('') +
+            '</div>';
+        }
+      }
 
       // Challenges
       var challengesHtml = '';
@@ -2009,7 +2048,7 @@ if (window.location.hash === '#activities') {
           '</div>';
       }
 
-      var empty = (r.activeChallenges || []).length === 0 && (r.upcomingRsvps || []).length === 0 && (r.recentActivities || []).length === 0;
+      var empty = goalsHtml === '' && (r.activeChallenges || []).length === 0 && (r.upcomingRsvps || []).length === 0 && (r.recentActivities || []).length === 0;
 
       body.innerHTML =
         '<div style="background:white;border-bottom:var(--border);padding:14px 16px">' +
@@ -2025,7 +2064,7 @@ if (window.location.hash === '#activities') {
           '</div>' +
           '<div style="display:flex;gap:4px;margin-top:10px">' + dayStripHtml + '</div>' +
         '</div>' +
-        challengesHtml + eventsHtml + achHtml + actsHtml +
+        goalsHtml + challengesHtml + eventsHtml + achHtml + actsHtml +
         (empty ? '<div style="text-align:center;padding:40px 24px"><div style="font-size:32px;margin-bottom:10px">👋</div><div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:6px">Your overview is waiting</div><div style="font-size:12px;color:var(--gray-500);line-height:1.6">Log an activity, join a challenge, or RSVP to an event and this page comes alive.</div></div>' : '');
     } catch (err) {
       body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Could not load overview.</div>';
@@ -2040,6 +2079,10 @@ if (window.location.hash === '#activities') {
   };
   window.openActivitiesTab = function () {
     var t = document.getElementById('htab-activities');
+    if (t) t.click();
+  };
+  window.openGoalsTab = function () {
+    var t = document.getElementById('htab-goals');
     if (t) t.click();
   };
 
@@ -2105,6 +2148,8 @@ if (window.location.hash === '#activities') {
   function goalIcon(g) {
     return (g.type === 'distance' && g.sport) ? SPORT_META[g.sport][0] : TYPE_ICONS[g.type];
   }
+  // Shared with the Overview mini-card so both surfaces format goals identically.
+  window.__goalFmt = { title: goalTitle, unit: unitWord, icon: goalIcon, num: fmtNum };
 
   function goalCard(g, readOnly) {
     var done = g.state === 'completed', exp = g.state === 'expired';

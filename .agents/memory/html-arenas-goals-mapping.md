@@ -1,9 +1,9 @@
 ---
 name: html-arenas goals feature — decisions & lessons
-description: Goals Pro feature (3-session build; ① API + ② my-profile Goals tab done; ③ copy flip pending) — decisions later sessions must stay consistent with, plus build lessons.
+description: Goals Pro feature (API + my-profile Goals tab + Overview mini-card + live marketing copy, all shipped) — decisions future work must stay consistent with, plus build lessons.
 ---
 
-# Goals feature — sessions ① (API) + ② (Goals tab UI) built; session ③ pending
+# Goals feature — fully shipped (API, Goals tab, Overview mini-card, live pricing copy)
 
 ## Decisions locked in by the built API
 - **Units:** goal progress uses `parseDistanceKmUnitAware` (profile "km logged" precedent), NOT the app-wide unit-blind `parseDistanceKm`. Goal `unit` ('km'|'mi') stored; target converted to km ONCE on read (MI_TO_KM=1.609, symmetric with the parser's mile factor); progress reported back in the goal's own unit (2dp).
@@ -14,10 +14,11 @@ description: Goals Pro feature (3-session build; ① API + ② my-profile Goals 
 - **Distance goals with sport=null** mean "any DISTANCE_SPORTS activity" (running/cycling/swimming/hiking filter applied in progress).
 - **Gating:** POST/PATCH = `requireProPlan('goals')`; GET = requireAuth self-only, degrades to `{active:[],archived:[],unavailable:true}` if the table is missing; archive + DELETE = requireAuth only (ungated exit actions). Lapsed (canceled sub) can read/archive/delete but not create/edit — falls out of the gate shape, don't special-case.
 - **Validation codes** the UI must handle: sport_not_distance, unit_required, unit_not_allowed, end_date_required, end_date_not_allowed, invalid_start_date, invalid_end_date, invalid_target, invalid_type, invalid_sport, goal_limit (5-active soft cap, 400), immutable_field (PATCH type/status). PATCH validates the MERGED row.
-- **Goals tab (session ②, SHIPPED) FETCHES even when proLocked** (reads allowed) and renders read-only with upgrade CTAs on create/edit only — unlike stats tab which skips the fetch.
-- **Copy flip still pending (session ③):** landing + billing Pro cards list "Set goals & track progress" as coming-soon — UI has now shipped, so flip the copy in lockstep with the gate boundary next session.
+- **Goals tab FETCHES even when proLocked** (reads allowed) and renders read-only with upgrade CTAs on create/edit only — unlike stats tab which skips the fetch.
+- **Copy flip DONE:** landing + billing Pro cards list "Set goals & track progress" as a live ✓ feature. "AI coaching — coming soon" stays until that ships (copy in lockstep with the gate boundary). Goals appear in exactly those two marketing spots — nothing anywhere implies coaching/recommendations/AI in the goals context; keep it that way (feature is 4 self-tracked types with a linear on-pace projection).
+- **Overview mini-card:** the profile Overview renders "🎯 My goals · N in progress" (top 2 by daysRemaining asc then pct desc, state==='active' only), hidden entirely at zero; goals fetch is `.catch`-guarded so a goals failure can never break the Overview; formatting shared from the Goals IIFE via `window.__goalFmt` (safe because inline scripts run before fetch microtasks resolve).
 
-## Session ② (Goals tab) decisions
+## Goals tab decisions
 - All Goals UI lives in one IIFE in arenas-my-profile.html; the client NEVER recomputes numbers — progress/pct/onTrack/daysRemaining/state all render from API enrichment, and server 400 `message` strings surface directly in the form.
 - **PATCH bodies omit date keys unless period=custom** — `start_date` is NOT NULL in the DB, so sending `start_date: null` would 500. Server clears end_date itself when period moves off custom.
 - Locked-panel precedence: unavailable/error → locked panel ONLY when proLocked AND zero goals → lapsed read-only banner (proLocked + goals exist) → pro cards/empty state.
