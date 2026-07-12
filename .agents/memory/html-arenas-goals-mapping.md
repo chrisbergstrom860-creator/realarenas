@@ -1,15 +1,22 @@
 ---
-name: html-arenas goals feature — mapping decisions
-description: Pre-build mapping conclusions for the Set Goals & Track Progress Pro feature (3-session build); decisions the build sessions must stay consistent with.
+name: html-arenas goals feature — decisions & lessons
+description: Goals Pro feature (3-session build; session ① API done, no UI yet) — decisions later sessions must stay consistent with, plus build lessons.
 ---
 
-# Goals feature — mapping-session conclusions (session 1 of 3, nothing built yet)
+# Goals feature — session ① (API) built; sessions ②/③ (UI) pending
 
-- **Units:** goal progress must use `parseDistanceKmUnitAware` (the profile "km logged" precedent), NOT the app-wide `parseDistanceKm` (swim-metres ~1000× bug). Store goal `unit` ('km'|'mi'), convert target to km once on read. Accepted drift vs challenges distance math (buggy parser) — same accepted drift as the profile headline.
-- **Streaks:** algorithm exists inline in 4 spots (profile stats route, badge stats, challenges route, feed sidebar) with identical semantics (distinct `toDateString` days; current = run ending today-or-yesterday, gap<=1). NO shared helper exists — extract `computeStreaks(activities)` during build rather than adding a 5th copy.
-- **Progress = computed on read** (no stored counters), mirroring challenges `enrich()`; guard every completion check with `target > 0` (the challenges 0>=0 lesson). `duration` goals need `parseDurationHours` (challenges deliberately report 0 for duration — don't ride computeChallengeProgress for that type).
-- **Periods:** weekly = Monday-start local calendar week (`getWeekStart(0)`), monthly = local calendar month — matching profile-stats/reports conventions, NOT leaderboards' rolling `getDateRange`. Local date parts, never toISOString (UTC+ skew rule). activities.date is timestamptz stored as midnight UTC.
-- **Gating shape:** goals are purely individual → `requireProPlan('goals')` middleware fits writes (no club-aware inline needed, unlike challenges). GET = requireAuth + self-only (IDOR rule), ungated → lapsed read-only falls out naturally ('past_due' still counts as pro = grace). DELETE ungated (exit-action principle, like challenge leave).
-- **Goals tab locked panel ≠ stats tab pattern:** stats skips the fetch entirely when proLocked; goals must FETCH even when proLocked (reads allowed) and render read-only with upgrade CTAs on create/edit only.
-- **Table must be user-created** via Supabase SQL editor (service role can't DDL) — provide exact CREATE TABLE + RLS SQL, degrade gracefully until it exists (activities/achievements pattern).
-- **Copy flip:** landing + billing Pro cards list "Set goals & track progress" as coming-soon — flip to live when built (keep copy in lockstep with gate boundary).
+## Decisions locked in by the built API
+- **Units:** goal progress uses `parseDistanceKmUnitAware` (profile "km logged" precedent), NOT the app-wide unit-blind `parseDistanceKm`. Goal `unit` ('km'|'mi') stored; target converted to km ONCE on read (MI_TO_KM=1.609, symmetric with the parser's mile factor); progress reported back in the goal's own unit (2dp).
+- **Streaks:** `computeStreaks(activities)` shared helper now exists (near getWeekStart). There were FIVE inline copies, not four — the fifth was in /api/profile/overview; challenges used a daySet probe-walk variant that is semantically identical (proven by a 5,015-case equivalence test). Never re-inline; challenges still keeps its daySet for weekGrid rendering.
+- **Streak goals measure the ALL-TIME current streak** (parity with the Stats tab number); the goal window is only a deadline, not a streak filter.
+- **State is computed, not stored:** progress/pct/isComplete/onTrack/state(active|completed|expired) come from `enrichGoal` on read; only `status` (active|archived) is persisted. Only custom-period goals can expire.
+- **Windows:** weekly = Monday-start local week (`getWeekStart(0)`), monthly = local calendar month, custom = start..end **inclusive**; local date parts, never toISOString (UTC+ skew rule).
+- **Distance goals with sport=null** mean "any DISTANCE_SPORTS activity" (running/cycling/swimming/hiking filter applied in progress).
+- **Gating:** POST/PATCH = `requireProPlan('goals')`; GET = requireAuth self-only, degrades to `{active:[],archived:[],unavailable:true}` if the table is missing; archive + DELETE = requireAuth only (ungated exit actions). Lapsed (canceled sub) can read/archive/delete but not create/edit — falls out of the gate shape, don't special-case.
+- **Validation codes** the UI must handle: sport_not_distance, unit_required, unit_not_allowed, end_date_required, end_date_not_allowed, invalid_start_date, invalid_end_date, invalid_target, invalid_type, invalid_sport, goal_limit (5-active soft cap, 400), immutable_field (PATCH type/status). PATCH validates the MERGED row.
+- **Goals tab (session ②) must FETCH even when proLocked** (reads allowed) and render read-only with upgrade CTAs on create/edit only — unlike stats tab which skips the fetch.
+- **Copy flip still pending:** landing + billing Pro cards list "Set goals & track progress" as coming-soon — flip to live only when the UI ships (copy in lockstep with the gate boundary).
+
+## Build lessons
+- `goals` table is live in Supabase (user-created; 12 cols incl. defaults status=active, start_date=today) with CHECK constraints on type/period/status/target_value>0 — a malformed enum reaching Postgres is a 500, so validate everything app-side first.
+- Backgrounded processes do NOT survive across separate bash tool invocations here — run a temp test server and its test suite inside ONE command (`(node server.js &); sleep 3; node test.cjs; kill ...`).

@@ -1812,6 +1812,40 @@ function getWeekStart(weeksAgo) {
   return monday;
 }
 
+// Shared streak computation over a user's activities (rows need only `.date`).
+// Distinct active days come from LOCAL toDateString buckets (the app-wide
+// bucketing rule — never toISOString). `longestStreak` is the max run of
+// consecutive active days all-time; `currentStreak` is the run ending today or
+// yesterday (today may still be pending, so a rest day today doesn't break
+// yesterday's streak; last activity 2+ days ago = 0). Extracted from what were
+// five identical inline copies (profile stats, achievements stats, challenges
+// header, feed sidebar, profile overview) — output equivalence across all five
+// was verified case-exhaustively before the swap. Duplicate same-day rows are
+// collapsed by the Set, so callers can pass raw activity lists.
+function computeStreaks(activities) {
+  const days = [...new Set((activities || []).map((a) => new Date(a.date).toDateString()))]
+    .map((d) => new Date(d)).sort((a, b) => a - b);
+  let longestStreak = 0, run = 0;
+  for (let i = 0; i < days.length; i++) {
+    if (i === 0) run = 1;
+    else run = Math.round((days[i] - days[i - 1]) / 86400000) === 1 ? run + 1 : 1;
+    if (run > longestStreak) longestStreak = run;
+  }
+  let currentStreak = 0;
+  if (days.length > 0) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const last = new Date(days[days.length - 1]); last.setHours(0, 0, 0, 0);
+    if (Math.round((today - last) / 86400000) <= 1) {
+      currentStreak = 1;
+      for (let i = days.length - 1; i > 0; i--) {
+        if (Math.round((days[i] - days[i - 1]) / 86400000) === 1) currentStreak++;
+        else break;
+      }
+    }
+  }
+  return { currentStreak, longestStreak };
+}
+
 // Weekly training-load breakdown for a coach's club dashboard. Load is derived
 // from logged activity duration (there is no wearable/HR data). Names/handles/
 // sports come from auth metadata (no `profiles` table). Admin/coach of the
@@ -2708,15 +2742,8 @@ async function gatherBadgeStats(userId) {
     const dt = new Date(ds);
     return !isNaN(dt.getTime()) && dt.getHours() < 6;
   });
-  // Longest streak of consecutive active days.
-  const days = [...new Set(activities.map(a => new Date(a.date).toDateString()))]
-    .map(d => new Date(d)).sort((a, b) => a - b);
-  let longestStreak = 0, run = 0;
-  for (let i = 0; i < days.length; i++) {
-    if (i === 0) run = 1;
-    else run = Math.round((days[i] - days[i - 1]) / 86400000) === 1 ? run + 1 : 1;
-    if (run > longestStreak) longestStreak = run;
-  }
+  // Longest streak of consecutive active days (shared helper).
+  const { longestStreak } = computeStreaks(activities);
   // Social + community counts (head:true → count only, no rows transferred).
   const { count: followingCount } = await supabaseAdmin
     .from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId);
@@ -2884,23 +2911,11 @@ app.get(BASE + '/api/profile/overview', requireAuth, async (req, res) => {
         : i < todayIdx ? 'rest' : 'future'
     }));
 
-    // Current streak — consecutive active days ending today or yesterday.
+    // Current streak — consecutive active days ending today or yesterday
+    // (shared helper).
     const { data: allActs } = await supabaseAdmin
       .from('activities').select('date').eq('user_id', userId);
-    const days = [...new Set((allActs || []).map(a => new Date(a.date).toDateString()))]
-      .map(d => new Date(d)).sort((a, b) => a - b);
-    let currentStreak = 0;
-    if (days.length > 0) {
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const last = new Date(days[days.length - 1]); last.setHours(0, 0, 0, 0);
-      if (Math.round((today - last) / 86400000) <= 1) {
-        currentStreak = 1;
-        for (let i = days.length - 1; i > 0; i--) {
-          if (Math.round((days[i] - days[i - 1]) / 86400000) === 1) currentStreak++;
-          else break;
-        }
-      }
-    }
+    const { currentStreak } = computeStreaks(allActs || []);
 
     // Recent activities (last 3) — ordered by `date` (no created_at column).
     const { data: recentActs } = await supabaseAdmin
@@ -3139,25 +3154,10 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
         .map((sport) => ({ sport, points: calculatePoints(bySport[sport]) }))
         .filter((x) => x.points > 0)
         .sort((a, b) => b.points - a.points);
-      // Distinct active days (local date strings) drive both streaks + the grid.
+      // Distinct active days (local date strings) still drive the week grid;
+      // both streak numbers now come from the shared helper (same semantics).
       const daySet = new Set(acts.map((a) => new Date(a.date).toDateString()));
-      const activeDays = [...daySet].map((d) => new Date(d)).sort((a, b) => a - b);
-      // "longest streak" — max run of consecutive active days (all-time), same
-      // logic as the profile stats page.
-      let streakRun = 0;
-      for (let i = 0; i < activeDays.length; i++) {
-        if (i === 0) streakRun = 1;
-        else {
-          const diff = Math.round((activeDays[i] - activeDays[i - 1]) / 86400000);
-          streakRun = diff === 1 ? streakRun + 1 : 1;
-        }
-        if (streakRun > longestStreak) longestStreak = streakRun;
-      }
-      // "current streak" — consecutive active days ending now; today may still be
-      // pending, so when today has no activity yet we count back from yesterday.
-      const probe = new Date();
-      if (!daySet.has(probe.toDateString())) probe.setDate(probe.getDate() - 1);
-      while (daySet.has(probe.toDateString())) { currentStreak++; probe.setDate(probe.getDate() - 1); }
+      ({ currentStreak, longestStreak } = computeStreaks(acts));
       // This week's grid (Mon→Sun): active day, today, and future (unfilled) cells.
       const todayStr = new Date().toDateString();
       const dow = (mNow.getDay() + 6) % 7; // 0 = Monday
@@ -3639,22 +3639,9 @@ async function buildFeedSidebar(userId) {
         : 'future'
     }));
 
-    // Current streak — consecutive active days ending today or yesterday.
-    const days = [...new Set(acts.map(a => new Date(a.date).toDateString()))]
-      .map(d => new Date(d)).sort((a, b) => a - b);
-    let currentStreak = 0;
-    if (days.length > 0) {
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const last = new Date(days[days.length - 1]); last.setHours(0, 0, 0, 0);
-      if (Math.round((today - last) / 86400000) <= 1) {
-        currentStreak = 1;
-        for (let i = days.length - 1; i > 0; i--) {
-          if (Math.round((days[i] - days[i - 1]) / 86400000) === 1) currentStreak++;
-          else break;
-        }
-      }
-    }
-    sidebar.currentStreak = currentStreak;
+    // Current streak — consecutive active days ending today or yesterday
+    // (shared helper).
+    sidebar.currentStreak = computeStreaks(acts).currentStreak;
 
     // This-week club rank — viewer's most recent club, ranked by week points.
     // A rank number needs no names, so we skip the per-member metadata lookups.
@@ -4465,32 +4452,8 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
     const totalHours = Math.round(periodActs.reduce((s, a) => s + parseDurationHours(a.duration), 0) * 10) / 10;
     const totalPoints = calculatePoints(periodActs);
 
-    // ── Streaks (always all-time) ──
-    const activeDays = [...new Set(acts.map((a) => new Date(a.date).toDateString()))]
-      .map((d) => new Date(d)).sort((a, b) => a - b);
-    let longestStreak = 0, run = 0;
-    for (let i = 0; i < activeDays.length; i++) {
-      if (i === 0) { run = 1; }
-      else {
-        const diff = Math.round((activeDays[i] - activeDays[i - 1]) / 86400000);
-        run = diff === 1 ? run + 1 : 1;
-      }
-      if (run > longestStreak) longestStreak = run;
-    }
-    let currentStreak = 0;
-    if (activeDays.length > 0) {
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const lastActive = new Date(activeDays[activeDays.length - 1]); lastActive.setHours(0, 0, 0, 0);
-      const gap = Math.round((today - lastActive) / 86400000);
-      if (gap <= 1) {
-        currentStreak = 1;
-        for (let i = activeDays.length - 1; i > 0; i--) {
-          const diff = Math.round((activeDays[i] - activeDays[i - 1]) / 86400000);
-          if (diff === 1) currentStreak++;
-          else break;
-        }
-      }
-    }
+    // ── Streaks (always all-time, shared helper) ──
+    const { currentStreak, longestStreak } = computeStreaks(acts);
     // Avg sessions per week over the period (or since first activity in period).
     const firstDate = periodActs.length > 0 ? new Date(periodActs[0].date) : now;
     const weeksSpan = Math.max(1, (now - firstDate) / (7 * 86400000));
@@ -4594,6 +4557,373 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
   } catch (err) {
     console.log('Profile stats error:', err.message);
     res.status(500).json({ error: 'Could not load stats' });
+  }
+});
+
+// ── GOALS (individual Pro feature) ──
+// Personal training goals computed on read from `activities` — no stored
+// counters (the challenges enrich() pattern: the server computes progress/pct/
+// isComplete/onTrack; clients must consume these, never recompute). Stored
+// status is only 'active' | 'archived'; "completed"/"expired" are derived.
+// Distance math is deliberately UNIT-AWARE (parseDistanceKmUnitAware, the
+// profile "km logged" precedent) — accepted drift from challenges' distance
+// math, which still uses the unit-blind parseDistanceKm.
+// Gating: creates/edits require the Pro plan; reads and archive/delete are
+// requireAuth-only (self-only), so a lapsed subscriber keeps read access and
+// can always archive — exit actions are never gated.
+
+const GOAL_TYPES = ['distance', 'frequency', 'duration', 'streak'];
+const GOAL_PERIODS = ['weekly', 'monthly', 'custom'];
+const GOAL_UNITS = ['km', 'mi'];
+const KNOWN_SPORTS = Object.keys(SPORT_POINTS);
+// Sports where a distance goal makes sense. A distance goal with sport=null
+// means "any distance sport" and its progress only counts these sports.
+const DISTANCE_SPORTS = ['running', 'cycling', 'swimming', 'hiking'];
+const MAX_ACTIVE_GOALS = 5;
+const MI_TO_KM = 1.609;
+
+// Parse a 'YYYY-MM-DD' date column as a LOCAL date. new Date('YYYY-MM-DD')
+// parses as UTC midnight, which shifts the day in non-UTC locales — the same
+// bucketing rule the rest of the app follows (local date parts, never ISO).
+function parseLocalDate(s) {
+  const [y, m, d] = String(s).split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
+// The goal's evaluation window in local time. weekly = current Monday-start
+// local week; monthly = current local calendar month; custom = start_date
+// through end_date INCLUSIVE (the window closes at local midnight after
+// end_date). Weekly/monthly windows are always the current period, so only
+// custom goals can expire.
+function goalWindow(goal) {
+  if (goal.period === 'weekly') {
+    const start = getWeekStart(0);
+    const end = new Date(start); end.setDate(start.getDate() + 7);
+    return { start, end };
+  }
+  if (goal.period === 'monthly') {
+    const now = new Date();
+    return {
+      start: new Date(now.getFullYear(), now.getMonth(), 1),
+      end: new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    };
+  }
+  const start = parseLocalDate(goal.start_date);
+  const endBase = parseLocalDate(goal.end_date || goal.start_date);
+  const end = new Date(endBase); end.setDate(endBase.getDate() + 1);
+  return { start, end };
+}
+
+// Server-computed goal enrichment. `activities` = ALL of the owner's activity
+// rows (sport, distance, duration, date); `streaks` = computeStreaks output
+// over those rows (streak goals measure the ALL-TIME current streak — their
+// window is a review deadline only). Null-distance rows contribute 0 via the
+// parser, never crash.
+function enrichGoal(goal, activities, streaks) {
+  const now = new Date();
+  const { start, end } = goalWindow(goal);
+  const target = Number(goal.target_value) || 0;
+  // Comparison space: km for distance goals (target converted from mi once
+  // here), otherwise the type's natural unit (sessions / hours / days).
+  const targetCmp = goal.type === 'distance' && goal.unit === 'mi' ? target * MI_TO_KM : target;
+
+  let progressCmp = 0;
+  if (goal.type === 'streak') {
+    progressCmp = streaks.currentStreak;
+  } else {
+    const inWindow = activities.filter((a) => {
+      const d = new Date(a.date);
+      return d >= start && d < end;
+    });
+    const matches = inWindow.filter((a) => {
+      if (goal.sport) return a.sport === goal.sport;
+      if (goal.type === 'distance') return DISTANCE_SPORTS.includes(a.sport);
+      return true;
+    });
+    if (goal.type === 'distance') {
+      progressCmp = matches.reduce((s, a) => s + parseDistanceKmUnitAware(a.distance), 0);
+    } else if (goal.type === 'frequency') {
+      progressCmp = matches.length;
+    } else if (goal.type === 'duration') {
+      progressCmp = matches.reduce((s, a) => s + parseDurationHours(a.duration), 0);
+    }
+  }
+
+  const pct = targetCmp > 0 ? Math.min(100, Math.round((progressCmp / targetCmp) * 100)) : 0;
+  const isComplete = targetCmp > 0 && progressCmp >= targetCmp;
+  const expired = !isComplete && now >= end;
+  const daysRemaining = Math.max(0, Math.ceil((end - now) / 86400000));
+  // Linear pace projection: on track when the completed fraction of the target
+  // is at least the elapsed fraction of the window (complete = always on
+  // track; expired-incomplete = off track).
+  const elapsedFrac = Math.min(1, Math.max(0, (now - start) / (end - start || 1)));
+  const progressFrac = targetCmp > 0 ? progressCmp / targetCmp : 0;
+  const onTrack = isComplete || (!expired && progressFrac >= elapsedFrac);
+  // Distance progress is reported back in the goal's own stored unit.
+  const progress = goal.type === 'distance' && goal.unit === 'mi'
+    ? Math.round((progressCmp / MI_TO_KM) * 100) / 100
+    : Math.round(progressCmp * 100) / 100;
+
+  return {
+    id: goal.id,
+    type: goal.type,
+    sport: goal.sport || null,
+    unit: goal.unit || null,
+    period: goal.period,
+    startDate: goal.start_date,
+    endDate: goal.end_date || null,
+    status: goal.status,
+    createdAt: goal.created_at,
+    target,
+    progress,
+    pct,
+    isComplete,
+    windowStart: start.toISOString(),
+    windowEnd: end.toISOString(),
+    daysRemaining,
+    onTrack,
+    projection: 'linear',
+    state: isComplete ? 'completed' : expired ? 'expired' : 'active'
+  };
+}
+
+// Validate a full goal configuration (used by both create and edit — edits
+// validate the MERGED result so a partial change can't leave an invalid
+// combination). Returns { error, message } or null when valid.
+function validateGoalConfig(g) {
+  if (!GOAL_TYPES.includes(g.type)) {
+    return { error: 'invalid_type', message: 'Goal type must be one of: ' + GOAL_TYPES.join(', ') };
+  }
+  const target = Number(g.target_value);
+  if (!Number.isFinite(target) || target <= 0) {
+    return { error: 'invalid_target', message: 'Target must be a number greater than 0.' };
+  }
+  if (!GOAL_PERIODS.includes(g.period)) {
+    return { error: 'invalid_period', message: 'Period must be one of: ' + GOAL_PERIODS.join(', ') };
+  }
+  if (g.sport != null && !KNOWN_SPORTS.includes(g.sport)) {
+    return { error: 'invalid_sport', message: 'Unknown sport.' };
+  }
+  if (g.type === 'distance') {
+    if (g.sport != null && !DISTANCE_SPORTS.includes(g.sport)) {
+      return { error: 'sport_not_distance', message: 'Distance goals are only available for: ' + DISTANCE_SPORTS.join(', ') + ' (or leave the sport blank for any of them).' };
+    }
+    if (!GOAL_UNITS.includes(g.unit)) {
+      return { error: 'unit_required', message: 'Distance goals need a unit of km or mi.' };
+    }
+  } else if (g.unit != null) {
+    return { error: 'unit_not_allowed', message: 'Only distance goals take a unit.' };
+  }
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  if (g.start_date != null && !dateRe.test(String(g.start_date))) {
+    return { error: 'invalid_start_date', message: 'Start date must be YYYY-MM-DD.' };
+  }
+  if (g.period === 'custom') {
+    if (!g.end_date || !dateRe.test(String(g.end_date))) {
+      return { error: 'end_date_required', message: 'Custom goals need an end date (YYYY-MM-DD).' };
+    }
+    if (g.start_date && parseLocalDate(g.end_date) < parseLocalDate(g.start_date)) {
+      return { error: 'invalid_end_date', message: 'End date must be on or after the start date.' };
+    }
+  } else if (g.end_date != null) {
+    return { error: 'end_date_not_allowed', message: 'Only custom goals take an end date.' };
+  }
+  return null;
+}
+
+// Fetch the owner's activities once and enrich a set of goal rows.
+async function enrichGoalRows(userId, rows) {
+  const { data: acts } = await supabaseAdmin
+    .from('activities').select('sport, distance, duration, date').eq('user_id', userId);
+  const activities = acts || [];
+  const streaks = computeStreaks(activities);
+  return rows.map((g) => enrichGoal(g, activities, streaks));
+}
+
+// List the signed-in user's goals, enriched, active and archived separated.
+// Ungated read (self-only): lapsed subscribers keep visibility of their goals.
+// Degrades gracefully (log + empty) if the goals table doesn't exist yet.
+app.get(BASE + '/api/goals', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server is not configured for goals' });
+  try {
+    const { data: rows, error } = await supabaseAdmin
+      .from('goals').select('*').eq('user_id', req.user.id)
+      .order('created_at', { ascending: true });
+    if (error) {
+      console.log('Goals query error (degrading to empty):', error.message);
+      return res.json({ active: [], archived: [], unavailable: true });
+    }
+    const goals = rows || [];
+    if (!goals.length) return res.json({ active: [], archived: [] });
+    const enriched = await enrichGoalRows(req.user.id, goals);
+    res.json({
+      active: enriched.filter((g) => g.status === 'active'),
+      archived: enriched.filter((g) => g.status === 'archived')
+    });
+  } catch (err) {
+    console.log('Goals list error:', err.message);
+    res.status(500).json({ error: 'Could not load goals' });
+  }
+});
+
+// Create a goal — Pro-gated. Validates the type/sport/unit/period pairing and
+// enforces the 5-active-goal cap with a clear 400.
+app.post(BASE + '/api/goals', requireAuth, requireProPlan('goals'), async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server is not configured for goals' });
+  try {
+    const b = req.body || {};
+    const config = {
+      type: b.type,
+      sport: b.sport || null,
+      target_value: b.target_value,
+      unit: b.unit || null,
+      period: b.period,
+      start_date: b.start_date || null,
+      end_date: b.end_date || null
+    };
+    const invalid = validateGoalConfig(config);
+    if (invalid) return res.status(400).json(invalid);
+
+    // Soft cap: count-then-insert is racy under concurrent creates, which is
+    // acceptable for a UX limit (worst case a user briefly exceeds 5 — nothing
+    // breaks; the list just shows more goals).
+    const { count: activeCount } = await supabaseAdmin
+      .from('goals').select('*', { count: 'exact', head: true })
+      .eq('user_id', req.user.id).eq('status', 'active');
+    if ((activeCount || 0) >= MAX_ACTIVE_GOALS) {
+      return res.status(400).json({
+        error: 'goal_limit',
+        message: `You can have up to ${MAX_ACTIVE_GOALS} active goals — archive one to add another.`
+      });
+    }
+
+    const insert = {
+      user_id: req.user.id,
+      type: config.type,
+      sport: config.sport,
+      target_value: Number(config.target_value),
+      unit: config.type === 'distance' ? config.unit : null,
+      period: config.period,
+      end_date: config.period === 'custom' ? config.end_date : null
+    };
+    if (config.start_date) insert.start_date = config.start_date;
+    const { data: row, error } = await supabaseAdmin
+      .from('goals').insert(insert).select().single();
+    if (error) {
+      console.log('Goal create error:', error.message);
+      return res.status(500).json({ error: 'Could not create goal' });
+    }
+    const [enriched] = await enrichGoalRows(req.user.id, [row]);
+    res.json({ goal: enriched });
+  } catch (err) {
+    console.log('Goal create error:', err.message);
+    res.status(500).json({ error: 'Could not create goal' });
+  }
+});
+
+// Look up a goal row and enforce self-only ownership. Replies on res and
+// returns null when the caller should stop.
+async function loadOwnGoal(req, res) {
+  const { data: row, error } = await supabaseAdmin
+    .from('goals').select('*').eq('id', req.params.id).maybeSingle();
+  if (error) {
+    console.log('Goal lookup error:', error.message);
+    res.status(500).json({ error: 'Could not load goal' });
+    return null;
+  }
+  if (!row) { res.status(404).json({ error: 'not_found' }); return null; }
+  if (row.user_id !== req.user.id) { res.status(403).json({ error: 'forbidden' }); return null; }
+  return row;
+}
+
+// Edit a goal — Pro-gated, self-only, editable fields only (type and status
+// are immutable here; archiving has its own ungated route). The merged result
+// is re-validated so partial edits can't produce an invalid combination.
+app.patch(BASE + '/api/goals/:id', requireAuth, requireProPlan('goals'), async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server is not configured for goals' });
+  try {
+    const row = await loadOwnGoal(req, res);
+    if (!row) return;
+    const b = req.body || {};
+    if (b.type !== undefined && b.type !== row.type) {
+      return res.status(400).json({ error: 'immutable_field', message: 'A goal\'s type cannot change — archive it and create a new one.' });
+    }
+    if (b.status !== undefined) {
+      return res.status(400).json({ error: 'immutable_field', message: 'Use the archive endpoint to change a goal\'s status.' });
+    }
+    const editable = ['target_value', 'sport', 'unit', 'period', 'start_date', 'end_date'];
+    const updates = {};
+    editable.forEach((f) => { if (b[f] !== undefined) updates[f] = b[f] === '' ? null : b[f]; });
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ error: 'no_editable_fields', message: 'Nothing to update.' });
+    }
+    const merged = { ...row, ...updates };
+    // Period changes away from custom drop the end date; distance stays the
+    // only type carrying a unit.
+    if (merged.period !== 'custom') merged.end_date = updates.end_date !== undefined ? updates.end_date : null;
+    const invalid = validateGoalConfig(merged);
+    if (invalid) return res.status(400).json(invalid);
+    const { data: saved, error } = await supabaseAdmin
+      .from('goals')
+      .update({
+        target_value: Number(merged.target_value),
+        sport: merged.sport,
+        unit: merged.type === 'distance' ? merged.unit : null,
+        period: merged.period,
+        start_date: merged.start_date,
+        end_date: merged.period === 'custom' ? merged.end_date : null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', row.id).select().single();
+    if (error) {
+      console.log('Goal update error:', error.message);
+      return res.status(500).json({ error: 'Could not update goal' });
+    }
+    const [enriched] = await enrichGoalRows(req.user.id, [saved]);
+    res.json({ goal: enriched });
+  } catch (err) {
+    console.log('Goal update error:', err.message);
+    res.status(500).json({ error: 'Could not update goal' });
+  }
+});
+
+// Archive a goal — ungated exit action (requireAuth + self-only): a lapsed
+// subscriber must always be able to put their goals away.
+app.post(BASE + '/api/goals/:id/archive', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server is not configured for goals' });
+  try {
+    const row = await loadOwnGoal(req, res);
+    if (!row) return;
+    const { error } = await supabaseAdmin
+      .from('goals')
+      .update({ status: 'archived', updated_at: new Date().toISOString() })
+      .eq('id', row.id);
+    if (error) {
+      console.log('Goal archive error:', error.message);
+      return res.status(500).json({ error: 'Could not archive goal' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.log('Goal archive error:', err.message);
+    res.status(500).json({ error: 'Could not archive goal' });
+  }
+});
+
+// Delete a goal — ungated exit action (requireAuth + self-only), hard delete.
+app.delete(BASE + '/api/goals/:id', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server is not configured for goals' });
+  try {
+    const row = await loadOwnGoal(req, res);
+    if (!row) return;
+    const { error } = await supabaseAdmin.from('goals').delete().eq('id', row.id);
+    if (error) {
+      console.log('Goal delete error:', error.message);
+      return res.status(500).json({ error: 'Could not delete goal' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.log('Goal delete error:', err.message);
+    res.status(500).json({ error: 'Could not delete goal' });
   }
 });
 

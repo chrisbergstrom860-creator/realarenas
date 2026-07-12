@@ -9,7 +9,7 @@ description: Payments build decisions — plans, subscriptions table, SDK except
 - Individual Pro **$9/month monthly-only**; Club Pro **flat $29/month monthly-only** (no per-member fees), purchased by a club's coach/admin on behalf of the club. Test mode only until told otherwise. No trials, no annual — all fabricated landing copy ($12/annual/14-day trial/per-member) was removed in the Session ④ honesty pass; repo greps for those terms should stay clean (legit non-pricing "14-day" uses: invite expiry windows, streak-challenge names, Fortnight badge; `trialing` status handling in webhook code is also legit).
 
 ## Data model
-- Single `subscriptions` table in Supabase (user-created via SQL editor — service role can't run DDL): polymorphic `owner_type ('user'|'club')` + `owner_id`, `plan ('pro'|'club_pro')`, `stripe_customer_id`, `stripe_subscription_id`, `status`, `current_period_end`, `cancel_at_period_end`, unique(owner_type, owner_id).
+- Single `subscriptions` table in Supabase (user-created via SQL editor — service role can't run DDL): polymorphic `owner_type ('user'|'club')` + `owner_id`, `plan ('pro'|'club_pro')`, `stripe_customer_id`, `stripe_subscription_id`, `status`, `current_period_end`, `cancel_at_period_end`, unique(owner_type, owner_id). `stripe_customer_id` is NOT NULL — test fixtures inserting fake pro subs must supply a dummy `cus_…` value or the insert silently fails and the user resolves to free.
 - **Why one table:** one webhook code path for both products; "free" = absence of a row; unique(owner_type,owner_id) is the idempotency anchor for webhook upserts.
 
 ## Plan resolution (server.js)
