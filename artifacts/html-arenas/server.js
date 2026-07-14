@@ -583,11 +583,12 @@ function athleteBottomNav(activeKey) {
     + bnItem(activeKey, 'feed', "nav('/feed')", '🏠', 'Feed', false)
     + bnItem(activeKey, 'events', "nav('/events')", '📅', 'Events', false)
     + bnItem(activeKey, 'log', "nav('/profile#activities')", '➕', 'Log', true)
+    + bnItem(activeKey, 'calendar', "nav('/calendar')", '🗓️', 'Cal', false)
     + bnItem(activeKey, 'ranks', "nav('/leaderboards')", '🏆', 'Ranks', false)
     + bnItem(activeKey, 'profile', "nav('/profile')", '👤', 'Profile', false)
     + '</nav>';
 }
-const ATHLETE_NAV_ACTIVE = { feed: 'feed', profile: 'profile', events: 'events', leaderboards: 'ranks', challenges: null, athletes: null, notifications: null, billing: null };
+const ATHLETE_NAV_ACTIVE = { feed: 'feed', profile: 'profile', events: 'events', calendar: 'calendar', leaderboards: 'ranks', challenges: null, athletes: null, notifications: null, billing: null };
 
 // Club pages (coach dashboard + member home) navigate by switching tabs/sections
 // in place via setTab(), not by loading a new URL, so their bottom nav calls
@@ -5063,6 +5064,303 @@ app.delete(BASE + '/api/goals/:id', requireAuth, async (req, res) => {
   } catch (err) {
     console.log('Goal delete error:', err.message);
     res.status(500).json({ error: 'Could not delete goal' });
+  }
+});
+
+// ── PLANNED TRAINING (planned_sessions) ──
+// Prospective sessions shown on the Calendar page. The table is user-provisioned
+// (no DDL via service role) so every read degrades to empty if it's missing.
+// Reads are free (the calendar view is free content); writes are Pro-gated via
+// requireProPlan('training_plan') — dormant unless PLAN_GATES_ENABLED, exactly
+// like goals. Plan dates are plain 'YYYY-MM-DD' local-date strings (goals
+// convention, parseLocalDate rule) — never timestamps, so no timezone drift.
+const PLAN_STATUSES = ['planned', 'done', 'skipped'];
+const PLAN_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Validate create/edit fields. `partial` allows PATCH to send a subset; the
+// merged row is what gets checked. Returns an { error, message } or null.
+function validatePlanFields(p) {
+  if (!PLAN_DATE_RE.test(String(p.date || ''))) {
+    return { error: 'invalid_date', message: 'Date must be YYYY-MM-DD.' };
+  }
+  const [y, m, d] = String(p.date).split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) {
+    return { error: 'invalid_date', message: 'That date does not exist.' };
+  }
+  if (!KNOWN_SPORTS.includes(p.sport)) {
+    return { error: 'invalid_sport', message: 'Unknown sport.' };
+  }
+  if (!PLAN_STATUSES.includes(p.status)) {
+    return { error: 'invalid_status', message: 'Status must be planned, done or skipped.' };
+  }
+  if (p.title != null && String(p.title).length > 120) {
+    return { error: 'title_too_long', message: 'Title must be 120 characters or fewer.' };
+  }
+  if (p.planned_duration != null && String(p.planned_duration).length > 20) {
+    return { error: 'duration_too_long', message: 'Duration must be 20 characters or fewer.' };
+  }
+  if (p.notes != null && String(p.notes).length > 500) {
+    return { error: 'notes_too_long', message: 'Notes must be 500 characters or fewer.' };
+  }
+  return null;
+}
+
+// Look up a plan row and enforce self-only ownership (loadOwnGoal pattern).
+async function loadOwnPlan(req, res) {
+  const { data: row, error } = await supabaseAdmin
+    .from('planned_sessions').select('*').eq('id', req.params.id).maybeSingle();
+  if (error) {
+    console.log('Plan lookup error:', error.message);
+    res.status(500).json({ error: 'Could not load plan' });
+    return null;
+  }
+  if (!row) { res.status(404).json({ error: 'not_found' }); return null; }
+  if (row.user_id !== req.user.id) { res.status(403).json({ error: 'forbidden' }); return null; }
+  return row;
+}
+
+// List the viewer's plans — free, self-only. Optional ?month=YYYY-MM window
+// (text comparison is safe on YYYY-MM-DD strings). Missing table → empty list.
+app.get(BASE + '/api/plans', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ plans: [] });
+  try {
+    let q = supabaseAdmin.from('planned_sessions').select('*')
+      .eq('user_id', req.user.id).order('date', { ascending: true });
+    if (typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month)) {
+      const [y, m] = req.query.month.split('-').map(Number);
+      const next = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+      q = q.gte('date', req.query.month + '-01').lt('date', next + '-01');
+    }
+    const { data, error } = await q;
+    if (error) {
+      console.log('Plans list error (degrading to empty):', error.message);
+      return res.json({ plans: [] });
+    }
+    res.json({ plans: data || [] });
+  } catch (err) {
+    console.log('Plans list error:', err.message);
+    res.json({ plans: [] });
+  }
+});
+
+// Create a plan — Pro-gated (dormant while PLAN_GATES_ENABLED is off).
+app.post(BASE + '/api/plans', requireAuth, requireProPlan('training_plan'), async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server is not configured for plans' });
+  try {
+    const b = req.body || {};
+    const fields = {
+      date: b.date,
+      sport: b.sport,
+      title: b.title != null ? String(b.title).trim() || null : null,
+      planned_duration: b.planned_duration != null ? String(b.planned_duration).trim() || null : null,
+      notes: b.notes != null ? String(b.notes).trim() || null : null,
+      status: 'planned' // creation always starts planned; done/skipped are transitions
+    };
+    const invalid = validatePlanFields(fields);
+    if (invalid) return res.status(400).json(invalid);
+    const { data: row, error } = await supabaseAdmin
+      .from('planned_sessions').insert({ user_id: req.user.id, ...fields }).select().single();
+    if (error) {
+      console.log('Plan create error:', error.message);
+      return res.status(500).json({ error: 'Could not create plan' });
+    }
+    res.json({ plan: row });
+  } catch (err) {
+    console.log('Plan create error:', err.message);
+    res.status(500).json({ error: 'Could not create plan' });
+  }
+});
+
+// Edit a plan — Pro-gated, self-only. Editable: date, sport, title, duration,
+// notes, status (whitelisted). activity_id is NOT client-writable — it is set
+// server-side by the "Log this" flow (Session ②) so a plan can never claim an
+// activity the user didn't log through it.
+app.patch(BASE + '/api/plans/:id', requireAuth, requireProPlan('training_plan'), async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server is not configured for plans' });
+  try {
+    const row = await loadOwnPlan(req, res);
+    if (!row) return;
+    const b = req.body || {};
+    const merged = {
+      date: b.date !== undefined ? b.date : row.date,
+      sport: b.sport !== undefined ? b.sport : row.sport,
+      title: b.title !== undefined ? (b.title != null ? String(b.title).trim() || null : null) : row.title,
+      planned_duration: b.planned_duration !== undefined ? (b.planned_duration != null ? String(b.planned_duration).trim() || null : null) : row.planned_duration,
+      notes: b.notes !== undefined ? (b.notes != null ? String(b.notes).trim() || null : null) : row.notes,
+      status: b.status !== undefined ? b.status : row.status
+    };
+    const invalid = validatePlanFields(merged);
+    if (invalid) return res.status(400).json(invalid);
+    const { data: updated, error } = await supabaseAdmin
+      .from('planned_sessions')
+      .update({ ...merged, updated_at: new Date().toISOString() })
+      .eq('id', row.id).eq('user_id', req.user.id)
+      .select().single();
+    if (error) {
+      console.log('Plan update error:', error.message);
+      return res.status(500).json({ error: 'Could not update plan' });
+    }
+    res.json({ plan: updated });
+  } catch (err) {
+    console.log('Plan update error:', err.message);
+    res.status(500).json({ error: 'Could not update plan' });
+  }
+});
+
+// Delete a plan — Pro-gated, self-only.
+app.delete(BASE + '/api/plans/:id', requireAuth, requireProPlan('training_plan'), async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server is not configured for plans' });
+  try {
+    const row = await loadOwnPlan(req, res);
+    if (!row) return;
+    const { error } = await supabaseAdmin
+      .from('planned_sessions').delete().eq('id', row.id).eq('user_id', req.user.id);
+    if (error) {
+      console.log('Plan delete error:', error.message);
+      return res.status(500).json({ error: 'Could not delete plan' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.log('Plan delete error:', err.message);
+    res.status(500).json({ error: 'Could not delete plan' });
+  }
+});
+
+// ── CALENDAR MONTH DATA ──
+// Everything the calendar shows for one month, in ~5 queries: the viewer's
+// club events + own-RSVP'd events windowed to the month, own activities, own
+// plans. Month param is regex-validated YYYY-MM and all boundary math is
+// integer year/month arithmetic (reports-tab precedent — never Date→toISOString
+// month strings, which skew in non-UTC locales). The event/activity window is
+// widened by one day on each side because timestamps are bucketed by LOCAL
+// date parts on the client: a local-evening activity near a month boundary can
+// live in the neighbouring UTC month. The client filters to the exact local
+// month, so the overlap costs a few extra rows, never a wrong day.
+app.get(BASE + '/api/calendar/month', requireAuth, async (req, res) => {
+  const empty = { events: [], activities: [], plans: [] };
+  // Default month: server-local today (client always passes its own).
+  const now = new Date();
+  const fallback = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const monthParam = (typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month))
+    ? req.query.month : fallback;
+  const [year, month] = monthParam.split('-').map(Number);
+  if (month < 1 || month > 12) return res.status(400).json({ error: 'invalid_month' });
+  if (!supabaseAdmin) return res.json({ month: monthParam, ...empty });
+  try {
+    const userId = req.user.id;
+    const winStart = new Date(year, month - 1, 1);
+    winStart.setDate(winStart.getDate() - 1); // widen for local-date bucketing
+    const winEnd = new Date(year, month, 1);
+    winEnd.setDate(winEnd.getDate() + 1);
+    const startIso = winStart.toISOString();
+    const endIso = winEnd.toISOString();
+    // Plan window in plain YYYY-MM-DD text (lexicographic compare is safe).
+    const nextMonth = month === 12 ? `${year + 1}-01` : `${year}-${String(month + 1).padStart(2, '0')}`;
+
+    const { data: memberships } = await supabaseAdmin
+      .from('memberships').select('club_id').eq('user_id', userId);
+    const clubIds = [...new Set((memberships || []).map(m => m.club_id).filter(Boolean))];
+
+    const [clubEventsRes, myRsvpsRes, activitiesRes, plansRes] = await Promise.all([
+      clubIds.length
+        ? supabaseAdmin.from('events').select('*').in('club_id', clubIds)
+            .gte('date', startIso).lt('date', endIso)
+        : Promise.resolve({ data: [] }),
+      supabaseAdmin.from('event_rsvps').select('event_id, status').eq('user_id', userId),
+      supabaseAdmin.from('activities')
+        .select('id, sport, title, distance, duration, date')
+        .eq('user_id', userId).gte('date', startIso).lt('date', endIso),
+      supabaseAdmin.from('planned_sessions').select('*').eq('user_id', userId)
+        .gte('date', monthParam + '-01').lt('date', nextMonth + '-01')
+    ]);
+
+    const clubEvents = clubEventsRes.data || [];
+    const myRsvpRows = myRsvpsRes.data || [];
+    const rsvpByEvent = {};
+    myRsvpRows.forEach(r => { if (r.event_id) rsvpByEvent[r.event_id] = r.status; });
+
+    // Events the viewer RSVP'd to that are NOT club events already fetched
+    // (public events, other clubs' events they were invited into, etc.).
+    const clubEventIds = new Set(clubEvents.map(e => e.id));
+    const extraIds = myRsvpRows
+      .map(r => r.event_id)
+      .filter(id => id && !clubEventIds.has(id) && rsvpByEvent[id] !== 'cancelled');
+    let extraEvents = [];
+    if (extraIds.length) {
+      const { data } = await supabaseAdmin.from('events').select('*')
+        .in('id', [...new Set(extraIds)]).gte('date', startIso).lt('date', endIso);
+      extraEvents = data || [];
+    }
+
+    // Honesty partition: myStatus is 'going' / 'interested' for real RSVPs,
+    // 'none' (Not responded) for club events the viewer never answered. A
+    // CANCELLED RSVP never renders as a commitment: on a club event it falls
+    // back to 'none' (the event still exists for the club); on a non-club
+    // event the row is dropped entirely (the RSVP was its only link to the
+    // viewer's calendar).
+    const allEvents = [...clubEvents, ...extraEvents];
+    const clubNameIds = [...new Set(allEvents.map(e => e.club_id).filter(Boolean))];
+    const clubMap = {};
+    if (clubNameIds.length) {
+      const { data: clubsData } = await supabaseAdmin
+        .from('clubs').select('id, name').in('id', clubNameIds);
+      (clubsData || []).forEach(c => { clubMap[c.id] = c.name; });
+    }
+    const events = allEvents
+      .map(e => {
+        const raw = rsvpByEvent[e.id] || null;
+        const myStatus = (raw === 'going' || raw === 'interested') ? raw : 'none';
+        return {
+          id: e.id, title: e.title, sport: e.sport, date: e.date,
+          location: e.location || null, event_type: e.event_type || null,
+          club_id: e.club_id || null, club_name: e.club_id ? (clubMap[e.club_id] || null) : null,
+          myStatus
+        };
+      })
+      .filter(e => !(e.myStatus === 'none' && !e.club_id));
+
+    // Missing planned_sessions table degrades to empty, never crashes the page.
+    if (plansRes.error) console.log('Calendar plans error (degrading to empty):', plansRes.error.message);
+
+    res.json({
+      month: monthParam,
+      events,
+      activities: activitiesRes.data || [],
+      plans: plansRes.data || []
+    });
+  } catch (err) {
+    console.log('Calendar month error:', err.message);
+    res.json({ month: monthParam, ...empty });
+  }
+});
+
+// Calendar page — standard shell composition. Injects the sidebar clubs, the
+// viewer's identity, and the proLocked gating flag (the read-only day panel is
+// free; the flag is for Session ②'s plan-creation affordances).
+app.get(BASE + '/calendar', requirePageAuth, async (req, res) => {
+  const servePlain = () => res.type('html').send(
+    injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-calendar.html'), 'utf8'), 'calendar')
+  );
+  try {
+    if (!supabaseAdmin) return servePlain();
+    const data = {
+      userId: req.user.id,
+      profile: displayFromUser(req.user),
+      clubs: await getSidebarClubs(req.user.id),
+      gating: { proLocked: await computeProLocked(req.user.id) }
+    };
+    const html = injectProBadge(
+      injectBottomNav(
+        injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-calendar.html'), 'utf8'), data),
+        'calendar'
+      ),
+      (await getUserPlan(req.user.id)) === 'pro'
+    );
+    res.type('html').send(html);
+  } catch (err) {
+    console.log('Calendar page error:', err.message);
+    servePlain();
   }
 });
 

@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+window.BASE = window.location.pathname.startsWith('/html') ? '/html' : '';
+window.nav = function(path){ window.location.href = window.BASE + path; };
+document.addEventListener('DOMContentLoaded', function(){
+  if (window.BASE === '') {
+    document.querySelectorAll('[href^="/html/"]').forEach(function(el){ el.setAttribute('href', el.getAttribute('href').slice(5)); });
+    document.querySelectorAll('[action^="/html/"]').forEach(function(el){ el.setAttribute('action', el.getAttribute('action').slice(5)); });
+  }
+});
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arenas — Calendar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/html/arenas.css">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+button{font-family:var(--font)}
+.notif-btn{width:34px;height:34px;border-radius:7px;border:var(--border);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;position:relative;transition:background .1s}
+.notif-btn:hover{background:var(--gray-50)}
+.main{display:block;max-width:1020px;padding:28px 32px 60px}
+.page-title{font-size:22px;font-weight:700;color:var(--gray-900);letter-spacing:-.01em;margin-bottom:4px}
+.page-sub{font-size:13px;color:var(--gray-500);margin-bottom:20px}
+
+/* ── Header controls ── */
+.cal-controls{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.cal-monthnav{display:flex;align-items:center;gap:8px}
+.cal-month-label{font-size:16px;font-weight:700;color:var(--gray-900);min-width:150px;text-align:center}
+.cal-nav-btn{width:32px;height:32px;border-radius:7px;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-700);display:flex;align-items:center;justify-content:center;transition:background .1s}
+.cal-nav-btn:hover{background:var(--gray-50)}
+.cal-today-btn{padding:7px 13px;border-radius:7px;border:var(--border);background:white;cursor:pointer;font-size:12px;font-weight:600;color:var(--gray-700);transition:background .1s}
+.cal-today-btn:hover{background:var(--gray-50)}
+.view-toggle{display:flex;border:var(--border);border-radius:8px;overflow:hidden}
+.view-toggle button{padding:7px 14px;border:none;background:white;font-size:12px;font-weight:600;color:var(--gray-500);cursor:pointer}
+.view-toggle button.on{background:var(--gray-900);color:white}
+
+/* ── Legend ── */
+.cal-legend{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px;font-size:11px;color:var(--gray-500)}
+.cal-legend span{display:inline-flex;align-items:center;gap:5px}
+.lg-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
+.lg-ev{background:var(--yellow)}
+.lg-nr{background:transparent;border:1.5px solid var(--gray-400)}
+.lg-plan{background:#8B5CF6}
+.lg-act{background:#10B981}
+
+/* ── MONTH GRID (dormant my-profile .cal-grid CSS as the base, sized up for a
+     full-page calendar: real tap targets, auto rows instead of 1:1 heat cells) ── */
+.cal-labels{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:10px 4px 4px;font-size:10px;color:var(--gray-400);text-align:center;text-transform:uppercase;letter-spacing:.05em;font-family:var(--mono)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:0 0 14px}
+.cal-day{min-height:86px;border-radius:8px;border:var(--border);background:white;padding:6px 7px;cursor:pointer;display:flex;flex-direction:column;gap:4px;overflow:hidden;transition:border-color .1s,background .1s}
+.cal-day:hover{border-color:var(--gray-400);background:var(--gray-50)}
+.cd-empty{background:transparent;border:none;cursor:default;min-height:0}
+.cd-empty:hover{background:transparent;border:none}
+.cd-num{font-size:11px;font-weight:600;color:var(--gray-500);font-family:var(--mono);line-height:1}
+.cd-today{border:2px solid var(--gray-900)}
+.cd-today .cd-num{color:var(--gray-900);background:var(--yellow);border-radius:4px;padding:1px 4px;align-self:flex-start}
+.cd-pills{display:flex;flex-direction:column;gap:2px;min-width:0}
+.cd-pill{font-size:10px;line-height:1.3;padding:1px 5px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.cd-pill.ev{background:var(--yellow-light);color:#7a5c00}
+.cd-pill.nr{background:transparent;border:1px dashed var(--gray-300);color:var(--gray-400);font-weight:500}
+.cd-pill.plan{background:#F5F3FF;color:#5B21B6}
+.cd-pill.plan.done{text-decoration:line-through;opacity:.7}
+.cd-pill.plan.skipped{text-decoration:line-through;opacity:.5}
+.cd-pill.act{background:#ECFDF5;color:#065F46}
+.cd-dots{display:none;align-items:center;gap:3px;flex-wrap:wrap}
+.cd-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.cd-dot.ev{background:var(--yellow)}
+.cd-dot.nr{background:transparent;border:1.5px solid var(--gray-400)}
+.cd-dot.plan{background:#8B5CF6}
+.cd-dot.act{background:#10B981}
+.cd-more{font-size:9px;color:var(--gray-400);font-family:var(--mono)}
+
+/* ── AGENDA VIEW ── */
+.agenda{display:flex;flex-direction:column;gap:10px}
+.ag-day{background:white;border:var(--border);border-radius:10px;overflow:hidden}
+.ag-day.today{border:2px solid var(--gray-900)}
+.ag-head{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:var(--border);background:var(--gray-50);cursor:pointer}
+.ag-head:hover{background:var(--gray-100)}
+.ag-date{font-size:13px;font-weight:700;color:var(--gray-900)}
+.ag-today-tag{font-size:10px;font-weight:700;background:var(--yellow);color:var(--gray-900);border-radius:4px;padding:2px 6px;text-transform:uppercase;letter-spacing:.04em}
+.ag-items{display:flex;flex-direction:column}
+.ag-item{display:flex;align-items:flex-start;gap:10px;padding:10px 16px;border-bottom:var(--border);font-size:13px}
+.ag-item:last-child{border-bottom:none}
+.ag-ic{font-size:16px;flex-shrink:0;line-height:1.3}
+.ag-body{min-width:0;flex:1}
+.ag-title{font-weight:600;color:var(--gray-900);overflow:hidden;text-overflow:ellipsis}
+.ag-meta{font-size:12px;color:var(--gray-500);margin-top:1px}
+.ag-item.nr .ag-title{color:var(--gray-500);font-weight:500}
+.ag-item.nr{background:var(--gray-50)}
+
+/* ── Status chips (shared: agenda + day panel) ── */
+.chip{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;flex-shrink:0;white-space:nowrap;align-self:center}
+.chip.going{background:#ECFDF5;color:#065F46;border:1px solid #A7F3D0}
+.chip.interested{background:var(--yellow-light);color:#7a5c00;border:1px solid #fde68a}
+.chip.nr{background:transparent;color:var(--gray-400);border:1px dashed var(--gray-300)}
+.chip.planned{background:#F5F3FF;color:#5B21B6;border:1px solid #DDD6FE}
+.chip.done{background:#ECFDF5;color:#065F46;border:1px solid #A7F3D0}
+.chip.skipped{background:var(--gray-50);color:var(--gray-400);border:1px solid var(--gray-200)}
+
+/* ── DAY PANEL (modal on desktop, bottom sheet ≤768px) ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;display:none;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(3px)}
+.modal-overlay.open{display:flex}
+.modal{background:white;border-radius:14px;width:100%;max-width:480px;max-height:82vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.18)}
+.modal-header{padding:18px 22px 14px;border-bottom:var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;position:sticky;top:0;background:white}
+.modal-title{font-size:15px;font-weight:700;color:var(--gray-900)}
+.modal-close{width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--gray-500)}
+.modal-close:hover{background:var(--gray-100)}
+.modal-body{padding:16px 22px 22px}
+.dp-section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--gray-400);margin:14px 0 8px}
+.dp-section-label:first-child{margin-top:0}
+.dp-empty{font-size:12px;color:var(--gray-400)}
+.dp-item{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--gray-100);font-size:13px}
+.dp-item:last-child{border-bottom:none}
+.dp-item.nr{opacity:.75}
+/* Session ② slot: action row per item (Log this / done / skip) mounts here. */
+.dp-actions{display:none}
+
+.empty-state{background:white;border:var(--border);border-radius:12px;padding:36px 24px;text-align:center;color:var(--gray-500);font-size:13px}
+.muted-line{font-size:13px;color:var(--gray-400)}
+
+@media (max-width:768px){
+  .main{padding:20px 14px 90px}
+  .cal-day{min-height:52px;padding:4px 5px}
+  .cd-pills{display:none}
+  .cd-dots{display:flex}
+  .cal-month-label{min-width:120px;font-size:14px}
+  /* Bottom sheet treatment for the day panel */
+  .modal-overlay{padding:0;align-items:flex-end}
+  .modal{max-width:none;border-radius:14px 14px 0 0;max-height:78vh}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="topbar-logo" onclick="nav('/feed')" style="cursor:pointer">
+    <div class="logo-icon">🏟</div>
+    <span class="logo-text">Arenas</span>
+  </div>
+  <div class="topbar-center"></div>
+  <div class="topbar-actions">
+    <div class="notif-btn" onclick="nav('/notifications')">🔔<div class="notif-dot"></div></div>
+    <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
+      <div class="user-av user-initials" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">·</div>
+      <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
+        <a href="/html/profile" style="display:block;padding:10px 14px;font-size:13px;color:#111827;text-decoration:none">My profile</a>
+        <a href="/html/auth/logout" style="display:block;padding:10px 14px;font-size:13px;color:#DC2626;text-decoration:none;border-top:1px solid #f3f4f6">Log out</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="nav-section-label">My Arenas</div>
+  <div class="nav-item" onclick="nav('/feed')"><span class="nav-icon">🏠</span> Feed</div>
+  <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">👤</span> My profile</div>
+  <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">📅</span> Events</div>
+  <div class="nav-item active"><span class="nav-icon">🗓️</span> Calendar</div>
+  <div class="nav-item" onclick="nav('/leaderboards')"><span class="nav-icon">🏆</span> Leaderboards</div>
+  <div class="nav-item" onclick="nav('/challenges')"><span class="nav-icon">⚡</span> Challenges</div>
+  <div class="nav-item" onclick="nav('/profile#activities')"><span class="nav-icon">➕</span> Log activity</div>
+  <div class="nav-item" onclick="nav('/athletes')"><span class="nav-icon">👥</span> Athletes</div>
+  <div class="nav-section-label">My clubs</div>
+  <div class="nav-section-label">Account</div>
+  <div class="nav-item" onclick="nav('/billing')"><span class="nav-icon">💳</span> Billing</div>
+  <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">⚙️</span> Settings</div>
+  <div class="sidebar-footer">
+    <div style="display:flex;align-items:center;gap:9px">
+      <div class="user-initials" style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">·</div>
+      <div><div class="user-name" style="font-size:12px;font-weight:600;color:var(--gray-900)"></div><div style="font-size:10px;color:var(--gray-500)"><span class="user-handle"></span></div></div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="page-title">Calendar</div>
+  <div class="page-sub">Your events, planned training and logged activities in one place.</div>
+
+  <div class="cal-controls">
+    <div class="cal-monthnav">
+      <button class="cal-nav-btn" id="cal-prev" aria-label="Previous month">‹</button>
+      <div class="cal-month-label" id="cal-month-label">…</div>
+      <button class="cal-nav-btn" id="cal-next" aria-label="Next month">›</button>
+      <button class="cal-today-btn" id="cal-today-btn">Today</button>
+    </div>
+    <div class="view-toggle" role="tablist">
+      <button id="vt-month">Month</button>
+      <button id="vt-agenda">Agenda</button>
+    </div>
+  </div>
+
+  <div class="cal-legend">
+    <span><span class="lg-dot lg-ev"></span> Event (going / interested)</span>
+    <span><span class="lg-dot lg-nr"></span> Club event — not responded</span>
+    <span><span class="lg-dot lg-plan"></span> Planned training</span>
+    <span><span class="lg-dot lg-act"></span> Logged activity</span>
+  </div>
+
+  <div id="cal-root"><div class="muted-line">Loading…</div></div>
+</div>
+
+</div>
+
+<!-- DAY PANEL -->
+<div class="modal-overlay" id="day-panel" onclick="if(event.target===this)closeDayPanel()">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="dp-title">
+    <div class="modal-header">
+      <div class="modal-title" id="dp-title">…</div>
+      <button class="modal-close" onclick="closeDayPanel()" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="dp-body"></div>
+  </div>
+</div>
+
+<script>
+// ── Calendar page. All rendering is from /api/calendar/month — nothing is
+// fabricated client-side. Timestamps (events, activities) are bucketed by
+// LOCAL date parts; plan dates are already local YYYY-MM-DD strings.
+(function () {
+  var root = document.getElementById('cal-root');
+  var monthLabel = document.getElementById('cal-month-label');
+  var VIEW_KEY = 'arenas_calendar_view'; // notifications-panel key precedent
+  var HASH_RE = /^#(\d{4})-(\d{2})$/;
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function sportIcon(id) {
+    var icons = window.ARENAS_SPORT_ICONS || {};
+    return icons[id] || '🏅';
+  }
+  function sportName(id) {
+    var reg = window.ARENAS_SPORTS || [];
+    for (var i = 0; i < reg.length; i++) if (reg[i].id === id) return reg[i].name;
+    return id ? (String(id).charAt(0).toUpperCase() + String(id).slice(1)) : 'Activity';
+  }
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  function ymdOf(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+  function todayYmd() { return ymdOf(new Date()); }
+  // Parse YYYY-MM-DD as a LOCAL date (parseLocalDate rule — new Date('YYYY-MM-DD')
+  // is UTC midnight and shifts the day in non-UTC locales).
+  function parseLocalYmd(s) {
+    var p = String(s).split('-').map(Number);
+    return new Date(p[0], (p[1] || 1) - 1, p[2] || 1);
+  }
+
+  // ── State ──
+  var state = {
+    year: 0, month: 0,           // month is 1-12
+    view: 'month',
+    data: null,                  // raw API payload
+    byDay: {}                    // ymd -> { events:[], plans:[], activities:[] }
+  };
+
+  function currentYm() { return state.year + '-' + pad2(state.month); }
+
+  function initMonthFromHash() {
+    var m = HASH_RE.exec(window.location.hash || '');
+    if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12) {
+      state.year = Number(m[1]); state.month = Number(m[2]);
+    } else {
+      var n = new Date();
+      state.year = n.getFullYear(); state.month = n.getMonth() + 1;
+    }
+  }
+  function initView() {
+    var stored = null;
+    try { stored = localStorage.getItem(VIEW_KEY); } catch (e) {}
+    if (stored === 'month' || stored === 'agenda') { state.view = stored; return; }
+    state.view = (window.innerWidth <= 768) ? 'agenda' : 'month';
+  }
+  function setView(v) {
+    state.view = v;
+    try { localStorage.setItem(VIEW_KEY, v); } catch (e) {}
+    renderToggle(); render();
+  }
+  function renderToggle() {
+    document.getElementById('vt-month').className = state.view === 'month' ? 'on' : '';
+    document.getElementById('vt-agenda').className = state.view === 'agenda' ? 'on' : '';
+  }
+
+  // Integer month math only (reports-tab rule) — never Date→ISO for month keys.
+  function shiftMonth(delta) {
+    var m = state.month + delta;
+    var y = state.year;
+    while (m < 1) { m += 12; y -= 1; }
+    while (m > 12) { m -= 12; y += 1; }
+    state.year = y; state.month = m;
+    syncHash(); load();
+  }
+  function goToday() {
+    var n = new Date();
+    state.year = n.getFullYear(); state.month = n.getMonth() + 1;
+    syncHash(); load();
+  }
+  function syncHash() {
+    var ym = '#' + currentYm();
+    if (window.location.hash !== ym) {
+      suppressHash = true;
+      window.location.hash = ym;
+    }
+  }
+  var suppressHash = false;
+  window.addEventListener('hashchange', function () {
+    if (suppressHash) { suppressHash = false; return; }
+    var m = HASH_RE.exec(window.location.hash || '');
+    if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12) {
+      state.year = Number(m[1]); state.month = Number(m[2]);
+      load();
+    }
+  });
+
+  // ── Data ──
+  function bucket(data) {
+    var byDay = {};
+    function push(ymd, kind, item) {
+      if (!byDay[ymd]) byDay[ymd] = { events: [], plans: [], activities: [] };
+      byDay[ymd][kind].push(item);
+    }
+    var ymPrefix = currentYm() + '-';
+    (data.events || []).forEach(function (ev) {
+      var d = new Date(ev.date);
+      if (isNaN(d)) return;
+      var ymd = ymdOf(d); // LOCAL day
+      if (ymd.indexOf(ymPrefix) !== 0) return; // window is widened server-side; trim to the local month
+      push(ymd, 'events', ev);
+    });
+    (data.activities || []).forEach(function (a) {
+      var d = new Date(a.date);
+      if (isNaN(d)) return;
+      var ymd = ymdOf(d);
+      if (ymd.indexOf(ymPrefix) !== 0) return;
+      push(ymd, 'activities', a);
+    });
+    (data.plans || []).forEach(function (p) {
+      var ymd = String(p.date || '');
+      if (ymd.indexOf(ymPrefix) !== 0) return;
+      push(ymd, 'plans', p);
+    });
+    Object.keys(byDay).forEach(function (k) {
+      byDay[k].events.sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
+    });
+    return byDay;
+  }
+
+  function load() {
+    monthLabel.textContent = parseLocalYmd(currentYm() + '-01')
+      .toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    root.innerHTML = '<div class="muted-line">Loading…</div>';
+    fetch(window.BASE + '/api/calendar/month?month=' + currentYm())
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data) {
+          root.innerHTML = '<div class="empty-state">The calendar could not be loaded right now — please refresh to try again.</div>';
+          return;
+        }
+        state.data = data;
+        state.byDay = bucket(data);
+        render();
+      })
+      .catch(function () {
+        root.innerHTML = '<div class="empty-state">The calendar could not be loaded right now — please refresh to try again.</div>';
+      });
+  }
+
+  // ── Shared item renderers ──
+  function timeOf(iso) {
+    var d = new Date(iso);
+    if (isNaN(d)) return '';
+    return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  }
+  function eventChip(ev) {
+    if (ev.myStatus === 'going') return '<span class="chip going">Going</span>';
+    if (ev.myStatus === 'interested') return '<span class="chip interested">Interested</span>';
+    return '<span class="chip nr">Not responded</span>';
+  }
+  function planChip(p) {
+    if (p.status === 'done') return '<span class="chip done">Done</span>';
+    if (p.status === 'skipped') return '<span class="chip skipped">Skipped</span>';
+    return '<span class="chip planned">Planned</span>';
+  }
+  function eventItemHtml(ev, cls) {
+    var meta = [timeOf(ev.date), ev.club_name ? esc(ev.club_name) : null, ev.location ? esc(ev.location) : null]
+      .filter(Boolean).join(' · ');
+    return '<div class="' + cls + (ev.myStatus === 'none' ? ' nr' : '') + '">' +
+      '<span class="ag-ic">' + sportIcon(ev.sport) + '</span>' +
+      '<div class="ag-body"><div class="ag-title">' + esc(ev.title || 'Event') + '</div>' +
+      (meta ? '<div class="ag-meta">' + meta + '</div>' : '') + '</div>' +
+      eventChip(ev) + '</div>';
+  }
+  function planItemHtml(p, cls) {
+    var meta = [esc(sportName(p.sport)), p.planned_duration ? esc(p.planned_duration) : null]
+      .filter(Boolean).join(' · ');
+    return '<div class="' + cls + '">' +
+      '<span class="ag-ic">' + sportIcon(p.sport) + '</span>' +
+      '<div class="ag-body"><div class="ag-title">' + esc(p.title || ('Planned ' + sportName(p.sport).toLowerCase())) + '</div>' +
+      (meta ? '<div class="ag-meta">' + meta + '</div>' : '') +
+      (p.notes ? '<div class="ag-meta">' + esc(p.notes) + '</div>' : '') + '</div>' +
+      planChip(p) +
+      '<div class="dp-actions"></div>' + // Session ② action slot
+      '</div>';
+  }
+  function activityItemHtml(a, cls) {
+    var meta = [esc(sportName(a.sport)), a.distance ? esc(a.distance) : null, a.duration ? esc(a.duration) : null]
+      .filter(Boolean).join(' · ');
+    return '<div class="' + cls + '">' +
+      '<span class="ag-ic">' + sportIcon(a.sport) + '</span>' +
+      '<div class="ag-body"><div class="ag-title">' + esc(a.title || sportName(a.sport)) + '</div>' +
+      (meta ? '<div class="ag-meta">' + meta + '</div>' : '') + '</div>' +
+      '<span class="chip done">Logged</span></div>';
+  }
+
+  // ── MONTH GRID ──
+  function renderMonth() {
+    var y = state.year, m = state.month;
+    var first = new Date(y, m - 1, 1);
+    var daysInMonth = new Date(y, m, 0).getDate(); // integer month math
+    var lead = (first.getDay() + 6) % 7;           // Monday-first (app convention)
+    var today = todayYmd();
+    var html = '<div class="cal-labels"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>';
+    html += '<div class="cal-grid">';
+    for (var i = 0; i < lead; i++) html += '<div class="cal-day cd-empty"></div>';
+    for (var d = 1; d <= daysInMonth; d++) {
+      var ymd = y + '-' + pad2(m) + '-' + pad2(d);
+      var day = state.byDay[ymd] || { events: [], plans: [], activities: [] };
+      var cls = 'cal-day' + (ymd === today ? ' cd-today' : '');
+      html += '<div class="' + cls + '" data-ymd="' + ymd + '" role="button" tabindex="0" aria-label="' + ymd + '">';
+      html += '<span class="cd-num">' + d + '</span>';
+
+      // Desktop: up to 3 tiny pills, then a +N counter.
+      var pills = [];
+      day.events.forEach(function (ev) {
+        pills.push('<span class="cd-pill ' + (ev.myStatus === 'none' ? 'nr' : 'ev') + '">' + sportIcon(ev.sport) + ' ' + esc(ev.title || 'Event') + '</span>');
+      });
+      day.plans.forEach(function (p) {
+        pills.push('<span class="cd-pill plan ' + esc(p.status) + '">' + sportIcon(p.sport) + ' ' + esc(p.title || sportName(p.sport)) + '</span>');
+      });
+      day.activities.forEach(function (a) {
+        pills.push('<span class="cd-pill act">' + sportIcon(a.sport) + ' ' + esc(a.title || sportName(a.sport)) + '</span>');
+      });
+      if (pills.length) {
+        html += '<span class="cd-pills">' + pills.slice(0, 3).join('') +
+          (pills.length > 3 ? '<span class="cd-more">+' + (pills.length - 3) + ' more</span>' : '') + '</span>';
+      }
+
+      // Mobile: one dot per content type present (confirmed vs not-responded distinct).
+      var dots = '';
+      if (day.events.some(function (ev) { return ev.myStatus !== 'none'; })) dots += '<span class="cd-dot ev"></span>';
+      if (day.events.some(function (ev) { return ev.myStatus === 'none'; })) dots += '<span class="cd-dot nr"></span>';
+      if (day.plans.length) dots += '<span class="cd-dot plan"></span>';
+      if (day.activities.length) dots += '<span class="cd-dot act"></span>';
+      if (dots) html += '<span class="cd-dots">' + dots + '</span>';
+
+      html += '</div>';
+    }
+    html += '</div>';
+    root.innerHTML = html;
+    root.querySelectorAll('.cal-day[data-ymd]').forEach(function (cell) {
+      cell.addEventListener('click', function () { openDayPanel(cell.getAttribute('data-ymd')); });
+      cell.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDayPanel(cell.getAttribute('data-ymd')); } });
+    });
+  }
+
+  // ── AGENDA VIEW ──
+  function renderAgenda() {
+    var days = Object.keys(state.byDay).sort();
+    var today = todayYmd();
+    if (!days.length) {
+      root.innerHTML = '<div class="empty-state">Nothing on the calendar this month yet.<br>RSVP to an event or log an activity and it will show up here.</div>';
+      return;
+    }
+    var html = '<div class="agenda">';
+    days.forEach(function (ymd) {
+      var day = state.byDay[ymd];
+      var label = parseLocalYmd(ymd).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+      html += '<div class="ag-day' + (ymd === today ? ' today" id="ag-today' : '') + '">';
+      html += '<div class="ag-head" data-ymd="' + ymd + '"><span class="ag-date">' + label + '</span>' +
+        (ymd === today ? '<span class="ag-today-tag">Today</span>' : '') + '</div>';
+      html += '<div class="ag-items">';
+      day.events.forEach(function (ev) { html += eventItemHtml(ev, 'ag-item'); });
+      day.plans.forEach(function (p) { html += planItemHtml(p, 'ag-item'); });
+      day.activities.forEach(function (a) { html += activityItemHtml(a, 'ag-item'); });
+      html += '</div></div>';
+    });
+    html += '</div>';
+    root.innerHTML = html;
+    root.querySelectorAll('.ag-head[data-ymd]').forEach(function (head) {
+      head.addEventListener('click', function () { openDayPanel(head.getAttribute('data-ymd')); });
+    });
+    var todayEl = document.getElementById('ag-today');
+    if (todayEl && typeof todayEl.scrollIntoView === 'function') {
+      todayEl.scrollIntoView({ block: 'start', behavior: 'auto' });
+    }
+  }
+
+  function render() {
+    if (!state.data) return;
+    if (state.view === 'agenda') renderAgenda(); else renderMonth();
+  }
+
+  // ── DAY PANEL (read-only this session; Session ② slots actions into
+  //    .dp-actions and the footer) ──
+  window.openDayPanel = function (ymd) {
+    var day = state.byDay[ymd] || { events: [], plans: [], activities: [] };
+    document.getElementById('dp-title').textContent =
+      parseLocalYmd(ymd).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    var html = '';
+    html += '<div class="dp-section-label">Events</div>';
+    html += day.events.length
+      ? day.events.map(function (ev) { return eventItemHtml(ev, 'dp-item'); }).join('')
+      : '<div class="dp-empty">No events on this day.</div>';
+    html += '<div class="dp-section-label">Planned training</div>';
+    html += day.plans.length
+      ? day.plans.map(function (p) { return planItemHtml(p, 'dp-item'); }).join('')
+      : '<div class="dp-empty">No planned sessions.</div>';
+    html += '<div class="dp-section-label">Activities</div>';
+    html += day.activities.length
+      ? day.activities.map(function (a) { return activityItemHtml(a, 'dp-item'); }).join('')
+      : '<div class="dp-empty">No logged activities.</div>';
+    document.getElementById('dp-body').innerHTML = html;
+    document.getElementById('day-panel').classList.add('open');
+  };
+  window.closeDayPanel = function () {
+    document.getElementById('day-panel').classList.remove('open');
+  };
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeDayPanel();
+  });
+
+  // ── Wire controls ──
+  document.getElementById('cal-prev').addEventListener('click', function () { shiftMonth(-1); });
+  document.getElementById('cal-next').addEventListener('click', function () { shiftMonth(1); });
+  document.getElementById('cal-today-btn').addEventListener('click', goToday);
+  document.getElementById('vt-month').addEventListener('click', function () { setView('month'); });
+  document.getElementById('vt-agenda').addEventListener('click', function () { setView('agenda'); });
+
+  initMonthFromHash();
+  initView();
+  renderToggle();
+  syncHash();
+  load();
+})();
+</script>
+<script>
+// Identity: swap placeholder initials/name/handle for the logged-in viewer.
+(function () {
+  var data = window.ARENAS_DATA;
+  if (!data || !data.profile) return;
+  var p = data.profile;
+  var name = p.name || 'Athlete';
+  var handle = (p.handle || 'athlete').replace(/^@+/, '');
+  var initials = (name.trim().split(/\s+/).map(function (w) { return w[0]; }).join('').slice(0, 2) || 'A').toUpperCase();
+  document.querySelectorAll('.user-initials').forEach(function (el) { el.textContent = initials; });
+  document.querySelectorAll('.user-name').forEach(function (el) { el.textContent = name; });
+  document.querySelectorAll('.user-handle').forEach(function (el) { el.textContent = '@' + handle; });
+})();
+</script>
+<script>
+// Shared "My clubs" sidebar renderer — identical on every athlete-facing page so
+// the sidebar always reflects the viewer's real club memberships
+// (window.ARENAS_DATA.clubs) from the same Supabase query. No hardcoded club data
+// lives in the static HTML.
+(function () {
+  var clubs = (window.ARENAS_DATA && window.ARENAS_DATA.clubs) || [];
+  var label = null;
+  document.querySelectorAll('.sidebar .nav-section-label').forEach(function (l) {
+    if (/^\s*my clubs\s*$/i.test(l.textContent || '')) label = l;
+  });
+  if (!label) return;
+  var parent = label.parentNode;
+  var sib = label.nextElementSibling;
+  while (sib && sib.classList && sib.classList.contains('nav-item')) {
+    var next = sib.nextElementSibling;
+    sib.remove();
+    sib = next;
+  }
+  var anchor = label.nextElementSibling;
+  var sportIcons = window.ARENAS_SPORT_ICONS || {}; // registry emoji + legacy drift entries
+  if (!clubs.length) {
+    var empty = document.createElement('div');
+    empty.className = 'nav-item';
+    empty.style.cssText = 'color:var(--gray-400);cursor:default';
+    empty.textContent = 'No clubs yet';
+    parent.insertBefore(empty, anchor);
+    return;
+  }
+  clubs.forEach(function (club) {
+    var item = document.createElement('div');
+    item.className = 'nav-item';
+    item.onclick = function () {
+      if (typeof nav !== 'function') return;
+      if (club.role === 'admin' || club.role === 'coach') { nav('/clubs/dashboard?club=' + club.id); }
+      else { nav('/clubs/member/' + club.id); }
+    };
+    var ic = document.createElement('span');
+    ic.className = 'nav-icon';
+    if (club.logo_url && window.clubTileHtml) {
+      ic.style.cssText = 'width:18px;height:18px;border-radius:4px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle';
+      ic.innerHTML = window.clubTileHtml.content(club.logo_url, club.sport);
+    } else {
+      ic.textContent = sportIcons[club.sport] || '🏟';
+    }
+    item.appendChild(ic);
+    item.appendChild(document.createTextNode(' ' + (club.name || 'Club')));
+    parent.insertBefore(item, anchor);
+  });
+})();
+</script>
+</body>
+</html>
