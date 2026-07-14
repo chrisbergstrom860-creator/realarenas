@@ -13,6 +13,10 @@ const multer = require('multer');
 const sharp = require('sharp');
 const { createClient } = require('@supabase/supabase-js');
 const { subscriptionPriceLabel, PRICE_FALLBACK_LABEL } = require('./billing-price');
+// Single source of truth for everything sport-shaped (ids, labels, emoji,
+// colors, scoring, distance-goal eligibility). SPORT_POINTS / KNOWN_SPORTS /
+// DISTANCE_SPORTS are DERIVED there and equivalence-tested in sports.test.js.
+const { SPORTS, SPORT_POINTS, KNOWN_SPORTS, DISTANCE_SPORTS, SPORT_ICONS, LEGACY_SPORT_EMOJI } = require('./sports');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -636,8 +640,9 @@ const MANAGED_CLUBS_MENU_SCRIPT = `<script>(function buildManagedClubsMenu(){
     if (!managed.length) return;
     var menu = document.getElementById('userMenu');
     if (!menu || menu.querySelector('.menu-club-item')) return;
-    var icons = { running:'🏃', cycling:'🚴', climbing:'🧗', swimming:'🏊', football:'⚽', weightlifting:'🏋️', hiking:'🥾', yoga:'🧘', triathlon:'🔱' };
-    var bgs = { running:'#FFF7ED', cycling:'#EFF6FF', climbing:'#F5F3FF', swimming:'#F0FDFA', football:'#ECFDF5', weightlifting:'#FEF9C3', hiking:'#FAEEDA', yoga:'#FBEAF0', triathlon:'#EFF6FF' };
+    var icons = window.ARENAS_SPORT_ICONS || {};
+    var bgs = {};
+    (window.ARENAS_SPORTS || []).forEach(function(s){ bgs[s.id] = s.colors.bg; });
     var section = document.createElement('div');
     var lab = document.createElement('div');
     lab.style.cssText = 'font-size:10px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em;padding:9px 14px 5px';
@@ -694,7 +699,26 @@ const MANAGED_CLUBS_MENU_SCRIPT = `<script>(function buildManagedClubsMenu(){
 // fallback. All interpolated values are escaped.
 const AVATAR_HELPERS_SCRIPT = `<script>(function arenasAvatarHelpers(){
   var esc = function (s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); };
-  window.ARENAS_SPORT_ICONS = { running:'🏃', cycling:'🚴', climbing:'🧗', swimming:'🏊', football:'⚽', weightlifting:'🏋️', hiking:'🥾', yoga:'🧘', triathlon:'🔱' };
+  // Sports registry (sports.js) — the client-side single source of truth every
+  // page's sport maps/pickers derive from. ARENAS_SPORT_ICONS is kept as a
+  // derived alias (registry emoji + legacy entries for drifted stored values).
+  window.ARENAS_SPORTS = ${JSON.stringify(SPORTS)};
+  window.ARENAS_SPORT_ICONS = ${JSON.stringify(Object.assign({}, SPORT_ICONS, LEGACY_SPORT_EMOJI))};
+  var sportsById = {};
+  window.ARENAS_SPORTS.forEach(function (s) { sportsById[s.id] = s; });
+  window.ARENAS_SPORTS_BY_ID = sportsById;
+  // "🏃 Running" for registry sports; legacy icon + Title-case for known
+  // drifted values (🔱 Triathlon); plain Title-case text for anything else —
+  // existing stored data always keeps rendering (graceful fallback, no 🏅 spam).
+  window.arenasSportTag = function (id) {
+    var s = sportsById[id];
+    if (s) return s.emoji + ' ' + s.label;
+    var t = String(id == null ? '' : id);
+    if (!t) return '';
+    var label = t.charAt(0).toUpperCase() + t.slice(1);
+    var icon = window.ARENAS_SPORT_ICONS[t];
+    return icon ? icon + ' ' + label : label;
+  };
   var IMG_STYLE = 'display:block;width:100%;height:100%;object-fit:cover;border-radius:inherit';
   var ONERR = "var s=this.previousElementSibling;if(s)s.style.display='';this.remove()";
   function inner(url, fallback) {
@@ -1525,18 +1549,9 @@ app.get(BASE + '/api/feed/activities', requireAuth, async (req, res) => {
 });
 
 // ── LEADERBOARDS ──
-// Points per sport. Distance-based sports score per km; the rest score per
-// session. The numeric `rate` is points awarded per unit.
-const SPORT_POINTS = {
-  running: { per: 'km', rate: 10 },
-  cycling: { per: 'km', rate: 6 },
-  climbing: { per: 'session', rate: 50 },
-  swimming: { per: 'session', rate: 40 },
-  football: { per: 'session', rate: 30 },
-  hiking: { per: 'session', rate: 30 },
-  weightlifting: { per: 'session', rate: 20 },
-  yoga: { per: 'session', rate: 20 }
-};
+// Points per sport (SPORT_POINTS) come from the sports registry (sports.js):
+// distance-based sports score per km; the rest score per session. The derived
+// map is asserted identical to the historic literal in sports.test.js.
 
 // `distance` is a free-form string (e.g. "12.4 km"); units are ignored app-wide,
 // so we only extract the numeral — same pattern used elsewhere in this file.
@@ -4484,7 +4499,10 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
         handle: display.handle,
         bio: meta.bio || '',
         location: meta.location || '',
-        avatar_url: meta.avatar_url || null
+        avatar_url: meta.avatar_url || null,
+        // Saved "Your sports" selection (registry ids) — drives the settings
+        // sport chips' initial .on state.
+        sports: Array.isArray(meta.sports) ? meta.sports : []
       },
       userId: req.user.id,
       email: req.user.email,
@@ -4669,10 +4687,9 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
 const GOAL_TYPES = ['distance', 'frequency', 'duration', 'streak'];
 const GOAL_PERIODS = ['weekly', 'monthly', 'custom'];
 const GOAL_UNITS = ['km', 'mi'];
-const KNOWN_SPORTS = Object.keys(SPORT_POINTS);
-// Sports where a distance goal makes sense. A distance goal with sport=null
-// means "any distance sport" and its progress only counts these sports.
-const DISTANCE_SPORTS = ['running', 'cycling', 'swimming', 'hiking'];
+// KNOWN_SPORTS (valid ids) and DISTANCE_SPORTS (sports where a distance goal
+// makes sense; a sport=null distance goal only counts these) are derived from
+// the sports registry (sports.js) and required at the top of this file.
 const MAX_ACTIVE_GOALS = 5;
 const MI_TO_KM = 1.609;
 
@@ -5042,6 +5059,19 @@ app.post(BASE + '/api/profile/update', requireAuth, async (req, res) => {
     }
     if (typeof body.location === 'string') meta.location = body.location.trim().slice(0, 120);
     if (typeof body.bio === 'string') meta.bio = body.bio.trim().slice(0, 600);
+    // "Your sports" chips (settings). Only registry ids are accepted; deduped
+    // and capped at the registry size (all 8). An empty array clears the list.
+    if (Array.isArray(body.sports)) {
+      const cleaned = [];
+      for (const s of body.sports) {
+        if (typeof s !== 'string') return res.status(400).json({ error: 'Invalid sports selection' });
+        const id = s.trim().toLowerCase();
+        if (!KNOWN_SPORTS.includes(id)) return res.status(400).json({ error: 'Invalid sports selection' });
+        if (!cleaned.includes(id)) cleaned.push(id);
+      }
+      if (cleaned.length > KNOWN_SPORTS.length) return res.status(400).json({ error: 'Too many sports' });
+      meta.sports = cleaned;
+    }
     const { error } = await supabaseAdmin.auth.admin.updateUserById(req.user.id, { user_metadata: meta });
     if (error) {
       console.log('Profile update error:', error.message);
@@ -5288,7 +5318,18 @@ app.delete(BASE + '/api/clubs/:clubId/logo', requireAuth, async (req, res) => {
 // redirects to the landing page so stale bookmarks/links don't 404. The page
 // file arenas-blog.html stays on disk, unused, to repurpose or point at Ghost later.
 app.get(BASE + '/blog', (req, res) => res.redirect(BASE + '/landing'));
-app.get(BASE + '/for-clubs', (req, res) => res.sendFile(path.join(HTML, 'arenas-for-clubs.html')));
+// The club-signup "Primary sport" select is server-rendered from the sports
+// registry (lowercase ids as values, proper labels), so the marketing page —
+// which gets no script injections — can never drift from the registry again.
+const CLUB_SPORT_OPTIONS = '<option value="">Select a sport…</option>'
+  + SPORTS.map((s) => `<option value="${s.id}">${s.label}</option>`).join('');
+app.get(BASE + '/for-clubs', (req, res) => {
+  const html = fs.readFileSync(path.join(HTML, 'arenas-for-clubs.html'), 'utf8').replace(
+    /(<select class="form-select" id="club-sport">)[\s\S]*?(<\/select>)/,
+    `$1${CLUB_SPORT_OPTIONS}$2`
+  );
+  res.type('html').send(html);
+});
 // About is a public marketing/content page (no auth), served raw like /for-clubs.
 app.get(BASE + '/about', (req, res) => res.sendFile(path.join(HTML, 'arenas-about.html')));
 // Terms of Service is a public content page (no auth), served raw like /about.

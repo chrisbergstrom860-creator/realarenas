@@ -443,16 +443,19 @@ button,select,input,textarea{font-family:var(--font)}
         <div style="padding:18px">
           <!-- Sport selector -->
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--gray-500);margin-bottom:8px">Sport *</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px" id="act-sport-chips">
-            <button type="button" class="act-sport-chip" data-sport="running" onclick="selectActivitySport(this,'running')">🏃 Running</button>
-            <button type="button" class="act-sport-chip" data-sport="cycling" onclick="selectActivitySport(this,'cycling')">🚴 Cycling</button>
-            <button type="button" class="act-sport-chip" data-sport="climbing" onclick="selectActivitySport(this,'climbing')">🧗 Climbing</button>
-            <button type="button" class="act-sport-chip" data-sport="swimming" onclick="selectActivitySport(this,'swimming')">🏊 Swimming</button>
-            <button type="button" class="act-sport-chip" data-sport="football" onclick="selectActivitySport(this,'football')">⚽ Football</button>
-            <button type="button" class="act-sport-chip" data-sport="weightlifting" onclick="selectActivitySport(this,'weightlifting')">🏋️ Weightlifting</button>
-            <button type="button" class="act-sport-chip" data-sport="hiking" onclick="selectActivitySport(this,'hiking')">🥾 Hiking</button>
-            <button type="button" class="act-sport-chip" data-sport="yoga" onclick="selectActivitySport(this,'yoga')">🧘 Yoga</button>
-          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px" id="act-sport-chips"></div>
+          <script>
+          // Sport picker chips rendered from the sports registry
+          // (window.ARENAS_SPORTS, injected on every app-shell page) — ids,
+          // emoji, labels and order all come from the registry.
+          (function () {
+            var wrap = document.getElementById('act-sport-chips');
+            if (!wrap) return;
+            wrap.innerHTML = (window.ARENAS_SPORTS || []).map(function (s) {
+              return '<button type="button" class="act-sport-chip" data-sport="' + s.id + '" onclick="selectActivitySport(this,\'' + s.id + '\')">' + s.emoji + ' ' + s.label + '</button>';
+            }).join('');
+          })();
+          </script>
 
           <!-- Core fields -->
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
@@ -624,16 +627,21 @@ button,select,input,textarea{font-family:var(--font)}
           <div class="settings-section">
             <div class="ss-title">Sports & level</div>
             <div class="form-field"><label class="form-label">Your sports</label>
-              <div class="sport-chip-grid">
-                <button class="sport-chip on" onclick="this.classList.toggle('on')">🏃 Running</button>
-                <button class="sport-chip on" onclick="this.classList.toggle('on')">🚴 Cycling</button>
-                <button class="sport-chip on" onclick="this.classList.toggle('on')">🧗 Climbing</button>
-                <button class="sport-chip" onclick="this.classList.toggle('on')">🏊 Swimming</button>
-                <button class="sport-chip" onclick="this.classList.toggle('on')">⚽ Football</button>
-                <button class="sport-chip" onclick="this.classList.toggle('on')">🏋️ Weightlifting</button>
-                <button class="sport-chip" onclick="this.classList.toggle('on')">🎾 Tennis</button>
-                <button class="sport-chip" onclick="this.classList.toggle('on')">🏄 Surfing</button>
-              </div>
+              <div class="sport-chip-grid" id="settings-sport-chips"></div>
+              <script>
+              // "Your sports" chips rendered from the sports registry (this
+              // dropped the never-saveable Tennis/Surfing drift and added the
+              // real Hiking/Yoga). The saved selection (profile.sports) is
+              // applied by the populate block further down, and the selection
+              // is persisted via saveProfile → /api/profile/update.
+              (function () {
+                var grid = document.getElementById('settings-sport-chips');
+                if (!grid) return;
+                grid.innerHTML = (window.ARENAS_SPORTS || []).map(function (s) {
+                  return '<button class="sport-chip" data-sport="' + s.id + '" onclick="this.classList.toggle(\'on\')">' + s.emoji + ' ' + s.label + '</button>';
+                }).join('');
+              })();
+              </script>
             </div>
             <div class="form-field" style="margin-top:10px"><label class="form-label">Experience level</label><select id="set-level" class="form-select"><option>Beginner</option><option>Intermediate</option><option selected>Advanced</option><option>Elite / Professional</option></select></div>
           </div>
@@ -908,13 +916,15 @@ document.getElementById('htab-overview').classList.add('active');
   var folTab = document.querySelector('#htab-following .tab-count');
   if (folTab) folTab.textContent = data.followingCount;
 
-  // Sports tags derived from the user's real posts (fall back to a neutral tag)
-  var SPORTS = {
-    running: { emoji: '🏃', cls: 'sport-run', label: 'Running' },
-    cycling: { emoji: '🚴', cls: 'sport-cyc', label: 'Cycling' },
-    climbing: { emoji: '🧗', cls: 'sport-clm', label: 'Climbing' },
-    swimming: { emoji: '🏊', cls: 'sport-swm', label: 'Swimming' }
-  };
+  // Sports tags derived from the user's real posts (fall back to a neutral tag).
+  // Emoji/labels come from the sports registry; the hero-tag color class stays
+  // page-local presentation (only these four have dedicated CSS classes — the
+  // other sports render as neutral hero-tags, same as before).
+  var HERO_TAG_CLS = { running: 'sport-run', cycling: 'sport-cyc', climbing: 'sport-clm', swimming: 'sport-swm' };
+  var SPORTS = {};
+  (window.ARENAS_SPORTS || []).forEach(function (s) {
+    SPORTS[s.id] = { emoji: s.emoji, cls: HERO_TAG_CLS[s.id] || '', label: s.label };
+  });
   var tagsWrap = document.querySelector('.hero-tags');
   if (tagsWrap) {
     var seen = [];
@@ -926,7 +936,7 @@ document.getElementById('htab-overview').classList.add('active');
       seen.forEach(function (s) {
         var meta = SPORTS[s];
         var span = document.createElement('span');
-        span.className = 'hero-tag' + (meta ? ' ' + meta.cls : '');
+        span.className = 'hero-tag' + (meta && meta.cls ? ' ' + meta.cls : '');
         span.textContent = meta ? (meta.emoji + ' ' + meta.label) : (s.charAt(0).toUpperCase() + s.slice(1));
         tagsWrap.appendChild(span);
       });
@@ -956,7 +966,7 @@ document.getElementById('htab-overview').classList.add('active');
   // no "find clubs" affordance — discovery happens via the Athletes directory.
   (function () {
     var clubs = data.clubs || [];
-    var sportIcons = { running:'🏃', cycling:'🚴', climbing:'🧗', swimming:'🏊', football:'⚽', triathlon:'🔱', hiking:'🥾', yoga:'🧘', weightlifting:'🏋️' };
+    var sportIcons = window.ARENAS_SPORT_ICONS || {}; // registry emoji + legacy drift entries
     function titleCase(s){ return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
     var col = document.getElementById('clubs-list');
     if (col) {
@@ -1044,16 +1054,32 @@ document.getElementById('htab-overview').classList.add('active');
   setVal('set-bio', p.bio || '');
   setVal('set-location', p.location || '');
 
+  // "Your sports" chips: reflect the saved selection. The chips themselves are
+  // rendered from the sports registry; here we only toggle .on for saved ids.
+  var savedSports = Array.isArray(p.sports) ? p.sports : [];
+  document.querySelectorAll('#settings-sport-chips .sport-chip').forEach(function (chip) {
+    chip.classList.toggle('on', savedSports.indexOf(chip.getAttribute('data-sport')) !== -1);
+  });
+
   function val(id) { var el = document.getElementById(id); return el ? el.value : ''; }
   function gather(scope) {
     var fn = scope === 'modal' ? val('edit-first-name') : val('set-first-name');
     var ln = scope === 'modal' ? val('edit-last-name') : val('set-last-name');
-    return {
+    var out = {
       name: (fn + ' ' + ln).trim(),
       handle: String(val('edit-handle') || handle).replace(/^@+/, ''),
       location: scope === 'modal' ? val('edit-location') : val('set-location'),
       bio: scope === 'modal' ? val('edit-bio') : val('set-bio')
     };
+    // Sports live only in the settings form. The modal payload omits the key
+    // entirely so the server leaves the saved selection untouched.
+    if (scope !== 'modal') {
+      out.sports = Array.prototype.map.call(
+        document.querySelectorAll('#settings-sport-chips .sport-chip.on'),
+        function (chip) { return chip.getAttribute('data-sport'); }
+      );
+    }
+    return out;
   }
   async function saveProfile(scope, btn) {
     var payload = gather(scope);
@@ -1111,8 +1137,6 @@ document.getElementById('htab-overview').classList.add('active');
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
-  var sportEmojis = { running:'🏃 Running', cycling:'🚴 Cycling', climbing:'🧗 Climbing',
-    swimming:'🏊 Swimming', triathlon:'🔱 Triathlon', football:'⚽ Football' };
   var avColors = [
     {bg:'#FEF9C3',color:'#854D0E'},{bg:'#FCE7F3',color:'#9D174D'},
     {bg:'#E0F2FE',color:'#0369A1'},{bg:'#F5F3FF',color:'#5B21B6'},
@@ -1153,7 +1177,7 @@ document.getElementById('htab-overview').classList.add('active');
     var bits = ['@' + esc(a.handle || 'athlete')];
     if (a.location) bits.push(esc(a.location));
     var sub = bits.join(' · ');
-    if (primary) sub = esc(sportEmojis[primary] || primary) + ' · ' + sub;
+    if (primary) sub = esc(window.arenasSportTag(primary) || primary) + ' · ' + sub;
     return sub;
   }
 
