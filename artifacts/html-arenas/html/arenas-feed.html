@@ -287,7 +287,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="nav-section-label">My Arenas</div>
   <div class="nav-item active"><span class="nav-icon">🏠</span> Feed</div>
   <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">👤</span> My profile</div>
-  <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">📅</span> Events</div>
+  <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">🎟️</span> Events</div>
   <div class="nav-item" onclick="nav('/calendar')"><span class="nav-icon">🗓️</span> Calendar</div>
   <div class="nav-item" onclick="nav('/leaderboards')"><span class="nav-icon">🏆</span> Leaderboards</div>
   <div class="nav-item" onclick="nav('/challenges')"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">3</span></div>
@@ -436,7 +436,7 @@ button,select,input,textarea{font-family:var(--font)}
         <span style="font-size:12px;color:var(--gray-300)">→</span>
       </div>
       <div class="qa-item" onclick="nav('/events')">
-        <div class="qa-icon" style="background:var(--blue-light)">📅</div>
+        <div class="qa-icon" style="background:var(--blue-light)">🎟️</div>
         <div><div class="qa-title">Upcoming events</div></div>
         <span style="font-size:12px;color:var(--gray-300)">→</span>
       </div>
@@ -800,7 +800,7 @@ function renderFollowingRsvps() {
     const name = author.name || 'Athlete';
     const handle = author.handle || 'athlete';
     const ev = r.event || {};
-    const icon = sportIcons[ev.sport] || '📅';
+    const icon = sportIcons[ev.sport] || '🎟️';
     const when = ev.date ? new Date(ev.date).toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'long' }) : '';
     const ago = r.created_at ? getTimeAgo(new Date(r.created_at)) : 'recently';
 

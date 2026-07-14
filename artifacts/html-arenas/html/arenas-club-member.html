@@ -299,7 +299,7 @@ button,select,input,textarea{font-family:var(--font)}/* ── LAYOUT ── *//
   <div class="nav-section-label">My Arenas</div>
   <div class="nav-item" onclick="nav('/feed')"><span class="nav-icon">🏠</span> My feed</div>
   <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">👤</span> My profile</div>
-  <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">📅</span> Events</div>
+  <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">🎟️</span> Events</div>
   <div class="nav-item" onclick="nav('/billing')"><span class="nav-icon">💳</span> Billing</div>
 
   <div class="nav-section-label" id="club-name-label" style="margin-top:4px">Hackney Running Club</div>
@@ -314,7 +314,7 @@ button,select,input,textarea{font-family:var(--font)}/* ── LAYOUT ── *//
   <div class="nav-item" id="nav-feed" onclick="setTab('feed',this)" style="display:none"><span class="nav-icon">📣</span> Announcements</div>
   <div class="nav-item" id="nav-leaderboard" onclick="nav('/leaderboards')"><span class="nav-icon">🏆</span> Leaderboard</div>
   <div class="nav-item" id="nav-challenges" onclick="setTab('challenges',this)" style="display:none"><span class="nav-icon">⚡</span> Challenges</div>
-  <div class="nav-item" id="nav-events" onclick="setTab('events',this)" style="display:none"><span class="nav-icon">📅</span> Club events</div>
+  <div class="nav-item" id="nav-events" onclick="setTab('events',this)" style="display:none"><span class="nav-icon">🎟️</span> Club events</div>
   <div class="nav-item" id="nav-members" onclick="setTab('members',this)"><span class="nav-icon">👥</span> Members</div>
 
   <div class="sidebar-footer">
@@ -629,7 +629,7 @@ function showToast(msg) {
         html += '' +
           '<div id="cm-sec-events" style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:12px;overflow:hidden">' +
             '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between">' +
-              '<div style="font-size:12px;font-weight:600">📅 Upcoming club events</div>' +
+              '<div style="font-size:12px;font-weight:600">🎟️ Upcoming club events</div>' +
               '<span onclick="nav(\'/events\')" style="font-size:11px;color:var(--gray-400);cursor:pointer">View all →</span>' +
             '</div>' +
             r.events.map(function(e) {

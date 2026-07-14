@@ -337,7 +337,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="nav-section-label">My Arenas</div>
   <div class="nav-item" onclick="nav('/feed')"><span class="nav-icon">🏠</span> Feed</div>
   <div class="nav-item active" onclick="setTab('overview')"><span class="nav-icon">👤</span> My profile</div>
-  <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">📅</span> Events</div>
+  <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">🎟️</span> Events</div>
   <div class="nav-item" onclick="nav('/calendar')"><span class="nav-icon">🗓️</span> Calendar</div>
   <div class="nav-item" onclick="nav('/leaderboards')"><span class="nav-icon">🏆</span> Leaderboards</div>
   <div class="nav-item" onclick="nav('/challenges')"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">3</span></div>
@@ -2053,7 +2053,7 @@ if (window.location.hash === '#activities' || logHashMatch) {
         eventsHtml =
           '<div style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:12px;overflow:hidden">' +
             '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between">' +
-              '<div style="font-size:12px;font-weight:600">📅 My upcoming events · ' + r.upcomingRsvps.length + '</div>' +
+              '<div style="font-size:12px;font-weight:600">🎟️ My upcoming events · ' + r.upcomingRsvps.length + '</div>' +
               '<span onclick="nav(\'/events\')" style="font-size:11px;color:var(--gray-400);cursor:pointer">View all →</span>' +
             '</div>' +
             r.upcomingRsvps.map(function (ev) {

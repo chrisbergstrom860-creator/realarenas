@@ -331,7 +331,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
   <div class="nav-item" onclick="setTab('training',this)"><span class="nav-icon">📈</span> Training load <span class="nav-badge alert" style="display:none"></span></div>
   <div class="nav-item" onclick="setTab('leaderboard',this)"><span class="nav-icon">🏆</span> Leaderboard</div>
   <div class="nav-item" onclick="setTab('challenges',this)"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">4</span></div>
-  <div class="nav-item" onclick="setTab('events',this)"><span class="nav-icon">📅</span> Events <span class="nav-badge">3</span></div>
+  <div class="nav-item" onclick="setTab('events',this)"><span class="nav-icon">🎟️</span> Events <span class="nav-badge">3</span></div>
   <div class="nav-section-label">Analytics</div>
   <div class="nav-item" onclick="setTab('feed',this)"><span class="nav-icon">🏃</span> Club feed</div>
   <div class="nav-item" onclick="setTab('reports',this)"><span class="nav-icon">📋</span> Reports</div>
@@ -357,7 +357,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
         <div style="font-size:12px;color:var(--gray-400);margin-top:2px" id="ov-greeting-sub">Here's what's happening at your club this week</div>
       </div>
       <div style="display:flex;gap:6px">
-        <button onclick="switchToTabAndCreate('events')" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;font-size:12px;font-weight:600;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">📅 Event</button>
+        <button onclick="switchToTabAndCreate('events')" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;font-size:12px;font-weight:600;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🎟️ Event</button>
         <button onclick="switchToTabAndCreate('challenges')" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;font-size:12px;font-weight:600;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">⚡ Challenge</button>
         <button onclick="nav('/clubs/invite')" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">+ Invite members</button>
       </div>
@@ -408,7 +408,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
       <!-- Upcoming events -->
       <div style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">
         <div style="padding:10px 14px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--gray-50)">
-          <div style="font-size:12px;font-weight:600">📅 Upcoming events</div>
+          <div style="font-size:12px;font-weight:600">🎟️ Upcoming events</div>
           <span onclick="navToTab('events')" style="font-size:11px;color:var(--gray-400);cursor:pointer">View all →</span>
         </div>
         <div id="ov-events-list">
@@ -692,7 +692,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
   <div class="tab-content" id="tab-events">
     <!-- Header -->
     <div class="page-hdr">
-      <div class="page-hdr-left"><h1>Club events 📅</h1><p>Manage training sessions, races, and social events for your club</p></div>
+      <div class="page-hdr-left"><h1>Club events 🎟️</h1><p>Manage training sessions, races, and social events for your club</p></div>
       <div class="page-hdr-right">
         <button class="btn btn-yellow" onclick="openCreateClubEvent()">+ Create event</button>
       </div>
@@ -740,7 +740,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
     <!-- Events list (populated from window.ARENAS_DATA by renderClubEvents) -->
     <div id="club-events-list">
       <div style="text-align:center;padding:48px 24px;background:white;border:var(--border);border-radius:var(--radius-lg)">
-        <div style="font-size:36px;margin-bottom:12px">📅</div>
+        <div style="font-size:36px;margin-bottom:12px">🎟️</div>
         <div style="font-size:15px;font-weight:700;color:var(--gray-900);margin-bottom:6px">No events yet</div>
         <div style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:16px">Create your first club event and your members will be notified automatically.</div>
         <button onclick="openCreateClubEvent()" class="btn btn-yellow">+ Create first event</button>
@@ -1163,7 +1163,7 @@ document.addEventListener('DOMContentLoaded', function () {
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
   var panelOpen = false;
-  var typeIcons = { like: '👍', follow: '👤', comment: '💬', club: '🏃', challenge: '⚡', event: '📅', system: '✦' };
+  var typeIcons = { like: '👍', follow: '👤', comment: '💬', club: '🏃', challenge: '⚡', event: '🎟️', system: '✦' };
   var allNotifs = [];
   var showAll = false;
   var COLLAPSED = 15;
@@ -2689,7 +2689,7 @@ document.addEventListener('DOMContentLoaded', function () {
       upcomingEvents.filter(function (e) { return e.daysUntil <= 2 && e.notRespondedCount > 0; }).slice(0, 2).forEach(function (e) {
         var when = e.daysUntil <= 0 ? 'today' : e.daysUntil === 1 ? 'tomorrow' : 'in 2 days';
         attentionItems.push({
-          icon: '📅', iconBg: 'var(--yellow-light)',
+          icon: '🎟️', iconBg: 'var(--yellow-light)',
           text: '<strong>' + esc(e.title) + ' is ' + when + '</strong> — ' + e.notRespondedCount + ' member' + (e.notRespondedCount !== 1 ? 's' : '') + " still haven't responded",
           actionLabel: 'Nudge RSVPs',
           action: "nudgeNonResponders('" + esc(e.id) + "',this)"
@@ -3097,7 +3097,7 @@ document.addEventListener('DOMContentLoaded', function () {
             + (statCells.length ? '<div style="display:grid;grid-template-columns:repeat(' + statCells.length + ',1fr);gap:8px;margin:0 14px 10px">' + statCells.join('') + '</div>' : '')
             + (item.aiInsight ? '<div style="margin:0 14px 10px;background:var(--yellow-light);border:0.5px solid #fde68a;border-radius:8px;padding:9px 12px;display:flex;gap:8px;align-items:flex-start"><span style="font-size:13px;flex-shrink:0">📝</span><div style="font-size:11px;color:#633806;line-height:1.55"><strong>Coach&#39;s note:</strong> ' + esc(item.aiInsight) + '</div></div>' : '');
         } else if (item.type === 'rsvp') {
-          badge = '<span style="margin-left:auto;font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;background:#EFF6FF;color:#1E40AF;border:0.5px solid #93C5FD;flex-shrink:0">📅 RSVP</span>';
+          badge = '<span style="margin-left:auto;font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;background:#EFF6FF;color:#1E40AF;border:0.5px solid #93C5FD;flex-shrink:0">🎟️ RSVP</span>';
           metaLabel = 'is going to an event';
           var d = new Date(item.eventDate);
           var dateStr = isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -3290,7 +3290,7 @@ document.addEventListener('DOMContentLoaded', function () {
           + topSportHtml + topMemberHtml + '</div>'
 
           + '<div style="margin:0 14px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">'
-          + '<div style="padding:11px 16px;border-bottom:var(--border);background:var(--gray-50);font-size:12px;font-weight:600">📅 Events</div>'
+          + '<div style="padding:11px 16px;border-bottom:var(--border);background:var(--gray-50);font-size:12px;font-weight:600">🎟️ Events</div>'
           + '<div style="display:grid;grid-template-columns:repeat(3,1fr)">'
           + metric(ev.count, 'Events held', delta(ev.countDelta))
           + metric(ev.avgAttendanceRate + '%', 'Avg attendance rate', '')

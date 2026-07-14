@@ -581,7 +581,7 @@ function bnItem(activeKey, key, onclick, icon, label, primary) {
 function athleteBottomNav(activeKey) {
   return '<nav class="bottom-nav" aria-label="Primary">'
     + bnItem(activeKey, 'feed', "nav('/feed')", '🏠', 'Feed', false)
-    + bnItem(activeKey, 'events', "nav('/events')", '📅', 'Events', false)
+    + bnItem(activeKey, 'events', "nav('/events')", '🎟️', 'Events', false)
     + bnItem(activeKey, 'log', "nav('/profile#activities')", '➕', 'Log', true)
     + bnItem(activeKey, 'calendar', "nav('/calendar')", '🗓️', 'Cal', false)
     + bnItem(activeKey, 'ranks', "nav('/leaderboards')", '🏆', 'Ranks', false)
@@ -616,7 +616,7 @@ function clubMemberBottomNav(activeKey) {
     + clubBnItem(activeKey, 'overview', 'overview', '📊', 'Overview')
     + clubBnItem(activeKey, 'feed', 'feed', '📣', 'News')
     + clubBnItem(activeKey, 'challenges', 'challenges', '⚡', 'Goals')
-    + clubBnItem(activeKey, 'events', 'events', '📅', 'Events')
+    + clubBnItem(activeKey, 'events', 'events', '🎟️', 'Events')
     + clubBnItem(activeKey, 'members', 'members', '👥', 'Members')
     + '</nav>' + CLUB_BN_SCRIPT;
 }
@@ -4287,7 +4287,7 @@ app.post(BASE + '/api/events/:id/post-to-feed', requireAuth, async (req, res) =>
   const eventDate = new Date(event.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   const { error: postErr } = await supabaseAdmin.from('posts').insert({
     user_id: req.user.id,
-    content: `📅 Club event: ${event.title} — ${eventDate} at ${event.location}. Come join us! RSVP on the Events page.`,
+    content: `🎟️ Club event: ${event.title} — ${eventDate} at ${event.location}. Come join us! RSVP on the Events page.`,
     sport: event.sport || null
   });
   if (postErr) return res.json({ error: postErr.message });
