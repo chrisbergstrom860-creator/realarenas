@@ -2869,7 +2869,7 @@ const BADGES = [
   // Community
   { id: 'challenger', cat: 'community', icon: '⚡', name: 'Challenger', desc: 'Complete your first challenge', check: s => s.challengesCompleted >= 1, progress: s => [s.challengesCompleted, 1] },
   { id: 'serial_challenger', cat: 'community', icon: '🏆', name: 'Serial Challenger', desc: 'Complete 5 challenges', check: s => s.challengesCompleted >= 5, progress: s => [s.challengesCompleted, 5] },
-  { id: 'regular', cat: 'community', icon: '📅', name: 'Regular', desc: 'RSVP going to 10 events', check: s => s.eventsAttended >= 10, progress: s => [s.eventsAttended, 10] },
+  { id: 'regular', cat: 'community', icon: '🎟️', name: 'Regular', desc: 'RSVP going to 10 events', check: s => s.eventsAttended >= 10, progress: s => [s.eventsAttended, 10] },
   { id: 'popular', cat: 'community', icon: '🌟', name: 'Popular', desc: 'Reach 25 followers', check: s => s.followerCount >= 25, progress: s => [s.followerCount, 25] }
 ];
 
