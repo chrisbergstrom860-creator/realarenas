@@ -28,7 +28,19 @@ const SPORTS = [
   { id: 'football',      label: 'Football',      emoji: '⚽', colors: { bg: '#ECFDF5', text: '#166534', border: '#86EFAC' }, scoring: { per: 'session', rate: 30 }, isDistance: false, fieldsConfig: 'football' },
   { id: 'hiking',        label: 'Hiking',        emoji: '🥾', colors: { bg: '#FAEEDA', text: '#633806', border: '#EF9F27' }, scoring: { per: 'session', rate: 30 }, isDistance: true,  fieldsConfig: 'hiking' },
   { id: 'weightlifting', label: 'Weightlifting', emoji: '🏋️', colors: { bg: '#FEF9C3', text: '#854D0E', border: '#FDE047' }, scoring: { per: 'session', rate: 20 }, isDistance: false, fieldsConfig: 'weightlifting' },
-  { id: 'yoga',          label: 'Yoga',          emoji: '🧘', colors: { bg: '#FBEAF0', text: '#72243E', border: '#F4C0D1' }, scoring: { per: 'session', rate: 20 }, isDistance: false, fieldsConfig: 'yoga' }
+  { id: 'yoga',          label: 'Yoga',          emoji: '🧘', colors: { bg: '#FBEAF0', text: '#72243E', border: '#F4C0D1' }, scoring: { per: 'session', rate: 20 }, isDistance: false, fieldsConfig: 'yoga' },
+  // ── Session ② additions (July 2026) — all per-session scoring, no distance
+  // goals. Rates argued against the existing session-sport spread (climbing 50
+  // down to yoga 20): hockey 40 = swimming (short, very high intensity,
+  // full-body); basketball 35 sits between football 30 and swimming 40
+  // (sustained running + jumping, usually shorter than a football match);
+  // golf 30 = hiking/football (4+ hours, ~10km walked — long duration, low
+  // intensity); pickleball 25 above weightlifting/yoga 20 (real cardio, but
+  // lighter than the field-sport sessions).
+  { id: 'golf',          label: 'Golf',          emoji: '⛳', colors: { bg: '#F7FEE7', text: '#3F6212', border: '#BEF264' }, scoring: { per: 'session', rate: 30 }, isDistance: false, fieldsConfig: 'golf' },
+  { id: 'pickleball',    label: 'Pickleball',    emoji: '🏓', colors: { bg: '#ECFEFF', text: '#155E75', border: '#67E8F9' }, scoring: { per: 'session', rate: 25 }, isDistance: false, fieldsConfig: 'pickleball' },
+  { id: 'basketball',    label: 'Basketball',    emoji: '🏀', colors: { bg: '#FFFBEB', text: '#92400E', border: '#FCD34D' }, scoring: { per: 'session', rate: 35 }, isDistance: false, fieldsConfig: 'basketball' },
+  { id: 'hockey',        label: 'Hockey',        emoji: '🏒', colors: { bg: '#F1F5F9', text: '#334155', border: '#94A3B8' }, scoring: { per: 'session', rate: 40 }, isDistance: false, fieldsConfig: 'hockey' }
 ];
 
 // Leaderboard points per sport — derived; must stay identical to the historic

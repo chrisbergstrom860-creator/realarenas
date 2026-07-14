@@ -1340,6 +1340,37 @@ var activitySportFields = {
       <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Focus area <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-yfocus" placeholder="e.g. Hip openers, backbends…"></div>
       <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Instructor <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-instructor" placeholder="e.g. Adriene"></div>
     </div>`
+  },
+  golf: {
+    label: 'Golf details',
+    // Golf's own columns (golf_strokes / golf_course) — deliberately distinct
+    // from swimming's `stroke` select (sf-stroke): different input ids,
+    // different DB columns, zero interaction.
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Strokes <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="number" id="sf-golfstrokes" placeholder="e.g. 82" min="1" max="300"></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Course <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-golfcourse" maxlength="120" placeholder="e.g. Pebble Creek"></div>
+    </div>`
+  },
+  pickleball: {
+    label: 'Pickleball details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Session type</div><select class="form-select" id="sf-sessiontype"><option value="">Select…</option><option>Singles</option><option>Doubles</option><option>Drills</option><option>Open play</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg HR <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-hr" placeholder="e.g. 140 bpm"></div>
+    </div>`
+  },
+  basketball: {
+    label: 'Basketball details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Session type</div><select class="form-select" id="sf-sessiontype"><option value="">Select…</option><option>Full-court game</option><option>Half-court</option><option>Pickup</option><option>Shooting practice</option><option>Training</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg HR <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-hr" placeholder="e.g. 150 bpm"></div>
+    </div>`
+  },
+  hockey: {
+    label: 'Hockey details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Session type</div><select class="form-select" id="sf-sessiontype"><option value="">Select…</option><option>Game</option><option>Practice</option><option>Skills session</option><option>Scrimmage</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg HR <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-hr" placeholder="e.g. 155 bpm"></div>
+    </div>`
   }
 };
 
@@ -1444,7 +1475,9 @@ async function saveActivity() {
     yoga_style: actVal('sf-ystyle'),
     yoga_format: actVal('sf-format'),
     focus_area: actVal('sf-yfocus'),
-    instructor: actVal('sf-instructor')
+    instructor: actVal('sf-instructor'),
+    golf_strokes: actVal('sf-golfstrokes'),
+    golf_course: actVal('sf-golfcourse')
   };
 
   try {
@@ -1548,6 +1581,8 @@ function renderActivities(activities) {
     if (a.elevation) stats.push('<div class="ac-stat-item">⛰ <strong>' + escAct(a.elevation) + '</strong> elev</div>');
     if (a.top_grade) stats.push('<div class="ac-stat-item">✓ <strong>' + escAct(a.top_grade) + '</strong> sent</div>');
     if (a.problems_count) stats.push('<div class="ac-stat-item">🧗 <strong>' + escAct(a.problems_count) + '</strong> problems</div>');
+    if (a.golf_strokes) stats.push('<div class="ac-stat-item">⛳ <strong>' + escAct(a.golf_strokes) + '</strong> strokes</div>');
+    if (a.golf_course) stats.push('<div class="ac-stat-item">🏌️ <strong>' + escAct(a.golf_course) + '</strong></div>');
     if (a.rpe) stats.push('<div class="ac-stat-item">💪 <strong>RPE ' + escAct(a.rpe) + '</strong></div>');
     return stats.join('');
   }

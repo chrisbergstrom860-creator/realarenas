@@ -318,15 +318,17 @@ button,select,input,textarea{font-family:var(--font)}
         <div class="f-pill" onclick="setFilter(this,'clubs')" id="f-pill-clubs">🤝 Clubs only</div>
       </div>
       <script>
-      // Sport filter pills rendered from the sports registry. WHICH sports get
-      // a quick filter (running/cycling/climbing) stays a feed-level curation
-      // choice, but ids/emoji/labels come from the registry — expanding the
-      // set is a one-line change to FILTER_SPORTS.
+      // Sport filter pills rendered from the sports registry. Session ②: the
+      // pill set is now the viewer's OWN profile sports (user_metadata.sports,
+      // injected as ARENAS_DATA.sports) — plus All + Clubs. Users who haven't
+      // picked sports yet fall back to the historic curated trio.
       (function () {
-        var FILTER_SPORTS = ['running', 'cycling', 'climbing'];
+        var mine = (window.ARENAS_DATA && window.ARENAS_DATA.sports) || [];
+        var by = window.ARENAS_SPORTS_BY_ID || {};
+        var FILTER_SPORTS = mine.filter(function (id) { return by[id]; });
+        if (!FILTER_SPORTS.length) FILTER_SPORTS = ['running', 'cycling', 'climbing'];
         var clubsPill = document.getElementById('f-pill-clubs');
         if (!clubsPill) return;
-        var by = window.ARENAS_SPORTS_BY_ID || {};
         FILTER_SPORTS.forEach(function (id) {
           var s = by[id]; if (!s) return;
           var pill = document.createElement('div');
@@ -355,14 +357,17 @@ button,select,input,textarea{font-family:var(--font)}
         <div class="composer-options">
           <div class="composer-sport-chips" id="composer-sports"></div>
           <script>
-          // Composer sport chips rendered from the sports registry. The chip
-          // set (4 quick sports) stays a composer-level curation choice; the
-          // ids/emoji/labels come from the registry.
+          // Composer sport chips rendered from the sports registry. Session ②:
+          // like the filter pills, the chips are the viewer's own profile
+          // sports (ARENAS_DATA.sports); fallback to the historic curated four
+          // when the user hasn't picked sports yet.
           (function () {
-            var COMPOSER_SPORTS = ['running', 'cycling', 'climbing', 'swimming'];
+            var mine = (window.ARENAS_DATA && window.ARENAS_DATA.sports) || [];
+            var by = window.ARENAS_SPORTS_BY_ID || {};
+            var COMPOSER_SPORTS = mine.filter(function (id) { return by[id]; });
+            if (!COMPOSER_SPORTS.length) COMPOSER_SPORTS = ['running', 'cycling', 'climbing', 'swimming'];
             var wrap = document.getElementById('composer-sports');
             if (!wrap) return;
-            var by = window.ARENAS_SPORTS_BY_ID || {};
             wrap.innerHTML = COMPOSER_SPORTS.map(function (id) {
               var s = by[id]; if (!s) return '';
               return '<button type="button" class="c-sport-chip" onclick="selectComposerSport(this,\'' + s.id + '\')">' + s.emoji + ' ' + s.label + '</button>';
@@ -742,6 +747,8 @@ function renderInjectedActivities() {
     if (a.avg_power) stats.push('<span style="font-size:11px;color:var(--gray-600)">⚡ ' + escFeedAct(a.avg_power) + '</span>');
     if (a.avg_hr) stats.push('<span style="font-size:11px;color:var(--gray-600)">❤️ ' + escFeedAct(a.avg_hr) + '</span>');
     if (a.top_grade) stats.push('<span style="font-size:11px;color:var(--gray-600)">✓ ' + escFeedAct(a.top_grade) + '</span>');
+    if (a.golf_strokes) stats.push('<span style="font-size:11px;color:var(--gray-600)">⛳ ' + escFeedAct(a.golf_strokes) + ' strokes</span>');
+    if (a.golf_course) stats.push('<span style="font-size:11px;color:var(--gray-600)">🏌️ ' + escFeedAct(a.golf_course) + '</span>');
     return stats.join('<span style="color:var(--gray-300)">·</span>');
   }
 

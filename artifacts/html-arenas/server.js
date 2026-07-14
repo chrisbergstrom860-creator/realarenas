@@ -1339,6 +1339,15 @@ function generateAIInsight(activity) {
     ],
     yoga: [
       `${activity.yoga_style ? activity.yoga_style : 'Yoga'} builds the mobility, body awareness, and breathing control that directly improves performance in every other sport you do. ${activity.yoga_style === 'Yin' || activity.yoga_style === 'Restorative' ? 'Restorative practice like this accelerates recovery from harder training sessions.' : ''} Consistency here matters more than duration.`
+    ],
+    // Session ② sport-specific branch: golf gets one because its two custom
+    // fields (strokes/course) give the note something concrete to say.
+    // Pickleball/basketball/hockey intentionally fall through to the generic
+    // fallback below (banked for a later session).
+    golf: [
+      activity.golf_strokes ?
+        `${activity.golf_strokes} strokes${activity.golf_course ? ' at ' + activity.golf_course : ''} logged. A full round is 4+ hours on your feet — real low-intensity aerobic volume. Track strokes round to round: trends matter more than any single score.` :
+        `Round logged${activity.golf_course ? ' at ' + activity.golf_course : ''}. Walking the course is underrated aerobic work, and the focus practice transfers to every sport you do.`
     ]
   };
   const sportInsights = insights[activity.sport];
@@ -1437,6 +1446,18 @@ app.post(BASE + '/api/activities/create', requireAuth, async (req, res) => {
   const b = req.body || {};
   if (!b.sport) return res.json({ error: 'Please select a sport' });
   if (!b.title || !b.title.trim()) return res.json({ error: 'Please enter an activity title' });
+  // Golf's numeric column gets real bounds validation (the other per-sport
+  // fields are free-form text columns). Distinct from swimming's `stroke`
+  // column — different name, different config, zero interaction.
+  let golfStrokes = null;
+  if (b.golf_strokes != null && String(b.golf_strokes).trim() !== '') {
+    const n = Number(b.golf_strokes);
+    if (!Number.isInteger(n) || n < 1 || n > 300) {
+      return res.json({ error: 'Strokes must be a whole number between 1 and 300' });
+    }
+    golfStrokes = n;
+  }
+  const golfCourse = (b.golf_course && String(b.golf_course).trim()) ? String(b.golf_course).trim().slice(0, 120) : null;
   const activityData = {
     user_id: req.user.id,
     sport: b.sport,
@@ -1475,7 +1496,9 @@ app.post(BASE + '/api/activities/create', requireAuth, async (req, res) => {
     yoga_style: b.yoga_style || null,
     yoga_format: b.yoga_format || null,
     focus_area: b.focus_area || null,
-    instructor: b.instructor || null
+    instructor: b.instructor || null,
+    golf_strokes: golfStrokes,
+    golf_course: golfCourse
   };
   activityData.ai_insight = generateAIInsight(activityData);
   const { data, error } = await supabaseAdmin
@@ -3827,7 +3850,12 @@ app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
     const userClubs = await getSidebarClubs(req.user.id);
     // Real right-rail widget data (weekly km, streak, club rank, follow suggestions).
     const sidebar = await buildFeedSidebar(req.user.id);
-    const userData = { profile: displayFromUser(req.user), userId: req.user.id, posts, followsNobody, feedActivities, followingRsvps, clubs: userClubs, week: sidebar.week, dayStrip: sidebar.dayStrip, currentStreak: sidebar.currentStreak, clubRank: sidebar.clubRank, followSuggestions: sidebar.followSuggestions };
+    // The viewer's profile sports (user_metadata) drive the feed's sport
+    // filter pills + composer chips — pages fall back to a curated set when
+    // the user hasn't picked sports yet.
+    const feedMeta = req.user.user_metadata || {};
+    const userSports = Array.isArray(feedMeta.sports) ? feedMeta.sports.filter(Boolean) : [];
+    const userData = { profile: displayFromUser(req.user), userId: req.user.id, sports: userSports, posts, followsNobody, feedActivities, followingRsvps, clubs: userClubs, week: sidebar.week, dayStrip: sidebar.dayStrip, currentStreak: sidebar.currentStreak, clubRank: sidebar.clubRank, followSuggestions: sidebar.followSuggestions };
     const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), userData), 'feed'), (await getUserPlan(req.user.id)) === 'pro');
     res.type('html').send(html);
   } catch (err) {
@@ -5060,7 +5088,7 @@ app.post(BASE + '/api/profile/update', requireAuth, async (req, res) => {
     if (typeof body.location === 'string') meta.location = body.location.trim().slice(0, 120);
     if (typeof body.bio === 'string') meta.bio = body.bio.trim().slice(0, 600);
     // "Your sports" chips (settings). Only registry ids are accepted; deduped
-    // and capped at the registry size (all 8). An empty array clears the list.
+    // and capped at the registry size (now 12). An empty array clears the list.
     if (Array.isArray(body.sports)) {
       const cleaned = [];
       for (const s of body.sports) {
@@ -5325,7 +5353,7 @@ const CLUB_SPORT_OPTIONS = '<option value="">Select a sport…</option>'
   + SPORTS.map((s) => `<option value="${s.id}">${s.label}</option>`).join('');
 // The admin "Your primary sport" chips are likewise server-rendered from the
 // registry (drift cleanup: the old markup offered a non-registry Triathlon
-// chip and only 6 sports; now all 8 registry sports, no Triathlon).
+// chip and only 6 sports; now every registry sport, no Triathlon).
 const ADMIN_SPORT_CHIPS = SPORTS.map((s) =>
   `<button type="button" class="sport-chip" onclick="toggleSport(this,'${s.id}')">${s.emoji} ${s.label}</button>`
 ).join('\n            ');
