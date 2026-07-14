@@ -373,10 +373,23 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
     <div id="tab-discover" style="display:none">
       <div class="filter-bar">
         <span class="filter-label">Sport:</span>
-        <button class="sport-filter active" onclick="setFilter(this,'sport','all')">All my sports</button>
-        <button class="sport-filter" onclick="setFilter(this,'sport','running')">🏃 Running</button>
-        <button class="sport-filter" onclick="setFilter(this,'sport','cycling')">🚴 Cycling</button>
-        <button class="sport-filter" onclick="setFilter(this,'sport','climbing')">🧗 Climbing</button>
+        <button class="sport-filter active" onclick="setFilter(this,'sport','all')" id="ch-sport-filter-all">All my sports</button>
+        <script>
+        // Discover-tab sport filter pills rendered from the sports registry.
+        // WHICH sports get a pill (running/cycling/climbing) stays a page-level
+        // curation choice; ids/emoji/labels come from the registry.
+        (function () {
+          var FILTER_SPORTS = ['running', 'cycling', 'climbing'];
+          var allBtn = document.getElementById('ch-sport-filter-all');
+          if (!allBtn) return;
+          var by = window.ARENAS_SPORTS_BY_ID || {};
+          FILTER_SPORTS.slice().reverse().forEach(function (id) {
+            var s = by[id]; if (!s) return;
+            allBtn.insertAdjacentHTML('afterend',
+              '<button class="sport-filter" onclick="setFilter(this,\'sport\',\'' + s.id + '\')">' + s.emoji + ' ' + s.label + '</button>');
+          });
+        })();
+        </script>
         <div style="width:1px;height:20px;background:var(--gray-200);margin:0 4px"></div>
         <button class="difficulty-filter active" onclick="setFilter(this,'type','all')">All types</button>
         <button class="difficulty-filter" onclick="setFilter(this,'type','solo')">Solo</button>
@@ -474,11 +487,18 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
     <div class="modal-body">
       <div>
         <div style="font-size:13px;font-weight:600;color:var(--gray-700);margin-bottom:8px">Sport</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="sport-filter active" onclick="selectCreateSport(this,'running')">🏃 Running</button>
-          <button class="sport-filter" onclick="selectCreateSport(this,'cycling')">🚴 Cycling</button>
-          <button class="sport-filter" onclick="selectCreateSport(this,'climbing')">🧗 Climbing</button>
-        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap" id="create-sport-chips"></div>
+        <script>
+        // Create-challenge sport picker rendered from the sports registry —
+        // all 8 sports (the old markup only offered 3), first one pre-selected.
+        (function () {
+          var wrap = document.getElementById('create-sport-chips');
+          if (!wrap) return;
+          wrap.innerHTML = (window.ARENAS_SPORTS || []).map(function (s, i) {
+            return '<button class="sport-filter' + (i === 0 ? ' active' : '') + '" onclick="selectCreateSport(this,\'' + s.id + '\')">' + s.emoji + ' ' + s.label + '</button>';
+          }).join('');
+        })();
+        </script>
       </div>
       <div>
         <div style="font-size:13px;font-weight:600;color:var(--gray-700);margin-bottom:8px">Challenge type</div>
@@ -820,14 +840,14 @@ function showToast(msg) {
     else if (t === '@jamiek') el.textContent = '@' + handle;
   });
 
-  const SPORT_ICONS = { running:'🏃', cycling:'🚴', climbing:'🧗', swimming:'🏊', football:'⚽', weightlifting:'🏋️', hiking:'🥾', yoga:'🧘', any:'⚡' };
-  const SPORT_COLORS = {
-    running:'background:#FFF7ED;color:#9A3412', cycling:'background:#EFF6FF;color:#1E40AF',
-    climbing:'background:#F5F3FF;color:#5B21B6', swimming:'background:#F0FDFA;color:#134E4A',
-    football:'background:#ECFDF5;color:#166534', weightlifting:'background:#FEF9C3;color:#854D0E',
-    hiking:'background:#FAEEDA;color:#633806', yoga:'background:#FBEAF0;color:#72243E',
-    any:'background:var(--gray-100);color:var(--gray-600)'
-  };
+  // Icons and tag styles derived from the sports registry; 'any' is a
+  // challenges-only pseudo-sport (kept local). PROGRESS_COLORS below is a
+  // separate progress-bar accent palette, not part of the registry.
+  const SPORT_ICONS = Object.assign({ any:'⚡' }, window.ARENAS_SPORT_ICONS);
+  const SPORT_COLORS = { any:'background:var(--gray-100);color:var(--gray-600)' };
+  (window.ARENAS_SPORTS || []).forEach(function (s) {
+    SPORT_COLORS[s.id] = 'background:' + s.colors.bg + ';color:' + s.colors.text;
+  });
   const PROGRESS_COLORS = { running:'#F97316', cycling:'#3B82F6', climbing:'#8B5CF6', swimming:'#14B8A6', football:'#10B981', weightlifting:'#EAB308', hiking:'#F59E0B', yoga:'#EC4899', any:'#6B7280' };
   const sportIcon = s => SPORT_ICONS[s] || '⚡';
   const sportColor = s => SPORT_COLORS[s] || SPORT_COLORS.any;
@@ -1231,14 +1251,9 @@ function showToast(msg) {
             <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:8px">Sport</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap" id="ch-sport-chips">
               <button type="button" class="ch-sport-chip selected" data-sport="any" onclick="selectChSport(this)">⚡ Any sport</button>
-              <button type="button" class="ch-sport-chip" data-sport="running" onclick="selectChSport(this)">🏃 Running</button>
-              <button type="button" class="ch-sport-chip" data-sport="cycling" onclick="selectChSport(this)">🚴 Cycling</button>
-              <button type="button" class="ch-sport-chip" data-sport="climbing" onclick="selectChSport(this)">🧗 Climbing</button>
-              <button type="button" class="ch-sport-chip" data-sport="swimming" onclick="selectChSport(this)">🏊 Swimming</button>
-              <button type="button" class="ch-sport-chip" data-sport="football" onclick="selectChSport(this)">⚽ Football</button>
-              <button type="button" class="ch-sport-chip" data-sport="weightlifting" onclick="selectChSport(this)">🏋️ Weights</button>
-              <button type="button" class="ch-sport-chip" data-sport="hiking" onclick="selectChSport(this)">🥾 Hiking</button>
-              <button type="button" class="ch-sport-chip" data-sport="yoga" onclick="selectChSport(this)">🧘 Yoga</button>
+              ${(window.ARENAS_SPORTS || []).map(function (s) {
+                return '<button type="button" class="ch-sport-chip" data-sport="' + s.id + '" onclick="selectChSport(this)">' + s.emoji + ' ' + s.label + '</button>';
+              }).join('')}
             </div>
           </div>
           <div style="margin-bottom:14px">
@@ -1428,7 +1443,7 @@ function showToast(msg) {
     sib = next;
   }
   var anchor = label.nextElementSibling;
-  var sportIcons = { running: '🏃', cycling: '🚴', climbing: '🧗', swimming: '🏊', football: '⚽', triathlon: '🔱', hiking: '🥾', yoga: '🧘', weightlifting: '🏋️' };
+  var sportIcons = window.ARENAS_SPORT_ICONS || {}; // registry emoji + legacy drift entries
   if (!clubs.length) {
     var empty = document.createElement('div');
     empty.className = 'nav-item';

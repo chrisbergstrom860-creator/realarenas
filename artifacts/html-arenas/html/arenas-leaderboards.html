@@ -242,18 +242,25 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 <!-- SPORT TABS BAR -->
 <div class="sport-bar">
   <div class="sport-bar-inner">
-    <button class="sport-nav-tab active" data-sport="all" onclick="setSport('all', this)">
+    <button class="sport-nav-tab active" data-sport="all" onclick="setSport('all', this)" id="sport-tab-all">
       🏅 All my sports
     </button>
-    <button class="sport-nav-tab" data-sport="running" onclick="setSport('running', this)">
-      🏃 Running
-    </button>
-    <button class="sport-nav-tab" data-sport="cycling" onclick="setSport('cycling', this)">
-      🚴 Cycling
-    </button>
-    <button class="sport-nav-tab" data-sport="climbing" onclick="setSport('climbing', this)">
-      🧗 Climbing
-    </button>
+    <script>
+    // Sport tabs rendered from the sports registry. WHICH sports get a tab
+    // (running/cycling/climbing) stays a page-level curation choice; the
+    // ids/emoji/labels come from the registry.
+    (function () {
+      var TAB_SPORTS = ['running', 'cycling', 'climbing'];
+      var allTab = document.getElementById('sport-tab-all');
+      if (!allTab) return;
+      var by = window.ARENAS_SPORTS_BY_ID || {};
+      TAB_SPORTS.slice().reverse().forEach(function (id) {
+        var s = by[id]; if (!s) return;
+        allTab.insertAdjacentHTML('afterend',
+          '<button class="sport-nav-tab" data-sport="' + s.id + '" onclick="setSport(\'' + s.id + '\', this)">' + s.emoji + ' ' + s.label + '</button>');
+      });
+    })();
+    </script>
     <div style="flex:1"></div>
     <div class="sport-bar-right">
       <select class="scope-select" onchange="setScope(this.value)">
@@ -386,7 +393,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
     { bg: '#ECFDF5', c: '#065F46' }, { bg: '#FAEEDA', c: '#633806' },
     { bg: '#FFF7ED', c: '#9A3412' }, { bg: '#FBEAF0', c: '#72243E' }
   ];
-  var sportIcons = { running: '🏃', cycling: '🚴', climbing: '🧗', swimming: '🏊', football: '⚽', weightlifting: '🏋️', hiking: '🥾', yoga: '🧘' };
+  var sportIcons = window.ARENAS_SPORT_ICONS || {}; // derived from the sports registry
   var periodLabel = { week: 'Weekly', month: 'Monthly', alltime: 'All time' };
   var scopeLabel = { platform: 'Everyone', following: 'People you follow', club: (data.clubName || 'Your club') };
 
@@ -443,7 +450,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 
     var meta = state.sport === 'all'
       ? { icon: '🏅', bg: '#FFF9E0', label: 'All sports' }
-      : { icon: sportIcons[state.sport] || '🏅', bg: '#FFF9E0', label: cap(state.sport) };
+      : { icon: sportIcons[state.sport] || '🏅', bg: '#FFF9E0', label: (window.ARENAS_SPORTS_BY_ID && window.ARENAS_SPORTS_BY_ID[state.sport] && window.ARENAS_SPORTS_BY_ID[state.sport].label) || cap(state.sport) };
     var pi = document.getElementById('podium-icon');
     if (pi) { pi.textContent = meta.icon; pi.style.background = meta.bg; }
     var pt = document.getElementById('podium-title');
@@ -643,7 +650,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
     sib = next;
   }
   var anchor = label.nextElementSibling;
-  var sportIcons = { running: '🏃', cycling: '🚴', climbing: '🧗', swimming: '🏊', football: '⚽', triathlon: '🔱', hiking: '🥾', yoga: '🧘', weightlifting: '🏋️' };
+  var sportIcons = window.ARENAS_SPORT_ICONS || {}; // registry emoji + legacy drift entries
   if (!clubs.length) {
     var empty = document.createElement('div');
     empty.className = 'nav-item';
@@ -710,16 +717,23 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
   var listEl = document.getElementById('active-challenges-list');
   if (!listEl) return;
 
-  var sportStyle = {
-    running:       { icon: '🏃', bg: '#FFF7ED', bar: '#F97316' },
-    cycling:       { icon: '🚴', bg: '#EFF6FF', bar: '#3B82F6' },
-    climbing:      { icon: '🧗', bg: '#F5F3FF', bar: '#8B5CF6' },
-    swimming:      { icon: '🏊', bg: '#ECFEFF', bar: '#06B6D4' },
-    football:      { icon: '⚽', bg: '#F0FDF4', bar: '#22C55E' },
-    weightlifting: { icon: '🏋️', bg: '#FEF2F2', bar: '#EF4444' },
-    hiking:        { icon: '🥾', bg: '#F7FEE7', bar: '#65A30D' },
-    yoga:          { icon: '🧘', bg: '#FDF4FF', bar: '#D946EF' }
+  // Icons come from the sports registry; bg/bar stay a local challenge-card
+  // accent palette (deliberately different hexes from the registry tag colors).
+  var CHALLENGE_ACCENTS = {
+    running:       { bg: '#FFF7ED', bar: '#F97316' },
+    cycling:       { bg: '#EFF6FF', bar: '#3B82F6' },
+    climbing:      { bg: '#F5F3FF', bar: '#8B5CF6' },
+    swimming:      { bg: '#ECFEFF', bar: '#06B6D4' },
+    football:      { bg: '#F0FDF4', bar: '#22C55E' },
+    weightlifting: { bg: '#FEF2F2', bar: '#EF4444' },
+    hiking:        { bg: '#F7FEE7', bar: '#65A30D' },
+    yoga:          { bg: '#FDF4FF', bar: '#D946EF' }
   };
+  var sportStyle = {};
+  (window.ARENAS_SPORTS || []).forEach(function (s) {
+    var acc = CHALLENGE_ACCENTS[s.id] || {};
+    sportStyle[s.id] = { icon: s.emoji, bg: acc.bg || '#FFF9E0', bar: acc.bar || '#F59E0B' };
+  });
   var DEFAULT_STYLE = { icon: '🏅', bg: '#FFF9E0', bar: '#F59E0B' };
 
   function esc(s) {

@@ -5323,11 +5323,22 @@ app.get(BASE + '/blog', (req, res) => res.redirect(BASE + '/landing'));
 // which gets no script injections — can never drift from the registry again.
 const CLUB_SPORT_OPTIONS = '<option value="">Select a sport…</option>'
   + SPORTS.map((s) => `<option value="${s.id}">${s.label}</option>`).join('');
+// The admin "Your primary sport" chips are likewise server-rendered from the
+// registry (drift cleanup: the old markup offered a non-registry Triathlon
+// chip and only 6 sports; now all 8 registry sports, no Triathlon).
+const ADMIN_SPORT_CHIPS = SPORTS.map((s) =>
+  `<button type="button" class="sport-chip" onclick="toggleSport(this,'${s.id}')">${s.emoji} ${s.label}</button>`
+).join('\n            ');
 app.get(BASE + '/for-clubs', (req, res) => {
-  const html = fs.readFileSync(path.join(HTML, 'arenas-for-clubs.html'), 'utf8').replace(
-    /(<select class="form-select" id="club-sport">)[\s\S]*?(<\/select>)/,
-    `$1${CLUB_SPORT_OPTIONS}$2`
-  );
+  const html = fs.readFileSync(path.join(HTML, 'arenas-for-clubs.html'), 'utf8')
+    .replace(
+      /(<select class="form-select" id="club-sport">)[\s\S]*?(<\/select>)/,
+      `$1${CLUB_SPORT_OPTIONS}$2`
+    )
+    .replace(
+      /(<div class="sport-chips" id="admin-sports">)[\s\S]*?(<\/div>)/,
+      `$1${ADMIN_SPORT_CHIPS}$2`
+    );
   res.type('html').send(html);
 });
 // About is a public marketing/content page (no auth), served raw like /for-clubs.

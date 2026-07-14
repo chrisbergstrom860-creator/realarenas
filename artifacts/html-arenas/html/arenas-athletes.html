@@ -420,18 +420,14 @@ function showToast(msg) {
   const grid = document.getElementById('athlete-grid');
   if (!grid) return;
 
-  const sportColors = {
-    running:'background:#FFF7ED;color:#9A3412;border-color:#FDBA74',
-    cycling:'background:#E0F2FE;color:#1E40AF;border-color:#93C5FD',
-    climbing:'background:#F5F3FF;color:#5B21B6;border-color:#C4B5FD',
-    swimming:'background:#F0FDFA;color:#134E4A;border-color:#5EEAD4',
-    triathlon:'background:#FCE7F3;color:#72243E;border-color:#F4C0D1',
-    football:'background:#ECFDF5;color:#166534;border-color:#86EFAC'
-  };
-  const sportEmojis = {
-    running:'🏃 Running', cycling:'🚴 Cycling', climbing:'🧗 Climbing',
-    swimming:'🏊 Swimming', triathlon:'🔱 Triathlon', football:'⚽ Football'
-  };
+  // Tag styles derived from the sports registry (all 8 sports — the old
+  // literal only styled 6, and its cycling bg #E0F2FE was drift from the
+  // canonical #EFF6FF). Labels come from arenasSportTag(), which also handles
+  // legacy ids like 'triathlon' (🔱 Triathlon, unstyled).
+  const sportColors = {};
+  (window.ARENAS_SPORTS || []).forEach(function (s) {
+    sportColors[s.id] = 'background:' + s.colors.bg + ';color:' + s.colors.text + ';border-color:' + s.colors.border;
+  });
   const avColors = [
     {bg:'#FEF9C3',color:'#854D0E'},{bg:'#FCE7F3',color:'#9D174D'},
     {bg:'#E0F2FE',color:'#0369A1'},{bg:'#F5F3FF',color:'#5B21B6'},
@@ -478,7 +474,7 @@ function showToast(msg) {
     const sports = a.sports || [];
     const primary = sports[0] || null;
     const sportStyle = primary ? (sportColors[primary] || '') : '';
-    const sportLabel = primary ? (sportEmojis[primary] || primary) : null;
+    const sportLabel = primary ? window.arenasSportTag(primary) : null;
     const levelLabel = a.level ? (a.level.charAt(0).toUpperCase() + a.level.slice(1)) : null;
     const followers = a.followerCount || 0;
     return '' +
@@ -635,7 +631,7 @@ function showToast(msg) {
     const handleEl = document.getElementById('modal-handle');
     if (handleEl) handleEl.textContent = '@' + (a.handle || 'athlete') + (a.location ? ' · ' + a.location : '');
     const tagsEl = document.getElementById('modal-tags');
-    if (tagsEl) tagsEl.innerHTML = (a.sports || []).map(s => '<span class="mh-tag">' + esc(sportEmojis[s] || s) + '</span>').join('');
+    if (tagsEl) tagsEl.innerHTML = (a.sports || []).map(s => '<span class="mh-tag">' + esc(window.arenasSportTag(s)) + '</span>').join('');
     const statsEl = document.getElementById('modal-stats');
     if (statsEl) statsEl.innerHTML =
       '<div class="modal-stat"><div class="mv">' + (a.followerCount || 0) + '</div><div class="ml">Followers</div></div>' +
@@ -702,7 +698,7 @@ function showToast(msg) {
     sib = next;
   }
   var anchor = label.nextElementSibling;
-  var sportIcons = { running: '🏃', cycling: '🚴', climbing: '🧗', swimming: '🏊', football: '⚽', triathlon: '🔱', hiking: '🥾', yoga: '🧘', weightlifting: '🏋️' };
+  var sportIcons = window.ARENAS_SPORT_ICONS || {}; // registry emoji + legacy drift entries
   if (!clubs.length) {
     var empty = document.createElement('div');
     empty.className = 'nav-item';

@@ -1,22 +1,53 @@
 ---
-name: html-arenas sport list sprawl
-description: Where the 8-sport list lives (canonical + ~25 client copies), what validates sport values, and the safe path to add sports.
+name: html-arenas sports registry
+description: The SSOT SPORTS registry in sports.js — how sport data flows to server + all pages, and the rules for touching sport-shaped code.
 ---
 
-# Sport list reality (investigated July 2026, pre-expansion)
+# html-arenas sports registry (SSOT — shipped July 2026)
 
-**Canonical (server.js):** `SPORT_POINTS` (~line 1530) is the de-facto registry — running per-km×10, cycling per-km×6, climbing 50 / swimming 40 / football 30 / weightlifting 30 / hiking 20 / yoga 20 per session. `KNOWN_SPORTS = Object.keys(SPORT_POINTS)` and `DISTANCE_SPORTS = [running,cycling,swimming,hiking]` derive from/beside it. Server also injects `window.ARENAS_SPORT_ICONS` (9 keys incl. triathlon) via the avatar-helpers script — the proven injection pattern for a future shared registry.
+`artifacts/html-arenas/sports.js` is the single source of truth for the 8 sports
+(running, cycling, climbing, swimming, football, hiking, weightlifting, yoga).
+Per sport: `id`, `label`, `emoji`, `colors {bg,text,border}`, `scoring {per,rate}`,
+`isDistance`, `fieldsConfig`. Everything sport-shaped derives from it.
 
-**Rules that matter:**
-- `calculatePoints`: unknown sport → flat 20/session (nothing breaks); km-sport without distance → rate×2.
-- Validation exists ONLY on goals (`KNOWN_SPORTS` + `DISTANCE_SPORTS`). Activity/post/event/challenge/club creates all accept free-text sport.
-- Adding a sport server-side = add one `SPORT_POINTS` entry; everything else already tolerates it. Adding per-session sports never touches `DISTANCE_SPORTS`.
+**Rule: add/change a sport in sports.js ONLY.** Never reintroduce a hand-written
+sport map in a page or the server.
 
-**Client copies (~25) that must be edited by hand until an SSOT exists:** sportIcons/sportColors/sportBgs/sportEmojis maps in my-profile (×~8 incl. goals' client copy of KNOWN/DISTANCE_SPORTS + SPORT_META), club-dashboard (×~8, some drifted with basketball/tennis/gym/rowing/triathlon), feed (SPORT_COLORS/EMOJIS only 4 sports; filter pills + composer chips only 3), leaderboards (tabs only run/cycle/climb; icons 8-key), athletes (6-key, missing weights/hiking/yoga), club-member, billing, challenges, events.html create-select (9 opts incl. Triathlon), for-clubs signup select (capitalized labels incl. Tennis/Surfing/Multi-sport → club.sport stored Capitalized, breaking lowercase icon lookups → 🏟 fallback).
+## How it flows
 
-**Dead/trap UI:** edit-profile "Your sports" chips are not wired — `/api/profile/update` only handles name/handle/location/bio; `meta.sports` has NO write path anywhere (seed-only). Feed hero-tags SPORTS map (4-key) and postcard tag degrade gracefully for unknown sports.
+- Server: `SPORT_POINTS`, `KNOWN_SPORTS`, `DISTANCE_SPORTS`, `SPORT_ICONS` are
+  derived exports of sports.js; equivalence-pinned by `sports.test.js` (run
+  `pnpm --filter @workspace/html-arenas test` after any registry change).
+- Client: server injects `window.ARENAS_SPORTS`, `ARENAS_SPORT_ICONS`
+  (registry + `LEGACY_SPORT_EMOJI`, e.g. triathlon 🔱), `ARENAS_SPORTS_BY_ID`,
+  and `arenasSportTag()` into every app-shell page before `</head>` (inside
+  AVATAR_HELPERS_SCRIPT), so parse-time inline scripts can rely on them.
+- All shell-page sport maps/pickers derive from these globals. Curated filter
+  subsets (feed pills, leaderboard tabs, club-dashboard pill rows, challenges
+  discover filter) keep a local id-array of WHICH sports appear but render
+  emoji/label from the registry — expanding a subset is a product decision
+  (Session ② scope), not a drift fix.
+- Local accent palettes that are NOT registry data (challenges PROGRESS_COLORS,
+  leaderboards CHALLENGE_ACCENTS bg/bar) stay local by design; only icons/labels
+  derive from the registry there.
 
-**Marketing:** landing stat tile hard-codes "8 Sports supported" — must change with any expansion. All other copy says "every sport" (safe).
+## Sharp edges
 
-**Why:** any sport expansion done by editing only the server list will silently leave ~25 UI maps stale (missing icons/colors, invisible filter options).
-**How to apply:** when expanding sports, either touch every list above or first build a server-injected registry (like ARENAS_SPORT_ICONS) and derive the client maps from it.
+- Marketing pages (landing-login, for-clubs) get NO script injection. for-clubs
+  pickers (club-sport select + admin-sports chips) are server-rendered via regex
+  replace in the `/for-clubs` route. Landing's 20-sport ticker and visual-only
+  onboarding chips (toggleSport only toggles a class) are deliberate marketing
+  breadth — leave them.
+- arenas-challenges.html: the club-challenge modal is built inside a JS template
+  literal (`buildCreateModal`) — NEVER nest a `<script>` tag in it (`</script>`
+  terminates the outer script tag in the browser); use `${...}` interpolation.
+- Unknown/legacy stored sport values must keep graceful fallback rendering
+  (`arenasSportTag` → legacy icon + TitleCase, or plain TitleCase; tiles fall
+  back 🏟/🏅). No data migration for drifted stored values.
+- `calculatePoints`: unknown sport → flat 20/session; km-sport without distance
+  → rate×2 (behavior predates the registry, preserved).
+- Profile sports: edit-profile chips render from the registry and save via
+  `/api/profile/update` (validated against KNOWN_SPORTS, dedup, cap 8);
+  consumed from `user_metadata.sports` by leaderboards/athletes/challenges.
+- Landing stat tile hard-codes "8 Sports supported" — must change with any
+  sport expansion.

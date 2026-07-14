@@ -659,9 +659,21 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
 
     <!-- Filter row -->
     <div style="background:white;border-bottom:var(--border);padding:8px 16px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-      <div class="ch-filter-pill" onclick="filterClubChallenges(this,'all')" style="padding:4px 11px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid var(--yellow-dark);background:var(--yellow-light);color:#7a5c00;cursor:pointer">All challenges</div>
-      <div class="ch-filter-pill" onclick="filterClubChallenges(this,'running')" style="padding:4px 11px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🏃 Running</div>
-      <div class="ch-filter-pill" onclick="filterClubChallenges(this,'cycling')" style="padding:4px 11px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🚴 Cycling</div>
+      <div class="ch-filter-pill" onclick="filterClubChallenges(this,'all')" style="padding:4px 11px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid var(--yellow-dark);background:var(--yellow-light);color:#7a5c00;cursor:pointer" id="ch-filter-pill-all">All challenges</div>
+      <script>
+      // Sport filter pills from the registry (running/cycling stays the
+      // curated subset; 'any' is a challenges-only pseudo-sport, kept static).
+      (function () {
+        var allPill = document.getElementById('ch-filter-pill-all');
+        if (!allPill) return;
+        var by = window.ARENAS_SPORTS_BY_ID || {};
+        ['cycling', 'running'].forEach(function (id) {
+          var s = by[id]; if (!s) return;
+          allPill.insertAdjacentHTML('afterend',
+            '<div class="ch-filter-pill" onclick="filterClubChallenges(this,\'' + s.id + '\')" style="padding:4px 11px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">' + s.emoji + ' ' + s.label + '</div>');
+        });
+      })();
+      </script>
       <div class="ch-filter-pill" onclick="filterClubChallenges(this,'any')" style="padding:4px 11px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Any sport</div>
     </div>
 
@@ -708,10 +720,21 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
 
     <!-- Filter row -->
     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:14px">
-      <div class="ev-filter-pill" onclick="filterClubEvents(this,'all')" style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid #fde68a;background:var(--yellow-light);color:#7a5c00;cursor:pointer">All events</div>
-      <div class="ev-filter-pill" onclick="filterClubEvents(this,'running')" style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🏃 Running</div>
-      <div class="ev-filter-pill" onclick="filterClubEvents(this,'cycling')" style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🚴 Cycling</div>
-      <div class="ev-filter-pill" onclick="filterClubEvents(this,'climbing')" style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🧗 Climbing</div>
+      <div class="ev-filter-pill" onclick="filterClubEvents(this,'all')" style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid #fde68a;background:var(--yellow-light);color:#7a5c00;cursor:pointer" id="ev-filter-pill-all">All events</div>
+      <script>
+      // Sport filter pills from the registry (running/cycling/climbing stays
+      // the curated subset for this filter row).
+      (function () {
+        var allPill = document.getElementById('ev-filter-pill-all');
+        if (!allPill) return;
+        var by = window.ARENAS_SPORTS_BY_ID || {};
+        ['climbing', 'cycling', 'running'].forEach(function (id) {
+          var s = by[id]; if (!s) return;
+          allPill.insertAdjacentHTML('afterend',
+            '<div class="ev-filter-pill" onclick="filterClubEvents(this,\'' + s.id + '\')" style="padding:5px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">' + s.emoji + ' ' + s.label + '</div>');
+        });
+      })();
+      </script>
     </div>
 
     <!-- Events list (populated from window.ARENAS_DATA by renderClubEvents) -->
@@ -1276,16 +1299,11 @@ document.addEventListener('DOMContentLoaded', function () {
   function set(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
   function cap(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1); }
 
-  var sportColors = {
-    running: { bg:'#FFF7ED', color:'#9A3412', border:'#FDBA74', icon:'🏃' },
-    cycling: { bg:'#EFF6FF', color:'#1E40AF', border:'#93C5FD', icon:'🚴' },
-    climbing: { bg:'#F5F3FF', color:'#5B21B6', border:'#C4B5FD', icon:'🧗' },
-    swimming: { bg:'#F0FDFA', color:'#134E4A', border:'#5EEAD4', icon:'🏊' },
-    football: { bg:'#ECFDF5', color:'#166534', border:'#86EFAC', icon:'⚽' },
-    weightlifting: { bg:'#FEF9C3', color:'#854D0E', border:'#FDE047', icon:'🏋️' },
-    hiking: { bg:'#FAEEDA', color:'#633806', border:'#EF9F27', icon:'🥾' },
-    yoga: { bg:'#FBEAF0', color:'#72243E', border:'#F4C0D1', icon:'🧘' }
-  };
+  // Derived from the sports registry.
+  var sportColors = {};
+  (window.ARENAS_SPORTS || []).forEach(function (s) {
+    sportColors[s.id] = { bg: s.colors.bg, color: s.colors.text, border: s.colors.border, icon: s.emoji };
+  });
   var avColors = [
     {bg:'#FEF9C3',c:'#854D0E'},{bg:'#FCE7F3',c:'#9D174D'},
     {bg:'#E0F2FE',c:'#0369A1'},{bg:'#F5F3FF',c:'#5B21B6'},
@@ -1678,14 +1696,12 @@ document.addEventListener('DOMContentLoaded', function () {
           '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Event title *</div><input class="form-input" style="width:100%" type="text" id="cev-title" placeholder="e.g. Saturday Long Run, Tuesday Track Session…"></div>' +
           '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:8px">Sport *</div>' +
             '<div style="display:flex;gap:5px;flex-wrap:wrap" id="cev-sports">' +
-              '<button type="button" class="cev-sport-chip selected" data-sport="running" onclick="selectCevSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid #fde68a;background:var(--yellow-light);color:#7a5c00;cursor:pointer">🏃 Running</button>' +
-              '<button type="button" class="cev-sport-chip" data-sport="cycling" onclick="selectCevSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🚴 Cycling</button>' +
-              '<button type="button" class="cev-sport-chip" data-sport="climbing" onclick="selectCevSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🧗 Climbing</button>' +
-              '<button type="button" class="cev-sport-chip" data-sport="swimming" onclick="selectCevSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🏊 Swimming</button>' +
-              '<button type="button" class="cev-sport-chip" data-sport="football" onclick="selectCevSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">⚽ Football</button>' +
-              '<button type="button" class="cev-sport-chip" data-sport="hiking" onclick="selectCevSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🥾 Hiking</button>' +
-              '<button type="button" class="cev-sport-chip" data-sport="weightlifting" onclick="selectCevSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🏋️ Weights</button>' +
-              '<button type="button" class="cev-sport-chip" data-sport="yoga" onclick="selectCevSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🧘 Yoga</button>' +
+              // Event sport chips rendered from the sports registry (first
+              // sport pre-selected — running, same as the historic markup).
+              (window.ARENAS_SPORTS || []).map(function (s, i) {
+                var sel = i === 0;
+                return '<button type="button" class="cev-sport-chip' + (sel ? ' selected' : '') + '" data-sport="' + s.id + '" onclick="selectCevSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:' + (sel ? '1px solid #fde68a' : 'var(--border)') + ';background:' + (sel ? 'var(--yellow-light)' : 'white') + ';color:' + (sel ? '#7a5c00' : 'var(--gray-600)') + ';cursor:pointer">' + s.emoji + ' ' + s.label + '</button>';
+              }).join('') +
             '</div>' +
           '</div>' +
           '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Event type</div>' +
@@ -1789,17 +1805,14 @@ document.addEventListener('DOMContentLoaded', function () {
     return String(name || '?').trim().split(/\s+/).map(function (n) { return n[0] || ''; }).join('').slice(0, 2).toUpperCase() || '?';
   }
 
-  var sportColors = {
-    running: { bg: '#FFF7ED', color: '#9A3412', border: '#FDBA74', icon: '🏃' },
-    cycling: { bg: '#EFF6FF', color: '#1E40AF', border: '#93C5FD', icon: '🚴' },
-    climbing: { bg: '#F5F3FF', color: '#5B21B6', border: '#C4B5FD', icon: '🧗' },
-    swimming: { bg: '#F0FDFA', color: '#134E4A', border: '#5EEAD4', icon: '🏊' },
-    football: { bg: '#ECFDF5', color: '#166534', border: '#86EFAC', icon: '⚽' },
-    weightlifting: { bg: '#FEF9C3', color: '#854D0E', border: '#FDE047', icon: '🏋️' },
-    hiking: { bg: '#FAEEDA', color: '#633806', border: '#EF9F27', icon: '🥾' },
-    yoga: { bg: '#FBEAF0', color: '#72243E', border: '#F4C0D1', icon: '🧘' },
+  // Derived from the sports registry; 'any' is a challenges-only pseudo-sport.
+  var sportColors = {};
+  (window.ARENAS_SPORTS || []).forEach(function (s) {
+    sportColors[s.id] = { bg: s.colors.bg, color: s.colors.text, border: s.colors.border, icon: s.emoji };
+  });
+  Object.assign(sportColors, {
     any: { bg: 'var(--gray-100)', color: 'var(--gray-600)', border: 'var(--gray-200)', icon: '⚡' }
-  };
+  });
   var avColors = [
     { bg: '#FEF9C3', c: '#854D0E' }, { bg: '#FCE7F3', c: '#9D174D' },
     { bg: '#E0F2FE', c: '#0369A1' }, { bg: '#F5F3FF', c: '#5B21B6' },
@@ -2045,7 +2058,8 @@ document.addEventListener('DOMContentLoaded', function () {
   };
 
   // ── Create challenge modal ──
-  var SPORTS = ['any', 'running', 'cycling', 'swimming', 'climbing', 'football', 'weightlifting', 'hiking', 'yoga'];
+  // 'any' + registry ids (registry order — the single source of truth).
+  var SPORTS = ['any'].concat((window.ARENAS_SPORTS || []).map(function (s) { return s.id; }));
   var GOALS = [
     { type: 'distance', label: 'Distance', unit: 'km', icon: '📍' },
     { type: 'sessions', label: 'Sessions', unit: 'sessions', icon: '📋' },
@@ -2440,7 +2454,7 @@ document.addEventListener('DOMContentLoaded', function () {
       container.innerHTML = '<div style="padding:24px;text-align:center;font-size:13px;color:var(--gray-400)">No members match this filter</div>';
       return;
     }
-    var sportIcons = { running: '🏃', cycling: '🚴', climbing: '🧗', swimming: '🏊', football: '⚽', weightlifting: '🏋️', hiking: '🥾', yoga: '🧘' };
+    var sportIcons = window.ARENAS_SPORT_ICONS || {};
     container.innerHTML = filtered.map(function (m, i) {
       var av = avColors[i % avColors.length];
       var ini = (m.name || '').split(' ').map(function (n) { return n[0]; }).join('').slice(0, 2).toUpperCase();
@@ -2589,7 +2603,7 @@ document.addEventListener('DOMContentLoaded', function () {
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
-    var sportIcons = { running: '🏃', cycling: '🚴', climbing: '🧗', swimming: '🏊', football: '⚽', weightlifting: '🏋️', hiking: '🥾', yoga: '🧘', any: '⚡' };
+    var sportIcons = Object.assign({ any: '⚡' }, window.ARENAS_SPORT_ICONS); // registry + challenges-only 'any'
     function setText(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
 
     window.navToTab = function (tab) {
@@ -2898,16 +2912,11 @@ document.addEventListener('DOMContentLoaded', function () {
       { bg: '#E0F2FE', c: '#0369A1' }, { bg: '#F5F3FF', c: '#5B21B6' },
       { bg: '#ECFDF5', c: '#065F46' }, { bg: '#FAEEDA', c: '#633806' }
     ];
-    var sportColors = {
-      running: { bg: '#FFF7ED', color: '#9A3412', border: '#FDBA74', icon: '🏃' },
-      cycling: { bg: '#EFF6FF', color: '#1E40AF', border: '#93C5FD', icon: '🚴' },
-      climbing: { bg: '#F5F3FF', color: '#5B21B6', border: '#C4B5FD', icon: '🧗' },
-      swimming: { bg: '#F0FDFA', color: '#134E4A', border: '#5EEAD4', icon: '🏊' },
-      football: { bg: '#ECFDF5', color: '#166534', border: '#86EFAC', icon: '⚽' },
-      weightlifting: { bg: '#FEF9C3', color: '#854D0E', border: '#FDE047', icon: '🏋️' },
-      hiking: { bg: '#FAEEDA', color: '#633806', border: '#EF9F27', icon: '🥾' },
-      yoga: { bg: '#FBEAF0', color: '#72243E', border: '#F4C0D1', icon: '🧘' }
-    };
+    // Derived from the sports registry.
+    var sportColors = {};
+    (window.ARENAS_SPORTS || []).forEach(function (s) {
+      sportColors[s.id] = { bg: s.colors.bg, color: s.colors.text, border: s.colors.border, icon: s.emoji };
+    });
 
     var cfFilter = 'all';
     var cfFeedItems = [];
@@ -3152,8 +3161,10 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     var rpCurrentMonth = new Date().toISOString().slice(0, 7);
 
-    var sportNames = { running: 'Running', cycling: 'Cycling', climbing: 'Climbing', swimming: 'Swimming', football: 'Football', weightlifting: 'Weightlifting', hiking: 'Hiking', yoga: 'Yoga' };
-    var sportIcons2 = { running: '🏃', cycling: '🚴', climbing: '🧗', swimming: '🏊', football: '⚽', weightlifting: '🏋️', hiking: '🥾', yoga: '🧘' };
+    // Labels and icons derived from the sports registry.
+    var sportNames = {};
+    (window.ARENAS_SPORTS || []).forEach(function (s) { sportNames[s.id] = s.label; });
+    var sportIcons2 = window.ARENAS_SPORT_ICONS || {};
 
     window.rpChangeMonth = function (dir) {
       // Pure integer month math — avoid a Date/toISOString round-trip, which in
@@ -3324,7 +3335,8 @@ document.addEventListener('DOMContentLoaded', function () {
   var data = window.ARENAS_DATA || {};
   var club = data.club || null;
 
-  var sportIcons = { running: '🏃', cycling: '🚴', swimming: '🏊', triathlon: '🏊', football: '⚽', basketball: '🏀', tennis: '🎾', climbing: '🧗', yoga: '🧘', gym: '🏋', hiking: '🥾', rowing: '🚣' };
+  // Registry emoji + legacy drift entries; unknown/legacy sports fall back to 🏟.
+  var sportIcons = window.ARENAS_SPORT_ICONS || {};
   var fallbackIcon = (club && sportIcons[(club.sport || '').toLowerCase()]) || '🏟';
 
   var tile = document.querySelector('.sidebar-footer .club-icon');

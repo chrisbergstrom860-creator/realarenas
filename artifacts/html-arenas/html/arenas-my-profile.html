@@ -1531,18 +1531,12 @@ function renderActivities(activities) {
   }
   if (empty) empty.style.display = 'none';
 
-  var sportIcons = { running:'🏃', cycling:'🚴', climbing:'🧗', swimming:'🏊',
-    football:'⚽', weightlifting:'🏋️', hiking:'🥾', yoga:'🧘' };
-  var sportColors = {
-    running:'background:#FFF7ED;color:#9A3412;border-color:#FDBA74',
-    cycling:'background:#EFF6FF;color:#1E40AF;border-color:#93C5FD',
-    climbing:'background:#F5F3FF;color:#5B21B6;border-color:#C4B5FD',
-    swimming:'background:#F0FDFA;color:#134E4A;border-color:#5EEAD4',
-    football:'background:#ECFDF5;color:#166534;border-color:#86EFAC',
-    weightlifting:'background:#FEF9C3;color:#854D0E;border-color:#FDE047',
-    hiking:'background:#FAEEDA;color:#633806;border-color:#EF9F27',
-    yoga:'background:#FBEAF0;color:#72243E;border-color:#F4C0D1'
-  };
+  // Icons and tag styles derived from the sports registry (window.ARENAS_SPORTS).
+  var sportIcons = window.ARENAS_SPORT_ICONS || {};
+  var sportColors = {};
+  (window.ARENAS_SPORTS || []).forEach(function (s) {
+    sportColors[s.id] = 'background:' + s.colors.bg + ';color:' + s.colors.text + ';border-color:' + s.colors.border;
+  });
 
   function buildStats(a) {
     var stats = [];
@@ -1662,16 +1656,12 @@ if (window.location.hash === '#activities') {
         return;
       }
 
-      var sportColors = {
-        running:{bg:'#FFF7ED',bar:'#9A3412',icon:'🏃',name:'Running'},
-        cycling:{bg:'#EFF6FF',bar:'#1E40AF',icon:'🚴',name:'Cycling'},
-        climbing:{bg:'#F5F3FF',bar:'#5B21B6',icon:'🧗',name:'Climbing'},
-        swimming:{bg:'#F0FDFA',bar:'#134E4A',icon:'🏊',name:'Swimming'},
-        football:{bg:'#ECFDF5',bar:'#166534',icon:'⚽',name:'Football'},
-        weightlifting:{bg:'#FEF9C3',bar:'#854D0E',icon:'🏋️',name:'Weights'},
-        hiking:{bg:'#FAEEDA',bar:'#633806',icon:'🥾',name:'Hiking'},
-        yoga:{bg:'#FBEAF0',bar:'#72243E',icon:'🧘',name:'Yoga'}
-      };
+      // Sport breakdown palette derived from the sports registry ("bar" is the
+      // registry's text color — same hexes as the historic literal).
+      var sportColors = {};
+      (window.ARENAS_SPORTS || []).forEach(function (s) {
+        sportColors[s.id] = { bg: s.colors.bg, bar: s.colors.text, icon: s.emoji, name: s.label };
+      });
 
       var maxWeekH = Math.max.apply(null, r.weeklyChart.map(function (w) { return w.hours; }).concat([0.5]));
       var chartBars = r.weeklyChart.map(function (w, i) {
@@ -1892,8 +1882,11 @@ if (window.location.hash === '#activities') {
         return;
       }
 
-      var sportIcons = { running: '🏃', cycling: '🚴', climbing: '🧗', swimming: '🏊', football: '⚽', weightlifting: '🏋️', hiking: '🥾', yoga: '🧘', any: '⚡' };
-      var sportBgs = { running: '#FFF7ED', cycling: '#EFF6FF', climbing: '#F5F3FF', swimming: '#F0FDFA', football: '#ECFDF5', weightlifting: '#FEF9C3', hiking: '#FAEEDA', yoga: '#FBEAF0' };
+      // Derived from the sports registry; 'any' (= any sport) is a goals-only
+      // pseudo-sport, not a registry entry.
+      var sportIcons = Object.assign({ any: '⚡' }, window.ARENAS_SPORT_ICONS);
+      var sportBgs = {};
+      (window.ARENAS_SPORTS || []).forEach(function (s) { sportBgs[s.id] = s.colors.bg; });
 
       // Day strip
       var dayStripHtml = (r.dayStrip || []).map(function (d) {
@@ -2120,9 +2113,12 @@ if (window.location.hash === '#activities') {
 (function () {
   var GBASE = window.BASE || '';
   var MAX_ACTIVE = 5; // mirrors the server cap; the server remains the boundary
-  var DISTANCE_SPORTS = ['running', 'cycling', 'swimming', 'hiking'];
-  var ALL_SPORTS = ['running', 'cycling', 'climbing', 'swimming', 'football', 'weightlifting', 'hiking', 'yoga'];
-  var SPORT_META = { running: ['🏃', 'Running'], cycling: ['🚴', 'Cycling'], climbing: ['🧗', 'Climbing'], swimming: ['🏊', 'Swimming'], football: ['⚽', 'Football'], weightlifting: ['🏋️', 'Weightlifting'], hiking: ['🥾', 'Hiking'], yoga: ['🧘', 'Yoga'] };
+  // All three derived from the sports registry (mirrors the server's
+  // KNOWN_SPORTS/DISTANCE_SPORTS derivations from the same source).
+  var DISTANCE_SPORTS = (window.ARENAS_SPORTS || []).filter(function (s) { return s.isDistance; }).map(function (s) { return s.id; });
+  var ALL_SPORTS = (window.ARENAS_SPORTS || []).map(function (s) { return s.id; });
+  var SPORT_META = {};
+  (window.ARENAS_SPORTS || []).forEach(function (s) { SPORT_META[s.id] = [s.emoji, s.label]; });
   var TYPE_ICONS = { distance: '📏', frequency: '🔁', duration: '⏱', streak: '🔥' };
 
   var proLocked = !!(window.ARENAS_DATA && window.ARENAS_DATA.gating && window.ARENAS_DATA.gating.proLocked);
@@ -2467,7 +2463,7 @@ if (window.location.hash === '#activities') {
     sib = next;
   }
   var anchor = label.nextElementSibling;
-  var sportIcons = { running: '🏃', cycling: '🚴', climbing: '🧗', swimming: '🏊', football: '⚽', triathlon: '🔱', hiking: '🥾', yoga: '🧘', weightlifting: '🏋️' };
+  var sportIcons = window.ARENAS_SPORT_ICONS || {}; // registry emoji + legacy drift entries
   if (!clubs.length) {
     var empty = document.createElement('div');
     empty.className = 'nav-item';

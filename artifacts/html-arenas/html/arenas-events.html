@@ -250,9 +250,14 @@ function showToast(msg){
       return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
     });
   }
-  var SPORT_ICON = { running:'🏃', cycling:'🚴', climbing:'🧗', swimming:'🏊',
-    triathlon:'🔱', football:'⚽', weightlifting:'🏋️', hiking:'🥾', yoga:'🧘', any:'✦' };
-  function sportLabel(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Event'; }
+  // Icons from the sports registry (+ events-only 'any' fallback glyph);
+  // labels prefer the registry label, falling back to TitleCase for legacy ids.
+  var SPORT_ICON = Object.assign({ any:'✦' }, window.ARENAS_SPORT_ICONS);
+  function sportLabel(s) {
+    if (!s) return 'Event';
+    var reg = window.ARENAS_SPORTS_BY_ID && window.ARENAS_SPORTS_BY_ID[s];
+    return reg ? reg.label : s.charAt(0).toUpperCase() + s.slice(1);
+  }
   function dParts(d) {
     var dt = new Date(d);
     if (isNaN(dt.getTime())) return { day:'?', mon:'' };
@@ -509,7 +514,12 @@ function showToast(msg){
           '<div class="evx-field"><label class="evx-label">Title *</label><input class="evx-input" name="title" required placeholder="e.g. Saturday long run"></div>' +
           '<div class="evx-row">' +
             '<div class="evx-field"><label class="evx-label">Sport *</label><select class="evx-select" name="sport" required>' +
-              '<option value="">Select…</option><option value="running">Running</option><option value="cycling">Cycling</option><option value="climbing">Climbing</option><option value="swimming">Swimming</option><option value="triathlon">Triathlon</option><option value="football">Football</option><option value="weightlifting">Weightlifting</option><option value="hiking">Hiking</option><option value="yoga">Yoga</option>' +
+              // Options from the sports registry (drift cleanup: the legacy
+              // 'Triathlon' picker option is gone — it isn't a registry sport).
+              '<option value="">Select…</option>' +
+              (window.ARENAS_SPORTS || []).map(function (s) {
+                return '<option value="' + s.id + '">' + s.label + '</option>';
+              }).join('') +
             '</select></div>' +
             '<div class="evx-field"><label class="evx-label">Type</label><input class="evx-input" name="event_type" placeholder="e.g. 10K, Sportive"></div>' +
           '</div>' +
@@ -640,7 +650,7 @@ function showToast(msg){
     sib = next;
   }
   var anchor = label.nextElementSibling;
-  var sportIcons = { running: '🏃', cycling: '🚴', climbing: '🧗', swimming: '🏊', football: '⚽', triathlon: '🔱', hiking: '🥾', yoga: '🧘', weightlifting: '🏋️' };
+  var sportIcons = window.ARENAS_SPORT_ICONS || {}; // registry emoji + legacy drift entries
   if (!clubs.length) {
     var empty = document.createElement('div');
     empty.className = 'nav-item';

@@ -315,11 +315,28 @@ button,select,input,textarea{font-family:var(--font)}
       </div>
       <div class="filter-bar" id="filter-bar">
         <div class="f-pill on" onclick="setFilter(this,'all')">All</div>
-        <div class="f-pill" onclick="setFilter(this,'running')">🏃 Running</div>
-        <div class="f-pill" onclick="setFilter(this,'cycling')">🚴 Cycling</div>
-        <div class="f-pill" onclick="setFilter(this,'climbing')">🧗 Climbing</div>
-        <div class="f-pill" onclick="setFilter(this,'clubs')">🤝 Clubs only</div>
+        <div class="f-pill" onclick="setFilter(this,'clubs')" id="f-pill-clubs">🤝 Clubs only</div>
       </div>
+      <script>
+      // Sport filter pills rendered from the sports registry. WHICH sports get
+      // a quick filter (running/cycling/climbing) stays a feed-level curation
+      // choice, but ids/emoji/labels come from the registry — expanding the
+      // set is a one-line change to FILTER_SPORTS.
+      (function () {
+        var FILTER_SPORTS = ['running', 'cycling', 'climbing'];
+        var clubsPill = document.getElementById('f-pill-clubs');
+        if (!clubsPill) return;
+        var by = window.ARENAS_SPORTS_BY_ID || {};
+        FILTER_SPORTS.forEach(function (id) {
+          var s = by[id]; if (!s) return;
+          var pill = document.createElement('div');
+          pill.className = 'f-pill';
+          pill.setAttribute('onclick', "setFilter(this,'" + id + "')");
+          pill.textContent = s.emoji + ' ' + s.label;
+          clubsPill.parentNode.insertBefore(pill, clubsPill);
+        });
+      })();
+      </script>
     </div>
 
     <!-- POST COMPOSER -->
@@ -336,12 +353,22 @@ button,select,input,textarea{font-family:var(--font)}
       </div>
       <div class="composer-bottom" id="composer-bottom" style="display:none">
         <div class="composer-options">
-          <div class="composer-sport-chips" id="composer-sports">
-            <button type="button" class="c-sport-chip" onclick="selectComposerSport(this,'running')">🏃 Running</button>
-            <button type="button" class="c-sport-chip" onclick="selectComposerSport(this,'cycling')">🚴 Cycling</button>
-            <button type="button" class="c-sport-chip" onclick="selectComposerSport(this,'climbing')">🧗 Climbing</button>
-            <button type="button" class="c-sport-chip" onclick="selectComposerSport(this,'swimming')">🏊 Swimming</button>
-          </div>
+          <div class="composer-sport-chips" id="composer-sports"></div>
+          <script>
+          // Composer sport chips rendered from the sports registry. The chip
+          // set (4 quick sports) stays a composer-level curation choice; the
+          // ids/emoji/labels come from the registry.
+          (function () {
+            var COMPOSER_SPORTS = ['running', 'cycling', 'climbing', 'swimming'];
+            var wrap = document.getElementById('composer-sports');
+            if (!wrap) return;
+            var by = window.ARENAS_SPORTS_BY_ID || {};
+            wrap.innerHTML = COMPOSER_SPORTS.map(function (id) {
+              var s = by[id]; if (!s) return '';
+              return '<button type="button" class="c-sport-chip" onclick="selectComposerSport(this,\'' + s.id + '\')">' + s.emoji + ' ' + s.label + '</button>';
+            }).join('');
+          })();
+          </script>
           <div class="composer-feelings">
             <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'great')">💪 Feeling great</button>
             <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'tired')">😴 Tired</button>
@@ -576,13 +603,15 @@ async function submitPost() {
   }
 }
 
-const SPORT_COLORS = {
-  running: 'background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74',
-  cycling: 'background:var(--blue-light);color:#1E40AF;border:1px solid #93C5FD',
-  climbing: 'background:var(--purple-light);color:#5B21B6;border:1px solid #C4B5FD',
-  swimming: 'background:var(--teal-light);color:#134E4A;border:1px solid #5EEAD4'
-};
-const SPORT_EMOJIS = { running: '🏃 Running', cycling: '🚴 Cycling', climbing: '🧗 Climbing', swimming: '🏊 Swimming' };
+// Tag styles/labels derived from the sports registry (hexes are what the old
+// CSS vars resolved to). All 8 registry sports now get styled tags — posts
+// tagged football/hiking/weightlifting/yoga previously rendered unstyled.
+const SPORT_COLORS = {};
+const SPORT_EMOJIS = {};
+(window.ARENAS_SPORTS || []).forEach(function (s) {
+  SPORT_COLORS[s.id] = 'background:' + s.colors.bg + ';color:' + s.colors.text + ';border:1px solid ' + s.colors.border;
+  SPORT_EMOJIS[s.id] = s.emoji + ' ' + s.label;
+});
 const FEELING_LABELS = { great: '💪 Feeling great', tired: '😴 Tired', injured: '🤕 Injured', motivated: '🔥 Motivated' };
 
 function postCardHtml(post, opts) {
@@ -698,18 +727,12 @@ function renderInjectedActivities() {
   const feedItems = document.getElementById('feed-items');
   if (!feedItems) return;
 
-  const sportIcons = { running:'🏃', cycling:'🚴', climbing:'🧗', swimming:'🏊',
-    football:'⚽', weightlifting:'🏋️', hiking:'🥾', yoga:'🧘' };
-  const sportColors = {
-    running:'background:#FFF7ED;color:#9A3412;border-color:#FDBA74',
-    cycling:'background:#EFF6FF;color:#1E40AF;border-color:#93C5FD',
-    climbing:'background:#F5F3FF;color:#5B21B6;border-color:#C4B5FD',
-    swimming:'background:#F0FDFA;color:#134E4A;border-color:#5EEAD4',
-    football:'background:#ECFDF5;color:#166534;border-color:#86EFAC',
-    weightlifting:'background:#FEF9C3;color:#854D0E;border-color:#FDE047',
-    hiking:'background:#FAEEDA;color:#633806;border-color:#EF9F27',
-    yoga:'background:#FBEAF0;color:#72243E;border-color:#F4C0D1'
-  };
+  // Icons and tag styles derived from the sports registry.
+  const sportIcons = window.ARENAS_SPORT_ICONS || {};
+  const sportColors = {};
+  (window.ARENAS_SPORTS || []).forEach(function (s) {
+    sportColors[s.id] = 'background:' + s.colors.bg + ';color:' + s.colors.text + ';border-color:' + s.colors.border;
+  });
 
   function buildStats(a) {
     const stats = [];
@@ -762,8 +785,7 @@ function renderFollowingRsvps() {
   const feedItems = document.getElementById('feed-items');
   if (!feedItems) return;
   const B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
-  const sportIcons = { running:'🏃', cycling:'🚴', climbing:'🧗', swimming:'🏊',
-    triathlon:'🔱', football:'⚽', weightlifting:'🏋️', hiking:'🥾', yoga:'🧘' };
+  const sportIcons = window.ARENAS_SPORT_ICONS || {}; // registry emoji + legacy drift entries
 
   data.followingRsvps.slice().reverse().forEach(function (r) {
     const author = r.author || { name:'Athlete', handle:'athlete' };
@@ -887,7 +909,7 @@ renderFeedEmptyState();
     sib = next;
   }
   var anchor = label.nextElementSibling;
-  var sportIcons = { running: '🏃', cycling: '🚴', climbing: '🧗', swimming: '🏊', football: '⚽', triathlon: '🔱', hiking: '🥾', yoga: '🧘', weightlifting: '🏋️' };
+  var sportIcons = window.ARENAS_SPORT_ICONS || {}; // registry emoji + legacy drift entries
   if (!clubs.length) {
     var empty = document.createElement('div');
     empty.className = 'nav-item';

@@ -528,8 +528,10 @@ function showToast(msg) {
     return Math.floor(s / 86400) + 'd ago';
   }
 
-  var sportIcons = { running:'🏃',cycling:'🚴',climbing:'🧗',swimming:'🏊',football:'⚽',weightlifting:'🏋️',hiking:'🥾',yoga:'🧘' };
-  var sportBgs = { running:'#FFF7ED',cycling:'#EFF6FF',climbing:'#F5F3FF',swimming:'#F0FDFA',football:'#ECFDF5',weightlifting:'#FEF9C3',hiking:'#FAEEDA',yoga:'#FBEAF0' };
+  // Icons and tile backgrounds derived from the sports registry.
+  var sportIcons = window.ARENAS_SPORT_ICONS || {};
+  var sportBgs = {};
+  (window.ARENAS_SPORTS || []).forEach(function (s) { sportBgs[s.id] = s.colors.bg; });
   var avColors = [
     {bg:'#FEF9C3',c:'#854D0E'},{bg:'#FCE7F3',c:'#9D174D'},
     {bg:'#E0F2FE',c:'#0369A1'},{bg:'#F5F3FF',c:'#5B21B6'},
