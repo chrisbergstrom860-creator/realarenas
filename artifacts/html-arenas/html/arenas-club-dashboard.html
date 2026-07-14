@@ -314,7 +314,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
       </div>
     </div>
     <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
-      <div class="user-av coach-initials" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">RH</div>
+      <div class="user-av coach-initials" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">·</div>
       <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
         <a href="/html/profile" style="display:block;padding:10px 14px;font-size:13px;color:#111827;text-decoration:none">My profile</a>
         <a href="/html/auth/logout" style="display:block;padding:10px 14px;font-size:13px;color:#DC2626;text-decoration:none;border-top:1px solid #f3f4f6">Log out</a>
@@ -869,7 +869,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
           <tbody>
             <tr><td><div style="display:flex;align-items:center;gap:7px"><div class="member-av" style="background:#FEF9C3;color:#854D0E;width:24px;height:24px;font-size:9px">SL</div>Sofia L.</div></td><td><span class="pill pill-going">✓ Going</span></td><td style="font-size:11px;color:var(--gray-400)">May 15</td><td><button class="btn btn-sm btn-ghost" onclick="showToast('Viewing Sofia\'s profile…')">View</button></td></tr>
             <tr><td><div style="display:flex;align-items:center;gap:7px"><div class="member-av" style="background:#FCE7F3;color:#9D174D;width:24px;height:24px;font-size:9px">YT</div>Yuki T.</div></td><td><span class="pill pill-going">✓ Going</span></td><td style="font-size:11px;color:var(--gray-400)">May 16</td><td><button class="btn btn-sm btn-ghost" onclick="showToast('Viewing Yuki\'s profile…')">View</button></td></tr>
-            <tr><td><div style="display:flex;align-items:center;gap:7px"><div class="member-av" style="background:#FFF7ED;color:#9A3412;width:24px;height:24px;font-size:9px">JK</div>Jamie K.</div></td><td><span class="pill pill-pending">⏳ Pending</span></td><td style="font-size:11px;color:var(--gray-400)">—</td><td><button class="btn btn-sm btn-yellow" onclick="showToast('Reminder sent to Jamie')">Nudge</button></td></tr>
+            <tr><td><div style="display:flex;align-items:center;gap:7px"><div class="member-av" style="background:#FFF7ED;color:#9A3412;width:24px;height:24px;font-size:9px">·</div>Jamie K.</div></td><td><span class="pill pill-pending">⏳ Pending</span></td><td style="font-size:11px;color:var(--gray-400)">—</td><td><button class="btn btn-sm btn-yellow" onclick="showToast('Reminder sent to Jamie')">Nudge</button></td></tr>
             <tr><td><div style="display:flex;align-items:center;gap:7px"><div class="member-av" style="background:#F5F3FF;color:#5B21B6;width:24px;height:24px;font-size:9px">TR</div>Tom R.</div></td><td><span class="pill pill-declined">✗ Declined</span></td><td style="font-size:11px;color:var(--gray-400)">May 14</td><td><button class="btn btn-sm btn-ghost" onclick="showToast('Viewing Tom\'s profile…')">View</button></td></tr>
           </tbody>
         </table>
@@ -951,10 +951,9 @@ document.addEventListener('DOMContentLoaded', function () {
   if (!data) return;
   var clubName = (data.club && data.club.name) || 'Your Club';
   var coachName = (data.profile && data.profile.name) || 'Coach';
-  var initials = coachName.split(/\s+/).map(function (n) { return n[0]; }).join('').slice(0, 2).toUpperCase();
   document.querySelectorAll('.club-name').forEach(function (el) { el.textContent = clubName; });
   document.querySelectorAll('.coach-name').forEach(function (el) { el.textContent = coachName; });
-  document.querySelectorAll('.coach-initials').forEach(function (el) { el.textContent = initials; });
+  // Topbar avatar (.coach-initials) is rendered by the shared identity script.
   document.querySelectorAll('.member-count').forEach(function (el) { el.textContent = data.memberCount; });
   document.title = 'Arenas · ' + clubName + ' Dashboard';
   if (data.club && data.club.sport) {
@@ -983,13 +982,13 @@ document.addEventListener('DOMContentLoaded', function () {
     if (isNaN(d.getTime())) return '—';
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
-  function avatarEl(name, idx) {
+  function avatarEl(m, idx) {
     var c = avPalette[idx % avPalette.length];
     var el = document.createElement('div');
     el.className = 'member-av';
     el.style.background = c[0];
     el.style.color = c[1];
-    el.textContent = initialsOf(name);
+    el.innerHTML = window.avatarHtml.content((m && m.avatar_url) || null, (m && m.name) || 'Member');
     return el;
   }
 
@@ -1027,7 +1026,7 @@ document.addEventListener('DOMContentLoaded', function () {
       var tdMember = document.createElement('td');
       var cell = document.createElement('div');
       cell.className = 'member-name-cell';
-      cell.appendChild(avatarEl(m.name, i));
+      cell.appendChild(avatarEl(m, i));
       var info = document.createElement('div');
       var nameEl = document.createElement('div');
       nameEl.className = 'member-name';
@@ -1087,7 +1086,7 @@ document.addEventListener('DOMContentLoaded', function () {
         row.style.gap = '10px';
         row.style.padding = '8px 14px';
 
-        row.appendChild(avatarEl(m.name, i));
+        row.appendChild(avatarEl(m, i));
 
         var info = document.createElement('div');
         info.style.flex = '1';
@@ -1330,9 +1329,9 @@ document.addEventListener('DOMContentLoaded', function () {
     var goingPct = totalMembers > 0 ? Math.round((event.goingCount / totalMembers) * 100) : 0;
     var interestedPct = totalMembers > 0 ? Math.round((event.interestedCount / totalMembers) * 100) : 0;
     var nonePct = Math.max(0, 100 - goingPct - interestedPct);
-    var avatarHtml = (event.goingMembers || []).slice(0, 5).map(function (m, i) {
+    var attendeeAvs = (event.goingMembers || []).slice(0, 5).map(function (m, i) {
       var av = avColors[i % avColors.length];
-      return '<div style="width:24px;height:24px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';border:1.5px solid white;margin-left:' + (i === 0 ? '0' : '-6px') + ';display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:600;flex-shrink:0">' + esc(initialsOf(m.name)) + '</div>';
+      return window.avatarHtml(m.avatar_url || null, m.name || 'Member', '', 'width:24px;height:24px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';border:1.5px solid white;margin-left:' + (i === 0 ? '0' : '-6px') + ';display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:600;flex-shrink:0;overflow:hidden');
     }).join('');
     var extraCount = (event.goingCount || 0) - 5;
     var notRespondedColor = event.notRespondedCount > 10 ? '#EF4444' : event.notRespondedCount > 5 ? '#E6B800' : 'var(--gray-400)';
@@ -1404,7 +1403,7 @@ document.addEventListener('DOMContentLoaded', function () {
           '<button onclick="viewEventRsvps(\'' + id + '\')" style="padding:5px 12px;border-radius:7px;font-size:12px;font-weight:600;border:none;background:var(--gray-900);color:white;cursor:pointer">View RSVPs</button>' +
           (event.notRespondedCount > 0 ? '<button onclick="nudgeNonResponders(\'' + id + '\',this)" style="padding:5px 12px;border-radius:7px;font-size:12px;border:1px solid #fde68a;background:var(--yellow-light);color:#7a5c00;cursor:pointer">⚡ Nudge ' + event.notRespondedCount + ' non-responders</button>' : '') +
           '<div style="margin-left:auto;display:flex;gap:5px;align-items:center">' +
-            avatarHtml +
+            attendeeAvs +
             (extraCount > 0 ? '<div style="width:24px;height:24px;border-radius:50%;background:var(--gray-100);color:var(--gray-500);border:1.5px solid white;margin-left:-6px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600">+' + extraCount + '</div>' : '') +
             '<button onclick="editClubEvent(\'' + id + '\')" style="margin-left:8px;padding:5px 10px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Edit</button>' +
             '<button onclick="postEventToFeed(\'' + id + '\',this)" style="padding:5px 10px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Post to feed</button>' +
@@ -1502,7 +1501,7 @@ document.addEventListener('DOMContentLoaded', function () {
       function memberRow(r, i) {
         var av = avColors[i % avColors.length];
         return '<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:var(--border)">' +
-          '<div style="width:30px;height:30px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0">' + esc(initialsOf(r.name)) + '</div>' +
+          window.avatarHtml(r.avatar_url || null, r.name || 'Member', '', 'width:30px;height:30px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0;overflow:hidden') +
           '<div style="flex:1">' +
             '<div style="font-size:13px;font-weight:500;color:var(--gray-900)">' + esc(r.name || 'Member') + '</div>' +
             '<div style="font-size:11px;color:var(--gray-400)">@' + esc(r.handle || 'member') + '</div>' +
@@ -1825,7 +1824,7 @@ document.addEventListener('DOMContentLoaded', function () {
     return '' +
       '<div style="display:flex;align-items:center;gap:8px">' +
         '<div style="font-size:12px;font-weight:500;font-family:var(--mono);color:' + (rankColors[i] || 'var(--gray-400)') + ';width:16px;text-align:center;flex-shrink:0">' + (i + 1) + '</div>' +
-        '<div style="width:22px;height:22px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:600;flex-shrink:0">' + esc(initialsOf(entry.name)) + '</div>' +
+        window.avatarHtml(entry.avatar_url || null, entry.name || 'Athlete', '', 'width:22px;height:22px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:600;flex-shrink:0;overflow:hidden') +
         '<div style="font-size:12px;color:var(--gray-900);width:70px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(entry.name) + '</div>' +
         '<div style="flex:1;height:4px;background:var(--gray-100);border-radius:2px;overflow:hidden">' +
           '<div style="width:' + pct + '%;height:100%;background:' + (rankColors[i] || '#9CA3AF') + ';border-radius:2px"></div>' +
@@ -2015,7 +2014,7 @@ document.addEventListener('DOMContentLoaded', function () {
         return '' +
           '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:var(--border)">' +
             '<div style="font-size:14px;font-weight:700;font-family:var(--mono);color:' + rankColor + ';width:24px;flex-shrink:0;text-align:center">' + entry.rank + '</div>' +
-            '<div style="width:32px;height:32px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0">' + esc(initialsOf(entry.name)) + '</div>' +
+            window.avatarHtml(entry.avatar_url || null, entry.name || 'Athlete', '', 'width:32px;height:32px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0;overflow:hidden') +
             '<div style="flex:1;min-width:0">' +
               '<div style="font-size:13px;font-weight:500;color:var(--gray-900)">' + esc(entry.name) + '</div>' +
               '<div style="height:4px;background:var(--gray-100);border-radius:2px;margin-top:4px;overflow:hidden"><div style="width:' + pct + '%;height:100%;background:' + (i === 0 ? '#FFD21E' : '#6B7280') + ';border-radius:2px"></div></div>' +
@@ -2246,7 +2245,7 @@ document.addEventListener('DOMContentLoaded', function () {
       return '' +
         '<div style="display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:var(--border)' + (val === 0 ? ';opacity:.55' : '') + '">' +
         '<div style="font-size:12px;font-weight:500;font-family:var(--mono);color:' + rankColor + ';width:18px;text-align:center;flex-shrink:0">' + (i + 1) + '</div>' +
-        '<div style="width:26px;height:26px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0">' + esc(initials(e.name)) + '</div>' +
+        window.avatarHtml(e.avatar_url || null, e.name || 'Member', '', 'width:26px;height:26px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0;overflow:hidden') +
         '<div style="font-size:12px;font-weight:500;color:var(--gray-900);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(e.name) + '</div>' +
         '<div style="width:60px;height:4px;background:var(--gray-100);border-radius:2px;overflow:hidden;flex-shrink:0"><div style="width:' + barW + '%;height:100%;background:' + barColor + ';border-radius:2px"></div></div>' +
         '<div style="font-size:11px;font-family:var(--mono);color:var(--gray-600);text-align:right;flex-shrink:0;min-width:58px">' + disp + '</div>' +
@@ -2988,7 +2987,7 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       var coachName = (data.profile && data.profile.name) || '';
       var avEl = document.getElementById('cf-comp-av');
-      if (avEl && coachName) avEl.textContent = initialsOf(coachName);
+      if (avEl && coachName) avEl.innerHTML = window.avatarHtml.content((data.profile && data.profile.avatar_url) || null, coachName);
       var subEl = document.getElementById('cf-sub');
       if (subEl) subEl.textContent = 'Everything happening at ' + ((data.club && data.club.name) || 'your club') + ' · post announcements to all members';
       try {
@@ -3061,7 +3060,6 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       container.innerHTML = filtered.map(function (item, i) {
         var av = avColors[i % avColors.length];
-        var ini = esc(initialsOf(item.name));
         var isCoach = item.type === 'announcement';
         var avStyle = isCoach ? 'background:var(--yellow);color:var(--gray-900)' : 'background:' + av.bg + ';color:' + av.c;
         var safeName = esc(item.name || 'Member');
@@ -3121,7 +3119,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         return '<div class="cf-card" style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:0 0 10px;overflow:hidden">'
           + '<div style="display:flex;align-items:center;gap:10px;padding:12px 14px 8px">'
-          + '<div style="width:36px;height:36px;border-radius:50%;' + avStyle + ';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">' + ini + '</div>'
+          + window.avatarHtml(item.avatarUrl || null, item.name || 'Member', '', 'width:36px;height:36px;border-radius:50%;' + avStyle + ';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;overflow:hidden')
           + '<div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">' + safeName + '</div>'
           + '<div style="font-size:11px;color:var(--gray-400)">@' + safeHandle + ' · ' + metaLabel + '</div></div>'
           + badge

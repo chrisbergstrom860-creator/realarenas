@@ -282,7 +282,12 @@ async function openPortal(kind, clubId, btn) {
     };
     var ic = document.createElement('span');
     ic.className = 'nav-icon';
-    ic.textContent = sportIcons[club.sport] || '🏟';
+    if (club.logo_url && window.clubTileHtml) {
+      ic.style.cssText = 'width:18px;height:18px;border-radius:4px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle';
+      ic.innerHTML = window.clubTileHtml.content(club.logo_url, club.sport);
+    } else {
+      ic.textContent = sportIcons[club.sport] || '🏟';
+    }
     item.appendChild(ic);
     item.appendChild(document.createTextNode(' ' + (club.name || 'Club')));
     parent.insertBefore(item, anchor);

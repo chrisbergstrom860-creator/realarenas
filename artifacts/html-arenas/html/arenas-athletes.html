@@ -275,7 +275,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="topbar-actions">
     <div class="icon-btn" onclick="nav('/notifications')">🔔<div class="notif-dot"></div></div>
     <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
-      <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">JK</div>
+      <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">·</div>
       <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
         <a href="/html/profile" style="display:block;padding:10px 14px;font-size:13px;color:#111827;text-decoration:none">My profile</a>
         <a href="/html/auth/logout" style="display:block;padding:10px 14px;font-size:13px;color:#DC2626;text-decoration:none;border-top:1px solid #f3f4f6">Log out</a>
@@ -300,7 +300,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">⚙️</span> Settings</div>
   <div class="sidebar-footer">
     <div style="display:flex;align-items:center;gap:9px">
-      <div style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">JK</div>
+      <div class="sf-av" style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">·</div>
       <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div><div style="font-size:10px;color:var(--gray-500)">@jamiek</div></div>
     </div>
   </div>
@@ -348,7 +348,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="modal">
     <div class="modal-header">
       <div class="modal-hero" id="modal-hero">
-        <div class="mh-av" id="modal-av">JK</div>
+        <div class="mh-av" id="modal-av">·</div>
         <div class="mh-info">
           <div class="mh-name" id="modal-name">Jamie King</div>
           <div class="mh-handle" id="modal-handle">@jamiek · London, UK</div>
@@ -408,15 +408,10 @@ function showToast(msg) {
   // Update the logged-in user's identity in the nav + sidebar footer.
   const myName = (data.myProfile && data.myProfile.name) || 'Athlete';
   const myHandle = ((data.myProfile && data.myProfile.handle) || 'athlete').replace(/^@+/, '');
-  const myInitials = myName.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
-  document.querySelectorAll('.user-av').forEach(el => {
-    if (el.textContent.trim() === 'JK') el.textContent = myInitials;
-  });
   document.querySelectorAll('.sidebar-footer div').forEach(el => {
     if (el.childElementCount !== 0) return;
     const t = el.textContent.trim();
-    if (t === 'JK') el.textContent = myInitials;
-    else if (t === 'Jamie King') el.textContent = myName;
+    if (t === 'Jamie King') el.textContent = myName;
     else if (t === '@jamiek') el.textContent = '@' + myHandle;
   });
 
@@ -490,7 +485,7 @@ function showToast(msg) {
       '<div class="athlete-card" data-sport="' + esc(primary || 'all') + '" data-name="' + esc(a.name || 'Athlete') + '"' +
         ' data-user-id="' + esc(a.id) + '" style="animation-delay:' + (i * 0.03) + 's" onclick="openAthleteModal(\'' + esc(a.id) + '\')">' +
         '<div class="ac-head">' +
-          '<div class="ac-av" style="background:' + av.bg + ';color:' + av.color + '">' + esc(a.initials) + '</div>' +
+          window.avatarHtml(a.avatar_url || null, a.name || 'Athlete', 'ac-av', 'background:' + av.bg + ';color:' + av.color) +
           '<div>' +
             '<div class="ac-name">' + esc(a.name || 'Athlete') + '</div>' +
             '<div class="ac-location">' + (a.location ? '📍 ' + esc(a.location) : '📍 Location not set') + ' · @' + esc(a.handle || 'athlete') + '</div>' +
@@ -632,7 +627,7 @@ function showToast(msg) {
     if (!modal) return;
     const avEl = document.getElementById('modal-av');
     if (avEl) {
-      avEl.textContent = a.initials;
+      avEl.innerHTML = window.avatarHtml.content(a.avatar_url || null, a.name || 'Athlete');
       avEl.style.cssText = 'width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;flex-shrink:0;border:3px solid rgba(255,255,255,.15);position:relative;z-index:1;background:' + av.bg + ';color:' + av.color;
     }
     const nameEl = document.getElementById('modal-name');
@@ -726,7 +721,12 @@ function showToast(msg) {
     };
     var ic = document.createElement('span');
     ic.className = 'nav-icon';
-    ic.textContent = sportIcons[club.sport] || '🏟';
+    if (club.logo_url && window.clubTileHtml) {
+      ic.style.cssText = 'width:18px;height:18px;border-radius:4px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle';
+      ic.innerHTML = window.clubTileHtml.content(club.logo_url, club.sport);
+    } else {
+      ic.textContent = sportIcons[club.sport] || '🏟';
+    }
     item.appendChild(ic);
     item.appendChild(document.createTextNode(' ' + (club.name || 'Club')));
     parent.insertBefore(item, anchor);

@@ -190,7 +190,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
   <div class="topbar-actions">
     <div class="icon-btn" onclick="nav('/notifications')">🔔<div class="notif-dot"></div></div>
     <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
-      <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">JK</div>
+      <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">·</div>
       <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
         <a href="/html/profile" style="display:block;padding:10px 14px;font-size:13px;color:#111827;text-decoration:none">My profile</a>
         <a href="/html/auth/logout" style="display:block;padding:10px 14px;font-size:13px;color:#DC2626;text-decoration:none;border-top:1px solid #f3f4f6">Log out</a>
@@ -214,7 +214,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
   <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">⚙️</span> Settings</div>
   <div class="sidebar-footer">
     <div style="display:flex;align-items:center;gap:9px">
-      <div style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">JK</div>
+      <div class="sf-av" style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">·</div>
       <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div><div style="font-size:10px;color:var(--gray-500)">@jamiek</div></div>
     </div>
   </div>
@@ -273,7 +273,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 
     <!-- Your position banner -->
     <div class="your-banner" id="your-banner">
-      <div class="yb-avatar">JK</div>
+      <div class="yb-avatar">·</div>
       <div class="yb-info">
         <div class="yb-name">Jamie K.</div>
         <div class="yb-sub" id="yb-sport-label">Running · Cycling · Climbing · Advanced</div>
@@ -457,7 +457,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
     var nameEl = document.querySelector('.yb-name');
     if (nameEl && data.profile) nameEl.textContent = data.profile.name || 'You';
     var avEl = document.querySelector('.yb-avatar');
-    if (avEl && data.profile) avEl.textContent = initials(data.profile.name);
+    if (avEl && data.profile && window.avatarHtml) avEl.innerHTML = window.avatarHtml.content(data.profile.avatar_url || null, data.profile.name || 'You');
 
     var me = null;
     for (var i = 0; i < rows.length; i++) { if (myId && rows[i].userId === myId) { me = rows[i]; break; } }
@@ -515,7 +515,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
       return '' +
         '<div class="podium-col fade-in">' +
         '<div class="place-emoji">' + places[i] + '</div>' +
-        '<div class="podium-avatar ' + rankCls[i] + '" style="background:' + colors[i].bg + ';color:' + colors[i].c + '">' + esc(initials(a.name)) + (isYou ? ' *' : '') + '</div>' +
+        window.avatarHtml(a.avatar_url || null, a.name || 'Athlete', 'podium-avatar ' + rankCls[i], 'background:' + colors[i].bg + ';color:' + colors[i].c) +
         '<div class="podium-pname">' + esc(a.name) + (isYou ? ' (you)' : '') + '</div>' +
         '<div class="podium-ploc">' + (a.location ? esc(a.location) : '—') + '</div>' +
         '<div class="podium-pscore">' + val + '</div>' +
@@ -558,7 +558,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
         '<div class="lb-row' + (isYou ? ' is-you' : '') + ' fade-in">' +
         '<div class="lb-rank ' + (rankCls[r._rank] || '') + '">' + r._rank + '</div>' +
         '<div class="lb-athlete">' +
-        '<div class="lb-av" style="background:' + av.bg + ';color:' + av.c + '">' + esc(initials(r.name)) + '</div>' +
+        window.avatarHtml(r.avatar_url || null, r.name || 'Athlete', 'lb-av', 'background:' + av.bg + ';color:' + av.c) +
         '<div>' +
         '<div class="lb-name">' + esc(r.name) + (isYou ? ' <span style="font-size:10px;color:var(--gray-400);font-weight:400">(you)</span>' : '') + '</div>' +
         '<div class="lb-detail">' + detail + '</div>' +
@@ -662,7 +662,12 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
     };
     var ic = document.createElement('span');
     ic.className = 'nav-icon';
-    ic.textContent = sportIcons[club.sport] || '🏟';
+    if (club.logo_url && window.clubTileHtml) {
+      ic.style.cssText = 'width:18px;height:18px;border-radius:4px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle';
+      ic.innerHTML = window.clubTileHtml.content(club.logo_url, club.sport);
+    } else {
+      ic.textContent = sportIcons[club.sport] || '🏟';
+    }
     item.appendChild(ic);
     item.appendChild(document.createTextNode(' ' + (club.name || 'Club')));
     parent.insertBefore(item, anchor);
@@ -674,24 +679,20 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 // name + handle) from the logged-in user's real identity. The server injects
 // window.ARENAS_DATA.profile.{name,handle} (from Supabase auth metadata). We match
 // by text content — inside <header> or .sidebar-footer, a leaf whose trimmed text
-// is "JK" becomes the initials, "Jamie King" the real name, "@jamiek" the
-// real handle — so chrome updates regardless of class. Content elsewhere untouched.
+// is "Jamie King" becomes the real name, "@jamiek" the real handle. The avatars
+// themselves are rendered by the shared identity script (window.avatarHtml).
 (function () {
   var data = window.ARENAS_DATA;
   if (!data || !data.profile || !data.profile.name) return;
   var name = data.profile.name.trim();
   var handle = (data.profile.handle || 'athlete').replace(/^@+/, '');
-  var initials = name.split(/\s+/)
-    .map(function (n) { return n[0]; }).join('').slice(0, 2).toUpperCase();
-  if (!initials) return;
   ['header', '.sidebar-footer'].forEach(function (sel) {
     var root = document.querySelector(sel);
     if (!root) return;
     root.querySelectorAll('div').forEach(function (el) {
       if (el.childElementCount !== 0) return;
       var t = el.textContent.trim();
-      if (t === 'JK') el.textContent = initials;
-      else if (t === 'Jamie King') el.textContent = name;
+      if (t === 'Jamie King') el.textContent = name;
       else if (t === '@jamiek') el.textContent = '@' + handle;
     });
   });

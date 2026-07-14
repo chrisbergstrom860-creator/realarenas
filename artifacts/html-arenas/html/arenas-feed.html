@@ -273,7 +273,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="topbar-actions">
     <div class="notif-btn" onclick="nav('/notifications')">🔔<div class="notif-dot"></div></div>
     <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
-      <div class="user-av user-initials" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">JK</div>
+      <div class="user-av user-initials" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">·</div>
       <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
         <a href="/html/profile" style="display:block;padding:10px 14px;font-size:13px;color:#111827;text-decoration:none">My profile</a>
         <a href="/html/auth/logout" style="display:block;padding:10px 14px;font-size:13px;color:#DC2626;text-decoration:none;border-top:1px solid #f3f4f6">Log out</a>
@@ -298,7 +298,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">⚙️</span> Settings</div>
   <div class="sidebar-footer">
     <div style="display:flex;align-items:center;gap:9px">
-      <div class="user-initials" style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">JK</div>
+      <div class="sf-av" style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">·</div>
       <div><div class="user-name" style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div><div style="font-size:10px;color:var(--gray-500)"><span class="user-handle">@jamiek</span></div></div>
     </div>
   </div>
@@ -325,7 +325,7 @@ button,select,input,textarea{font-family:var(--font)}
     <!-- POST COMPOSER -->
     <div class="post-composer" id="post-composer">
       <div class="composer-top">
-        <div class="composer-av user-initials">JK</div>
+        <div class="composer-av">·</div>
         <textarea
           class="composer-input"
           id="composer-input"
@@ -588,18 +588,15 @@ const FEELING_LABELS = { great: '💪 Feeling great', tired: '😴 Tired', injur
 function postCardHtml(post, opts) {
   const o = opts || {};
   const self = (window.ARENAS_DATA && window.ARENAS_DATA.profile) || {};
-  const selfInitials = self.name
-    ? self.name.split(/\s+/).map(n => n[0]).join('').slice(0, 2).toUpperCase()
-    : 'JK';
-  const name = o.name || self.name || 'Jamie King';
-  const handle = o.handle || self.handle || 'jamiek';
-  const initials = o.initials || selfInitials;
+  const name = o.name || self.name || 'Athlete';
+  const handle = o.handle || self.handle || 'athlete';
+  const avatarUrl = ('avatarUrl' in o) ? o.avatarUrl : (self.avatar_url || null);
   const avStyle = o.avStyle || '';
   const meta = o.meta || ('Just now · @' + handle);
   return `
     <div class="post-note-card">
       <div class="pn-head">
-        <div class="pn-av"${avStyle ? ' style="' + avStyle + '"' : ''}>${escapeHtml(initials)}</div>
+        ${window.avatarHtml(avatarUrl, name, 'pn-av', avStyle)}
         <div>
           <div class="pn-name">${escapeHtml(name)}</div>
           <div class="pn-meta">${escapeHtml(meta)}</div>
@@ -667,11 +664,10 @@ function renderInjectedPosts() {
     const isOwn = post.user_id === data.userId;
     const name = post.authorName || 'Athlete';
     const handle = post.authorHandle || 'athlete';
-    const initials = name.split(/\s+/).map(n => n[0]).join('').slice(0, 2).toUpperCase();
     card.innerHTML = postCardHtml(post, {
       name,
       handle,
-      initials,
+      avatarUrl: post.authorAvatarUrl || null,
       avStyle: isOwn
         ? 'background:var(--yellow);color:var(--gray-900)'
         : 'background:var(--gray-200);color:var(--gray-700)',
@@ -731,7 +727,6 @@ function renderInjectedActivities() {
     const author = a.author || { name: 'Athlete', handle: 'athlete' };
     const name = author.name || 'Athlete';
     const handle = author.handle || 'athlete';
-    const initials = name.split(/\s+/).map(function(n){ return n[0]; }).join('').slice(0, 2).toUpperCase();
     const icon = sportIcons[a.sport] || '🏃';
     const colorStyle = sportColors[a.sport] || '';
     const sportLabel = a.sport ? (a.sport.charAt(0).toUpperCase() + a.sport.slice(1)) : 'Activity';
@@ -743,7 +738,7 @@ function renderInjectedActivities() {
     wrap.innerHTML = '' +
       '<div class="post-note-card" style="padding:16px 18px">' +
         '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">' +
-          '<div style="width:36px;height:36px;border-radius:50%;background:var(--gray-200);color:var(--gray-700);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">' + escFeedAct(initials) + '</div>' +
+          window.avatarHtml(author.avatar_url || null, name, '', 'width:36px;height:36px;border-radius:50%;background:var(--gray-200);color:var(--gray-700);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0') +
           '<div style="flex:1;min-width:0">' +
             '<div style="font-size:13px;font-weight:600;color:var(--gray-900)">' + escFeedAct(name) + ' <span style="font-weight:400;color:var(--gray-400)">logged an activity</span></div>' +
             '<div style="font-size:11px;color:var(--gray-400)">' + getTimeAgo(new Date(a.date || a.created_at)) + ' · @' + escFeedAct(handle) + '</div>' +
@@ -774,7 +769,6 @@ function renderFollowingRsvps() {
     const author = r.author || { name:'Athlete', handle:'athlete' };
     const name = author.name || 'Athlete';
     const handle = author.handle || 'athlete';
-    const initials = name.split(/\s+/).map(function (n) { return n[0]; }).join('').slice(0, 2).toUpperCase();
     const ev = r.event || {};
     const icon = sportIcons[ev.sport] || '📅';
     const when = ev.date ? new Date(ev.date).toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'long' }) : '';
@@ -786,7 +780,7 @@ function renderFollowingRsvps() {
     wrap.innerHTML = '' +
       '<div class="post-note-card" style="padding:16px 18px">' +
         '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">' +
-          '<div style="width:36px;height:36px;border-radius:50%;background:var(--gray-200);color:var(--gray-700);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0">' + escFeedAct(initials) + '</div>' +
+          window.avatarHtml(author.avatar_url || null, name, '', 'width:36px;height:36px;border-radius:50%;background:var(--gray-200);color:var(--gray-700);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0') +
           '<div style="flex:1;min-width:0">' +
             '<div style="font-size:13px;font-weight:600;color:var(--gray-900)">' + escFeedAct(name) + ' <span style="font-weight:400;color:var(--gray-400)">is going to an event</span></div>' +
             '<div style="font-size:11px;color:var(--gray-400)">' + ago + ' · @' + escFeedAct(handle) + '</div>' +
@@ -846,18 +840,18 @@ renderFeedEmptyState();
 </script>
 <script>
 // Wire the logged-in user's real identity into the feed (server injects
-// window.ARENAS_DATA). Replaces the hardcoded "Jamie King" / "JK" placeholders.
+// window.ARENAS_DATA). Replaces the hardcoded placeholder identity markup.
 (function () {
   var data = window.ARENAS_DATA;
   if (!data || !data.profile) return;
   var name = data.profile.name || 'Athlete';
   var handle = data.profile.handle || 'athlete';
-  var initials = name.split(/\s+/).map(function (n) { return n[0]; }).join('').slice(0, 2).toUpperCase();
   document.querySelectorAll('.user-name').forEach(function (el) { el.textContent = name; });
-  document.querySelectorAll('.user-initials, .user-av').forEach(function (el) {
-    if (el.textContent.trim() === 'JK') el.textContent = initials;
-  });
   document.querySelectorAll('.user-handle').forEach(function (el) { el.textContent = '@' + handle; });
+  var composerAv = document.querySelector('.composer-av');
+  if (composerAv && window.avatarHtml) {
+    composerAv.innerHTML = window.avatarHtml.content(data.profile.avatar_url || null, name);
+  }
 })();
 </script>
 <script>
@@ -912,7 +906,12 @@ renderFeedEmptyState();
     };
     var ic = document.createElement('span');
     ic.className = 'nav-icon';
-    ic.textContent = sportIcons[club.sport] || '🏟';
+    if (club.logo_url && window.clubTileHtml) {
+      ic.style.cssText = 'width:18px;height:18px;border-radius:4px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle';
+      ic.innerHTML = window.clubTileHtml.content(club.logo_url, club.sport);
+    } else {
+      ic.textContent = sportIcons[club.sport] || '🏟';
+    }
     item.appendChild(ic);
     item.appendChild(document.createTextNode(' ' + (club.name || 'Club')));
     parent.insertBefore(item, anchor);
@@ -984,7 +983,7 @@ renderFeedEmptyState();
     list.innerHTML = sugg.map(function (u, i) {
       var pal = palette[i % palette.length].split(';');
       return '<div class="follow-item">'
-        + '<div class="fi-av" style="background:' + pal[0] + ';color:' + pal[1] + '">' + escFeedAct(u.initials || 'A') + '</div>'
+        + window.avatarHtml(u.avatar_url || null, u.name || 'Athlete', 'fi-av', 'background:' + pal[0] + ';color:' + pal[1])
         + '<div style="flex:1;min-width:0">'
         + '<div class="fi-name">' + escFeedAct(u.name || 'Athlete') + '</div>'
         + (u.meta ? '<div class="fi-meta">' + escFeedAct(u.meta) + '</div>' : '')

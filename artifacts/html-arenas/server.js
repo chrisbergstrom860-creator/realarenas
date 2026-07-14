@@ -551,7 +551,8 @@ function displayFromUser(user) {
   const emailLocal = user && user.email ? user.email.split('@')[0] : null;
   return {
     name: meta.name || emailLocal || 'Athlete',
-    handle: meta.handle || emailLocal || 'athlete'
+    handle: meta.handle || emailLocal || 'athlete',
+    avatar_url: meta.avatar_url || null
   };
 }
 
@@ -648,8 +649,9 @@ const MANAGED_CLUBS_MENU_SCRIPT = `<script>(function buildManagedClubsMenu(){
       item.style.cssText = 'display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer';
       item.onclick = function(){ if (typeof nav === 'function') nav('/clubs/dashboard?club=' + encodeURIComponent(c.id)); };
       var ic = document.createElement('div');
-      ic.style.cssText = 'width:26px;height:26px;border-radius:7px;background:' + (bgs[c.sport] || '#FFF7ED') + ';display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0';
-      ic.textContent = icons[c.sport] || '🏟';
+      ic.style.cssText = 'width:26px;height:26px;border-radius:7px;background:' + (bgs[c.sport] || '#FFF7ED') + ';display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;overflow:hidden';
+      if (window.clubTileHtml) { ic.innerHTML = window.clubTileHtml.content(c.logo_url || null, c.sport); }
+      else { ic.textContent = icons[c.sport] || '🏟'; }
       item.appendChild(ic);
       var mid = document.createElement('div');
       mid.style.cssText = 'flex:1;min-width:0';
@@ -673,6 +675,69 @@ const MANAGED_CLUBS_MENU_SCRIPT = `<script>(function buildManagedClubsMenu(){
     dv.style.cssText = 'height:0.5px;background:var(--gray-200);margin:4px 0';
     section.appendChild(dv);
     menu.insertBefore(section, menu.firstChild);
+  } catch (e) {}
+})();</script>`;
+
+// ── SHARED AVATAR / CLUB TILE HELPERS ──
+// One rendering source of truth for every avatar circle and club tile in the
+// app. Injected into <head> (before any page inline script runs) so page
+// renderers can call window.avatarHtml/clubTileHtml directly.
+//   avatarHtml(url, name, sizeClass[, style])  → full wrapper div
+//   clubTileHtml(url, sport, sizeClass[, style]) → full wrapper div
+//   avatarHtml.content(url, name) / clubTileHtml.content(url, sport)
+//     → inner markup only, for DOM-built sites that already own the wrapper
+//       element (topbar .user-av keeps its inline onclick, sidebar IIFE, etc.)
+// Markup pattern: hidden <span> fallback (initials or sport emoji) + an <img>
+// that fills the wrapper (object-fit:cover, border-radius:inherit). On load
+// error the img reveals the span and removes itself; with no URL only the
+// fallback renders — so every surface keeps its exact current look as the
+// fallback. All interpolated values are escaped.
+const AVATAR_HELPERS_SCRIPT = `<script>(function arenasAvatarHelpers(){
+  var esc = function (s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); };
+  window.ARENAS_SPORT_ICONS = { running:'🏃', cycling:'🚴', climbing:'🧗', swimming:'🏊', football:'⚽', weightlifting:'🏋️', hiking:'🥾', yoga:'🧘', triathlon:'🔱' };
+  var IMG_STYLE = 'display:block;width:100%;height:100%;object-fit:cover;border-radius:inherit';
+  var ONERR = "var s=this.previousElementSibling;if(s)s.style.display='';this.remove()";
+  function inner(url, fallback) {
+    if (!url) return esc(fallback);
+    return '<span style="display:none">' + esc(fallback) + '</span>'
+      + '<img src="' + esc(url) + '" alt="" style="' + IMG_STYLE + '" onerror="' + ONERR + '">';
+  }
+  function initialsOf(name) {
+    var t = String(name || '').trim();
+    if (!t) return 'A';
+    return t.split(/\\s+/).map(function (n) { return n.charAt(0); }).join('').slice(0, 2).toUpperCase() || 'A';
+  }
+  window.avatarHtml = function (url, name, sizeClass, style) {
+    return '<div class="' + esc(sizeClass || '') + '"' + (style ? ' style="' + esc(style) + '"' : '') + '>' + inner(url, initialsOf(name)) + '</div>';
+  };
+  window.avatarHtml.content = function (url, name) { return inner(url, initialsOf(name)); };
+  window.clubTileHtml = function (url, sport, sizeClass, style) {
+    return '<div class="' + esc(sizeClass || '') + '"' + (style ? ' style="' + esc(style) + '"' : '') + '>' + inner(url, window.ARENAS_SPORT_ICONS[sport] || '🏟') + '</div>';
+  };
+  window.clubTileHtml.content = function (url, sport) { return inner(url, window.ARENAS_SPORT_ICONS[sport] || '🏟'); };
+})();</script>`;
+function injectAvatarHelpers(html) {
+  if (html.indexOf('arenasAvatarHelpers') !== -1) return html;
+  return html.replace('</head>', AVATAR_HELPERS_SCRIPT + '</head>');
+}
+
+// Shared topbar/sidebar-footer identity renderer. Replaces the retired per-page
+// per-page hardcoded-initials rewrite pattern: reads the viewer's profile (name +
+// avatar_url now in displayFromUser output) from ARENAS_DATA (INVITE_DATA on
+// the invite console) and renders the topbar avatar ([onclick*="userMenu"],
+// same selector AVATAR_MENU_SCRIPT uses — the element keeps its inline onclick
+// because only innerHTML changes) and every standardized sidebar-footer .sf-av.
+// Injected at body end so it runs after the static markup exists; no-ops
+// gracefully on pages without profile data (e.g. servePlain fallbacks).
+const TOPBAR_IDENTITY_SCRIPT = `<script>(function arenasTopbarIdentity(){
+  try {
+    var d = window.ARENAS_DATA || window.INVITE_DATA;
+    var p = d && d.profile;
+    if (!p || !window.avatarHtml) return;
+    var content = window.avatarHtml.content(p.avatar_url || null, p.name || 'Athlete');
+    var top = document.querySelector('[onclick*="userMenu"]');
+    if (top) top.innerHTML = content;
+    document.querySelectorAll('.sf-av').forEach(function (el) { el.innerHTML = content; });
   } catch (e) {}
 })();</script>`;
 
@@ -736,7 +801,12 @@ function injectNotificationsPanel(html) {
   // every shell page that has the avatar menu — including the club dashboard,
   // whose notifications panel is already inline (so the bell block below no-ops
   // there, but the avatar fix still needs to apply).
-  let out = injectAvatarMenu(html);
+  let out = injectAvatarHelpers(injectAvatarMenu(html));
+  // Shared topbar/sidebar-footer identity (photo avatar or initials) — every
+  // shell page gets it; no-ops without profile data.
+  if (out.indexOf('arenasTopbarIdentity') === -1) {
+    out = out.replace('</body>', TOPBAR_IDENTITY_SCRIPT + '</body>');
+  }
   if (out.indexOf('id="notifications-panel"') === -1) {
     const withBell = out.replace(
       /<div class="(notif-btn|icon-btn)" onclick="nav\('\/notifications'\)">(.*?)<div class="notif-dot"><\/div><\/div>/,
@@ -1042,7 +1112,8 @@ app.get(BASE + '/api/posts', requireAuth, async (req, res) => {
         const emailLocal = user.email ? user.email.split('@')[0] : null;
         profileMap[id] = {
           name: meta.name || emailLocal || 'Athlete',
-          handle: meta.handle || emailLocal || 'athlete'
+          handle: meta.handle || emailLocal || 'athlete',
+          avatar_url: meta.avatar_url || null
         };
       }
     } catch (err) {
@@ -1564,6 +1635,7 @@ async function buildUserProfileMap(ids) {
         map[id] = {
           name: disp.name,
           handle: disp.handle,
+          avatar_url: disp.avatar_url || null,
           sports: Array.isArray(m.sports) ? m.sports : [],
           location: m.location || null
         };
@@ -1594,6 +1666,7 @@ app.get(BASE + '/api/leaderboard/platform', requireAuth, async (req, res) => {
         userId: u.id,
         name: disp.name,
         handle: disp.handle,
+        avatar_url: disp.avatar_url || null,
         sports: Array.isArray(m.sports) ? m.sports : [],
         location: m.location || null,
         points: calculatePoints(acts),
@@ -1627,7 +1700,7 @@ app.get(BASE + '/api/leaderboard/following', requireAuth, async (req, res) => {
       const p = profileMap[id] || { name: 'Athlete', handle: 'athlete', sports: [], location: null };
       const acts = byUser[id] || [];
       return {
-        userId: id, name: p.name, handle: p.handle, sports: p.sports, location: p.location,
+        userId: id, name: p.name, handle: p.handle, avatar_url: p.avatar_url || null, sports: p.sports, location: p.location,
         points: calculatePoints(acts), activityCount: acts.length, isMe: id === req.user.id
       };
     })
@@ -1665,7 +1738,7 @@ app.get(BASE + '/api/leaderboard/club', requireAuth, async (req, res) => {
       const p = profileMap[id] || { name: 'Member', handle: 'member', sports: [], location: null };
       const acts = byUser[id] || [];
       return {
-        userId: id, name: p.name, handle: p.handle, sports: p.sports, location: p.location,
+        userId: id, name: p.name, handle: p.handle, avatar_url: p.avatar_url || null, sports: p.sports, location: p.location,
         points: calculatePoints(acts), activityCount: acts.length, isMe: id === req.user.id
       };
     })
@@ -1707,7 +1780,7 @@ app.get(BASE + '/api/leaderboard/club-dashboard', requireAuth, async (req, res) 
     const recentUserIds = new Set((recent || []).filter((a) => new Date(a.date) >= fiveDaysAgo).map((a) => a.user_id));
     const atRisk = memberIds
       .filter((id) => !recentUserIds.has(id) && id !== req.user.id) // exclude the viewing coach (matches the nudge recipient set)
-      .map((id) => ({ userId: id, name: (profileMap[id] && profileMap[id].name) || 'Member', daysInactive: 5 }));
+      .map((id) => ({ userId: id, name: (profileMap[id] && profileMap[id].name) || 'Member', avatar_url: (profileMap[id] && profileMap[id].avatar_url) || null, daysInactive: 5 }));
 
     const stats = memberIds.map((id) => {
       const a = byUser[id] || [];
@@ -1716,6 +1789,7 @@ app.get(BASE + '/api/leaderboard/club-dashboard', requireAuth, async (req, res) 
         userId: id,
         name: (profileMap[id] && profileMap[id].name) || 'Member',
         handle: (profileMap[id] && profileMap[id].handle) || 'member',
+        avatar_url: (profileMap[id] && profileMap[id].avatar_url) || null,
         totalKm,
         sessionCount: a.length
       };
@@ -1923,6 +1997,7 @@ app.get(BASE + '/api/clubs/:clubId/training-load', requireAuth, async (req, res)
         userId: id,
         name: prof.name || 'Member',
         handle: prof.handle || 'member',
+        avatar_url: prof.avatar_url || null,
         sports: Array.isArray(prof.sports) ? prof.sports : [],
         weeklyHours, thisWeek, avg, trend, status,
         sessionsThisWeek: thisWeekActs.length,
@@ -2072,6 +2147,7 @@ app.get(BASE + '/api/clubs/:clubId/recent-activity', requireAuth, async (req, re
       ...recentJoins.map((m) => m.user_id)
     ]);
     const nameOf = (id) => (nameMap[id] && nameMap[id].name) || 'A member';
+    const avatarOf = (id) => (nameMap[id] && nameMap[id].avatar_url) || null;
 
     const sportLabels = {
       running: 'run', cycling: 'ride', climbing: 'climb', swimming: 'swim',
@@ -2084,6 +2160,7 @@ app.get(BASE + '/api/clubs/:clubId/recent-activity', requireAuth, async (req, re
       feed.push({
         type: 'activity',
         name: nameOf(a.user_id),
+        avatarUrl: avatarOf(a.user_id),
         text: `logged a ${dist}${sportLabels[a.sport] || a.sport || 'session'}`,
         timestamp: a.date
       });
@@ -2092,6 +2169,7 @@ app.get(BASE + '/api/clubs/:clubId/recent-activity', requireAuth, async (req, re
       feed.push({
         type: 'rsvp',
         name: nameOf(r.user_id),
+        avatarUrl: avatarOf(r.user_id),
         text: `RSVP'd going to ${eventTitleMap[r.event_id] || 'an event'}`,
         timestamp: r.created_at
       });
@@ -2100,6 +2178,7 @@ app.get(BASE + '/api/clubs/:clubId/recent-activity', requireAuth, async (req, re
       feed.push({
         type: 'join',
         name: nameOf(m.user_id),
+        avatarUrl: avatarOf(m.user_id),
         text: 'joined the club',
         timestamp: m.created_at
       });
@@ -2170,6 +2249,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
         userId: p.user_id,
         name: prof(p.user_id).name || 'Member',
         handle: prof(p.user_id).handle || 'member',
+        avatarUrl: prof(p.user_id).avatar_url || null,
         role: roleMap[p.user_id],
         content: p.content,
         sport: p.sport,
@@ -2193,6 +2273,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
         userId: a.user_id,
         name: prof(a.user_id).name || 'Member',
         handle: prof(a.user_id).handle || 'member',
+        avatarUrl: prof(a.user_id).avatar_url || null,
         content: a.notes || a.title || '',
         sport: a.sport,
         distance: a.distance,
@@ -2234,6 +2315,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
         userId: r.user_id,
         name: prof(r.user_id).name || 'Member',
         handle: prof(r.user_id).handle || 'member',
+        avatarUrl: prof(r.user_id).avatar_url || null,
         eventTitle: event.title,
         eventDate: event.date,
         eventLocation: event.location,
@@ -2253,6 +2335,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
           userId: m.user_id,
           name: prof(m.user_id).name || 'New member',
           handle: prof(m.user_id).handle || 'member',
+          avatarUrl: prof(m.user_id).avatar_url || null,
           sports: prof(m.user_id).sports || [],
           timestamp: m.created_at
         });
@@ -2298,6 +2381,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
             userId: participant.user_id,
             name: prof(participant.user_id).name || 'Member',
             handle: prof(participant.user_id).handle || 'member',
+            avatarUrl: prof(participant.user_id).avatar_url || null,
             challengeTitle: challenge.title,
             goalTarget: challenge.goal_target,
             goalUnit: challenge.goal_unit,
@@ -3201,6 +3285,7 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
           const fNameMap = await buildUserDisplayMap(Object.keys(byUser));
           friendsInChallenges = Object.keys(byUser).map((uid) => ({
             name: (fNameMap[uid] || {}).name || 'Athlete',
+            avatar_url: (fNameMap[uid] || {}).avatar_url || null,
             sport: byUser[uid][0].sport,
             challengeTitle: byUser[uid][0].title,
             moreCount: byUser[uid].length - 1
@@ -3364,6 +3449,7 @@ app.get(BASE + '/api/challenges/:id/leaderboard', requireAuth, async (req, res) 
         userId: participant.user_id,
         name: disp.name || 'Athlete',
         handle: disp.handle || 'athlete',
+        avatar_url: disp.avatar_url || null,
         progress,
         percentage: target ? Math.min(100, Math.round((progress / target) * 100)) : 0
       });
@@ -3546,7 +3632,8 @@ async function buildFeedPosts(limit, currentUserId) {
         const emailLocal = user.email ? user.email.split('@')[0] : null;
         profileMap[id] = {
           name: meta.name || emailLocal || 'Athlete',
-          handle: meta.handle || emailLocal || 'athlete'
+          handle: meta.handle || emailLocal || 'athlete',
+          avatar_url: meta.avatar_url || null
         };
       }
     } catch (err) {
@@ -3571,6 +3658,7 @@ async function buildFeedPosts(limit, currentUserId) {
     user_id: p.user_id,
     authorName: (profileMap[p.user_id] && profileMap[p.user_id].name) || 'Athlete',
     authorHandle: (profileMap[p.user_id] && profileMap[p.user_id].handle) || 'athlete',
+    authorAvatarUrl: (profileMap[p.user_id] && profileMap[p.user_id].avatar_url) || null,
     likeCount: (p.post_likes && p.post_likes[0] && p.post_likes[0].count) || 0,
     commentCount: (p.post_comments && p.post_comments[0] && p.post_comments[0].count) || 0,
     userLiked: likedSet.has(p.id)
@@ -3590,7 +3678,7 @@ async function getSidebarClubs(userId) {
   try {
     const { data } = await supabaseAdmin
       .from('memberships')
-      .select('role, clubs:club_id (id, name, handle, sport)')
+      .select('role, clubs:club_id (id, name, handle, sport, logo_url)')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
     return (data || []).map(m => {
@@ -3706,7 +3794,7 @@ async function buildFeedSidebar(userId) {
       }
       if (meta.location) metaBits.push(meta.location);
       if (clubMateIds.has(u.id)) metaBits.push('Club-mate');
-      return { id: u.id, name: disp.name, initials, meta: metaBits.join(' · ') };
+      return { id: u.id, name: disp.name, initials, avatar_url: disp.avatar_url || null, meta: metaBits.join(' · ') };
     });
   } catch (err) {
     console.log('Feed sidebar error:', err.message);
@@ -3781,6 +3869,7 @@ app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
           id: u.id,
           name: disp.name,
           handle: disp.handle,
+          avatar_url: disp.avatar_url || null,
           bio: meta.bio || null,
           location: meta.location || null,
           sports: Array.isArray(meta.sports) ? meta.sports : [],
@@ -4182,7 +4271,8 @@ app.get(BASE + '/api/events/:id/rsvps', requireAuth, async (req, res) => {
       status: r.status,
       userId: r.user_id,
       name: (nameMap[r.user_id] || {}).name || 'Member',
-      handle: (nameMap[r.user_id] || {}).handle || 'member'
+      handle: (nameMap[r.user_id] || {}).handle || 'member',
+      avatar_url: (nameMap[r.user_id] || {}).avatar_url || null
     }));
   res.json({ event, rsvps });
 });
@@ -4240,7 +4330,8 @@ app.get(BASE + '/events', requirePageAuth, async (req, res) => {
     const followingList = followingIds.map(id => ({
       id,
       name: (nameMap[id] || {}).name || 'Athlete',
-      handle: (nameMap[id] || {}).handle || 'athlete'
+      handle: (nameMap[id] || {}).handle || 'athlete',
+      avatar_url: (nameMap[id] || {}).avatar_url || null
     }));
     const clubs = await getSidebarClubs(userId);
     const eventData = { userId, profile: displayFromUser(req.user), following: followingList, clubs };
@@ -4325,7 +4416,7 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
       supabaseAdmin.from('memberships').select('role, clubs (name, handle)').eq('user_id', req.user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
       // All clubs the viewer belongs to (My Clubs tab). No `status` column on
       // memberships — every row is treated as an active membership.
-      supabaseAdmin.from('memberships').select('role, clubs:club_id (id, name, handle, sport, city)').eq('user_id', req.user.id).order('created_at', { ascending: false }),
+      supabaseAdmin.from('memberships').select('role, clubs:club_id (id, name, handle, sport, city, logo_url)').eq('user_id', req.user.id).order('created_at', { ascending: false }),
       // Raw follow edges (no `created_at` ordering — not guaranteed on this table).
       supabaseAdmin.from('follows').select('following_id').eq('follower_id', req.user.id),
       supabaseAdmin.from('follows').select('follower_id').eq('following_id', req.user.id),
@@ -5271,7 +5362,7 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
         } catch (err) {
           // Ignore individual lookup failures; fall back to defaults.
         }
-        return { user_id: m.user_id, role: m.role, joined_at: m.created_at, name: display.name, handle: display.handle };
+        return { user_id: m.user_id, role: m.role, joined_at: m.created_at, name: display.name, handle: display.handle, avatar_url: display.avatar_url || null };
       }));
 
       // Pending invitations for the overview "needs attention" panel + members
@@ -5334,7 +5425,8 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
             .slice(0, 6)
             .map(r => ({
               name: (nameMap[r.user_id] && nameMap[r.user_id].name) || 'Member',
-              handle: (nameMap[r.user_id] && nameMap[r.user_id].handle) || 'member'
+              handle: (nameMap[r.user_id] && nameMap[r.user_id].handle) || 'member',
+              avatar_url: (nameMap[r.user_id] && nameMap[r.user_id].avatar_url) || null
             }));
           const attendancePct = memberCount > 0 ? Math.round((goingCount / memberCount) * 100) : 0;
           const eventTime = new Date(event.date).getTime();
@@ -5422,6 +5514,7 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
               userId: uid,
               name: disp.name || 'Athlete',
               handle: disp.handle || 'athlete',
+              avatar_url: disp.avatar_url || null,
               progress,
               pct: target ? Math.min(100, Math.round((progress / target) * 100)) : 0,
               achieved: target > 0 && progress >= target
@@ -5518,7 +5611,7 @@ app.get(BASE + '/clubs/member/:clubId', requirePageAuth, async (req, res) => {
     // Confirm the viewer is a member of the requested club before showing it.
     const { data: membership } = await supabaseAdmin
       .from('memberships')
-      .select('role, clubs:club_id (id, name, handle, sport)')
+      .select('role, clubs:club_id (id, name, handle, sport, logo_url)')
       .eq('user_id', req.user.id)
       .eq('club_id', req.params.clubId)
       .maybeSingle();
@@ -5575,7 +5668,7 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
     // Club details.
     const { data: club } = await supabaseAdmin
       .from('clubs')
-      .select('id, name, handle, sport, city')
+      .select('id, name, handle, sport, city, logo_url')
       .eq('id', clubId)
       .maybeSingle();
 
@@ -5599,6 +5692,7 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
       userId: m.user_id,
       name: nameOf(m.user_id),
       handle: handleOf(m.user_id),
+      avatar_url: (profileMap[m.user_id] && profileMap[m.user_id].avatar_url) || null,
       role: m.role,
       isMe: m.user_id === userId
     })).sort((a, b) => ((roleOrder[a.role] ?? 3) - (roleOrder[b.role] ?? 3)) || a.name.localeCompare(b.name));
@@ -5623,6 +5717,7 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
       return {
         id: a.id,
         coachName: nameOf(a.user_id),
+        coachAvatarUrl: (profileMap[a.user_id] && profileMap[a.user_id].avatar_url) || null,
         role: roleOf(a.user_id),
         content: a.content,
         createdAt: a.created_at,
@@ -5770,7 +5865,7 @@ app.get(BASE + '/clubs/invite', requirePageAuth, async (req, res) => {
 
     const { data: membership } = await supabaseAdmin
       .from('memberships')
-      .select('club_id, role, clubs (id, name, handle, sport, city)')
+      .select('club_id, role, clubs (id, name, handle, sport, city, logo_url)')
       .eq('user_id', req.user.id)
       .in('role', ['admin', 'coach'])
       .order('created_at', { ascending: false })
@@ -5819,6 +5914,7 @@ app.get(BASE + '/clubs/invite', requirePageAuth, async (req, res) => {
         joined_at: m.created_at,
         name: (nameMap[m.user_id] && nameMap[m.user_id].name) || 'Member',
         handle: (nameMap[m.user_id] && nameMap[m.user_id].handle) || 'member',
+        avatar_url: (nameMap[m.user_id] && nameMap[m.user_id].avatar_url) || null,
         isSelf: m.user_id === req.user.id
       })),
       baseUrl: publicBaseUrl(req)
@@ -6673,6 +6769,7 @@ app.get(BASE + '/api/clubs/:clubId/members', requireAuth, async (req, res) => {
         joined_at: m.created_at,
         name: (nameMap[m.user_id] && nameMap[m.user_id].name) || 'Member',
         handle: (nameMap[m.user_id] && nameMap[m.user_id].handle) || 'member',
+        avatar_url: (nameMap[m.user_id] && nameMap[m.user_id].avatar_url) || null,
         isSelf: m.user_id === req.user.id
       }))
     });
@@ -6753,7 +6850,7 @@ app.post(BASE + '/api/clubs/:clubId/join-link', requireAuth, async (req, res) =>
 app.get(BASE + '/join/:token', async (req, res) => {
   const render = (state) => {
     try {
-      const html = injectNamedData(fs.readFileSync(path.join(HTML, 'arenas-club-join.html'), 'utf8'), 'JOIN_DATA', state);
+      const html = injectAvatarHelpers(injectNamedData(fs.readFileSync(path.join(HTML, 'arenas-club-join.html'), 'utf8'), 'JOIN_DATA', state));
       res.type('html').send(html);
     } catch (err) {
       res.status(500).send('Unable to load invite');
@@ -6763,7 +6860,7 @@ app.get(BASE + '/join/:token', async (req, res) => {
     if (!supabaseAdmin) return render({ status: 'error', baseUrl: publicBaseUrl(req) });
     const { data: invite } = await supabaseAdmin
       .from('club_invites')
-      .select('*, clubs (id, name, handle, sport, city)')
+      .select('*, clubs (id, name, handle, sport, city, logo_url)')
       .eq('token', req.params.token)
       .maybeSingle();
     if (!invite) return render({ status: 'invalid', baseUrl: publicBaseUrl(req) });

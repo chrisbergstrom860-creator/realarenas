@@ -323,7 +323,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="topbar-actions">
     <div class="notif-btn" onclick="nav('/notifications')">🔔<div class="notif-dot"></div></div>
     <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
-      <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">JK</div>
+      <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">·</div>
       <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
         <a href="/html/profile" style="display:block;padding:10px 14px;font-size:13px;color:#111827;text-decoration:none">My profile</a>
         <a href="/html/auth/logout" style="display:block;padding:10px 14px;font-size:13px;color:#DC2626;text-decoration:none;border-top:1px solid #f3f4f6">Log out</a>
@@ -348,7 +348,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="nav-item" onclick="setTab('settings')"><span class="nav-icon">⚙️</span> Settings</div>
   <div class="sidebar-footer">
     <div class="sf-row">
-      <div style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">JK</div>
+      <div class="sf-av" style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">·</div>
       <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div><div style="font-size:10px;color:var(--gray-500)">@jamiek</div></div>
     </div>
   </div>
@@ -364,7 +364,7 @@ button,select,input,textarea{font-family:var(--font)}
     <div class="hero-bg-grid"></div>
     <div class="hero-inner">
       <div class="hero-av-wrap">
-        <div class="hero-av" onclick="openModal('edit-profile')">JK</div>
+        <div class="hero-av" onclick="openModal('edit-profile')">·</div>
         <div class="hero-av-edit" onclick="openModal('edit-profile')">✏️</div>
         <div class="hero-online" title="Online now"></div>
       </div>
@@ -703,7 +703,7 @@ button,select,input,textarea{font-family:var(--font)}
     <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Edit profile</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
     <div class="modal-body">
       <div style="display:flex;align-items:center;gap:14px;padding:12px;background:var(--gray-50);border-radius:var(--radius)">
-        <div id="ep-avatar-preview" style="width:56px;height:56px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--gray-900);overflow:hidden;flex-shrink:0">JK</div>
+        <div id="ep-avatar-preview" style="width:56px;height:56px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--gray-900);overflow:hidden;flex-shrink:0">·</div>
         <div style="flex:1;min-width:0">
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button id="ep-avatar-upload" class="btn btn-ghost btn-sm" type="button">Upload photo</button>
@@ -733,8 +733,8 @@ button,select,input,textarea{font-family:var(--font)}
     <div class="modal-header"><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Comments</div><button class="modal-close" onclick="closeModals()">✕</button></div>
     <div class="modal-body">
       <div style="display:flex;gap:9px"><div style="width:28px;height:28px;border-radius:50%;background:#FEF9C3;color:#854D0E;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0">SL</div><div style="background:var(--gray-50);border-radius:0 10px 10px 10px;padding:9px 12px;font-size:13px;color:var(--gray-700)">Great effort Jamie! What's your fuelling strategy on long runs?</div></div>
-      <div style="display:flex;gap:9px"><div style="width:28px;height:28px;border-radius:50%;background:#FFF7ED;color:#9A3412;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0">JK</div><div style="background:var(--yellow-light);border-radius:10px 10px 10px 0;padding:9px 12px;font-size:13px;color:var(--gray-700)">Thanks Sofia! Gel at km 8 and 16. Trying caffeine this Sunday.</div></div>
-      <div style="display:flex;gap:9px;margin-top:4px"><div style="width:28px;height:28px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:var(--gray-900);flex-shrink:0">JK</div><input type="text" placeholder="Add a comment…" style="flex:1;padding:8px 12px;border:var(--border);border-radius:20px;font-size:13px;outline:none"></div>
+      <div style="display:flex;gap:9px"><div style="width:28px;height:28px;border-radius:50%;background:#FFF7ED;color:#9A3412;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0">·</div><div style="background:var(--yellow-light);border-radius:10px 10px 10px 0;padding:9px 12px;font-size:13px;color:var(--gray-700)">Thanks Sofia! Gel at km 8 and 16. Trying caffeine this Sunday.</div></div>
+      <div style="display:flex;gap:9px;margin-top:4px"><div style="width:28px;height:28px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:var(--gray-900);flex-shrink:0">·</div><input type="text" placeholder="Add a comment…" style="flex:1;padding:8px 12px;border:var(--border);border-radius:20px;font-size:13px;outline:none"></div>
     </div>
     <div class="modal-footer"><button class="btn btn-primary" style="flex:1;justify-content:center" onclick="closeModals();showToast('Comment posted!')">Post</button><button class="btn btn-ghost" onclick="closeModals()">Close</button></div>
   </div>
@@ -835,7 +835,7 @@ document.getElementById('htab-overview').classList.add('active');
 <script>
 // Wire the logged-in user's real profile data into the page. The /profile route
 // injects window.ARENAS_DATA. This replaces the hardcoded "Jamie King" /
-// "@jamiek" / "JK" placeholders with live identity, counts, sports, and posts.
+// "@jamiek" placeholders with live identity, counts, sports, and posts.
 // There is no profiles table, so name/handle/bio/location come from auth
 // metadata; counts and posts are queried from the database.
 (function () {
@@ -851,15 +851,17 @@ document.getElementById('htab-overview').classList.add('active');
     document.querySelectorAll(sel).forEach(function (el) { el.textContent = val; });
   }
 
-  // Name + avatar initials (hero, topbar)
+  // Name + hero avatar (photo when present, initials fallback). The topbar
+  // avatar and sidebar-footer .sf-av are rendered by the shared identity script.
   setText('.hero-name', name);
-  setText('.hero-av', initials);
-  setText('.user-av', initials);
+  document.querySelectorAll('.hero-av').forEach(function (el) {
+    if (window.avatarHtml) el.innerHTML = window.avatarHtml.content(p.avatar_url || null, name);
+    else el.textContent = initials;
+  });
 
   // Sidebar footer (avatar + name + handle)
   var sf = document.querySelector('.sf-row');
   if (sf) {
-    if (sf.children[0]) sf.children[0].textContent = initials;
     var sfWrap = sf.children[1];
     if (sfWrap) {
       if (sfWrap.children[0]) sfWrap.children[0].textContent = name;
@@ -867,13 +869,10 @@ document.getElementById('htab-overview').classList.add('active');
     }
   }
 
-  // Edit-profile modal avatar (56px, no class) — match its "JK" text.
-  var editModal = document.getElementById('modal-edit-profile');
-  if (editModal) {
-    editModal.querySelectorAll('div').forEach(function (el) {
-      if (el.childElementCount === 0 && el.textContent.trim() === 'JK') el.textContent = initials;
-    });
-  }
+  // Edit-profile modal avatar preview — rendered directly (photo or initials);
+  // the upload script below keeps it in sync after upload/remove.
+  var epPreview = document.getElementById('ep-avatar-preview');
+  if (epPreview && window.avatarHtml) epPreview.innerHTML = window.avatarHtml.content(p.avatar_url || null, name);
 
   // Handle line: "@handle · Location · Member since Mon YYYY"
   var parts = ['@' + handle];
@@ -968,7 +967,8 @@ document.getElementById('htab-overview').classList.add('active');
         var ic = document.createElement('div');
         ic.className = 'club-icon';
         ic.style.background = 'var(--orange-light)';
-        ic.textContent = sportIcons[club.sport] || '🏟';
+        if (window.clubTileHtml) ic.innerHTML = window.clubTileHtml.content(club.logo_url || null, club.sport);
+        else ic.textContent = sportIcons[club.sport] || '🏟';
         card.appendChild(ic);
         var mid = document.createElement('div');
         mid.style.flex = '1';
@@ -1148,8 +1148,6 @@ document.getElementById('htab-overview').classList.add('active');
     });
   }
 
-  function initials(name){ return (name || 'A').split(' ').map(function(n){ return n[0]; }).join('').slice(0,2).toUpperCase(); }
-
   function subline(a){
     var primary = (a.sports && a.sports[0]) || null;
     var bits = ['@' + esc(a.handle || 'athlete')];
@@ -1162,7 +1160,7 @@ document.getElementById('htab-overview').classList.add('active');
   function cardHTML(a, i, canUnfollow){
     var av = avColors[i % avColors.length];
     return '<div class="follow-card">' +
-      '<div class="fc-av" style="background:' + av.bg + ';color:' + av.color + '">' + esc(initials(a.name)) + '</div>' +
+      window.avatarHtml(a.avatar_url || null, a.name || 'Athlete', 'fc-av', 'background:' + av.bg + ';color:' + av.color) +
       '<div style="flex:1;min-width:0">' +
         '<div class="fc-name">' + esc(a.name || 'Athlete') + '</div>' +
         '<div class="fc-sport">' + subline(a) + '</div>' +
@@ -2464,7 +2462,12 @@ if (window.location.hash === '#activities') {
     };
     var ic = document.createElement('span');
     ic.className = 'nav-icon';
-    ic.textContent = sportIcons[club.sport] || '🏟';
+    if (club.logo_url && window.clubTileHtml) {
+      ic.style.cssText = 'width:18px;height:18px;border-radius:4px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle';
+      ic.innerHTML = window.clubTileHtml.content(club.logo_url, club.sport);
+    } else {
+      ic.textContent = sportIcons[club.sport] || '🏟';
+    }
     item.appendChild(ic);
     item.appendChild(document.createTextNode(' ' + (club.name || 'Club')));
     parent.insertBefore(item, anchor);
@@ -2475,9 +2478,8 @@ if (window.location.hash === '#activities') {
 // ── PROFILE PHOTO UPLOAD (Edit-profile modal) ──
 // Uploads immediately on file select to POST /api/profile/avatar (multipart),
 // separate from the JSON /api/profile/update form. On success the modal
-// preview and this page's own topbar + hero avatars update in place (the
-// app-wide rollout to other pages/surfaces is a separate step). Runs after the
-// initials-rewrite script above, so a photo (when present) wins over initials.
+// preview and this page's own topbar + hero avatars update in place via the
+// shared avatarHtml helper (photo with onerror -> initials fallback).
 (function () {
   var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
   var data = window.ARENAS_DATA || {};
@@ -2500,17 +2502,9 @@ if (window.location.hash === '#activities') {
   }
   function setCircle(el, url) {
     if (!el) return;
-    if (url) {
-      el.textContent = '';
-      var img = document.createElement('img');
-      img.src = url;
-      img.alt = 'Profile photo';
-      img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;display:block';
-      el.style.overflow = 'hidden';
-      el.appendChild(img);
-    } else {
-      el.textContent = initials;
-    }
+    el.style.overflow = 'hidden';
+    if (window.avatarHtml) el.innerHTML = window.avatarHtml.content(url || null, name);
+    else el.textContent = initials;
   }
   function applyAvatar(url) {
     circles().forEach(function (el) { setCircle(el, url); });

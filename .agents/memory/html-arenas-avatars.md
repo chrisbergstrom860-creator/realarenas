@@ -1,51 +1,33 @@
 ---
-name: html-arenas custom profile pictures — investigation mapping
-description: Pre-build mapping for avatar photos (free feature, initials fallback) — rendering surfaces, data path, storage posture, pipeline decisions. Investigated 2026-07-12, before any code.
+name: html-arenas avatars & club logos — final architecture
+description: Photo avatars + club logos end-state - storage pipeline, shared rendering helpers, payload conventions, JK retirement. Both sessions shipped 2026-07-14.
 ---
 
-# Custom profile pictures — investigation (no code yet)
+# Avatars & club logos — shipped end-state
 
-## Rendering reality
-- NO shared avatar component. ~15 per-page CSS circle classes (`.user-av`, `.ac-av`, `.fi-av`, `.fc-av`, `.hero-av`, `.lb-av`, `.podium-avatar`, `.yb-avatar`, `.member-av`, `.ch-lb-av`, `.fr-av`, `.av-sm`, `.composer-av`, `.pn-av` + inline 36px circles in feed) across 9+ pages; 8+ local copies of the same initials(name) split/map/slice helper; server.js also computes initials server-side in 2 API responses (~lines 3699, 3776).
-- Topbar/sidebar avatars are static "JK" placeholders in each page's HTML, rewritten client-side by matching `textContent === 'JK'` on `.user-initials, .user-av` — a photo change breaks this pattern (img has no textContent).
-- NOT avatar surfaces: shared notifications panel (type icons only), events page (topbar only), landing marketing previews (hardcoded fake initials, cosmetic).
-- Rollout idea: ship a shared `avatarHtml(url, name)` helper via server injection (same pattern as AVATAR_MENU_SCRIPT / injectNotificationsPanel), then convert each render site; img with onerror → initials div fallback.
+## Storage & upload pipeline (Session ①)
+- ONE public `avatars` bucket (idempotent createBucket at startup — safe to leave in), path namespacing `users/{id}/{ts}.webp` + `clubs/{clubId}/{ts}.webp`. All writes server-mediated via service role; clients never touch Storage.
+- Shared processAndStoreAvatar: multer memoryStorage 5MB (field name `avatar` for both endpoints) → sharp decode allowlist (jpeg/png/webp) → 256×256 cover webp (EXIF stripped) → versioned filename (the cache-buster — never reuse a path, Supabase CDN caches ~1h) → delete old object.
+- Endpoints: POST/DELETE `/api/profile/avatar` (self) and `/api/clubs/:clubId/logo` (getClubRole+isClubManagerRole, UNCONDITIONAL — never behind plan gates). Per-subject in-flight lock Set → 429, released in `finally`.
+- Source of truth: `avatar_url` in auth **user_metadata** (profiles table stays unused); `clubs.logo_url` (user-ran the ALTER TABLE — DDL is user-run SQL, service role can't).
+- `updateUserById(..., { user_metadata: { avatar_url: null } })` REMOVES the key — falsy checks everywhere.
+- **Why:** versioned filenames beat fixed paths (stale CDN), metadata beats profiles table (don't fork source of truth).
+- Known non-blocking edge: pipeline deletes old object BEFORE pointer write; reorder to write-pointer→delete-old when next touching these routes.
+- Railway risk: sharp+multer are native/CJS deps in artifact package.json; Railway must rebuild sharp for linux — watch first deploy.
 
-## Data path decision
-- Store `avatar_url` in auth **user_metadata** (the editable source of truth; profiles table has an avatar_url column but is UNUSED/stale — do not fork the source of truth).
-- Server touchpoints to carry avatar_url: `displayFromUser`, `buildUserProfileMap`, `buildUserDisplayMap`, feed author profileMap (~line 1030), athletes listUsers blocks (~3699/3776), ARENAS_DATA.profile injection. One added field each propagates to every surface's data.
+## Rendering helpers (Session ②)
+- `injectAvatarHelpers` puts AVATAR_HELPERS_SCRIPT in `<head>` (so body inline scripts can call it): `window.avatarHtml(url,name,sizeClass,style)` + `clubTileHtml(url,sport,sizeClass,style)` + `.content(url,x)` inner-HTML variants for filling existing circles/tiles.
+- Fallback pattern: escaped initials/emoji span ALWAYS rendered (hidden when url present) + `<img loading=lazy onerror="unhide previous sibling span; this.remove()">` — broken URLs degrade to initials at runtime. `object-fit:cover;border-radius:inherit` fits any circle or rounded-square tile. Everything interpolated goes through esc() (architect-verified no XSS).
+- Injection chain: injectBottomNav→injectNotificationsPanel→injectAvatarHelpers+TOPBAR_IDENTITY_SCRIPT (at body end, wins over page IIFEs). Identity script reads ARENAS_DATA||INVITE_DATA and fills viewer topbar/menu avatars. Join page injects helpers only — its call sites must guard `window.clubTileHtml ?`.
+- **How to apply:** any new page served through injectBottomNav gets helpers for free; call avatarHtml/clubTileHtml, never hand-roll initials circles or `textContent==='JK'` rewrites.
 
-## Storage posture (verified live)
-- Storage is 100% unused today: `listBuckets()` = []. Bucket creation works via service role (`storage.createBucket` is a Storage API call, NOT SQL DDL — the no-DDL constraint doesn't apply).
-- Decision: PUBLIC bucket `avatars`, public URLs, all writes server-mediated via service role (clients never touch Storage; no RLS policies needed for this posture).
+## Payload convention
+- Any payload/API carrying people MUST include the avatar field: `avatar_url` everywhere, EXCEPT `avatarUrl` in recent-activity + club feed items and `coachAvatarUrl` in member-home announcements (legacy camelCase — match the page, don't rename).
+- Names AND avatars both come from auth user_metadata via displayFromUser/buildUserProfileMap/buildUserDisplayMap — one added field there propagates everywhere.
+- Club logos flow via getSidebarClubs (sidebar/dropdown/profile Clubs tab) + per-route selects (dashboard, club-member, JOIN_DATA club.logo_url).
 
-## Pipeline decisions
-- client → Express → Storage (no signed-upload URLs). Multipart POST /api/profile/avatar: multer memoryStorage 5MB cap → sharp decode = real validation (jpeg/png/webp allowlist) → re-encode 256×256 cover webp (strips EXIF/GPS by default) → upload `avatars/{userId}/{timestamp}.webp` → delete previous object → write public URL to user_metadata. Plus DELETE endpoint (back to initials).
-- Versioned filename IS the cache-buster: Supabase public URLs are CDN+browser cached (default cacheControl 3600); overwriting a fixed path would serve stale for an hour+. New URL per upload = instant propagation; never reuse a path.
-- New deps: multer + sharp (sharp is native — verify install in this env at build time).
+## JK retirement convention (repo is grep-clean of "JK")
+- Viewer-identity placeholders → `·` (filled by identity script); fictional marketing personas (landing/blog) → single `J`. Never reintroduce initials placeholders that scripts match by textContent.
 
-## UI surface
-- No file inputs exist anywhere in the app yet. Home: "Edit profile" modal in arenas-my-profile.html (~line 701, hero ✏️ button) — current-avatar preview + Upload/Remove; upload immediately on file select (separate endpoint), don't multipart-ify the existing JSON /api/profile/update form.
-
-## Build plan
-- Two sessions confirmed: ① storage+pipeline+metadata+modal UI+own avatar (topbar/hero); ② rollout to all surfaces + server helper fields + shared injected helper. Surface count (~15 classes, 9+ pages) is the cost driver.
-
-## Club logos (investigated 2026-07-12, same read-only pass)
-- Club marks are NOT initials circles — they are rounded-SQUARE sport-emoji tiles (sportIcons[c.sport] || '🏟', radius 5–12px). Rendering rollout = img-in-rounded-square with emoji fallback.
-- Surfaces: sidebar "My clubs" IIFE (7 athlete pages, .nav-icon emoji), server-injected "Clubs you manage" dropdown (MANAGED_CLUBS_MENU_SCRIPT ~628), dashboard sidebar-footer .club-icon (HARDCODED 🏃 — never rewritten, already wrong for non-running clubs), club-member topbar .tc-icon + sidebar .club-sb-icon (both hardcoded 🏃) + client-rendered 46px hero tile (dynamic), profile Clubs tab renderer. NOT surfaces: feed (posts have no club_id), leaderboards/challenges/events (text labels), club-invite (brand logo + user avatars), marketing pages. Explorer-agent claim that profile .fc-av is a club list was WRONG — that's the Following tab (user avatars).
-- **clubs table has NO logo_url — adding it is DDL = user-run SQL in the Supabase dashboard** (service role can't ALTER TABLE; same precedent as activities/achievements).
-- Club data path: getSidebarClubs (~3586) is the only shared club resolver (selects id,name,handle,sport → ARENAS_DATA.clubs feeding sidebar + dropdown + profile Clubs tab) — add logo_url there; plus per-route selects: club-member route (id,name,handle,sport,city), dashboard route's own club fetch, join page (would want logo), challenges/events (text-only, skip). No batch club resolver exists (clubs fetched per-route).
-- Upload authz: POST /api/clubs/:clubId/logo = `getClubRole` + `isClubManagerRole` → 403, UNCONDITIONAL (never inside PLAN_GATES_ENABLED/requireProPlan — codified challenges lesson, server.js ~3236). ~12 existing management routes model the exact shape.
-- No club settings/edit UI or club-update route exists ANYWHERE (dashboard has no settings tab; unknown hashes fall to Overview). Logo upload = new modal off the dashboard sidebar-footer identity block + brand-new route.
-- Storage: ONE `avatars` bucket, path namespacing `users/{id}/{ts}.webp` + `clubs/{clubId}/{ts}.webp` (not two buckets — identical public-read/server-write posture, single setup, prefix separation sufficient since all writes are server-mediated). Pipeline identical to users: 5MB → sharp allowlist decode → 256×256 webp (EXIF stripped) → versioned filename → delete old → URL to clubs.logo_url.
-
-## Session ① SHIPPED (2026-07-14) — pipeline + endpoints + own-surface UIs
-- Live and fully tested: public `avatars` bucket (idempotent createBucket at startup — safe to leave in), shared processAndStoreAvatar pipeline, POST/DELETE /api/profile/avatar + /api/clubs/:clubId/logo. Test matrix all green (256×256 webp stored, EXIF stripped, old object deleted on re-upload, 400/413/429/401/403 paths, member/non-member/logged-out denials).
-- Concurrency: per-subject **in-flight lock Set → 429** (chosen over timed cooldown); lock key `user:{id}` / `club:{id}`; always released in `finally`.
-- Multer field name is `avatar` for BOTH user and club endpoints; wrapper maps LIMIT_FILE_SIZE→413, any other parse error→400.
-- `updateUserById(..., { user_metadata: { avatar_url: null } })` REMOVES the key (observed live: reads back as undefined) — falsy checks everywhere, so fine.
-- UI pattern: photo scripts are the LAST script before </body> so they run after the initials-rewrite IIFEs; a photo = replace circle textContent with an <img style="width/height 100%;object-fit:cover;border-radius:50%/inherit">; Remove restores initials/sport-emoji text.
-- my-profile: mock "Profile photo" modal (modal-avatar) DELETED; hero ✏️ + hero-av now open the edit-profile modal, which hosts the real uploader (ids ep-avatar-*). Dashboard: sidebar-footer ✏️ opens modal-club-logo (ids cl-logo-*); hardcoded 🏃 fixed to sportIcons[sport]||🏟 fallback.
-- Session ② TODO: rollout rendering to all ~15 avatar circle classes / 9+ pages + club tile surfaces (getSidebarClubs, managed-clubs menu, club-member page, profile Clubs tab) + carry avatar_url through displayFromUser/buildUserProfileMap/etc.
-- Railway risk: sharp+multer are native/CommonJS deps with concrete semvers in the artifact package.json (no catalog); Railway must npm-install & rebuild sharp for linux at deploy — watch first deploy.
-- Known non-blocking edge (architect-flagged, fix in a future pass): pipeline deletes the OLD object before the pointer write; if the pointer write then fails, the stored URL briefly points at a deleted object. Reorder to write-pointer→delete-old when next touching these routes.
+## Verification harness lesson
+- Temp self-login route for screenshots must live under `/landing/...` (screenshot tool prepends previewPath `/html/landing`); signInWithPassword + setSession + redirect works. REMOVE the route after — it's an unauthenticated login-as-user hole.
