@@ -1375,6 +1375,12 @@ var activitySportFields = {
   }
 };
 
+// Set by the calendar's "Log this" deep link (#log=<planId>): when present the
+// created activity is linked to that plan server-side (plan flips to done).
+// Cleared on every form open/reset so a manually opened form never carries a
+// stale plan link.
+var pendingPlanId = null;
+
 function toggleActivityForm() {
   var form = document.getElementById('activity-form');
   if (!form) return;
@@ -1391,6 +1397,7 @@ function toggleActivityForm() {
     document.getElementById('act-error').style.display = 'none';
     selectedActivitySport = null;
     selectedActivityFeeling = null;
+    pendingPlanId = null;
     form.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 }
@@ -1442,9 +1449,21 @@ async function saveActivity() {
   btn.textContent = 'Saving…';
   btn.disabled = true;
 
+  // Local-NOON timestamp for the picked day: `new Date('YYYY-MM-DD')` is UTC
+  // midnight, which lands on the PREVIOUS local day for viewers east of UTC —
+  // the calendar buckets by local date parts, so that off-by-one would show
+  // the activity on the wrong day.
+  var dateIso;
+  if (date) {
+    var dp = String(date).split('-').map(Number);
+    dateIso = new Date(dp[0], (dp[1] || 1) - 1, dp[2] || 1, 12, 0, 0).toISOString();
+  } else {
+    dateIso = new Date().toISOString();
+  }
   var body = {
     sport: sport, title: title, duration: duration, notes: notes,
-    date: date ? new Date(date).toISOString() : new Date().toISOString(),
+    date: dateIso,
+    plan_id: pendingPlanId,
     feeling: selectedActivityFeeling,
     distance: actVal('sf-distance'),
     pace: actVal('sf-pace'),
@@ -1494,7 +1513,10 @@ async function saveActivity() {
       btn.disabled = false;
       return;
     }
-    showToast('✓ Activity logged! Your followers can see it now.');
+    showToast(result.planCompleted
+      ? '✓ Activity logged — your planned session is marked done!'
+      : '✓ Activity logged! Your followers can see it now.');
+    pendingPlanId = null;
     toggleActivityForm();
     btn.textContent = 'Save activity →';
     btn.disabled = false;
@@ -1629,10 +1651,34 @@ document.addEventListener('DOMContentLoaded', loadActivities);
 var actHtab = document.getElementById('htab-activities');
 if (actHtab) actHtab.addEventListener('click', loadActivities);
 
-// Deep link: /profile#activities opens the Activities tab and the entry form.
-if (window.location.hash === '#activities') {
+// Deep links: /profile#activities opens the Activities tab and the entry form.
+// /profile#log=<planId> (calendar "Log this") additionally prefills the form
+// from that planned session and stashes plan_id so the plan flips to done.
+function prefillFromPlan(planId) {
+  fetch(ACT_BASE + '/api/plans')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var plan = null;
+      ((data && data.plans) || []).forEach(function (p) { if (p.id === planId) plan = p; });
+      if (!plan) return; // stale/deleted plan → plain empty form, no fake link
+      pendingPlanId = plan.id;
+      var chip = document.querySelector('.act-sport-chip[data-sport="' + plan.sport + '"]');
+      if (chip) selectActivitySport(chip, plan.sport);
+      // plan.date is already a local YYYY-MM-DD string — drop it straight into
+      // the date input, never through the Date constructor (UTC skew).
+      if (plan.date) document.getElementById('act-date').value = plan.date;
+      if (plan.title) document.getElementById('act-title').value = plan.title;
+      if (plan.planned_duration) document.getElementById('act-duration').value = plan.planned_duration;
+    })
+    .catch(function () {});
+}
+var logHashMatch = /^#log=(.+)$/.exec(window.location.hash || '');
+if (window.location.hash === '#activities' || logHashMatch) {
   if (typeof setTab === 'function') setTab('activities');
-  setTimeout(function(){ toggleActivityForm(); }, 50);
+  setTimeout(function(){
+    toggleActivityForm(); // opens + resets the form (clears pendingPlanId)…
+    if (logHashMatch) prefillFromPlan(decodeURIComponent(logHashMatch[1])); // …then prefill
+  }, 50);
 }
 </script>
 

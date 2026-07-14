@@ -1459,6 +1459,25 @@ app.post(BASE + '/api/activities/create', requireAuth, async (req, res) => {
     golfStrokes = n;
   }
   const golfCourse = (b.golf_course && String(b.golf_course).trim()) ? String(b.golf_course).trim().slice(0, 120) : null;
+  // "Log this" handoff from the calendar: an optional plan_id links the new
+  // activity to one of the CALLER'S OWN planned sessions. Ownership is checked
+  // BEFORE the insert — a forged plan_id belonging to another user is a hard
+  // 403 (never a cross-user write); a stale/deleted plan_id is ignored so a
+  // plan deleted in another tab can't block honest activity logging.
+  let linkPlan = null;
+  if (b.plan_id != null && String(b.plan_id).trim() !== '') {
+    try {
+      const { data: planRow } = await supabaseAdmin
+        .from('planned_sessions').select('id, user_id')
+        .eq('id', String(b.plan_id).trim()).maybeSingle();
+      if (planRow && planRow.user_id !== req.user.id) {
+        return res.status(403).json({ error: 'forbidden' });
+      }
+      linkPlan = planRow || null;
+    } catch (err) {
+      console.log('Plan link lookup error (ignoring link):', err.message);
+    }
+  }
   const activityData = {
     user_id: req.user.id,
     sport: b.sport,
@@ -1508,6 +1527,22 @@ app.post(BASE + '/api/activities/create', requireAuth, async (req, res) => {
     .select()
     .single();
   if (error) return res.json({ error: error.message });
+  // Close out the linked plan in the same request: set activity_id + done.
+  // Self-only by construction (linkPlan ownership was verified above); the
+  // .eq('user_id', …) filter is defense-in-depth.
+  let planCompleted = false;
+  if (linkPlan) {
+    try {
+      const { error: linkErr } = await supabaseAdmin
+        .from('planned_sessions')
+        .update({ activity_id: data.id, status: 'done', updated_at: new Date().toISOString() })
+        .eq('id', linkPlan.id).eq('user_id', req.user.id);
+      if (linkErr) console.log('Plan link update error:', linkErr.message);
+      else planCompleted = true;
+    } catch (err) {
+      console.log('Plan link update error:', err.message);
+    }
+  }
   // Notify followers (best-effort). The actor name comes from auth metadata
   // (no `profiles` table), not a DB join.
   try {
@@ -1532,7 +1567,7 @@ app.post(BASE + '/api/activities/create', requireAuth, async (req, res) => {
   }
   // Award any newly earned badges (volume/distance/streak/feats) without blocking.
   checkAchievements(req.user.id).catch(() => {});
-  res.json({ success: true, activity: data });
+  res.json({ success: true, activity: data, planCompleted });
 });
 
 // Recent activities for a given user (used by the profile Activities tab).
@@ -5172,16 +5207,28 @@ app.post(BASE + '/api/plans', requireAuth, requireProPlan('training_plan'), asyn
   }
 });
 
-// Edit a plan — Pro-gated, self-only. Editable: date, sport, title, duration,
-// notes, status (whitelisted). activity_id is NOT client-writable — it is set
-// server-side by the "Log this" flow (Session ②) so a plan can never claim an
-// activity the user didn't log through it.
-app.patch(BASE + '/api/plans/:id', requireAuth, requireProPlan('training_plan'), async (req, res) => {
+// Edit a plan — Pro-gated for content edits, self-only. Editable: date, sport,
+// title, duration, notes, status (whitelisted). activity_id is NOT
+// client-writable — it is set server-side by the "Log this" flow so a plan can
+// never claim an activity the user didn't log through it.
+// STATUS-ONLY updates are exempt from the Pro gate (ungated-exit rule): a
+// lapsed user must always be able to close out old plans (mark done/skipped) —
+// marking done conceptually rides with activity logging, which is free. The
+// gate applies only when the request edits anything beyond `status`.
+app.patch(BASE + '/api/plans/:id', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.status(503).json({ error: 'Server is not configured for plans' });
   try {
+    const b = req.body || {};
+    const editedKeys = Object.keys(b).filter((k) => b[k] !== undefined);
+    const statusOnly = editedKeys.length > 0 && editedKeys.every((k) => k === 'status');
+    if (!statusOnly && PLAN_GATES_ENABLED) {
+      const plan = await getUserPlan(req.user.id);
+      if (plan === 'free') {
+        return res.status(403).json({ error: 'pro_required', feature: 'training_plan', upgrade: '/billing' });
+      }
+    }
     const row = await loadOwnPlan(req, res);
     if (!row) return;
-    const b = req.body || {};
     const merged = {
       date: b.date !== undefined ? b.date : row.date,
       sport: b.sport !== undefined ? b.sport : row.sport,
@@ -5208,8 +5255,9 @@ app.patch(BASE + '/api/plans/:id', requireAuth, requireProPlan('training_plan'),
   }
 });
 
-// Delete a plan — Pro-gated, self-only.
-app.delete(BASE + '/api/plans/:id', requireAuth, requireProPlan('training_plan'), async (req, res) => {
+// Delete a plan — self-only, NEVER Pro-gated (ungated-exit rule, same as
+// leaving a club: a lapsed user can always remove their own data).
+app.delete(BASE + '/api/plans/:id', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.status(503).json({ error: 'Server is not configured for plans' });
   try {
     const row = await loadOwnPlan(req, res);

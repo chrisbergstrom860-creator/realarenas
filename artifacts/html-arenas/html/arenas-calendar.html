@@ -116,8 +116,23 @@ button{font-family:var(--font)}
 .dp-item{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--gray-100);font-size:13px}
 .dp-item:last-child{border-bottom:none}
 .dp-item.nr{opacity:.75}
-/* Session ② slot: action row per item (Log this / done / skip) mounts here. */
-.dp-actions{display:none}
+
+/* ── Day-panel actions (Session ②): per-item buttons + compact plan form ── */
+.dp-act-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+.dp-btn{padding:6px 11px;border-radius:7px;border:var(--border);background:white;font-size:11px;font-weight:600;color:var(--gray-700);cursor:pointer;transition:background .1s}
+.dp-btn:hover{background:var(--gray-50)}
+.dp-btn.primary{background:var(--yellow);border-color:var(--yellow-dark);color:var(--gray-900)}
+.dp-btn.primary:hover{background:var(--yellow)}
+.dp-btn.danger{color:#A32D2D;border-color:#FECACA}
+.dp-btn:disabled{opacity:.5;cursor:default}
+.dp-form{background:var(--gray-50);border:var(--border);border-radius:10px;padding:12px;margin:8px 0}
+.dp-form .fi{margin-bottom:9px}
+.dp-form label{font-size:11px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:3px}
+.dp-form label .opt{font-weight:400;color:var(--gray-400)}
+.dp-form input,.dp-form select,.dp-form textarea{width:100%;padding:8px 10px;border:var(--border);border-radius:7px;font-size:13px;font-family:var(--font);background:white;color:var(--gray-900)}
+.dp-form textarea{resize:vertical;min-height:44px}
+.dp-form-err{display:none;background:var(--red-light);border:1px solid #FECACA;border-radius:7px;padding:7px 10px;font-size:12px;color:#A32D2D;margin-bottom:9px}
+#cal-toast{display:none;position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:var(--gray-900);color:white;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:500;z-index:700;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:90vw;text-align:center}
 
 .empty-state{background:white;border:var(--border);border-radius:12px;padding:36px 24px;text-align:center;color:var(--gray-500);font-size:13px}
 .muted-line{font-size:13px;color:var(--gray-400)}
@@ -220,6 +235,8 @@ button{font-family:var(--font)}
   </div>
 </div>
 
+<div id="cal-toast" role="status"></div>
+
 <script>
 // ── Calendar page. All rendering is from /api/calendar/month — nothing is
 // fabricated client-side. Timestamps (events, activities) are bucketed by
@@ -241,7 +258,7 @@ button{font-family:var(--font)}
   }
   function sportName(id) {
     var reg = window.ARENAS_SPORTS || [];
-    for (var i = 0; i < reg.length; i++) if (reg[i].id === id) return reg[i].name;
+    for (var i = 0; i < reg.length; i++) if (reg[i].id === id) return reg[i].label;
     return id ? (String(id).charAt(0).toUpperCase() + String(id).slice(1)) : 'Activity';
   }
   function pad2(n) { return String(n).padStart(2, '0'); }
@@ -259,8 +276,38 @@ button{font-family:var(--font)}
     year: 0, month: 0,           // month is 1-12
     view: 'month',
     data: null,                  // raw API payload
-    byDay: {}                    // ymd -> { events:[], plans:[], activities:[] }
+    byDay: {},                   // ymd -> { events:[], plans:[], activities:[] }
+    openYmd: null                // day panel currently open for this day
   };
+  // Locked = gates on AND viewer on the free plan (server-computed, injected).
+  var proLocked = !!(window.ARENAS_DATA && window.ARENAS_DATA.gating && window.ARENAS_DATA.gating.proLocked);
+  // Plan form state inside the day panel: null | {mode:'create'} | {mode:'edit', planId}
+  var panelForm = null;
+
+  function toast(msg) {
+    var t = document.getElementById('cal-toast');
+    t.textContent = msg;
+    t.style.display = 'block';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { t.style.display = 'none'; }, 2600);
+  }
+  function api(method, path, body) {
+    return fetch(window.BASE + path, {
+      method: method,
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        return { ok: r.ok, status: r.status, json: j || {} };
+      });
+    });
+  }
+  function errText(r) {
+    var j = r.json || {};
+    if (j.error === 'pro_required') return 'Planning sessions is a Pro feature — upgrade from your Billing page.';
+    return j.message || (typeof j.error === 'string' ? j.error : null) || 'Something went wrong — please try again.';
+  }
 
   function currentYm() { return state.year + '-' + pad2(state.month); }
 
@@ -373,6 +420,22 @@ button{font-family:var(--font)}
       });
   }
 
+  // In-place update after any panel action: re-fetch the month (the server is
+  // the source of truth — no client-side state patching to drift), re-render
+  // the current view, and re-render the open day panel without closing it.
+  function refresh() {
+    fetch(window.BASE + '/api/calendar/month?month=' + currentYm())
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data) return;
+        state.data = data;
+        state.byDay = bucket(data);
+        render();
+        if (state.openYmd) renderDayPanel();
+      })
+      .catch(function () {});
+  }
+
   // ── Shared item renderers ──
   function timeOf(iso) {
     var d = new Date(iso);
@@ -389,25 +452,59 @@ button{font-family:var(--font)}
     if (p.status === 'skipped') return '<span class="chip skipped">Skipped</span>';
     return '<span class="chip planned">Planned</span>';
   }
-  function eventItemHtml(ev, cls) {
+  // RSVP actions mirror the events page exactly: POST /api/events/:id/rsvp with
+  // going / interested / cancelled — cancelled deletes the RSVP row server-side.
+  function rsvpBtn(evId, status, label, extraCls) {
+    return '<button class="dp-btn' + (extraCls ? ' ' + extraCls : '') + '" data-cal-action="rsvp" data-id="' + esc(evId) + '" data-status="' + status + '">' + label + '</button>';
+  }
+  function eventActionsHtml(ev) {
+    var btns = [];
+    if (ev.myStatus === 'going') {
+      btns.push(rsvpBtn(ev.id, 'interested', 'Switch to interested'));
+      btns.push(rsvpBtn(ev.id, 'cancelled', 'Cancel RSVP', 'danger'));
+    } else if (ev.myStatus === 'interested') {
+      btns.push(rsvpBtn(ev.id, 'going', "I'm going", 'primary'));
+      btns.push(rsvpBtn(ev.id, 'cancelled', 'Cancel RSVP', 'danger'));
+    } else {
+      btns.push(rsvpBtn(ev.id, 'going', "I'm going", 'primary'));
+      btns.push(rsvpBtn(ev.id, 'interested', 'Interested'));
+    }
+    return '<div class="dp-act-row">' + btns.join('') + '</div>';
+  }
+  // Plan actions: status transitions + delete are NEVER locked (mark-done rides
+  // with free activity logging; delete is the ungated exit). Only Edit — a
+  // content change — hides for locked viewers; the server enforces the same split.
+  function planActionsHtml(p) {
+    var btns = [];
+    if (p.status === 'planned') {
+      btns.push('<button class="dp-btn primary" data-cal-action="plan-log" data-id="' + esc(p.id) + '">Log this</button>');
+      btns.push('<button class="dp-btn" data-cal-action="plan-done" data-id="' + esc(p.id) + '">Mark done</button>');
+      btns.push('<button class="dp-btn" data-cal-action="plan-skip" data-id="' + esc(p.id) + '">Skip</button>');
+    }
+    if (!proLocked) btns.push('<button class="dp-btn" data-cal-action="plan-edit" data-id="' + esc(p.id) + '">Edit</button>');
+    btns.push('<button class="dp-btn danger" data-cal-action="plan-delete" data-id="' + esc(p.id) + '">Delete</button>');
+    return '<div class="dp-act-row">' + btns.join('') + '</div>';
+  }
+  function eventItemHtml(ev, cls, withActions) {
     var meta = [timeOf(ev.date), ev.club_name ? esc(ev.club_name) : null, ev.location ? esc(ev.location) : null]
       .filter(Boolean).join(' · ');
     return '<div class="' + cls + (ev.myStatus === 'none' ? ' nr' : '') + '">' +
       '<span class="ag-ic">' + sportIcon(ev.sport) + '</span>' +
       '<div class="ag-body"><div class="ag-title">' + esc(ev.title || 'Event') + '</div>' +
-      (meta ? '<div class="ag-meta">' + meta + '</div>' : '') + '</div>' +
+      (meta ? '<div class="ag-meta">' + meta + '</div>' : '') +
+      (withActions ? eventActionsHtml(ev) : '') + '</div>' +
       eventChip(ev) + '</div>';
   }
-  function planItemHtml(p, cls) {
+  function planItemHtml(p, cls, withActions) {
     var meta = [esc(sportName(p.sport)), p.planned_duration ? esc(p.planned_duration) : null]
       .filter(Boolean).join(' · ');
     return '<div class="' + cls + '">' +
       '<span class="ag-ic">' + sportIcon(p.sport) + '</span>' +
       '<div class="ag-body"><div class="ag-title">' + esc(p.title || ('Planned ' + sportName(p.sport).toLowerCase())) + '</div>' +
       (meta ? '<div class="ag-meta">' + meta + '</div>' : '') +
-      (p.notes ? '<div class="ag-meta">' + esc(p.notes) + '</div>' : '') + '</div>' +
+      (p.notes ? '<div class="ag-meta">' + esc(p.notes) + '</div>' : '') +
+      (withActions ? planActionsHtml(p) : '') + '</div>' +
       planChip(p) +
-      '<div class="dp-actions"></div>' + // Session ② action slot
       '</div>';
   }
   function activityItemHtml(a, cls) {
@@ -508,33 +605,158 @@ button{font-family:var(--font)}
     if (state.view === 'agenda') renderAgenda(); else renderMonth();
   }
 
-  // ── DAY PANEL (read-only this session; Session ② slots actions into
-  //    .dp-actions and the footer) ──
-  window.openDayPanel = function (ymd) {
+  // ── DAY PANEL (interactive: plan CRUD, Log-this handoff, RSVP) ──
+  // Actions live ONLY in the panel — the grid and agenda stay read-only and
+  // open the panel on click.
+
+  // Compact plan create/edit form. Date defaults to the open day; the sport
+  // select is built from the sports registry (window.ARENAS_SPORTS).
+  function planFormHtml() {
+    var editing = null;
+    if (panelForm && panelForm.mode === 'edit') {
+      var day = state.byDay[state.openYmd] || { plans: [] };
+      day.plans.forEach(function (p) { if (p.id === panelForm.planId) editing = p; });
+      if (!editing) return '';
+    }
+    var reg = window.ARENAS_SPORTS || [];
+    var selSport = editing ? editing.sport : (reg[0] ? reg[0].id : '');
+    var opts = reg.map(function (s) {
+      return '<option value="' + esc(s.id) + '"' + (s.id === selSport ? ' selected' : '') + '>' +
+        esc(s.emoji + ' ' + s.label) + '</option>';
+    }).join('');
+    return '<div class="dp-form">' +
+      '<div class="dp-form-err" id="dpf-err"></div>' +
+      '<div class="fi"><label for="dpf-date">Date</label><input type="date" id="dpf-date" value="' + esc(editing ? editing.date : state.openYmd) + '"></div>' +
+      '<div class="fi"><label for="dpf-sport">Sport</label><select id="dpf-sport">' + opts + '</select></div>' +
+      '<div class="fi"><label for="dpf-title">Title <span class="opt">(optional)</span></label><input type="text" id="dpf-title" maxlength="120" placeholder="e.g. Tempo intervals" value="' + esc((editing && editing.title) || '') + '"></div>' +
+      '<div class="fi"><label for="dpf-duration">Planned duration <span class="opt">(optional)</span></label><input type="text" id="dpf-duration" maxlength="20" placeholder="e.g. 45:00 or 1h 20m" value="' + esc((editing && editing.planned_duration) || '') + '"></div>' +
+      '<div class="fi"><label for="dpf-notes">Notes <span class="opt">(optional)</span></label><textarea id="dpf-notes" maxlength="500" rows="2" placeholder="Focus, route, workout details…">' + esc((editing && editing.notes) || '') + '</textarea></div>' +
+      '<div class="dp-act-row" style="margin-top:2px">' +
+      '<button class="dp-btn primary" data-cal-action="plan-save">' + (editing ? 'Save changes' : 'Add plan') + '</button>' +
+      '<button class="dp-btn" data-cal-action="plan-cancel-form">Cancel</button>' +
+      '</div></div>';
+  }
+
+  function renderDayPanel() {
+    var ymd = state.openYmd;
+    if (!ymd) return;
     var day = state.byDay[ymd] || { events: [], plans: [], activities: [] };
     document.getElementById('dp-title').textContent =
       parseLocalYmd(ymd).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     var html = '';
     html += '<div class="dp-section-label">Events</div>';
     html += day.events.length
-      ? day.events.map(function (ev) { return eventItemHtml(ev, 'dp-item'); }).join('')
+      ? day.events.map(function (ev) { return eventItemHtml(ev, 'dp-item', true); }).join('')
       : '<div class="dp-empty">No events on this day.</div>';
     html += '<div class="dp-section-label">Planned training</div>';
     html += day.plans.length
-      ? day.plans.map(function (p) { return planItemHtml(p, 'dp-item'); }).join('')
+      ? day.plans.map(function (p) {
+          if (panelForm && panelForm.mode === 'edit' && panelForm.planId === p.id) return planFormHtml();
+          return planItemHtml(p, 'dp-item', true);
+        }).join('')
       : '<div class="dp-empty">No planned sessions.</div>';
+    // Create affordance: form, or "+ Plan a session", or — for locked (gates on
+    // + free plan) viewers — the goals-tab locked CTA, verbatim markup.
+    if (panelForm && panelForm.mode === 'create') {
+      html += planFormHtml();
+    } else if (proLocked) {
+      html += '<div style="margin-top:10px"><button onclick="window.location.href=window.BASE + \'/billing\'" style="padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">🔒 Upgrade to Pro →</button></div>';
+    } else {
+      html += '<div class="dp-act-row" style="margin-top:10px"><button class="dp-btn" data-cal-action="plan-new">+ Plan a session</button></div>';
+    }
     html += '<div class="dp-section-label">Activities</div>';
     html += day.activities.length
       ? day.activities.map(function (a) { return activityItemHtml(a, 'dp-item'); }).join('')
       : '<div class="dp-empty">No logged activities.</div>';
     document.getElementById('dp-body').innerHTML = html;
+  }
+
+  window.openDayPanel = function (ymd) {
+    state.openYmd = ymd;
+    panelForm = null;
+    renderDayPanel();
     document.getElementById('day-panel').classList.add('open');
   };
   window.closeDayPanel = function () {
+    state.openYmd = null;
+    panelForm = null;
     document.getElementById('day-panel').classList.remove('open');
   };
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') closeDayPanel();
+  });
+
+  // ── Panel actions (one delegated handler; buttons carry data-cal-action) ──
+  function patchPlanStatus(id, status, btn) {
+    btn.disabled = true;
+    api('PATCH', '/api/plans/' + encodeURIComponent(id), { status: status }).then(function (r) {
+      if (!r.ok || r.json.error) { toast(errText(r)); btn.disabled = false; return; }
+      toast(status === 'done' ? '✓ Marked done' : 'Marked skipped');
+      refresh();
+    }).catch(function () { toast('Something went wrong — please try again.'); btn.disabled = false; });
+  }
+  function deletePlan(id, btn) {
+    if (!window.confirm('Delete this planned session? This cannot be undone.')) return;
+    btn.disabled = true;
+    api('DELETE', '/api/plans/' + encodeURIComponent(id)).then(function (r) {
+      if (!r.ok || r.json.error) { toast(errText(r)); btn.disabled = false; return; }
+      toast('Plan deleted');
+      refresh();
+    }).catch(function () { toast('Something went wrong — please try again.'); btn.disabled = false; });
+  }
+  function submitPlanForm(btn) {
+    var err = document.getElementById('dpf-err');
+    var date = (document.getElementById('dpf-date').value || '').trim();
+    var sport = document.getElementById('dpf-sport').value;
+    var title = document.getElementById('dpf-title').value.trim();
+    var duration = document.getElementById('dpf-duration').value.trim();
+    var notes = document.getElementById('dpf-notes').value.trim();
+    function fail(msg) { err.textContent = msg; err.style.display = 'block'; }
+    if (!date) return fail('Please pick a date.');
+    if (!sport) return fail('Please pick a sport.');
+    var wasEdit = panelForm && panelForm.mode === 'edit';
+    btn.disabled = true; btn.textContent = 'Saving…';
+    var body = { date: date, sport: sport, title: title || null, planned_duration: duration || null, notes: notes || null };
+    var req = wasEdit
+      ? api('PATCH', '/api/plans/' + encodeURIComponent(panelForm.planId), body)
+      : api('POST', '/api/plans', body);
+    req.then(function (r) {
+      if (!r.ok || r.json.error) {
+        fail(errText(r));
+        btn.disabled = false; btn.textContent = wasEdit ? 'Save changes' : 'Add plan';
+        return;
+      }
+      panelForm = null;
+      toast(wasEdit ? '✓ Plan updated' : '✓ Session planned');
+      refresh();
+    }).catch(function () {
+      fail('Something went wrong — please try again.');
+      btn.disabled = false; btn.textContent = wasEdit ? 'Save changes' : 'Add plan';
+    });
+  }
+  function rsvpFromPanel(eventId, status, btn) {
+    btn.disabled = true;
+    api('POST', '/api/events/' + encodeURIComponent(eventId) + '/rsvp', { status: status }).then(function (r) {
+      if (!r.ok || r.json.error) { toast(errText(r)); btn.disabled = false; return; }
+      toast(status === 'going' ? "✓ You're going!" : status === 'interested' ? '★ Marked interested' : 'RSVP removed');
+      refresh();
+    }).catch(function () { toast('Something went wrong — please try again.'); btn.disabled = false; });
+  }
+
+  document.getElementById('dp-body').addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('[data-cal-action]') : null;
+    if (!btn || btn.disabled) return;
+    var act = btn.getAttribute('data-cal-action');
+    var id = btn.getAttribute('data-id') || '';
+    if (act === 'plan-new') { panelForm = { mode: 'create' }; renderDayPanel(); }
+    else if (act === 'plan-edit') { panelForm = { mode: 'edit', planId: id }; renderDayPanel(); }
+    else if (act === 'plan-cancel-form') { panelForm = null; renderDayPanel(); }
+    else if (act === 'plan-save') submitPlanForm(btn);
+    else if (act === 'plan-done') patchPlanStatus(id, 'done', btn);
+    else if (act === 'plan-skip') patchPlanStatus(id, 'skipped', btn);
+    else if (act === 'plan-delete') deletePlan(id, btn);
+    else if (act === 'plan-log') { window.location.href = window.BASE + '/profile#log=' + encodeURIComponent(id); }
+    else if (act === 'rsvp') rsvpFromPanel(id, btn.getAttribute('data-status'), btn);
   });
 
   // ── Wire controls ──
