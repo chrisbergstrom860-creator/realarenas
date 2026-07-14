@@ -364,8 +364,8 @@ button,select,input,textarea{font-family:var(--font)}
     <div class="hero-bg-grid"></div>
     <div class="hero-inner">
       <div class="hero-av-wrap">
-        <div class="hero-av" onclick="openModal('avatar')">JK</div>
-        <div class="hero-av-edit" onclick="openModal('avatar')">✏️</div>
+        <div class="hero-av" onclick="openModal('edit-profile')">JK</div>
+        <div class="hero-av-edit" onclick="openModal('edit-profile')">✏️</div>
         <div class="hero-online" title="Online now"></div>
       </div>
       <div class="hero-info">
@@ -703,8 +703,16 @@ button,select,input,textarea{font-family:var(--font)}
     <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Edit profile</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
     <div class="modal-body">
       <div style="display:flex;align-items:center;gap:14px;padding:12px;background:var(--gray-50);border-radius:var(--radius)">
-        <div style="width:56px;height:56px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--gray-900)">JK</div>
-        <button class="btn btn-ghost btn-sm" onclick="showToast('Photo upload coming soon')">Change photo</button>
+        <div id="ep-avatar-preview" style="width:56px;height:56px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--gray-900);overflow:hidden;flex-shrink:0">JK</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button id="ep-avatar-upload" class="btn btn-ghost btn-sm" type="button">Upload photo</button>
+            <button id="ep-avatar-remove" class="btn btn-ghost btn-sm" type="button" style="display:none">Remove</button>
+          </div>
+          <div style="font-size:11px;color:var(--gray-500);margin-top:6px">JPG, PNG or WebP · max 5 MB · square works best</div>
+          <div id="ep-avatar-error" style="display:none;font-size:12px;color:#B91C1C;margin-top:6px"></div>
+        </div>
+        <input id="ep-avatar-file" type="file" accept="image/jpeg,image/png,image/webp" style="display:none">
       </div>
       <div class="form-row">
         <div class="form-field"><label class="form-label">First name</label><input id="edit-first-name" class="form-input" type="text" value="Jamie"></div>
@@ -729,20 +737,6 @@ button,select,input,textarea{font-family:var(--font)}
       <div style="display:flex;gap:9px;margin-top:4px"><div style="width:28px;height:28px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:var(--gray-900);flex-shrink:0">JK</div><input type="text" placeholder="Add a comment…" style="flex:1;padding:8px 12px;border:var(--border);border-radius:20px;font-size:13px;outline:none"></div>
     </div>
     <div class="modal-footer"><button class="btn btn-primary" style="flex:1;justify-content:center" onclick="closeModals();showToast('Comment posted!')">Post</button><button class="btn btn-ghost" onclick="closeModals()">Close</button></div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="modal-avatar" onclick="closeModals(event)">
-  <div class="modal">
-    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Profile photo</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
-    <div class="modal-body">
-      <div style="border:2px dashed var(--gray-200);border-radius:var(--radius-lg);padding:32px;text-align:center;cursor:pointer;background:var(--gray-50)" onclick="showToast('File picker opening…')">
-        <div style="font-size:36px;margin-bottom:10px">📸</div>
-        <div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:4px">Upload a photo</div>
-        <div style="font-size:12px;color:var(--gray-500)">PNG or JPG · Max 5MB · Square recommended</div>
-      </div>
-    </div>
-    <div class="modal-footer"><button class="btn btn-yellow" style="flex:1;justify-content:center" onclick="closeModals();showToast('✓ Photo updated!')">Save photo</button><button class="btn btn-ghost" onclick="closeModals()">Cancel</button></div>
   </div>
 </div>
 
@@ -2475,6 +2469,114 @@ if (window.location.hash === '#activities') {
     item.appendChild(document.createTextNode(' ' + (club.name || 'Club')));
     parent.insertBefore(item, anchor);
   });
+})();
+</script>
+<script>
+// ── PROFILE PHOTO UPLOAD (Edit-profile modal) ──
+// Uploads immediately on file select to POST /api/profile/avatar (multipart),
+// separate from the JSON /api/profile/update form. On success the modal
+// preview and this page's own topbar + hero avatars update in place (the
+// app-wide rollout to other pages/surfaces is a separate step). Runs after the
+// initials-rewrite script above, so a photo (when present) wins over initials.
+(function () {
+  var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
+  var data = window.ARENAS_DATA || {};
+  var p = data.profile || {};
+  var name = p.name || 'Athlete';
+  var initials = name.split(/\s+/).map(function (n) { return n[0]; }).join('').slice(0, 2).toUpperCase();
+
+  var fileInput = document.getElementById('ep-avatar-file');
+  var uploadBtn = document.getElementById('ep-avatar-upload');
+  var removeBtn = document.getElementById('ep-avatar-remove');
+  var errEl = document.getElementById('ep-avatar-error');
+  if (!fileInput || !uploadBtn) return;
+
+  function circles() {
+    return [
+      document.getElementById('ep-avatar-preview'),
+      document.querySelector('.hero-av'),
+      document.querySelector('.topbar .user-av') || document.querySelector('.user-av')
+    ];
+  }
+  function setCircle(el, url) {
+    if (!el) return;
+    if (url) {
+      el.textContent = '';
+      var img = document.createElement('img');
+      img.src = url;
+      img.alt = 'Profile photo';
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;display:block';
+      el.style.overflow = 'hidden';
+      el.appendChild(img);
+    } else {
+      el.textContent = initials;
+    }
+  }
+  function applyAvatar(url) {
+    circles().forEach(function (el) { setCircle(el, url); });
+    if (removeBtn) removeBtn.style.display = url ? '' : 'none';
+  }
+  function showErr(msg) {
+    if (!errEl) return;
+    errEl.textContent = msg;
+    errEl.style.display = 'block';
+  }
+  function clearErr() {
+    if (errEl) errEl.style.display = 'none';
+  }
+
+  uploadBtn.onclick = function () { clearErr(); fileInput.click(); };
+
+  fileInput.onchange = function () {
+    var f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    clearErr();
+    uploadBtn.disabled = true;
+    var orig = uploadBtn.textContent;
+    uploadBtn.textContent = 'Uploading…';
+    var fd = new FormData();
+    fd.append('avatar', f);
+    fetch(B + '/api/profile/avatar', { method: 'POST', body: fd })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; });
+      })
+      .then(function (res) {
+        if (res.ok && res.j && res.j.success) {
+          applyAvatar(res.j.avatar_url);
+          if (window.showToast) showToast('✓ Photo updated');
+        } else {
+          showErr((res.j && res.j.error) || 'Upload failed — please try again');
+        }
+      })
+      .catch(function () { showErr('Upload failed — please try again'); })
+      .then(function () {
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = orig;
+        fileInput.value = '';
+      });
+  };
+
+  if (removeBtn) removeBtn.onclick = function () {
+    clearErr();
+    removeBtn.disabled = true;
+    fetch(B + '/api/profile/avatar', { method: 'DELETE' })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; });
+      })
+      .then(function (res) {
+        if (res.ok && res.j && res.j.success) {
+          applyAvatar(null);
+          if (window.showToast) showToast('Photo removed');
+        } else {
+          showErr((res.j && res.j.error) || 'Could not remove the photo');
+        }
+      })
+      .catch(function () { showErr('Could not remove the photo'); })
+      .then(function () { removeBtn.disabled = false; });
+  };
+
+  // Initial render: show the stored photo (if any) on this page's own surfaces.
+  applyAvatar(p.avatar_url || null);
 })();
 </script>
 </body>

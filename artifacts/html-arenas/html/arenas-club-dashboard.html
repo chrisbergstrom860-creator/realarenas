@@ -40,7 +40,9 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
 .nav-item .nav-icon { font-size: 15px; flex-shrink: 0; width: 18px; text-align: center; }
 .nav-badge.alert { background: var(--red-light); color: var(--red); }
 .sidebar-footer .club-info { display: flex; align-items: center; gap: 8px; }
-.club-icon { width: 30px; height: 30px; border-radius: 7px; background: var(--yellow); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+.club-icon { width: 30px; height: 30px; border-radius: 7px; background: var(--yellow); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; overflow: hidden; }
+.club-logo-edit { margin-left: auto; background: none; border: none; cursor: pointer; font-size: 12px; opacity: .55; padding: 4px; border-radius: 6px; flex-shrink: 0; }
+.club-logo-edit:hover { opacity: 1; background: var(--gray-100); }
 .club-name-small { font-size: 12px; font-weight: 600; color: var(--gray-900); }
 .club-plan { font-size: 10px; color: var(--gray-500); }
 /* Club feed tab: two-column desktop (feed left, composer + real-data cards right), single column mobile */
@@ -337,7 +339,8 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
   <div class="sidebar-footer">
     <div class="club-info">
       <div class="club-icon">🏃</div>
-      <div><div class="club-name-small club-name">Hackney RC</div><div class="club-plan"><span class="member-count">48</span> members</div></div>
+      <div style="min-width:0"><div class="club-name-small club-name">Hackney RC</div><div class="club-plan"><span class="member-count">48</span> members</div></div>
+      <button class="club-logo-edit" onclick="openModal('club-logo')" title="Change club logo">✏️</button>
     </div>
   </div>
 </aside>
@@ -805,6 +808,27 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
 
 <!-- MODALS -->
 <!-- New event modal -->
+<div class="modal-overlay" id="modal-club-logo" onclick="closeAllModals(event)">
+  <div class="modal">
+    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Club logo</div><div style="font-size:13px;color:var(--gray-500);margin-top:2px">Shown wherever your club appears across Arenas</div></div><button class="modal-close" onclick="closeAllModals()">✕</button></div>
+    <div class="modal-body">
+      <div style="display:flex;align-items:center;gap:14px;padding:12px;background:var(--gray-50);border-radius:var(--radius)">
+        <div id="cl-logo-preview" style="width:56px;height:56px;border-radius:12px;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;overflow:hidden">🏟</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button id="cl-logo-upload" class="btn btn-ghost btn-sm" type="button">Upload logo</button>
+            <button id="cl-logo-remove" class="btn btn-ghost btn-sm" type="button" style="display:none">Remove</button>
+          </div>
+          <div style="font-size:11px;color:var(--gray-500);margin-top:6px">JPG, PNG or WebP · max 5 MB · square works best</div>
+          <div id="cl-logo-error" style="display:none;font-size:12px;color:#B91C1C;margin-top:6px"></div>
+        </div>
+        <input id="cl-logo-file" type="file" accept="image/jpeg,image/png,image/webp" style="display:none">
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeAllModals()">Close</button></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-event" onclick="closeAllModals(event)">
   <div class="modal">
     <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Add club event</div><div style="font-size:13px;color:var(--gray-500);margin-top:2px">Add an event and bulk-notify your members to register</div></div><button class="modal-close" onclick="closeAllModals()">✕</button></div>
@@ -3291,5 +3315,115 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   })();
   </script>
+<script>
+// ── CLUB LOGO (sidebar footer tile + upload modal) ──
+// Renders the real logo (clubs.logo_url) into the sidebar tile, replacing the
+// previously hardcoded 🏃 with the club's own sport emoji as the no-logo
+// fallback. Uploads go straight to POST /api/clubs/:id/logo on file select;
+// only this page's own tile updates here (app-wide rollout is a later step).
+(function () {
+  var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
+  var data = window.ARENAS_DATA || {};
+  var club = data.club || null;
+
+  var sportIcons = { running: '🏃', cycling: '🚴', swimming: '🏊', triathlon: '🏊', football: '⚽', basketball: '🏀', tennis: '🎾', climbing: '🧗', yoga: '🧘', gym: '🏋', hiking: '🥾', rowing: '🚣' };
+  var fallbackIcon = (club && sportIcons[(club.sport || '').toLowerCase()]) || '🏟';
+
+  var tile = document.querySelector('.sidebar-footer .club-icon');
+  var preview = document.getElementById('cl-logo-preview');
+  var fileInput = document.getElementById('cl-logo-file');
+  var uploadBtn = document.getElementById('cl-logo-upload');
+  var removeBtn = document.getElementById('cl-logo-remove');
+  var errEl = document.getElementById('cl-logo-error');
+  var editBtn = document.querySelector('.club-logo-edit');
+
+  // No managed club injected (placeholder dashboard) — hide the affordance.
+  if (!club || !club.id) {
+    if (editBtn) editBtn.style.display = 'none';
+    if (tile) tile.textContent = fallbackIcon;
+    return;
+  }
+
+  function setTile(el, url) {
+    if (!el) return;
+    if (url) {
+      el.textContent = '';
+      var img = document.createElement('img');
+      img.src = url;
+      img.alt = 'Club logo';
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block';
+      el.appendChild(img);
+    } else {
+      el.textContent = fallbackIcon;
+    }
+  }
+  function applyLogo(url) {
+    setTile(tile, url);
+    setTile(preview, url);
+    if (removeBtn) removeBtn.style.display = url ? '' : 'none';
+  }
+  function showErr(msg) {
+    if (!errEl) return;
+    errEl.textContent = msg;
+    errEl.style.display = 'block';
+  }
+  function clearErr() {
+    if (errEl) errEl.style.display = 'none';
+  }
+
+  if (uploadBtn) uploadBtn.onclick = function () { clearErr(); fileInput.click(); };
+
+  if (fileInput) fileInput.onchange = function () {
+    var f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    clearErr();
+    uploadBtn.disabled = true;
+    var orig = uploadBtn.textContent;
+    uploadBtn.textContent = 'Uploading…';
+    var fd = new FormData();
+    fd.append('avatar', f);
+    fetch(B + '/api/clubs/' + club.id + '/logo', { method: 'POST', body: fd })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; });
+      })
+      .then(function (res) {
+        if (res.ok && res.j && res.j.success) {
+          applyLogo(res.j.logo_url);
+          if (window.showToast) showToast('✓ Club logo updated');
+        } else {
+          showErr((res.j && res.j.error) || 'Upload failed — please try again');
+        }
+      })
+      .catch(function () { showErr('Upload failed — please try again'); })
+      .then(function () {
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = orig;
+        fileInput.value = '';
+      });
+  };
+
+  if (removeBtn) removeBtn.onclick = function () {
+    clearErr();
+    removeBtn.disabled = true;
+    fetch(B + '/api/clubs/' + club.id + '/logo', { method: 'DELETE' })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; });
+      })
+      .then(function (res) {
+        if (res.ok && res.j && res.j.success) {
+          applyLogo(null);
+          if (window.showToast) showToast('Logo removed');
+        } else {
+          showErr((res.j && res.j.error) || 'Could not remove the logo');
+        }
+      })
+      .catch(function () { showErr('Could not remove the logo'); })
+      .then(function () { removeBtn.disabled = false; });
+  };
+
+  // Initial render from injected data.
+  applyLogo(club.logo_url || null);
+})();
+</script>
 </body>
 </html>

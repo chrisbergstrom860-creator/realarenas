@@ -9,6 +9,8 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const cookieParser = require('cookie-parser');
+const multer = require('multer');
+const sharp = require('sharp');
 const { createClient } = require('@supabase/supabase-js');
 const { subscriptionPriceLabel, PRICE_FALLBACK_LABEL } = require('./billing-price');
 
@@ -4390,7 +4392,8 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
         name: display.name,
         handle: display.handle,
         bio: meta.bio || '',
-        location: meta.location || ''
+        location: meta.location || '',
+        avatar_url: meta.avatar_url || null
       },
       userId: req.user.id,
       email: req.user.email,
@@ -4959,6 +4962,236 @@ app.post(BASE + '/api/profile/update', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Update failed' });
   }
 });
+
+// ── AVATARS & CLUB LOGOS (Supabase Storage) ──
+// One PUBLIC bucket, path-namespaced: users/{userId}/{ts}.webp and
+// clubs/{clubId}/{ts}.webp. All writes are server-mediated via the service
+// role (clients never touch Storage directly), so prefix separation is the
+// only namespacing needed and no RLS policies are required.
+const AVATAR_BUCKET = 'avatars';
+
+// Idempotent bucket setup at startup: create-if-missing, never error if it
+// already exists (Supabase returns a 409/"already exists" for duplicates).
+(async () => {
+  if (!supabaseAdmin) return;
+  try {
+    const { error } = await supabaseAdmin.storage.createBucket(AVATAR_BUCKET, { public: true });
+    if (error && !/already exists|duplicate/i.test(error.message || '')) {
+      console.log('Avatar bucket setup error:', error.message);
+    }
+  } catch (err) {
+    console.log('Avatar bucket setup error:', err.message);
+  }
+})();
+
+// Multer stage: memory storage, 5 MB hard cap. The size cap maps to 413; any
+// other multipart parse problem is a clean 400 — never an unhandled throw.
+const avatarUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+function avatarUploadSingle(req, res, next) {
+  avatarUpload.single('avatar')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'Image is too large — the maximum is 5 MB' });
+      }
+      console.log('Avatar upload parse error:', err.message);
+      return res.status(400).json({ error: 'Could not read the uploaded file' });
+    }
+    next();
+  });
+}
+
+// Concurrency choice: an in-flight lock per subject (user or club) rather than
+// a timed cooldown — a second upload for the same subject while one is still
+// processing gets a 429, but back-to-back sequential uploads are fine.
+const avatarUploadsInFlight = new Set();
+
+// Extract the object path from one of OUR public URLs, and only when it sits
+// under the expected prefix — defense in depth so a corrupted stored URL can
+// never make cleanup delete some other user's/club's object.
+function avatarPathFromUrl(url, expectedPrefix) {
+  if (!url || typeof url !== 'string') return null;
+  const marker = `/storage/v1/object/public/${AVATAR_BUCKET}/`;
+  const i = url.indexOf(marker);
+  if (i === -1) return null;
+  let p;
+  try {
+    p = decodeURIComponent(url.slice(i + marker.length).split('?')[0]);
+  } catch (err) {
+    return null;
+  }
+  return p.startsWith(expectedPrefix + '/') ? p : null;
+}
+
+// Best-effort cleanup of a previous object. Tolerates every failure with a
+// log — cleanup must never fail the request that triggered it.
+async function deleteAvatarObject(url, expectedPrefix) {
+  const p = avatarPathFromUrl(url, expectedPrefix);
+  if (!p) return;
+  try {
+    const { error } = await supabaseAdmin.storage.from(AVATAR_BUCKET).remove([p]);
+    if (error) console.log('Old avatar cleanup failed (ignored):', error.message);
+  } catch (err) {
+    console.log('Old avatar cleanup failed (ignored):', err.message);
+  }
+}
+
+// The shared pipeline used by BOTH the user-avatar and club-logo endpoints.
+// sharp decode is the real validation (extensions/mime lie; pixels don't):
+// only jpeg/png/webp content passes, anything else is a clean 400. The
+// re-encode to a 256×256 cover-cropped WebP strips all EXIF/GPS metadata
+// (.rotate() first applies EXIF orientation so phone photos aren't sideways).
+// The versioned filename is the cache-buster: Supabase public URLs are
+// CDN/browser cached, so a new path per upload propagates instantly, then the
+// previous object is deleted best-effort.
+async function processAndStoreAvatar({ buffer, prefix, previousUrl }) {
+  let meta;
+  try {
+    meta = await sharp(buffer).metadata();
+  } catch (err) {
+    const e = new Error('That file is not a supported image — upload a JPG, PNG or WebP');
+    e.status = 400;
+    throw e;
+  }
+  if (!meta || !['jpeg', 'png', 'webp'].includes(meta.format)) {
+    const e = new Error('That file is not a supported image — upload a JPG, PNG or WebP');
+    e.status = 400;
+    throw e;
+  }
+  const webp = await sharp(buffer).rotate().resize(256, 256, { fit: 'cover' }).webp({ quality: 82 }).toBuffer();
+  const objectPath = `${prefix}/${Date.now()}.webp`;
+  const { error: upErr } = await supabaseAdmin.storage
+    .from(AVATAR_BUCKET)
+    .upload(objectPath, webp, { contentType: 'image/webp', upsert: false });
+  if (upErr) {
+    console.log('Avatar storage upload error:', upErr.message);
+    const e = new Error('Could not store the image — please try again');
+    e.status = 500;
+    throw e;
+  }
+  const { data: pub } = supabaseAdmin.storage.from(AVATAR_BUCKET).getPublicUrl(objectPath);
+  await deleteAvatarObject(previousUrl, prefix);
+  return { publicUrl: pub.publicUrl, objectPath };
+}
+
+// Upload/replace the signed-in user's own profile photo. Self-only by
+// construction: the storage prefix and metadata write both come from
+// req.user.id — no client-supplied id is involved anywhere.
+app.post(BASE + '/api/profile/avatar', requireAuth, avatarUploadSingle, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  if (!req.file || !req.file.buffer) return res.status(400).json({ error: 'No image file received' });
+  const lockKey = 'user:' + req.user.id;
+  if (avatarUploadsInFlight.has(lockKey)) {
+    return res.status(429).json({ error: 'An upload is already in progress — give it a second' });
+  }
+  avatarUploadsInFlight.add(lockKey);
+  try {
+    const meta = Object.assign({}, req.user.user_metadata || {});
+    const prefix = 'users/' + req.user.id;
+    const { publicUrl } = await processAndStoreAvatar({
+      buffer: req.file.buffer,
+      prefix,
+      previousUrl: meta.avatar_url
+    });
+    meta.avatar_url = publicUrl;
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.user.id, { user_metadata: meta });
+    if (error) {
+      // The pointer write failed — remove the just-uploaded object so it
+      // doesn't become an orphan nobody references.
+      console.log('Avatar metadata write error:', error.message);
+      await deleteAvatarObject(publicUrl, prefix).catch(() => {});
+      return res.status(500).json({ error: 'Could not save the new photo' });
+    }
+    res.json({ success: true, avatar_url: publicUrl });
+  } catch (err) {
+    console.log('Avatar upload error:', err.message);
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Upload failed' });
+  } finally {
+    avatarUploadsInFlight.delete(lockKey);
+  }
+});
+
+// Remove the user's photo: clear the pointer first (the UI falls back to
+// initials immediately), then best-effort delete the object.
+app.delete(BASE + '/api/profile/avatar', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  try {
+    const meta = Object.assign({}, req.user.user_metadata || {});
+    const oldUrl = meta.avatar_url;
+    if (!oldUrl) return res.json({ success: true });
+    meta.avatar_url = null;
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.user.id, { user_metadata: meta });
+    if (error) {
+      console.log('Avatar remove error:', error.message);
+      return res.status(500).json({ error: 'Could not remove the photo' });
+    }
+    await deleteAvatarObject(oldUrl, 'users/' + req.user.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.log('Avatar remove error:', err.message);
+    res.status(500).json({ error: 'Could not remove the photo' });
+  }
+});
+
+// Upload/replace a club's logo. Authorization (UNCONDITIONAL — independent of
+// PLAN_GATES_ENABLED, per the codified pattern): admin/coach of THIS club only.
+app.post(BASE + '/api/clubs/:clubId/logo', requireAuth, avatarUploadSingle, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  const { clubId } = req.params;
+  const role = await getClubRole(req.user.id, clubId);
+  if (!isClubManagerRole(role && role.role)) return res.status(403).json({ error: 'Not authorized' });
+  if (!req.file || !req.file.buffer) return res.status(400).json({ error: 'No image file received' });
+  const lockKey = 'club:' + clubId;
+  if (avatarUploadsInFlight.has(lockKey)) {
+    return res.status(429).json({ error: 'An upload is already in progress — give it a second' });
+  }
+  avatarUploadsInFlight.add(lockKey);
+  try {
+    const { data: clubRow } = await supabaseAdmin.from('clubs').select('id, logo_url').eq('id', clubId).maybeSingle();
+    if (!clubRow) return res.status(404).json({ error: 'Club not found' });
+    const prefix = 'clubs/' + clubId;
+    const { publicUrl } = await processAndStoreAvatar({
+      buffer: req.file.buffer,
+      prefix,
+      previousUrl: clubRow.logo_url
+    });
+    const { error } = await supabaseAdmin.from('clubs').update({ logo_url: publicUrl }).eq('id', clubId);
+    if (error) {
+      console.log('Club logo write error:', error.message);
+      await deleteAvatarObject(publicUrl, prefix).catch(() => {});
+      return res.status(500).json({ error: 'Could not save the new logo' });
+    }
+    res.json({ success: true, logo_url: publicUrl });
+  } catch (err) {
+    console.log('Club logo upload error:', err.message);
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Upload failed' });
+  } finally {
+    avatarUploadsInFlight.delete(lockKey);
+  }
+});
+
+// Remove a club's logo — same UNCONDITIONAL manager-only bar as the upload.
+app.delete(BASE + '/api/clubs/:clubId/logo', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  const { clubId } = req.params;
+  const role = await getClubRole(req.user.id, clubId);
+  if (!isClubManagerRole(role && role.role)) return res.status(403).json({ error: 'Not authorized' });
+  try {
+    const { data: clubRow } = await supabaseAdmin.from('clubs').select('id, logo_url').eq('id', clubId).maybeSingle();
+    if (!clubRow) return res.status(404).json({ error: 'Club not found' });
+    if (!clubRow.logo_url) return res.json({ success: true });
+    const { error } = await supabaseAdmin.from('clubs').update({ logo_url: null }).eq('id', clubId);
+    if (error) {
+      console.log('Club logo remove error:', error.message);
+      return res.status(500).json({ error: 'Could not remove the logo' });
+    }
+    await deleteAvatarObject(clubRow.logo_url, 'clubs/' + clubId);
+    res.json({ success: true });
+  } catch (err) {
+    console.log('Club logo remove error:', err.message);
+    res.status(500).json({ error: 'Could not remove the logo' });
+  }
+});
+
 // Blog is moving to an external Ghost site (not live yet). Until then the in-app
 // blog is unreachable: every in-app blog link has been removed and this route
 // redirects to the landing page so stale bookmarks/links don't 404. The page
@@ -4988,7 +5221,7 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
     const pickManagedMembership = async (clubFilter) => {
       let q = supabaseAdmin
         .from('memberships')
-        .select('club_id, role, clubs (id, name, handle, sport, city)')
+        .select('club_id, role, clubs (id, name, handle, sport, city, logo_url)')
         .eq('user_id', req.user.id)
         .in('role', ['admin', 'coach']);
       if (clubFilter) q = q.eq('club_id', clubFilter);

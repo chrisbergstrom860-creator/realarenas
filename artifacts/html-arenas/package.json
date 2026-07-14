@@ -9,13 +9,15 @@
     "build": "echo 'No build step required'"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.9"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.2",
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.4.2",
     "express": "^4.21.0",
+    "multer": "^2.2.0",
+    "sharp": "^0.35.3",
     "stripe": "^22.3.0"
   }
 }

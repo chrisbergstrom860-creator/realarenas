@@ -37,4 +37,4 @@
 - [html-arenas search wiring](html-arenas-search.md) — search is athletes-only via /athletes?q= deep link; dashboard member-filter globals need head-script stubs; Enter handlers need !event.isComposing.
 - [html-arenas Pro badge](html-arenas-pro-badge.md) — PRO badge = real subscription, never PLAN_GATES_ENABLED; server string-injection after injectBottomNav; exact-match patterns are the fragility.
 - [html-arenas goals](html-arenas-goals-mapping.md) — fully shipped (API, Goals tab, Overview mini-card, live pricing copy); server-truth enrichment, client never recomputes.
-- [html-arenas avatars](html-arenas-avatars.md) — pre-build mapping (users+clubs): no shared helpers; avatar_url→user_metadata, clubs.logo_url needs user-run DDL; one public bucket, versioned filenames.
+- [html-arenas avatars](html-arenas-avatars.md) — Session ① shipped: shared sharp pipeline + user/club endpoints in one public bucket, own-surface UIs; Session ② = app-wide rendering rollout.
