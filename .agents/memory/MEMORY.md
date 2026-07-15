@@ -36,6 +36,7 @@
 - [html-arenas sticky filter offset](html-arenas-sticky-scrollport.md) — sticky bars inside .main (overflow:hidden = the scrollport, already below topbar) must use top:0 not top:56px, else 56px gap + first row occluded.
 - [html-arenas Stripe/plans + gating](html-arenas-stripe.md) — $9 Pro / $29 Club Pro; raw-mount webhook is sole subscriptions writer; plan gating LIVE; gate details in topic file.
 - [html-arenas search wiring](html-arenas-search.md) — search is athletes-only via /athletes?q= deep link; dashboard member-filter globals need head-script stubs; Enter handlers need !event.isComposing.
+- [/log page restructure plan](html-arenas-log-page-plan.md) — validated move-not-rewrite map for extracting the activity form to /log; page-local form CSS is the trap; not yet built.
 - [html-arenas calendar](html-arenas-calendar.md) — interactive day panel; local YYYY-MM-DD text dates; gate split: create/edit Pro, status/delete free; Log-this links plan→activity; ARENAS_SPORTS uses .label not .name.
 - [html-arenas sports registry](html-arenas-sports-registry.md) — sports.js is the SSOT; all sport maps/pickers derive from injected ARENAS_SPORTS; never hand-write a sport map again.
 - [html-arenas Pro badge](html-arenas-pro-badge.md) — PRO badge = real subscription, never PLAN_GATES_ENABLED; server string-injection after injectBottomNav; exact-match patterns are the fragility.
