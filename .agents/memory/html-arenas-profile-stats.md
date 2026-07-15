@@ -10,13 +10,21 @@ panel `#tab-stats` (pills `.sp-period` + `#sp-stats-body`), client IIFE renders 
 
 ## Period semantics (product decision — keep consistent)
 - ONLY hero stats (activities/km/hours/points) and the sport breakdown respect
-  `period`. Streaks (current + longest), the 12-week chart, and all Personal
+  `period`. Streaks (current + longest), the weekly chart, and all Personal
   Records are **always all-time**, ignoring the filter.
   **Why:** PRs and streaks are lifetime achievements; scoping them to "this
-  month" makes them meaningless. The 12-week chart is intentionally a fixed
-  recent window, not a period view.
+  month" makes them meaningless. The weekly chart is a recent rolling window,
+  not a period view.
   **How to apply:** if asked to add/extend a PR or streak, compute it over the
   full activity set, not `periodActs`.
+- The weekly chart's range IS user-selectable: `?weeks=` whitelisted to
+  6/12/24 (anything else → 12), computed on-read from the same all-time query.
+  Client persists the choice in localStorage `arenas_stats_weeks` (whitelist
+  parse both sides) and range switching is compute-then-swap (no wrong-range
+  flash). Range stays independent of the period pills. Zero weeks render as a
+  flat gray baseline tick with no value label; value/axis labels thin to every
+  2nd/4th week (aligned backward from the always-labeled current week) at
+  24w and on narrow viewports.
 
 ## Bucketing gotcha (same as reports tab)
 - Biggest-week / biggest-month keys are built from **local** date parts

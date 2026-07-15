@@ -1304,6 +1304,24 @@ if (logHashMatch) {
 // ── STATS & PRs TAB ── real data computed from the user's own activities.
 (function () {
   var spPeriod = 'all';
+  // Weekly-chart range (6/12/24), persisted per the key-naming convention.
+  // Anything unexpected in storage falls back to the historic 12.
+  var spWeeks = (function () {
+    try {
+      var v = parseInt(localStorage.getItem('arenas_stats_weeks'), 10);
+      return v === 6 || v === 12 || v === 24 ? v : 12;
+    } catch (e) { return 12; }
+  })();
+
+  window.setStatsWeeks = function (n) {
+    if (n === spWeeks) return;
+    spWeeks = n;
+    try { localStorage.setItem('arenas_stats_weeks', String(n)); } catch (e) {}
+    // Compute-then-swap: the old chart stays visible until the new range's
+    // data has arrived, so there is never a wrong-range flash.
+    loadProfileStats();
+  };
+
   function esc(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -1339,7 +1357,7 @@ if (logHashMatch) {
       return;
     }
     try {
-      var response = await fetch(window.BASE + '/api/profile/stats?period=' + encodeURIComponent(spPeriod));
+      var response = await fetch(window.BASE + '/api/profile/stats?period=' + encodeURIComponent(spPeriod) + '&weeks=' + spWeeks);
       var r = await response.json();
       if (r.error) {
         body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Could not load stats.</div>';
@@ -1364,15 +1382,36 @@ if (logHashMatch) {
       });
 
       var maxWeekH = Math.max.apply(null, r.weeklyChart.map(function (w) { return w.hours; }).concat([0.5]));
+      var nWeeks = r.weeklyChart.length;
+      var narrow = window.innerWidth <= 480;
+      // Label thinning when bars get thin: value + axis labels drop to every
+      // 2nd/4th week (aligned backward from the current week, which is always
+      // labeled). 6w always shows everything.
+      var labelEvery = nWeeks === 24 ? (narrow ? 4 : 2) : nWeeks === 12 ? (narrow ? 2 : 1) : 1;
+      // Bars widen to fill the available width for shorter ranges.
+      var barMaxW = nWeeks === 6 ? '64px' : nWeeks === 12 ? '40px' : '26px';
       var chartBars = r.weeklyChart.map(function (w, i) {
         var isLast = i === r.weeklyChart.length - 1;
-        var h = Math.max(5, Math.round((w.hours / maxWeekH) * 100));
+        var stepsBack = nWeeks - 1 - i;
+        var onGrid = isLast || stepsBack % labelEvery === 0;
+        // Zero weeks get no value label (honest gap) but keep a flat baseline
+        // tick so the timeline reads continuously.
+        var bar = w.hours > 0
+          ? '<div style="width:100%;max-width:' + barMaxW + ';height:' + Math.max(4, Math.round((w.hours / maxWeekH) * 78)) + '%;border-radius:3px 3px 0 0;background:' + (isLast ? '#E6B800' : '#FFD21E') + '"></div>'
+          : '<div style="width:100%;max-width:' + barMaxW + ';height:3px;border-radius:1px;background:var(--gray-200)"></div>';
         return '' +
-          '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end">' +
-            '<div style="width:100%;max-width:26px;height:' + h + '%;border-radius:3px 3px 0 0;background:' + (isLast ? '#E6B800' : '#FFD21E') + '"></div>' +
-            '<div style="font-size:8px;color:' + (isLast ? 'var(--gray-600)' : 'var(--gray-400)') + ';font-weight:' + (isLast ? '600' : '400') + '">' + (isLast ? 'Now' : esc(w.label)) + '</div>' +
+          '<div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end">' +
+            (w.hours > 0 && onGrid ? '<div style="font-size:9px;font-family:var(--mono);font-weight:600;white-space:nowrap;color:' + (isLast ? 'var(--gray-900)' : 'var(--gray-500)') + '">' + w.hours + 'h</div>' : '') +
+            bar +
+            '<div style="font-size:8px;height:10px;line-height:10px;white-space:nowrap;color:' + (isLast ? 'var(--gray-600)' : 'var(--gray-400)') + ';font-weight:' + (isLast ? '600' : '400') + '">' + (onGrid ? (isLast ? 'Now' : esc(w.label)) : '') + '</div>' +
           '</div>';
       }).join('');
+
+      // Range switcher pills — same chip language as the period pills above.
+      var weekPill = function (n) {
+        var on = n === spWeeks;
+        return '<div class="sp-weeks" onclick="setStatsWeeks(' + n + ')" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;border:' + (on ? '1px solid var(--yellow-dark)' : 'var(--border)') + ';background:' + (on ? 'var(--yellow-light)' : 'white') + ';color:' + (on ? '#7a5c00' : 'var(--gray-600)') + '">' + n + 'w</div>';
+      };
 
       var maxSportPct = Math.max.apply(null, r.sportBreakdown.map(function (s) { return s.pct; }).concat([1]));
       var sportRows = r.sportBreakdown.map(function (s) {
@@ -1414,8 +1453,8 @@ if (logHashMatch) {
           '<div style="padding:12px 14px;display:flex;align-items:center;gap:10px"><div style="font-size:18px">📅</div><div><div style="font-size:15px;font-weight:700;font-family:var(--mono);line-height:1">' + r.streaks.avgPerWeek + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px">Avg sessions / week</div></div></div>' +
         '</div>' +
         '<div style="margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
-          '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between"><div style="font-size:12px;font-weight:600">📊 Weekly activity · last 12 weeks</div><div style="font-size:11px;color:var(--gray-400)">hours per week</div></div>' +
-          '<div style="display:flex;align-items:flex-end;gap:5px;height:80px;padding:14px 14px 8px">' + chartBars + '</div>' +
+          '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div style="font-size:12px;font-weight:600">📊 Weekly activity · last ' + nWeeks + ' weeks</div><div style="display:flex;align-items:center;gap:6px">' + weekPill(6) + weekPill(12) + weekPill(24) + '<div style="font-size:11px;color:var(--gray-400);margin-left:4px">hours per week</div></div></div>' +
+          '<div style="display:flex;align-items:flex-end;gap:' + (nWeeks === 24 ? '3px' : '5px') + ';height:170px;padding:12px 14px 8px">' + chartBars + '</div>' +
         '</div>' +
         (r.sportBreakdown.length > 0 ?
           '<div style="margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +

@@ -4635,9 +4635,14 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
     const weeksSpan = Math.max(1, (now - firstDate) / (7 * 86400000));
     const avgPerWeek = Math.round((periodActs.length / weeksSpan) * 10) / 10;
 
-    // ── Weekly chart (last 12 weeks, always recent regardless of period) ──
+    // ── Weekly chart (last N weeks, always recent regardless of period).
+    // `weeks` is whitelisted to the UI's range options; anything else falls
+    // back to the historic 12. Computed on-read from the same all-time
+    // activities query — no extra fetch, no stored aggregates. ──
+    const wq = parseInt(req.query.weeks, 10);
+    const chartWeeks = wq === 6 || wq === 12 || wq === 24 ? wq : 12;
     const weeklyChart = [];
-    for (let i = 11; i >= 0; i--) {
+    for (let i = chartWeeks - 1; i >= 0; i--) {
       const day = now.getDay() || 7;
       const wStart = new Date(now); wStart.setDate(now.getDate() - day + 1 - i * 7); wStart.setHours(0, 0, 0, 0);
       const wEnd = new Date(wStart); wEnd.setDate(wStart.getDate() + 7);
@@ -4724,6 +4729,7 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
 
     res.json({
       period,
+      chartWeeks,
       hero: { activities: periodActs.length, totalKm, totalHours, totalPoints },
       streaks: { current: currentStreak, longest: longestStreak, avgPerWeek },
       weeklyChart,
