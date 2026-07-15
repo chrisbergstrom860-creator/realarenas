@@ -10,6 +10,10 @@ description: How to screenshot auth-gated html-arenas widgets, and the screensho
 - For `app_preview`, the tool resolves `localhost:80{previewPath}{path}`, and this artifact's previewPath is `/html/landing` (NOT `/html`). So `path:'/foo'` becomes `/html/landing/foo`.
 - **How to apply:** to screenshot a route mounted at `/html/foo`, add a `/html/landing/foo` alias to the temp route (or otherwise make the composed URL land on your handler). A bare `/html/foo` path will 404 through the tool.
 
+**Reduced-motion e2e via testing subagent**
+- A `matchMedia('(prefers-reduced-motion: reduce)')` guard evaluated once at script load can only be tested if Playwright emulation is set at CONTEXT CREATION (`newContext({ reducedMotion: 'reduce' })`). Telling the tester to "emulate reduced motion" without this yields a false failure: emulation lands after scripts ran, the animation plays, and the snapshot catches a mid-flight value.
+- **How to apply:** spell out "set reducedMotion:'reduce' at context creation, before navigation; do NOT use page.emulateMedia after load" in the test plan. Same reasoning: full-page screenshots may catch count-up animations mid-value ("11" of 12) — that's proof the animation runs, not a bug.
+
 **Full-page harness variant (better than copy-paste harness for whole tabs)**
 - Instead of copying widget CSS/fns into a standalone file, add a temp unauthed route `BASE+'/landing/__preview/<name>'` that serves the REAL page file through the real `injectArenasData` + `injectBottomNav` pipeline with fixture data, then appends a `<script>` before `</body>` that (1) monkey-patches `window.fetch` for the page's API URL to return fixture JSON (query param like `?ms=0` toggles empty states) and (2) on DOMContentLoaded calls `setTab('<tab>', el)` to open the target tab. Expected: 401 console noise from the notifications poll — harmless.
 - Remove the route + `node --check server.js` + restart before push so `git status` shows only the intended files.
