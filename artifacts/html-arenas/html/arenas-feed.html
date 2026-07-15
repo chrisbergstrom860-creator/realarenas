@@ -291,7 +291,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="nav-item" onclick="nav('/calendar')"><span class="nav-icon">🗓️</span> Calendar</div>
   <div class="nav-item" onclick="nav('/leaderboards')"><span class="nav-icon">🏆</span> Leaderboards</div>
   <div class="nav-item" onclick="nav('/challenges')"><span class="nav-icon">⚡</span> Challenges <span class="nav-badge">3</span></div>
-  <div class="nav-item" onclick="nav('/profile#activities')"><span class="nav-icon">➕</span> Log activity</div>
+  <div class="nav-item" onclick="nav('/log')"><span class="nav-icon">➕</span> Log activity</div>
   <div class="nav-item" onclick="nav('/athletes')"><span class="nav-icon">👥</span> Athletes</div>
   <div class="nav-section-label">My clubs</div>
   <div class="nav-section-label">Account</div>
@@ -425,7 +425,7 @@ button,select,input,textarea{font-family:var(--font)}
     <!-- Quick actions -->
     <div class="side-card">
       <div class="side-hdr"><span class="side-title">⚡ Quick actions</span></div>
-      <div class="qa-item" onclick="nav('/profile#activities')">
+      <div class="qa-item" onclick="nav('/log')">
         <div class="qa-icon" style="background:var(--orange-light)">📝</div>
         <div><div class="qa-title">Log an activity</div></div>
         <span style="font-size:12px;color:var(--gray-300)">→</span>
@@ -963,7 +963,7 @@ renderFeedEmptyState();
     if (!week.activities) {
       body.innerHTML = '<div style="padding:16px 14px;text-align:center">'
         + '<div style="font-size:12px;color:var(--gray-500)">No activities logged this week yet</div>'
-        + '<a href="' + (window.BASE || '') + '/profile#activities" style="display:inline-block;margin-top:6px;font-size:12px;color:var(--orange);text-decoration:none;font-weight:500">Log your first activity →</a>'
+        + '<a href="' + (window.BASE || '') + '/log" style="display:inline-block;margin-top:6px;font-size:12px;color:var(--orange);text-decoration:none;font-weight:500">Log your first activity →</a>'
         + '</div>';
       return;
     }

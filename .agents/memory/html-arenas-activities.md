@@ -47,4 +47,6 @@ surface in followers' feeds via server-side injection.
 - All rendered activity/user values are HTML-escaped (`escAct` in profile,
   `escFeedAct` in feed) before `innerHTML`. Fetches are `window.BASE`-prefixed.
   Delete keeps a `confirm()` (consistent with the app's other destructive
-  actions). `/profile#activities` deep-links open the tab + entry form.
+  actions). `/profile#activities` deep-links open the tab (list-only — the
+  entry form lives on the standalone `/log` page; `#log=<id>` forwards to
+  `/log?plan=<id>`; see html-arenas-log-page.md).

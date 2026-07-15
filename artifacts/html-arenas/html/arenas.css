@@ -380,3 +380,24 @@ body {
     max-height: none !important;
   }
 }
+
+/* ── FORM CONTROLS + ACTIVITY-FORM CHIPS + TOAST ──
+   Promoted from arenas-my-profile.html's page-local styles when the activity
+   entry form moved to the standalone /log page — both pages need them now
+   (/log for the form; my-profile for its Settings forms, goal period chips
+   and delete toasts). Page inline <style> loads after this file and can
+   override anything here. */
+.form-input{padding:8px 11px;border:var(--border);border-radius:var(--radius);font-size:13px;color:var(--gray-800);outline:none;transition:border-color .13s}
+.form-input:focus{border-color:var(--gray-400);box-shadow:0 0 0 3px rgba(107,114,128,0.08)}
+.form-input::placeholder{color:var(--gray-400)}
+.form-select{padding:8px 11px;border:var(--border);border-radius:var(--radius);font-size:13px;color:var(--gray-700);background:white;outline:none;cursor:pointer}
+.form-textarea{padding:8px 11px;border:var(--border);border-radius:var(--radius);font-size:13px;color:var(--gray-800);outline:none;resize:vertical;min-height:72px;line-height:1.5;transition:border-color .13s}
+.form-textarea:focus{border-color:var(--gray-400);box-shadow:0 0 0 3px rgba(107,114,128,0.08)}
+.form-textarea::placeholder{color:var(--gray-400)}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--gray-900);color:white;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:500;z-index:999;transition:transform .3s ease;white-space:nowrap;box-shadow:var(--shadow-md)}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.act-sport-chip{padding:6px 13px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer;transition:all .12s}
+.act-sport-chip:hover{border-color:var(--gray-400)}
+.act-sport-chip.selected{background:var(--yellow-light);border-color:#fde68a;color:#7a5c00}
+.act-feeling-chip{padding:5px 12px;border-radius:20px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer;transition:all .12s}
+.act-feeling-chip.selected{background:var(--yellow-light);border-color:#fde68a;color:#7a5c00}

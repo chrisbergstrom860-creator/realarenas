@@ -582,13 +582,13 @@ function athleteBottomNav(activeKey) {
   return '<nav class="bottom-nav" aria-label="Primary">'
     + bnItem(activeKey, 'feed', "nav('/feed')", '🏠', 'Feed', false)
     + bnItem(activeKey, 'events', "nav('/events')", '🎟️', 'Events', false)
-    + bnItem(activeKey, 'log', "nav('/profile#activities')", '➕', 'Log', true)
+    + bnItem(activeKey, 'log', "nav('/log')", '➕', 'Log', true)
     + bnItem(activeKey, 'calendar', "nav('/calendar')", '🗓️', 'Cal', false)
     + bnItem(activeKey, 'ranks', "nav('/leaderboards')", '🏆', 'Ranks', false)
     + bnItem(activeKey, 'profile', "nav('/profile')", '👤', 'Profile', false)
     + '</nav>';
 }
-const ATHLETE_NAV_ACTIVE = { feed: 'feed', profile: 'profile', events: 'events', calendar: 'calendar', leaderboards: 'ranks', challenges: null, athletes: null, notifications: null, billing: null };
+const ATHLETE_NAV_ACTIVE = { feed: 'feed', profile: 'profile', events: 'events', log: 'log', calendar: 'calendar', leaderboards: 'ranks', challenges: null, athletes: null, notifications: null, billing: null };
 
 // Club pages (coach dashboard + member home) navigate by switching tabs/sections
 // in place via setTab(), not by loading a new URL, so their bottom nav calls
@@ -5408,6 +5408,35 @@ app.get(BASE + '/calendar', requirePageAuth, async (req, res) => {
     res.type('html').send(html);
   } catch (err) {
     console.log('Calendar page error:', err.message);
+    servePlain();
+  }
+});
+
+// Log-activity page — the standalone home of the activity entry form (moved
+// out of the profile's Activities tab). Standard shell composition like
+// /calendar. Logging is a free feature — plan-linking included — so no
+// proLocked flag is injected here.
+app.get(BASE + '/log', requirePageAuth, async (req, res) => {
+  const servePlain = () => res.type('html').send(
+    injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-log.html'), 'utf8'), 'log')
+  );
+  try {
+    if (!supabaseAdmin) return servePlain();
+    const data = {
+      userId: req.user.id,
+      profile: displayFromUser(req.user),
+      clubs: await getSidebarClubs(req.user.id)
+    };
+    const html = injectProBadge(
+      injectBottomNav(
+        injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-log.html'), 'utf8'), data),
+        'log'
+      ),
+      (await getUserPlan(req.user.id)) === 'pro'
+    );
+    res.type('html').send(html);
+  } catch (err) {
+    console.log('Log page error:', err.message);
     servePlain();
   }
 });

@@ -180,7 +180,7 @@ button{font-family:var(--font)}
   <div class="nav-item active"><span class="nav-icon">🗓️</span> Calendar</div>
   <div class="nav-item" onclick="nav('/leaderboards')"><span class="nav-icon">🏆</span> Leaderboards</div>
   <div class="nav-item" onclick="nav('/challenges')"><span class="nav-icon">⚡</span> Challenges</div>
-  <div class="nav-item" onclick="nav('/profile#activities')"><span class="nav-icon">➕</span> Log activity</div>
+  <div class="nav-item" onclick="nav('/log')"><span class="nav-icon">➕</span> Log activity</div>
   <div class="nav-item" onclick="nav('/athletes')"><span class="nav-icon">👥</span> Athletes</div>
   <div class="nav-section-label">My clubs</div>
   <div class="nav-section-label">Account</div>
@@ -755,7 +755,7 @@ button{font-family:var(--font)}
     else if (act === 'plan-done') patchPlanStatus(id, 'done', btn);
     else if (act === 'plan-skip') patchPlanStatus(id, 'skipped', btn);
     else if (act === 'plan-delete') deletePlan(id, btn);
-    else if (act === 'plan-log') { window.location.href = window.BASE + '/profile#log=' + encodeURIComponent(id); }
+    else if (act === 'plan-log') { window.location.href = window.BASE + '/log?plan=' + encodeURIComponent(id); }
     else if (act === 'rsvp') rsvpFromPanel(id, btn.getAttribute('data-status'), btn);
   });
 

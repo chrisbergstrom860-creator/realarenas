@@ -65,14 +65,15 @@ untouched.
 
 # "Log activity" sidebar highlight
 
-"Log activity" is NOT its own page — its sidebar item does `nav('/profile#activities')`,
-landing on the profile page's Activities tab. So its active highlight is driven by
-the profile page's `setTab(id)`, which clears `active` from all `.nav-item`s then
-re-applies it by tab→label: `activities`→"Log activity", `settings`→"Settings",
-everything else (overview/stats/achievements/clubs/following)→"My profile".
+"Log activity" IS its own page now (`/log`, see html-arenas-log-page.md) — every
+athlete sidebar item does `nav('/log')` and the /log page carries the static
+`active` class like any other page. On my-profile, `setTab(id)` re-applies the
+highlight by tab→label: `settings`→"Settings", everything else
+(overview/activities/stats/achievements/clubs/following)→"My profile" — there is
+no `activities`→"Log activity" mapping any more.
 
-**Why:** Previously `setTab` only re-highlighted on overview/settings, so the
-activities tab (and stats/etc.) left the sidebar with no highlight at all.
+**Why:** Previously `setTab` only re-highlighted on overview/settings, so some
+tabs left the sidebar with no highlight at all.
 
 **How to apply:** Keep every profile tab mapped to some sidebar label so the
 sidebar is never blank. Matching is `textContent.includes(label)`, which relies on
