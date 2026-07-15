@@ -5297,14 +5297,23 @@ app.get(BASE + '/api/calendar/month', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ month: monthParam, ...empty });
   try {
     const userId = req.user.id;
+    // Window widened ±8 days: ±1 was for local-date bucketing of timestamps;
+    // the calendar insights panel also needs the current week's overlap into a
+    // neighbor month (up to 6 days for a Monday-start week) plus tz skew — the
+    // client still trims the grid to the exact local month, so the extra rows
+    // only ever feed week counts.
     const winStart = new Date(year, month - 1, 1);
-    winStart.setDate(winStart.getDate() - 1); // widen for local-date bucketing
+    winStart.setDate(winStart.getDate() - 8);
     const winEnd = new Date(year, month, 1);
-    winEnd.setDate(winEnd.getDate() + 1);
+    winEnd.setDate(winEnd.getDate() + 8);
     const startIso = winStart.toISOString();
     const endIso = winEnd.toISOString();
-    // Plan window in plain YYYY-MM-DD text (lexicographic compare is safe).
-    const nextMonth = month === 12 ? `${year + 1}-01` : `${year}-${String(month + 1).padStart(2, '0')}`;
+    // Plan window in plain YYYY-MM-DD text (lexicographic compare is safe),
+    // widened ±7 days for the same week-overlap reason — local date math only,
+    // never toISOString (UTC skew).
+    const fmtYmd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const planStart = fmtYmd(new Date(year, month - 1, 1 - 7));
+    const planEnd = fmtYmd(new Date(year, month, 1 + 7)); // exclusive upper bound
 
     const { data: memberships } = await supabaseAdmin
       .from('memberships').select('club_id').eq('user_id', userId);
@@ -5320,7 +5329,7 @@ app.get(BASE + '/api/calendar/month', requireAuth, async (req, res) => {
         .select('id, sport, title, distance, duration, date')
         .eq('user_id', userId).gte('date', startIso).lt('date', endIso),
       supabaseAdmin.from('planned_sessions').select('*').eq('user_id', userId)
-        .gte('date', monthParam + '-01').lt('date', nextMonth + '-01')
+        .gte('date', planStart).lt('date', planEnd)
     ]);
 
     const clubEvents = clubEventsRes.data || [];

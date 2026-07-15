@@ -22,7 +22,13 @@ document.addEventListener('DOMContentLoaded', function(){
 button{font-family:var(--font)}
 .notif-btn{width:34px;height:34px;border-radius:7px;border:var(--border);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;position:relative;transition:background .1s}
 .notif-btn:hover{background:var(--gray-50)}
-.main{display:block;max-width:1020px;padding:28px 32px 60px}
+.main{display:block;padding:28px 32px 60px}
+/* Centered composition: title/controls/grid/insights share one max-width column.
+   The grid + the insights panel TOGETHER form the centered block. */
+.cal-shell{max-width:1340px;margin:0 auto}
+.cal-layout{display:flex;gap:20px;align-items:flex-start}
+#cal-root{flex:1;min-width:0}
+#cal-insights{width:280px;flex-shrink:0}
 .page-title{font-size:22px;font-weight:700;color:var(--gray-900);letter-spacing:-.01em;margin-bottom:4px}
 .page-sub{font-size:13px;color:var(--gray-500);margin-bottom:20px}
 
@@ -49,30 +55,52 @@ button{font-family:var(--font)}
 
 /* ── MONTH GRID (dormant my-profile .cal-grid CSS as the base, sized up for a
      full-page calendar: real tap targets, auto rows instead of 1:1 heat cells) ── */
-.cal-labels{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:10px 4px 4px;font-size:10px;color:var(--gray-400);text-align:center;text-transform:uppercase;letter-spacing:.05em;font-family:var(--mono)}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:0 0 14px}
-.cal-day{min-height:86px;border-radius:8px;border:var(--border);background:white;padding:6px 7px;cursor:pointer;display:flex;flex-direction:column;gap:4px;overflow:hidden;transition:border-color .1s,background .1s}
+.cal-labels{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:10px 4px 4px;font-size:11px;color:var(--gray-400);text-align:center;text-transform:uppercase;letter-spacing:.05em;font-family:var(--mono)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:0 0 14px}
+.cal-day{min-height:170px;border-radius:10px;border:var(--border);background:white;padding:8px 9px;cursor:pointer;display:flex;flex-direction:column;gap:5px;overflow:hidden;transition:border-color .1s,background .1s}
 .cal-day:hover{border-color:var(--gray-400);background:var(--gray-50)}
 .cd-empty{background:transparent;border:none;cursor:default;min-height:0}
 .cd-empty:hover{background:transparent;border:none}
-.cd-num{font-size:11px;font-weight:600;color:var(--gray-500);font-family:var(--mono);line-height:1}
+.cd-num{font-size:15px;font-weight:600;color:var(--gray-500);font-family:var(--mono);line-height:1}
 .cd-today{border:2px solid var(--gray-900)}
-.cd-today .cd-num{color:var(--gray-900);background:var(--yellow);border-radius:4px;padding:1px 4px;align-self:flex-start}
-.cd-pills{display:flex;flex-direction:column;gap:2px;min-width:0}
-.cd-pill{font-size:10px;line-height:1.3;padding:1px 5px;border-radius:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.cd-today .cd-num{color:var(--gray-900);background:var(--yellow);border-radius:5px;padding:2px 6px;align-self:flex-start}
+.cd-pills{display:flex;flex-direction:column;gap:3px;min-width:0}
+.cd-pill{font-size:12px;line-height:1.35;padding:2px 7px;border-radius:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
 .cd-pill.ev{background:var(--yellow-light);color:#7a5c00}
 .cd-pill.nr{background:transparent;border:1px dashed var(--gray-300);color:var(--gray-400);font-weight:500}
 .cd-pill.plan{background:#F5F3FF;color:#5B21B6}
 .cd-pill.plan.done{text-decoration:line-through;opacity:.7}
 .cd-pill.plan.skipped{text-decoration:line-through;opacity:.5}
 .cd-pill.act{background:#ECFDF5;color:#065F46}
-.cd-dots{display:none;align-items:center;gap:3px;flex-wrap:wrap}
-.cd-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.cd-dots{display:none;align-items:center;gap:4px;flex-wrap:wrap}
+.cd-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
 .cd-dot.ev{background:var(--yellow)}
 .cd-dot.nr{background:transparent;border:1.5px solid var(--gray-400)}
 .cd-dot.plan{background:#8B5CF6}
 .cd-dot.act{background:#10B981}
-.cd-more{font-size:9px;color:var(--gray-400);font-family:var(--mono)}
+.cd-more{font-size:11px;color:var(--gray-400);font-family:var(--mono)}
+
+/* ── INSIGHTS PANEL (right column desktop, summary block above on mobile).
+     All numbers are computed client-side from the fetched month data. ── */
+.ins-card{background:white;border:var(--border);border-radius:12px;padding:14px 16px}
+.ins-title{font-size:13px;font-weight:700;color:var(--gray-900);margin-bottom:10px}
+.ins-head{display:grid;grid-template-columns:minmax(0,1fr) 72px 72px;gap:6px;font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em;font-family:var(--mono);padding-bottom:6px;border-bottom:1px solid var(--gray-100)}
+.ins-head span:nth-child(n+2){text-align:right}
+.ins-row{display:grid;grid-template-columns:minmax(0,1fr) 72px 72px;gap:6px;align-items:center;padding:9px 0;border-bottom:1px solid var(--gray-100);font-size:12px;color:var(--gray-700)}
+.ins-row:last-of-type{border-bottom:none}
+.ins-label{display:flex;align-items:center;gap:7px;font-weight:600;min-width:0}
+.ins-label .lg-dot{flex-shrink:0}
+.ins-val{font-family:var(--mono);font-size:12.5px;font-weight:600;color:var(--gray-900);text-align:right;white-space:nowrap}
+.ins-sub{display:block;font-size:10px;font-weight:500;color:var(--gray-400);margin-top:1px}
+.ins-val.off{color:var(--gray-300);font-weight:400}
+/* The not-responded line is actionable — same muted/dashed treatment as its pills */
+.ins-row.nr{cursor:pointer;margin:0 -6px;padding-left:6px;padding-right:6px;border-radius:8px}
+.ins-row.nr .ins-label{color:var(--gray-500);font-weight:500}
+.ins-row.nr:hover{background:var(--gray-50)}
+.ins-note{font-size:10.5px;color:var(--gray-400);margin-top:9px;line-height:1.45}
+/* Jump-highlight for the "next not-responded day" (grid cell or agenda card) */
+.cal-flash{animation:calFlash 1.8s ease}
+@keyframes calFlash{0%,55%{box-shadow:0 0 0 3px var(--yellow);border-color:var(--yellow-dark)}100%{box-shadow:0 0 0 0 rgba(0,0,0,0)}}
 
 /* ── AGENDA VIEW ── */
 .agenda{display:flex;flex-direction:column;gap:10px}
@@ -139,7 +167,15 @@ button{font-family:var(--font)}
 
 @media (max-width:768px){
   .main{padding:20px 14px 90px}
-  .cal-day{min-height:52px;padding:4px 5px}
+  /* Insights become a compact summary block ABOVE the calendar/agenda */
+  .cal-layout{flex-direction:column;gap:14px;align-items:stretch}
+  #cal-insights{width:auto;order:-1}
+  .ins-card{padding:12px 14px}
+  /* ~2× cells; the grid may exceed the viewport height — vertical scroll is fine.
+     Dots (not pills) stay the mobile content markers: a 7-col grid at 380px gives
+     ~47px-wide cells where text pills would be pure ellipsis. */
+  .cal-day{min-height:104px;padding:6px 6px}
+  .cd-num{font-size:13px}
   .cd-pills{display:none}
   .cd-dots{display:flex}
   .cal-month-label{min-width:120px;font-size:14px}
@@ -196,6 +232,7 @@ button{font-family:var(--font)}
 
 <!-- MAIN -->
 <div class="main">
+<div class="cal-shell">
   <div class="page-title">Calendar</div>
   <div class="page-sub">Your events, planned training and logged activities in one place.</div>
 
@@ -219,7 +256,11 @@ button{font-family:var(--font)}
     <span><span class="lg-dot lg-act"></span> Logged activity</span>
   </div>
 
-  <div id="cal-root"><div class="muted-line">Loading…</div></div>
+  <div class="cal-layout">
+    <div id="cal-root"><div class="muted-line">Loading…</div></div>
+    <aside id="cal-insights" aria-label="Calendar insights"></aside>
+  </div>
+</div>
 </div>
 
 </div>
@@ -263,7 +304,17 @@ button{font-family:var(--font)}
   }
   function pad2(n) { return String(n).padStart(2, '0'); }
   function ymdOf(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
-  function todayYmd() { return ymdOf(new Date()); }
+  // TEST HOOK: ?_today=YYYY-MM-DD overrides the client's idea of "today" so the
+  // insights week-boundary math can be exercised deterministically (a Monday-start
+  // week that spans two months only exists on certain real dates). Display-only:
+  // it never touches writes, and every consumer of "today" (cd-today marker,
+  // remaining counts, jump) shifts consistently.
+  var TODAY_OVERRIDE = (function () {
+    var m = /[?&]_today=(\d{4}-\d{2}-\d{2})(?:&|$)/.exec(window.location.search);
+    return m ? m[1] : null;
+  })();
+  function nowLocal() { return TODAY_OVERRIDE ? parseLocalYmd(TODAY_OVERRIDE) : new Date(); }
+  function todayYmd() { return TODAY_OVERRIDE || ymdOf(new Date()); }
   // Parse YYYY-MM-DD as a LOCAL date (parseLocalDate rule — new Date('YYYY-MM-DD')
   // is UTC midnight and shifts the day in non-UTC locales).
   function parseLocalYmd(s) {
@@ -276,7 +327,8 @@ button{font-family:var(--font)}
     year: 0, month: 0,           // month is 1-12
     view: 'month',
     data: null,                  // raw API payload
-    byDay: {},                   // ymd -> { events:[], plans:[], activities:[] }
+    byDay: {},                   // ymd -> { events:[], plans:[], activities:[] } (month-trimmed)
+    byDayWide: {},               // same shape, UNTRIMMED — insights week counts only
     openYmd: null                // day panel currently open for this day
   };
   // Locked = gates on AND viewer on the free plan (server-computed, injected).
@@ -368,31 +420,29 @@ button{font-family:var(--font)}
   });
 
   // ── Data ──
-  function bucket(data) {
+  // ymPrefix (e.g. "2026-07-") trims to the displayed local month — that bucket
+  // drives the grid/agenda/day panel. Pass null for the UNTRIMMED bucket: the
+  // server widens its fetch window past the month edges so the insights panel
+  // can count the current week correctly even when it spans two months.
+  function bucket(data, ymPrefix) {
     var byDay = {};
     function push(ymd, kind, item) {
+      if (ymPrefix && ymd.indexOf(ymPrefix) !== 0) return;
       if (!byDay[ymd]) byDay[ymd] = { events: [], plans: [], activities: [] };
       byDay[ymd][kind].push(item);
     }
-    var ymPrefix = currentYm() + '-';
     (data.events || []).forEach(function (ev) {
       var d = new Date(ev.date);
       if (isNaN(d)) return;
-      var ymd = ymdOf(d); // LOCAL day
-      if (ymd.indexOf(ymPrefix) !== 0) return; // window is widened server-side; trim to the local month
-      push(ymd, 'events', ev);
+      push(ymdOf(d), 'events', ev); // LOCAL day
     });
     (data.activities || []).forEach(function (a) {
       var d = new Date(a.date);
       if (isNaN(d)) return;
-      var ymd = ymdOf(d);
-      if (ymd.indexOf(ymPrefix) !== 0) return;
-      push(ymd, 'activities', a);
+      push(ymdOf(d), 'activities', a);
     });
     (data.plans || []).forEach(function (p) {
-      var ymd = String(p.date || '');
-      if (ymd.indexOf(ymPrefix) !== 0) return;
-      push(ymd, 'plans', p);
+      push(String(p.date || ''), 'plans', p);
     });
     Object.keys(byDay).forEach(function (k) {
       byDay[k].events.sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
@@ -412,7 +462,8 @@ button{font-family:var(--font)}
           return;
         }
         state.data = data;
-        state.byDay = bucket(data);
+        state.byDay = bucket(data, currentYm() + '-');
+        state.byDayWide = bucket(data, null);
         render();
       })
       .catch(function () {
@@ -429,7 +480,8 @@ button{font-family:var(--font)}
       .then(function (data) {
         if (!data) return;
         state.data = data;
-        state.byDay = bucket(data);
+        state.byDay = bucket(data, currentYm() + '-');
+        state.byDayWide = bucket(data, null);
         render();
         if (state.openYmd) renderDayPanel();
       })
@@ -534,7 +586,7 @@ button{font-family:var(--font)}
       html += '<div class="' + cls + '" data-ymd="' + ymd + '" role="button" tabindex="0" aria-label="' + ymd + '">';
       html += '<span class="cd-num">' + d + '</span>';
 
-      // Desktop: up to 3 tiny pills, then a +N counter.
+      // Desktop: up to 5 pills at the larger cell size, then a +N counter.
       var pills = [];
       day.events.forEach(function (ev) {
         pills.push('<span class="cd-pill ' + (ev.myStatus === 'none' ? 'nr' : 'ev') + '">' + sportIcon(ev.sport) + ' ' + esc(ev.title || 'Event') + '</span>');
@@ -546,8 +598,8 @@ button{font-family:var(--font)}
         pills.push('<span class="cd-pill act">' + sportIcon(a.sport) + ' ' + esc(a.title || sportName(a.sport)) + '</span>');
       });
       if (pills.length) {
-        html += '<span class="cd-pills">' + pills.slice(0, 3).join('') +
-          (pills.length > 3 ? '<span class="cd-more">+' + (pills.length - 3) + ' more</span>' : '') + '</span>';
+        html += '<span class="cd-pills">' + pills.slice(0, 5).join('') +
+          (pills.length > 5 ? '<span class="cd-more">+' + (pills.length - 5) + ' more</span>' : '') + '</span>';
       }
 
       // Mobile: one dot per content type present (confirmed vs not-responded distinct).
@@ -602,7 +654,116 @@ button{font-family:var(--font)}
 
   function render() {
     if (!state.data) return;
+    renderInsights(); // insights live in a sibling column — render for BOTH views
     if (state.view === 'agenda') renderAgenda(); else renderMonth();
+  }
+
+  // ── INSIGHTS PANEL ──
+  // Every figure is computed client-side from the already-fetched month payload
+  // — honest zeros, nothing fabricated. Month figures come from the trimmed
+  // bucket (exactly what the grid shows); week figures from the untrimmed
+  // bucket because the current week can span two months. Week = Monday-start
+  // LOCAL week containing today, and week figures only render when the
+  // displayed month IS the current month — on other months the column grays
+  // out rather than showing misleading numbers.
+  // "Remaining" semantics: day-granularity, today inclusive (ymd >= today) —
+  // consistent with the app-wide local-date bucketing rule.
+  function computeInsights() {
+    var today = todayYmd();
+    var n = nowLocal();
+    var weekActive = currentYm() === (n.getFullYear() + '-' + pad2(n.getMonth() + 1));
+    var ws = new Date(n.getFullYear(), n.getMonth(), n.getDate() - ((n.getDay() + 6) % 7));
+    var weekStart = ymdOf(ws);
+    var weekEnd = ymdOf(new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + 6));
+    function tally(byDay, inWindow) {
+      var c = { evLeft: 0, nrLeft: 0, planLeft: 0, planDone: 0, acts: 0 };
+      Object.keys(byDay).forEach(function (ymd) {
+        if (!inWindow(ymd)) return;
+        var day = byDay[ymd];
+        var remaining = ymd >= today;
+        day.events.forEach(function (ev) {
+          if (ev.myStatus === 'going' || ev.myStatus === 'interested') { if (remaining) c.evLeft++; }
+          else if (remaining) c.nrLeft++;
+        });
+        day.plans.forEach(function (p) {
+          if (p.status === 'planned') { if (remaining) c.planLeft++; }
+          else if (p.status === 'done') c.planDone++;
+        });
+        c.acts += day.activities.length;
+      });
+      return c;
+    }
+    var ymPrefix = currentYm() + '-';
+    return {
+      weekActive: weekActive,
+      week: weekActive
+        ? tally(state.byDayWide, function (ymd) { return ymd >= weekStart && ymd <= weekEnd; })
+        : null,
+      month: tally(state.byDay, function (ymd) { return ymd.indexOf(ymPrefix) === 0; })
+    };
+  }
+  function renderInsights() {
+    var el = document.getElementById('cal-insights');
+    if (!el) return;
+    var ins = computeInsights();
+    var OFF = '<span class="ins-val off" title="Week figures appear when viewing the current month">—</span>';
+    function cells(main, sub) {
+      var m = '<span class="ins-val">' + main(ins.month) +
+        (sub ? '<span class="ins-sub">' + sub(ins.month) + '</span>' : '') + '</span>';
+      var w = ins.weekActive
+        ? '<span class="ins-val">' + main(ins.week) +
+          (sub ? '<span class="ins-sub">' + sub(ins.week) + '</span>' : '') + '</span>'
+        : OFF;
+      return w + m;
+    }
+    el.innerHTML = '<div class="ins-card">' +
+      '<div class="ins-title">At a glance</div>' +
+      '<div class="ins-head"><span></span><span>This week</span><span>This month</span></div>' +
+      '<div class="ins-row"><span class="ins-label"><span class="lg-dot lg-ev"></span>My events</span>' +
+        cells(function (c) { return String(c.evLeft); }, function () { return 'left'; }) + '</div>' +
+      '<div class="ins-row nr" id="ins-nr" role="button" tabindex="0" title="Club events you haven\u2019t responded to \u2014 click to jump to the next one">' +
+        '<span class="ins-label"><span class="lg-dot lg-nr"></span>Not responded</span>' +
+        cells(function (c) { return String(c.nrLeft); }, function () { return 'left'; }) + '</div>' +
+      '<div class="ins-row"><span class="ins-label"><span class="lg-dot lg-plan"></span>Planned training</span>' +
+        cells(function (c) { return c.planLeft + ' left'; }, function (c) { return c.planDone + ' done'; }) + '</div>' +
+      '<div class="ins-row"><span class="ins-label"><span class="lg-dot lg-act"></span>Logged</span>' +
+        cells(function (c) { return String(c.acts); }, function () { return 'so far'; }) + '</div>' +
+      '<div class="ins-note">\u201CLeft\u201D counts look ahead from today \u00B7 \u201CLogged\u201D looks back.' +
+      (ins.weekActive ? '' : '<br>Week figures appear when you\u2019re viewing the current month.') +
+      '</div></div>';
+    var nrRow = document.getElementById('ins-nr');
+    if (nrRow) {
+      nrRow.addEventListener('click', jumpToNextNr);
+      nrRow.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToNextNr(); }
+      });
+    }
+  }
+  // Jump to the next not-responded day IN THE DISPLAYED MONTH (trimmed bucket —
+  // a qualifying day in the neighbor-month part of the week has no cell here).
+  function jumpToNextNr() {
+    var today = todayYmd();
+    var days = Object.keys(state.byDay).sort();
+    var target = null;
+    for (var i = 0; i < days.length; i++) {
+      var d = days[i];
+      if (d >= today && state.byDay[d].events.some(function (ev) { return ev.myStatus === 'none'; })) {
+        target = d; break;
+      }
+    }
+    if (!target) return;
+    var el;
+    if (state.view === 'month') {
+      el = root.querySelector('.cal-day[data-ymd="' + target + '"]');
+    } else {
+      var head = root.querySelector('.ag-head[data-ymd="' + target + '"]');
+      el = head ? head.parentNode : null;
+    }
+    if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.classList.remove('cal-flash');
+    void el.offsetWidth; // restart the animation on repeat clicks
+    el.classList.add('cal-flash');
   }
 
   // ── DAY PANEL (interactive: plan CRUD, Log-this handoff, RSVP) ──
