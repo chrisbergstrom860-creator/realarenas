@@ -16,4 +16,4 @@ description: Standalone Log-activity page — route shape, post-save redirects, 
 - Shared styles were promoted to `arenas.css` (`.form-input/.form-select/.form-textarea`, `.toast`, `.act-sport-chip`, `.act-feeling-chip`).
   **How to apply:** my-profile's goal-period chips reuse `.act-sport-chip` and its delete toast uses `.toast` — do not remove these from arenas.css even though the entry form left the page.
 - Club pages (club-dashboard, club-member) keep their own nav without a Log item — by design, not a missed entry point.
-- A confirmed e2e athlete account `e2e-log-tester@example.com` (no clubs) exists in the shared dev Supabase; recreate any time via service-role `admin.createUser({email_confirm:true})` if the password is lost.
+- e2e login pattern: create a throwaway confirmed athlete via service-role `admin.createUser({email_confirm:true})`, then log in through `/html/auth/login`. Delete the user AND its rows afterwards (activities, planned_sessions, achievements, notifications all carry `user_id`) — old test accounts' passwords rot and pollute the shared dev DB.
