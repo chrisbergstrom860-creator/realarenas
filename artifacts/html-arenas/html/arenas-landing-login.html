@@ -85,7 +85,8 @@ html { scroll-behavior: smooth; }
   position: relative;
   z-index: 0;
 }
-/* Lane-line motif — barely-there horizontal rules behind the hero content */
+/* Lane-line motif — whisper-faint track texture behind the hero content.
+   Background layer only: absolutely positioned, evenly spaced, zero height added. */
 .hero-left::before {
   content: '';
   position: absolute;
@@ -93,13 +94,13 @@ html { scroll-behavior: smooth; }
   z-index: -1;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(17,24,39,0.05), rgba(17,24,39,0.05)),
-    linear-gradient(rgba(17,24,39,0.05), rgba(17,24,39,0.05)),
-    linear-gradient(rgba(17,24,39,0.05), rgba(17,24,39,0.05)),
-    linear-gradient(rgba(17,24,39,0.05), rgba(17,24,39,0.05));
+    linear-gradient(#EFEFEA, #EFEFEA),
+    linear-gradient(#EFEFEA, #EFEFEA),
+    linear-gradient(#EFEFEA, #EFEFEA),
+    linear-gradient(#EFEFEA, #EFEFEA);
   background-size: 100% 1px;
   background-repeat: no-repeat;
-  background-position: 0 22%, 0 42%, 0 62%, 0 82%;
+  background-position: 0 20%, 0 40%, 0 60%, 0 80%;
 }
 .hero-eyebrow {
   display: inline-flex;
@@ -288,20 +289,20 @@ html { scroll-behavior: smooth; }
 
 /* ── STATS BAR — carbon telemetry band ── */
 .stats-bar { background: var(--gray-900); border-bottom: 1px solid var(--gray-900); padding: 36px 24px; position: relative; overflow: hidden; }
-/* Lane lines inside the carbon band — slightly lighter than the background */
+/* Lane lines inside the carbon band — only a shade lighter than the band */
 .stats-bar::before {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(255,255,255,0.06), rgba(255,255,255,0.06)),
-    linear-gradient(rgba(255,255,255,0.06), rgba(255,255,255,0.06)),
-    linear-gradient(rgba(255,255,255,0.06), rgba(255,255,255,0.06)),
-    linear-gradient(rgba(255,255,255,0.06), rgba(255,255,255,0.06));
+    linear-gradient(#1D2736, #1D2736),
+    linear-gradient(#1D2736, #1D2736),
+    linear-gradient(#1D2736, #1D2736),
+    linear-gradient(#1D2736, #1D2736);
   background-size: 100% 1px;
   background-repeat: no-repeat;
-  background-position: 0 18%, 0 44%, 0 70%, 0 92%;
+  background-position: 0 20%, 0 40%, 0 60%, 0 80%;
 }
 .stats-bar-inner { max-width: 960px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); position: relative; }
 .stat-item { text-align: center; padding: 0 24px; border-right: 1px solid rgba(255,255,255,0.1); }
