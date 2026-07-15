@@ -1292,6 +1292,11 @@ if (logHashMatch) {
   window.location.replace((window.BASE || '') + '/log?plan=' + encodeURIComponent(decodeURIComponent(logHashMatch[1])));
 } else if (window.location.hash === '#activities') {
   if (typeof setTab === 'function') setTab('activities');
+} else if (window.location.hash === '#settings') {
+  // Deep link: /profile#settings opens the Settings tab (sidebar "Settings"
+  // items across the shell pages target this). setTab also swaps the sidebar
+  // highlight to "Settings" instead of "My profile".
+  if (typeof setTab === 'function') setTab('settings');
 }
 </script>
 
