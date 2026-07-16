@@ -823,10 +823,15 @@ document.getElementById('htab-overview').classList.add('active');
   var folTab = document.querySelector('#htab-following .tab-count');
   if (folTab) folTab.textContent = data.followingCount;
 
-  // Sports tags derived from the user's real posts (fall back to a neutral tag).
-  // Emoji/labels come from the sports registry; the hero-tag color class stays
-  // page-local presentation (only these four have dedicated CSS classes — the
-  // other sports render as neutral hero-tags, same as before).
+  // Sports tags derived from the union of the user's real posts AND logged
+  // activities (server sends activitySports = per-sport {count, lastDate}).
+  // "✦ New athlete" is the fallback only when BOTH are empty — i.e. the user
+  // has genuinely done nothing yet. Emoji/labels come from the sports
+  // registry; the hero-tag color class stays page-local presentation (only
+  // these four have dedicated CSS classes — the other sports render as
+  // neutral hero-tags, same as before). Capped at the top MAX_HERO_TAGS
+  // sports by count (recency breaks ties) so a many-sport athlete doesn't
+  // overflow the hero row.
   var HERO_TAG_CLS = { running: 'sport-run', cycling: 'sport-cyc', climbing: 'sport-clm', swimming: 'sport-swm' };
   var SPORTS = {};
   (window.ARENAS_SPORTS || []).forEach(function (s) {
@@ -834,13 +839,26 @@ document.getElementById('htab-overview').classList.add('active');
   });
   var tagsWrap = document.querySelector('.hero-tags');
   if (tagsWrap) {
-    var seen = [];
-    (data.posts || []).forEach(function (post) {
-      if (post.sport && seen.indexOf(post.sport) === -1) seen.push(post.sport);
+    var MAX_HERO_TAGS = 6;
+    var bySport = {};
+    function bumpSport(sport, count, last) {
+      if (!sport) return;
+      var entry = bySport[sport] || { sport: sport, count: 0, last: '' };
+      entry.count += count || 1;
+      if (last && String(last) > entry.last) entry.last = String(last);
+      bySport[sport] = entry;
+    }
+    (data.posts || []).forEach(function (post) { bumpSport(post.sport, 1, post.created_at); });
+    (data.activitySports || []).forEach(function (s) { bumpSport(s.sport, s.count, s.lastDate); });
+    var ranked = Object.keys(bySport).map(function (k) { return bySport[k]; });
+    ranked.sort(function (a, b) {
+      return (b.count - a.count) || (a.last < b.last ? 1 : a.last > b.last ? -1 : 0);
     });
+    ranked = ranked.slice(0, MAX_HERO_TAGS);
     tagsWrap.innerHTML = '';
-    if (seen.length) {
-      seen.forEach(function (s) {
+    if (ranked.length) {
+      ranked.forEach(function (entry) {
+        var s = entry.sport;
         var meta = SPORTS[s];
         var span = document.createElement('span');
         span.className = 'hero-tag' + (meta && meta.cls ? ' ' + meta.cls : '');

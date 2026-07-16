@@ -4503,10 +4503,11 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
       // Raw follow edges (no `created_at` ordering — not guaranteed on this table).
       supabaseAdmin.from('follows').select('following_id').eq('follower_id', req.user.id),
       supabaseAdmin.from('follows').select('follower_id').eq('following_id', req.user.id),
-      // Lifetime distance source. The `activities` table is user-provisioned and may
-      // not exist yet — supabase-js returns { data: null } rather than throwing, so a
-      // missing table degrades kmLogged to 0 instead of breaking the whole page.
-      supabaseAdmin.from('activities').select('distance').eq('user_id', req.user.id),
+      // Lifetime distance source + hero sport tags source. The `activities` table is
+      // user-provisioned and may not exist yet — supabase-js returns { data: null }
+      // rather than throwing, so a missing table degrades kmLogged to 0 and
+      // activitySports to [] instead of breaking the whole page.
+      supabaseAdmin.from('activities').select('sport, distance, date').eq('user_id', req.user.id),
       // Real count of the user's activities for the "Activities" hero stat + tab
       // badge. Counted from the activities table (NOT posts) so it matches the
       // Activities list and the Stats & PRs tab. Missing table → count null → 0.
@@ -4561,6 +4562,20 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
       (activitiesRes.data || []).reduce((s, a) => s + parseDistanceKmUnitAware(a.distance), 0) * 10
     ) / 10;
 
+    // Distinct sports across the user's logged activities, with per-sport count
+    // and most recent date. Feeds the profile hero sport tags (client unions
+    // these with post sports). Additive: the same query already fetches every
+    // activity row for kmLogged, so this reuses it rather than adding a query.
+    const activitySportMap = {};
+    for (const a of (activitiesRes.data || [])) {
+      if (!a.sport) continue;
+      const entry = activitySportMap[a.sport] || { sport: a.sport, count: 0, lastDate: null };
+      entry.count += 1;
+      if (a.date && (!entry.lastDate || String(a.date) > String(entry.lastDate))) entry.lastDate = a.date;
+      activitySportMap[a.sport] = entry;
+    }
+    const activitySports = Object.values(activitySportMap);
+
     const profileData = {
       profile: {
         name: display.name,
@@ -4581,6 +4596,7 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
       followerCount: followerRes.count || 0,
       followingCount: followingRes.count || 0,
       posts: postsRes.data || [],
+      activitySports,
       membership: membership ? { role: membership.role, club } : null,
       clubs: userClubs,
       followingList,
