@@ -42,4 +42,5 @@
 - [html-arenas Pro badge](html-arenas-pro-badge.md) — PRO badge = real subscription, never PLAN_GATES_ENABLED; server string-injection after injectBottomNav; exact-match patterns are the fragility.
 - [html-arenas goals](html-arenas-goals-mapping.md) — fully shipped (API, Goals tab, Overview mini-card, live pricing copy); server-truth enrichment, client never recomputes.
 - [html-arenas avatars](html-arenas-avatars.md) — SHIPPED app-wide: injected avatarHtml/clubTileHtml helpers (span+img onerror fallback), avatar_url payload convention, JK fully retired.
+- [html-arenas tz+country audit](html-arenas-tz-country-audit.md) — DIAGNOSED not fixed: dead Country select; server day-math is UTC vs client local (5PM-Pacific flips); agreed fix shape + 3-session split.
 - [html-arenas handle hiding](html-arenas-handle-hiding.md) — handles display-hidden but preserved in data; Session-1 surfaces done, sidebar chrome = Session 2; disambiguation via location+sports sublines.
