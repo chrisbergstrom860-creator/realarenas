@@ -18,6 +18,11 @@ const { subscriptionPriceLabel, PRICE_FALLBACK_LABEL } = require('./billing-pric
 // DISTANCE_SPORTS are DERIVED there and equivalence-tested in sports.test.js.
 const { SPORTS, SPORT_POINTS, KNOWN_SPORTS, DISTANCE_SPORTS, SPORT_ICONS, LEGACY_SPORT_EMOJI } = require('./sports');
 const { COUNTRIES, COUNTRY_NAMES, US_STATES, US_STATE_NAMES } = require('./countries');
+const {
+  isValidTimezone, getUserTimezone, dateParts, dayKey, keyToEpochDays,
+  addDaysToKey, keyToUtcDate, weekStartKey, monthKey, zoneMidnightUtc,
+  computeStreaks
+} = require('./tzdate');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -267,6 +272,22 @@ app.post(BASE + '/auth/login', async (req, res) => {
       return res.redirect(BASE + '/landing?error=invalid');
     }
     setSession(res, data.session);
+    // Auto-capture the browser timezone (hidden `tz` field) on EVERY login so
+    // travelers self-heal, unless the user set a manual override in Settings
+    // (timezone_source === 'manual' wins until cleared). Garbage zone names are
+    // rejected silently — keep the old value, never block the login.
+    try {
+      const tz = typeof req.body.tz === 'string' ? req.body.tz.trim() : '';
+      const meta = (data.user && data.user.user_metadata) || {};
+      if (tz && supabaseAdmin && isValidTimezone(tz) &&
+          meta.timezone_source !== 'manual' && meta.timezone !== tz) {
+        await supabaseAdmin.auth.admin.updateUserById(data.user.id, {
+          user_metadata: { timezone: tz, timezone_source: 'auto' }
+        });
+      }
+    } catch (tzErr) {
+      console.log('Login tz capture error (ignored):', tzErr.message);
+    }
     // Club admins/coaches land on the dashboard; everyone else on the feed.
     const dest = (await isClubManager(data.user && data.user.id)) ? '/clubs/dashboard' : '/feed';
     return res.redirect(BASE + dest);
@@ -289,11 +310,18 @@ app.post(BASE + '/auth/signup', async (req, res) => {
     console.log('Signup missing email or password');
     return res.redirect(BASE + '/landing?error=missing_fields');
   }
+  // Browser timezone from the hidden `tz` field — stored only when it is a
+  // real IANA zone (garbage is dropped silently; the login refresh heals it).
+  const signupTz = typeof req.body.tz === 'string' && isValidTimezone(req.body.tz.trim())
+    ? req.body.tz.trim() : null;
   try {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { name }, emailRedirectTo: publicBaseUrl(req) + '/auth/confirm' }
+      options: {
+        data: signupTz ? { name, timezone: signupTz, timezone_source: 'auto' } : { name },
+        emailRedirectTo: publicBaseUrl(req) + '/auth/confirm'
+      }
     });
     console.log('Signup result - user:', data && data.user && data.user.id);
     console.log('Signup result - session:', !!(data && data.session));
@@ -325,12 +353,15 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
     }
 
     // Create the user with the admin client so the email is auto-confirmed and
-    // no confirmation step is required.
+    // no confirmation step is required. Same hidden-field timezone capture as
+    // the athlete signup (invalid values silently dropped).
+    const clubTz = typeof req.body.tz === 'string' && isValidTimezone(req.body.tz.trim())
+      ? req.body.tz.trim() : null;
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
-      user_metadata: { name }
+      user_metadata: clubTz ? { name, timezone: clubTz, timezone_source: 'auto' } : { name }
     });
     if (error || !data || !data.user) {
       return res.redirect(BASE + '/for-clubs?error=signup');
@@ -1200,7 +1231,7 @@ app.post(BASE + '/api/posts/:id/like', requireAuth, async (req, res) => {
     console.log('Like notification error:', err.message);
   }
   // Award any newly earned badges (e.g. "Good Sport") without blocking.
-  checkAchievements(req.user.id).catch(() => {});
+  checkAchievements(req.user.id, getUserTimezone(req.user)).catch(() => {});
   res.json({ liked: true });
 });
 
@@ -1277,7 +1308,7 @@ app.post(BASE + '/api/follow/:userId', requireAuth, async (req, res) => {
     }
   }
   // Award any newly earned badges (e.g. "Social Starter") without blocking.
-  checkAchievements(req.user.id).catch(() => {});
+  checkAchievements(req.user.id, getUserTimezone(req.user)).catch(() => {});
   res.json({ success: true, following: true });
 });
 
@@ -1574,7 +1605,7 @@ app.post(BASE + '/api/activities/create', requireAuth, async (req, res) => {
     console.log('Activity notification error:', err.message);
   }
   // Award any newly earned badges (volume/distance/streak/feats) without blocking.
-  checkAchievements(req.user.id).catch(() => {});
+  checkAchievements(req.user.id, getUserTimezone(req.user)).catch(() => {});
   res.json({ success: true, activity: data, planCompleted });
 });
 
@@ -1719,7 +1750,10 @@ async function buildUserProfileMap(ids) {
           handle: disp.handle,
           avatar_url: disp.avatar_url || null,
           sports: Array.isArray(m.sports) ? m.sports : [],
-          location: m.location || null
+          location: m.location || null,
+          // Stored zone (validated at read time by consumers via
+          // isValidTimezone; absent for users who predate capture).
+          timezone: m.timezone || null
         };
       }
     } catch (err) {
@@ -1970,39 +2004,11 @@ function getWeekStart(weeksAgo) {
   return monday;
 }
 
-// Shared streak computation over a user's activities (rows need only `.date`).
-// Distinct active days come from LOCAL toDateString buckets (the app-wide
-// bucketing rule — never toISOString). `longestStreak` is the max run of
-// consecutive active days all-time; `currentStreak` is the run ending today or
-// yesterday (today may still be pending, so a rest day today doesn't break
-// yesterday's streak; last activity 2+ days ago = 0). Extracted from what were
-// five identical inline copies (profile stats, achievements stats, challenges
-// header, feed sidebar, profile overview) — output equivalence across all five
-// was verified case-exhaustively before the swap. Duplicate same-day rows are
-// collapsed by the Set, so callers can pass raw activity lists.
-function computeStreaks(activities) {
-  const days = [...new Set((activities || []).map((a) => new Date(a.date).toDateString()))]
-    .map((d) => new Date(d)).sort((a, b) => a - b);
-  let longestStreak = 0, run = 0;
-  for (let i = 0; i < days.length; i++) {
-    if (i === 0) run = 1;
-    else run = Math.round((days[i] - days[i - 1]) / 86400000) === 1 ? run + 1 : 1;
-    if (run > longestStreak) longestStreak = run;
-  }
-  let currentStreak = 0;
-  if (days.length > 0) {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const last = new Date(days[days.length - 1]); last.setHours(0, 0, 0, 0);
-    if (Math.round((today - last) / 86400000) <= 1) {
-      currentStreak = 1;
-      for (let i = days.length - 1; i > 0; i--) {
-        if (Math.round((days[i] - days[i - 1]) / 86400000) === 1) currentStreak++;
-        else break;
-      }
-    }
-  }
-  return { currentStreak, longestStreak };
-}
+// Shared streak computation now lives in tzdate.js (computeStreaks) and takes
+// the user's zone: distinct active days come from per-zone day keys instead of
+// server-local toDateString buckets. Old-vs-new equivalence for tz='UTC' was
+// verified over a randomized case set before the swap (the server runs UTC, so
+// UTC keys reproduce the legacy buckets exactly).
 
 // Weekly training-load breakdown for a coach's club dashboard. Load is derived
 // from logged activity duration (there is no wearable/HR data). Names/handles/
@@ -2034,13 +2040,17 @@ app.get(BASE + '/api/clubs/:clubId/training-load', requireAuth, async (req, res)
     const thisWeekStart = weekStarts[weekStarts.length - 1];
 
     // Every activity in the window in one query (need `duration` for load).
+    // Fetched one day wider than the server-week window so a member whose
+    // zone is ahead of UTC still gets their full local current week for the
+    // rest-day count below — the weekly buckets re-filter by their own
+    // boundaries, so the extra day never changes the hour totals.
     let activities = [];
     if (memberIds.length) {
       const { data, error } = await supabaseAdmin
         .from('activities')
         .select('user_id, sport, distance, duration, date')
         .in('user_id', memberIds)
-        .gte('date', periodStart.toISOString());
+        .gte('date', new Date(periodStart.getTime() - 86400000).toISOString());
       if (!error) activities = data || [];
     }
     const byUser = bucketActivities(activities);
@@ -2061,8 +2071,18 @@ app.get(BASE + '/api/clubs/:clubId/training-load', requireAuth, async (req, res)
         : 0;
       const thisWeekActs = acts.filter((a) => new Date(a.date) >= thisWeekStart);
       const kmThisWeek = Math.round(thisWeekActs.reduce((s, a) => s + parseDistanceKm(a.distance), 0) * 10) / 10;
-      const activeDays = new Set(thisWeekActs.map((a) => new Date(a.date).toDateString())).size;
-      const restDays = Math.max(0, Math.min(7, (new Date().getDay() || 7)) - activeDays);
+      // Rest days are a per-member day count, so they use the MEMBER'S zone:
+      // distinct active day keys in their current local week vs how far into
+      // that week they are. (The weekly hour buckets above stay on the shared
+      // server-week boundary — one consistent grid for the whole table.)
+      const prof = profileMap[id] || {};
+      const memberTz = isValidTimezone(prof.timezone) ? prof.timezone : 'UTC';
+      const mWeekStartK = weekStartKey(new Date(), memberTz);
+      const memberActiveDays = new Set(
+        acts.filter((a) => dayKey(a.date, memberTz) >= mWeekStartK)
+          .map((a) => dayKey(a.date, memberTz))
+      ).size;
+      const restDays = Math.max(0, Math.min(7, dateParts(new Date(), memberTz).weekday) - memberActiveDays);
 
       let status, trend;
       if (thisWeek === 0 && avg === 0) { status = 'inactive'; trend = 0; }
@@ -2074,7 +2094,6 @@ app.get(BASE + '/api/clubs/:clubId/training-load', requireAuth, async (req, res)
         else if (trend <= -40) status = 'behind';
         else status = 'ontrack';
       }
-      const prof = profileMap[id] || {};
       return {
         userId: id,
         name: prof.name || 'Member',
@@ -2890,7 +2909,7 @@ function badgeKm(a) {
 // Gather every stat the badge checks need for one user, via the global
 // service-role client. NOTE: the `activities` table has no `created_at` column,
 // so all time-based logic reads the activity `date`.
-async function gatherBadgeStats(userId) {
+async function gatherBadgeStats(userId, tz) {
   const { data: acts } = await supabaseAdmin
     .from('activities')
     .select('sport, distance, duration, date')
@@ -2904,14 +2923,17 @@ async function gatherBadgeStats(userId) {
   const sportCount = new Set(activities.map(a => a.sport).filter(Boolean)).size;
   // Early bird only counts when the stored date carries a real time component
   // (an ISO timestamp). Date-only values are skipped so midnight can't qualify.
+  // The hour is evaluated in the USER'S zone: a real-time 5:45 AM Pacific log
+  // (12:45Z) earns it, while a noon-stamped /log entry (stored as local noon)
+  // never does — the badge rewards actually being up early, wherever you are.
   const hasEarlyBird = activities.some(a => {
     const ds = String(a.date || '');
     if (ds.length <= 10 || !ds.includes('T')) return false;
-    const dt = new Date(ds);
-    return !isNaN(dt.getTime()) && dt.getHours() < 6;
+    const p = dateParts(ds, tz);
+    return !!p && p.hour < 6;
   });
-  // Longest streak of consecutive active days (shared helper).
-  const { longestStreak } = computeStreaks(activities);
+  // Longest streak of consecutive active days in the user's zone (shared helper).
+  const { longestStreak } = computeStreaks(activities, tz);
   // Social + community counts (head:true → count only, no rows transferred).
   const { count: followingCount } = await supabaseAdmin
     .from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId);
@@ -2960,10 +2982,10 @@ async function gatherBadgeStats(userId) {
 // Check the user's stats against every badge and award newly earned ones,
 // notifying the user once per badge. Safe to call fire-and-forget from action
 // routes; no-ops cleanly if the `achievements` table is missing/unreadable.
-async function checkAchievements(userId) {
+async function checkAchievements(userId, tz) {
   if (!supabaseAdmin || !userId) return [];
   try {
-    const stats = await gatherBadgeStats(userId);
+    const stats = await gatherBadgeStats(userId, tz);
     const { data: earned, error: earnedErr } = await supabaseAdmin
       .from('achievements').select('badge_id').eq('user_id', userId);
     if (earnedErr) return [];
@@ -2999,8 +3021,9 @@ async function checkAchievements(userId) {
 app.get(BASE + '/api/profile/achievements', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.status(503).json({ error: 'Server is not configured for achievements' });
   try {
-    await checkAchievements(req.user.id);
-    const stats = await gatherBadgeStats(req.user.id);
+    const achTz = getUserTimezone(req.user);
+    await checkAchievements(req.user.id, achTz);
+    const stats = await gatherBadgeStats(req.user.id, achTz);
     let earned = [];
     const { data: earnedRows, error: earnedErr } = await supabaseAdmin
       .from('achievements')
@@ -3051,27 +3074,33 @@ app.get(BASE + '/api/profile/overview', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.status(503).json({ error: 'Server is not configured for overview' });
   try {
     const userId = req.user.id;
+    const tz = getUserTimezone(req.user);
     const now = new Date();
-    const day = now.getDay() || 7;
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - day + 1);
-    weekStart.setHours(0, 0, 0, 0);
+    // Week bounds in the USER'S zone: the Monday-00:00 local instant is the
+    // exact query cutoff, so a Sunday-6PM-Pacific activity (Monday 02:00 UTC)
+    // stays in the Pacific user's previous week.
+    const weekStartK = weekStartKey(now, tz);
+    const weekStartInstant = zoneMidnightUtc(weekStartK, tz);
 
     // This week's activities.
     const { data: weekActs } = await supabaseAdmin
       .from('activities')
       .select('sport, distance, duration, date')
       .eq('user_id', userId)
-      .gte('date', weekStart.toISOString());
+      .gte('date', weekStartInstant.toISOString());
     const acts = weekActs || [];
     const weekKm = Math.round(acts.reduce((s, a) => s + parseDistanceKm(a.distance), 0) * 10) / 10;
     const weekHours = Math.round(acts.reduce((s, a) => s + parseDurationHours(a.duration), 0) * 10) / 10;
     const weekPoints = calculatePoints(acts);
 
-    // Day strip — which weekdays (Mon=0) had activity this week.
+    // Day strip — which weekdays (Mon=0) had activity this week, in the
+    // user's zone.
     const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const activeDaySet = new Set(acts.map(a => (new Date(a.date).getDay() || 7) - 1));
-    const todayIdx = day - 1;
+    const activeDaySet = new Set(acts.map(a => {
+      const p = dateParts(a.date, tz);
+      return p ? p.weekday - 1 : -1;
+    }));
+    const todayIdx = dateParts(now, tz).weekday - 1;
     const dayStrip = dayLabels.map((label, i) => ({
       label,
       state: i === todayIdx && !activeDaySet.has(i) ? 'today'
@@ -3079,11 +3108,11 @@ app.get(BASE + '/api/profile/overview', requireAuth, async (req, res) => {
         : i < todayIdx ? 'rest' : 'future'
     }));
 
-    // Current streak — consecutive active days ending today or yesterday
-    // (shared helper).
+    // Current streak — consecutive active days (user's zone) ending today or
+    // yesterday (shared helper).
     const { data: allActs } = await supabaseAdmin
       .from('activities').select('date').eq('user_id', userId);
-    const { currentStreak } = computeStreaks(allActs || []);
+    const { currentStreak } = computeStreaks(allActs || [], tz);
 
     // Recent activities (last 3) — ordered by `date` (no created_at column).
     const { data: recentActs } = await supabaseAdmin
@@ -3309,11 +3338,12 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
         .from('activities').select('sport, distance, date')
         .eq('user_id', userId);
       const acts = userActs || [];
+      const hdrTz = getUserTimezone(req.user);
       const mNow = new Date();
-      const monthStart = new Date(mNow.getFullYear(), mNow.getMonth(), 1);
-      const monthActs = acts.filter((a) => new Date(a.date) >= monthStart);
+      const nowMonth = monthKey(mNow, hdrTz);
+      const monthActs = acts.filter((a) => monthKey(a.date, hdrTz) === nowMonth);
       // "pts earned this month" — same SPORT_POINTS model used by leaderboards
-      // and profile stats, over the current calendar month's activities.
+      // and profile stats, over the user's-zone current calendar month.
       pointsThisMonth = calculatePoints(monthActs);
       // Per-sport breakdown of that exact monthly total (only sports with points).
       const bySport = {};
@@ -3322,18 +3352,17 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
         .map((sport) => ({ sport, points: calculatePoints(bySport[sport]) }))
         .filter((x) => x.points > 0)
         .sort((a, b) => b.points - a.points);
-      // Distinct active days (local date strings) still drive the week grid;
+      // Distinct active days (user-zone day keys) still drive the week grid;
       // both streak numbers now come from the shared helper (same semantics).
-      const daySet = new Set(acts.map((a) => new Date(a.date).toDateString()));
-      ({ currentStreak, longestStreak } = computeStreaks(acts));
-      // This week's grid (Mon→Sun): active day, today, and future (unfilled) cells.
-      const todayStr = new Date().toDateString();
-      const dow = (mNow.getDay() + 6) % 7; // 0 = Monday
-      const monday = new Date(mNow.getFullYear(), mNow.getMonth(), mNow.getDate() - dow);
+      const daySet = new Set(acts.map((a) => dayKey(a.date, hdrTz)));
+      ({ currentStreak, longestStreak } = computeStreaks(acts, hdrTz));
+      // This week's grid (Mon→Sun) in the user's zone: active day, today, and
+      // future (unfilled) cells — key comparisons, no server-local Dates.
+      const todayK = dayKey(mNow, hdrTz);
+      const mondayK = weekStartKey(mNow, hdrTz);
       for (let i = 0; i < 7; i++) {
-        const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
-        const ds = d.toDateString();
-        weekGrid.push({ active: daySet.has(ds), isToday: ds === todayStr, isFuture: d > mNow && ds !== todayStr });
+        const k = addDaysToKey(mondayK, i);
+        weekGrid.push({ active: daySet.has(k), isToday: k === todayK, isFuture: k > todayK });
       }
     } catch (statErr) {
       console.log('Challenge header stats error:', statErr.message);
@@ -3493,7 +3522,7 @@ app.post(BASE + '/api/challenges/:id/join', requireAuth, async (req, res) => {
     .from('challenge_participants').insert({ challenge_id: req.params.id, user_id: req.user.id });
   if (error) return res.json({ error: error.message });
   // Award any newly earned challenge badges without blocking.
-  checkAchievements(req.user.id).catch(() => {});
+  checkAchievements(req.user.id, getUserTimezone(req.user)).catch(() => {});
   res.json({ success: true });
 });
 
@@ -3776,17 +3805,19 @@ async function getSidebarClubs(userId) {
 // current streak, this-week club rank, and follow suggestions. Every value is
 // real (no fabricated content); the widgets fall back to honest empty/low-data
 // states client-side when these are zero/empty.
-async function buildFeedSidebar(userId) {
+async function buildFeedSidebar(userId, tz) {
   const sidebar = { week: { activities: 0, km: 0 }, dayStrip: [], currentStreak: 0, clubRank: null, followSuggestions: [] };
   if (!supabaseAdmin || !userId) return sidebar;
   try {
-    // Week bounds — local Monday 00:00 (matches /api/profile/overview).
+    // Week bounds — Monday 00:00 in the VIEWER'S zone (matches
+    // /api/profile/overview). Key comparisons bucket activities; the exact
+    // local-midnight instant below also scopes the club-rank query so the
+    // rank and the km above it always describe the same period.
     const now = new Date();
-    const day = now.getDay() || 7;
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - day + 1);
-    weekStart.setHours(0, 0, 0, 0);
-    const todayIdx = day - 1;
+    const viewerTz = tz || 'UTC';
+    const weekStartK = weekStartKey(now, viewerTz);
+    const weekStartInstant = zoneMidnightUtc(weekStartK, viewerTz);
+    const todayIdx = dateParts(now, viewerTz).weekday - 1;
 
     // One query for the user's own activities → weekly km, day strip, streak.
     const { data: allActs } = await supabaseAdmin
@@ -3794,12 +3825,15 @@ async function buildFeedSidebar(userId) {
       .select('sport, distance, date')
       .eq('user_id', userId);
     const acts = allActs || [];
-    const weekActs = acts.filter(a => new Date(a.date) >= weekStart);
+    const weekActs = acts.filter(a => dayKey(a.date, viewerTz) >= weekStartK);
     const weekKm = Math.round(weekActs.reduce((s, a) => s + parseDistanceKm(a.distance), 0) * 10) / 10;
     sidebar.week = { activities: weekActs.length, km: weekKm };
 
-    // Day strip — which weekdays (Mon=0) had activity this week.
-    const activeDaySet = new Set(weekActs.map(a => (new Date(a.date).getDay() || 7) - 1));
+    // Day strip — which weekdays (Mon=0) had activity this week (viewer zone).
+    const activeDaySet = new Set(weekActs.map(a => {
+      const p = dateParts(a.date, viewerTz);
+      return p ? p.weekday - 1 : -1;
+    }));
     const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
     const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     sidebar.dayStrip = dayLabels.map((label, i) => ({
@@ -3811,9 +3845,9 @@ async function buildFeedSidebar(userId) {
         : 'future'
     }));
 
-    // Current streak — consecutive active days ending today or yesterday
-    // (shared helper).
-    sidebar.currentStreak = computeStreaks(acts).currentStreak;
+    // Current streak — consecutive active days (viewer zone) ending today or
+    // yesterday (shared helper).
+    sidebar.currentStreak = computeStreaks(acts, viewerTz).currentStreak;
 
     // This-week club rank — viewer's most recent club, ranked by week points.
     // A rank number needs no names, so we skip the per-member metadata lookups.
@@ -3830,14 +3864,16 @@ async function buildFeedSidebar(userId) {
         .from('memberships').select('user_id').eq('club_id', membership.club_id);
       const memberIds = [...new Set((members || []).map(m => m.user_id).filter(Boolean))];
       if (memberIds.length) {
-        // Rank by points earned since the same local-Monday weekStart used for the
-        // viewer's "this week" km — NOT the rolling-7-day leaderboard window, so the
-        // rank and the distance above it always describe the same period.
+        // Rank by points earned since the same viewer-zone Monday-midnight
+        // instant used for the viewer's "this week" km — NOT the rolling-7-day
+        // leaderboard window, so the rank and the distance above it always
+        // describe the same period. (Per-member zones are a rollup concern —
+        // one consistent window per widget for now.)
         const { data: memberActs } = await supabaseAdmin
           .from('activities')
           .select('user_id, sport, distance, date')
           .in('user_id', memberIds)
-          .gte('date', weekStart.toISOString());
+          .gte('date', weekStartInstant.toISOString());
         const byUser = bucketActivities(memberActs || []);
         const ranked = memberIds
           .map(id => ({ id, points: calculatePoints(byUser[id] || []) }))
@@ -3893,7 +3929,7 @@ app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
     // helper so every athlete-facing page shows the exact same clubs.
     const userClubs = await getSidebarClubs(req.user.id);
     // Real right-rail widget data (weekly km, streak, club rank, follow suggestions).
-    const sidebar = await buildFeedSidebar(req.user.id);
+    const sidebar = await buildFeedSidebar(req.user.id, getUserTimezone(req.user));
     // The viewer's profile sports (user_metadata) drive the feed's sport
     // filter pills + composer chips — pages fall back to a curated set when
     // the user hasn't picked sports yet.
@@ -4225,7 +4261,7 @@ app.post(BASE + '/api/events/:id/rsvp', requireAuth, async (req, res) => {
     }
   }
   // Award community badges (e.g. "Regular") on a going RSVP, without blocking.
-  if (status === 'going') checkAchievements(req.user.id).catch(() => {});
+  if (status === 'going') checkAchievements(req.user.id, getUserTimezone(req.user)).catch(() => {});
   res.json({ success: true, status });
 });
 
@@ -4604,12 +4640,18 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
         avatar_url: meta.avatar_url || null,
         // Saved "Your sports" selection (registry ids) — drives the settings
         // sport chips' initial .on state.
-        sports: Array.isArray(meta.sports) ? meta.sports : []
+        sports: Array.isArray(meta.sports) ? meta.sports : [],
+        // Timezone override state for the settings select: the stored zone and
+        // whether it was set manually (manual survives login auto-refresh).
+        timezone: isValidTimezone(meta.timezone) ? meta.timezone : '',
+        timezoneSource: meta.timezone_source === 'manual' ? 'manual' : 'auto'
       },
       // Full registries for the settings dropdowns — injected here rather than
       // into the shared shell script so only the profile page pays the ~7KB.
       countries: COUNTRIES,
       usStates: US_STATES,
+      // IANA zone names for the timezone override select (runtime-provided).
+      timezones: Intl.supportedValuesOf('timeZone'),
       userId: req.user.id,
       email: req.user.email,
       memberSince: req.user.created_at || null,
@@ -4646,9 +4688,7 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
     if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
     const period = req.query.period === 'month' || req.query.period === 'year' ? req.query.period : 'all';
     const now = new Date();
-    let periodStart = new Date(2020, 0, 1);
-    if (period === 'month') periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    if (period === 'year') periodStart = new Date(now.getFullYear(), 0, 1);
+    const statsTz = getUserTimezone(req.user);
 
     // All activities for streaks + PRs (PRs are always all-time).
     const { data: allActivities, error } = await supabaseAdmin
@@ -4661,8 +4701,21 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
       return res.status(500).json({ error: 'Could not load stats' });
     }
     const acts = allActivities || [];
-    // Period-filtered activities for hero stats and breakdowns.
-    const periodActs = acts.filter((a) => new Date(a.date) >= periodStart);
+    // Period-filtered activities for hero stats and breakdowns. "This month" /
+    // "this year" mean calendar membership in the USER'S zone (key comparisons),
+    // so a late-evening Pacific activity stored after UTC midnight still counts
+    // toward the Pacific user's current month. 'all' keeps the legacy epoch cut.
+    let periodActs;
+    if (period === 'month') {
+      const nowMonth = monthKey(now, statsTz);
+      periodActs = acts.filter((a) => monthKey(a.date, statsTz) === nowMonth);
+    } else if (period === 'year') {
+      const nowYear = dateParts(now, statsTz).y;
+      periodActs = acts.filter((a) => { const p = dateParts(a.date, statsTz); return !!p && p.y === nowYear; });
+    } else {
+      const allStart = new Date(2020, 0, 1);
+      periodActs = acts.filter((a) => new Date(a.date) >= allStart);
+    }
 
     const km = (a) => parseDistanceKm(a.distance);
 
@@ -4671,8 +4724,8 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
     const totalHours = Math.round(periodActs.reduce((s, a) => s + parseDurationHours(a.duration), 0) * 10) / 10;
     const totalPoints = calculatePoints(periodActs);
 
-    // ── Streaks (always all-time, shared helper) ──
-    const { currentStreak, longestStreak } = computeStreaks(acts);
+    // ── Streaks (always all-time, shared helper, user's zone) ──
+    const { currentStreak, longestStreak } = computeStreaks(acts, statsTz);
     // Avg sessions per week over the period (or since first activity in period).
     const firstDate = periodActs.length > 0 ? new Date(periodActs[0].date) : now;
     const weeksSpan = Math.max(1, (now - firstDate) / (7 * 86400000));
@@ -4686,12 +4739,13 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
     const chartWeeks = wq === 6 || wq === 12 || wq === 24 ? wq : 12;
     const weeklyChart = [];
     for (let i = chartWeeks - 1; i >= 0; i--) {
-      const day = now.getDay() || 7;
-      const wStart = new Date(now); wStart.setDate(now.getDate() - day + 1 - i * 7); wStart.setHours(0, 0, 0, 0);
-      const wEnd = new Date(wStart); wEnd.setDate(wStart.getDate() + 7);
-      const wActs = acts.filter((a) => { const d = new Date(a.date); return d >= wStart && d < wEnd; });
+      // Week membership via user-zone day keys; the label renders the key at
+      // UTC so it can never drift a day from the bucket it names.
+      const wStartK = weekStartKey(now, statsTz, i);
+      const wEndK = addDaysToKey(wStartK, 7);
+      const wActs = acts.filter((a) => { const k = dayKey(a.date, statsTz); return k >= wStartK && k < wEndK; });
       weeklyChart.push({
-        label: wStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).replace(' ', ''),
+        label: keyToUtcDate(wStartK).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).replace(' ', ''),
         hours: Math.round(wActs.reduce((s, a) => s + parseDurationHours(a.duration), 0) * 10) / 10
       });
     }
@@ -4717,7 +4771,8 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
     const prs = [];
     const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000);
     const isNew = (dateStr) => new Date(dateStr) >= fourteenDaysAgo;
-    const fmtDate = (d) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    // PR dates render as the user's-zone calendar day of the activity instant.
+    const fmtDate = (d) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: statsTz });
 
     const runs = acts.filter((a) => a.sport === 'running' && km(a) > 0);
     if (runs.length) {
@@ -4748,26 +4803,22 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
     if (acts.length) {
       const weekTotals = {};
       acts.forEach((a) => {
-        const d = new Date(a.date);
-        const day = d.getDay() || 7;
-        const wStart = new Date(d); wStart.setDate(d.getDate() - day + 1); wStart.setHours(0, 0, 0, 0);
-        const key = `${wStart.getFullYear()}-${String(wStart.getMonth() + 1).padStart(2, '0')}-${String(wStart.getDate()).padStart(2, '0')}`;
+        // Bucket by the Monday key of the activity's week in the user's zone.
+        const key = weekStartKey(a.date, statsTz);
         if (!weekTotals[key]) weekTotals[key] = { hours: 0, count: 0 };
         weekTotals[key].hours += parseDurationHours(a.duration);
         weekTotals[key].count++;
       });
       const bestWeek = Object.entries(weekTotals).reduce((m, x) => x[1].hours > m[1].hours ? x : m);
-      prs.push({ icon: '📅', label: 'Biggest week', value: Math.round(bestWeek[1].hours * 10) / 10 + 'h', meta: 'Week of ' + new Date(bestWeek[0]).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' · ' + bestWeek[1].count + ' activities', isNew: isNew(bestWeek[0]) });
+      prs.push({ icon: '📅', label: 'Biggest week', value: Math.round(bestWeek[1].hours * 10) / 10 + 'h', meta: 'Week of ' + keyToUtcDate(bestWeek[0]).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) + ' · ' + bestWeek[1].count + ' activities', isNew: isNew(bestWeek[0]) });
 
       const monthTotals = {};
       acts.forEach((a) => {
-        const d = new Date(a.date);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const key = monthKey(a.date, statsTz);
         monthTotals[key] = (monthTotals[key] || 0) + km(a);
       });
       const bestMonth = Object.entries(monthTotals).reduce((m, x) => x[1] > m[1] ? x : m);
-      const [bmYear, bmMonth] = bestMonth[0].split('-').map(Number);
-      prs.push({ icon: '📍', label: 'Biggest month', value: Math.round(bestMonth[1]) + ' km', meta: new Date(bmYear, bmMonth - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) + ' · across all sports', isNew: false });
+      prs.push({ icon: '📍', label: 'Biggest month', value: Math.round(bestMonth[1]) + ' km', meta: keyToUtcDate(bestMonth[0]).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) + ' · across all sports', isNew: false });
     }
 
     res.json({
@@ -4814,28 +4865,34 @@ function parseLocalDate(s) {
   return new Date(y, (m || 1) - 1, d || 1);
 }
 
-// The goal's evaluation window in local time. weekly = current Monday-start
-// local week; monthly = current local calendar month; custom = start_date
-// through end_date INCLUSIVE (the window closes at local midnight after
+// The goal's evaluation window in the USER'S zone. weekly = current
+// Monday-start week; monthly = current calendar month; custom = start_date
+// through end_date INCLUSIVE (the window closes at the user's midnight after
 // end_date). Weekly/monthly windows are always the current period, so only
-// custom goals can expire.
-function goalWindow(goal) {
+// custom goals can expire. Returns both day-key bounds (activity bucketing —
+// [startKey, endKeyExcl) string comparisons) and the exact UTC instants of
+// those local midnights (deadline/pace math + windowStart/windowEnd ISO).
+function goalWindow(goal, tz) {
+  let startKey, endKeyExcl;
   if (goal.period === 'weekly') {
-    const start = getWeekStart(0);
-    const end = new Date(start); end.setDate(start.getDate() + 7);
-    return { start, end };
+    startKey = weekStartKey(new Date(), tz);
+    endKeyExcl = addDaysToKey(startKey, 7);
+  } else if (goal.period === 'monthly') {
+    const p = dateParts(new Date(), tz);
+    startKey = `${p.y}-${String(p.m).padStart(2, '0')}-01`;
+    endKeyExcl = p.m === 12
+      ? `${p.y + 1}-01-01`
+      : `${p.y}-${String(p.m + 1).padStart(2, '0')}-01`;
+  } else {
+    startKey = String(goal.start_date);
+    endKeyExcl = addDaysToKey(goal.end_date || goal.start_date, 1);
   }
-  if (goal.period === 'monthly') {
-    const now = new Date();
-    return {
-      start: new Date(now.getFullYear(), now.getMonth(), 1),
-      end: new Date(now.getFullYear(), now.getMonth() + 1, 1)
-    };
-  }
-  const start = parseLocalDate(goal.start_date);
-  const endBase = parseLocalDate(goal.end_date || goal.start_date);
-  const end = new Date(endBase); end.setDate(endBase.getDate() + 1);
-  return { start, end };
+  return {
+    startKey,
+    endKeyExcl,
+    start: zoneMidnightUtc(startKey, tz),
+    end: zoneMidnightUtc(endKeyExcl, tz)
+  };
 }
 
 // Server-computed goal enrichment. `activities` = ALL of the owner's activity
@@ -4843,9 +4900,9 @@ function goalWindow(goal) {
 // over those rows (streak goals measure the ALL-TIME current streak — their
 // window is a review deadline only). Null-distance rows contribute 0 via the
 // parser, never crash.
-function enrichGoal(goal, activities, streaks) {
+function enrichGoal(goal, activities, streaks, tz) {
   const now = new Date();
-  const { start, end } = goalWindow(goal);
+  const { startKey, endKeyExcl, start, end } = goalWindow(goal, tz);
   const target = Number(goal.target_value) || 0;
   // Comparison space: km for distance goals (target converted from mi once
   // here), otherwise the type's natural unit (sessions / hours / days).
@@ -4855,9 +4912,11 @@ function enrichGoal(goal, activities, streaks) {
   if (goal.type === 'streak') {
     progressCmp = streaks.currentStreak;
   } else {
+    // Window membership by user-zone day key, so a 6 PM Pacific activity
+    // (next-day UTC) counts toward the Pacific day's window.
     const inWindow = activities.filter((a) => {
-      const d = new Date(a.date);
-      return d >= start && d < end;
+      const k = dayKey(a.date, tz);
+      return k >= startKey && k < endKeyExcl;
     });
     const matches = inWindow.filter((a) => {
       if (goal.sport) return a.sport === goal.sport;
@@ -4955,13 +5014,14 @@ function validateGoalConfig(g) {
   return null;
 }
 
-// Fetch the owner's activities once and enrich a set of goal rows.
-async function enrichGoalRows(userId, rows) {
+// Fetch the owner's activities once and enrich a set of goal rows (all
+// window/streak math in the owner's zone).
+async function enrichGoalRows(userId, rows, tz) {
   const { data: acts } = await supabaseAdmin
     .from('activities').select('sport, distance, duration, date').eq('user_id', userId);
   const activities = acts || [];
-  const streaks = computeStreaks(activities);
-  return rows.map((g) => enrichGoal(g, activities, streaks));
+  const streaks = computeStreaks(activities, tz);
+  return rows.map((g) => enrichGoal(g, activities, streaks, tz));
 }
 
 // List the signed-in user's goals, enriched, active and archived separated.
@@ -4979,7 +5039,7 @@ app.get(BASE + '/api/goals', requireAuth, async (req, res) => {
     }
     const goals = rows || [];
     if (!goals.length) return res.json({ active: [], archived: [] });
-    const enriched = await enrichGoalRows(req.user.id, goals);
+    const enriched = await enrichGoalRows(req.user.id, goals, getUserTimezone(req.user));
     res.json({
       active: enriched.filter((g) => g.status === 'active'),
       archived: enriched.filter((g) => g.status === 'archived')
@@ -5037,7 +5097,7 @@ app.post(BASE + '/api/goals', requireAuth, requireProPlan('goals'), async (req, 
       console.log('Goal create error:', error.message);
       return res.status(500).json({ error: 'Could not create goal' });
     }
-    const [enriched] = await enrichGoalRows(req.user.id, [row]);
+    const [enriched] = await enrichGoalRows(req.user.id, [row], getUserTimezone(req.user));
     res.json({ goal: enriched });
   } catch (err) {
     console.log('Goal create error:', err.message);
@@ -5103,7 +5163,7 @@ app.patch(BASE + '/api/goals/:id', requireAuth, requireProPlan('goals'), async (
       console.log('Goal update error:', error.message);
       return res.status(500).json({ error: 'Could not update goal' });
     }
-    const [enriched] = await enrichGoalRows(req.user.id, [saved]);
+    const [enriched] = await enrichGoalRows(req.user.id, [saved], getUserTimezone(req.user));
     res.json({ goal: enriched });
   } catch (err) {
     console.log('Goal update error:', err.message);
@@ -5548,6 +5608,24 @@ app.post(BASE + '/api/profile/update', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'Invalid state' });
       } else {
         meta.state = s;
+      }
+    }
+    // Timezone override. A zone name sets a MANUAL override (wins over the
+    // per-login auto-capture until cleared); empty string returns to auto —
+    // adopting the browser zone sent alongside (browserTz) immediately when
+    // valid, otherwise keeping the stored zone until the next login refresh.
+    // Invalid zone names are rejected, never silently stored.
+    if (typeof body.timezone === 'string') {
+      const zone = body.timezone.trim();
+      if (!zone) {
+        meta.timezone_source = 'auto';
+        const btz = typeof body.browserTz === 'string' ? body.browserTz.trim() : '';
+        if (btz && isValidTimezone(btz)) meta.timezone = btz;
+      } else if (!isValidTimezone(zone)) {
+        return res.status(400).json({ error: 'Invalid timezone' });
+      } else {
+        meta.timezone = zone;
+        meta.timezone_source = 'manual';
       }
     }
     if (typeof body.bio === 'string') meta.bio = body.bio.trim().slice(0, 600);

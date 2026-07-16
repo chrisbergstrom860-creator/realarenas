@@ -529,6 +529,13 @@ button,select,input,textarea{font-family:var(--font)}
               <div class="form-field"><label class="form-label">State</label><select id="set-state" class="form-select"><option value="">Select state</option></select></div>
               <div class="form-field"></div>
             </div>
+            <!-- Timezone override: "Auto" follows the device zone captured at
+                 each login; picking a zone locks it until set back to Auto.
+                 Options are populated from the server-injected IANA list. -->
+            <div class="form-row">
+              <div class="form-field"><label class="form-label">Timezone</label><select id="set-timezone" class="form-select"><option value="">Auto (use device timezone)</option></select></div>
+              <div class="form-field"></div>
+            </div>
           </div>
           <div class="settings-section">
             <div class="ss-title">Sports & level</div>
@@ -1022,6 +1029,22 @@ document.getElementById('htab-overview').classList.add('active');
     cSel.addEventListener('change', syncStateRow);
   })();
 
+  // Timezone select: IANA options from the server-injected list. The stored
+  // zone is pre-selected ONLY for a manual override — on 'auto' the select
+  // stays on the "Auto" option even though a captured zone exists, so saving
+  // without touching it never accidentally freezes the auto-captured zone.
+  (function () {
+    var tSel = document.getElementById('set-timezone');
+    if (!tSel) return;
+    (data.timezones || []).forEach(function (z) {
+      var o = document.createElement('option'); o.value = z; o.textContent = z.replace(/_/g, ' '); tSel.appendChild(o);
+    });
+    if (p.timezoneSource === 'manual' && p.timezone) {
+      tSel.value = p.timezone;
+      if (tSel.value !== p.timezone) tSel.value = '';
+    }
+  })();
+
   // "Your sports" chips: reflect the saved selection. The chips themselves are
   // rendered from the sports registry; here we only toggle .on for saved ids.
   var savedSports = Array.isArray(p.sports) ? p.sports : [];
@@ -1048,6 +1071,10 @@ document.getElementById('htab-overview').classList.add('active');
         document.querySelectorAll('#settings-sport-chips .sport-chip.on'),
         function (chip) { return chip.getAttribute('data-sport'); }
       );
+      // Timezone: '' = back to Auto (server adopts browserTz immediately);
+      // a zone name = manual override.
+      out.timezone = val('set-timezone');
+      try { out.browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { out.browserTz = ''; }
     }
     return out;
   }

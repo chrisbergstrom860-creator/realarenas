@@ -1047,6 +1047,7 @@ html { scroll-behavior: smooth; }
           <div class="auth-title">Welcome back</div>
           <div class="auth-subtitle">Log in to your Arenas account</div>
           <form action="/html/auth/login" method="POST">
+            <input type="hidden" name="tz">
             <div class="form-field">
               <label class="form-label">Email</label>
               <input class="form-input" name="email" type="email" placeholder="you@example.com" required>
@@ -1065,6 +1066,7 @@ html { scroll-behavior: smooth; }
         <!-- SIGNUP -->
         <div id="form-signup" style="display:none">
           <form id="signupForm" action="/html/auth/signup" method="POST">
+          <input type="hidden" name="tz">
           <div class="onboard-step active" id="step-1">
             <div class="onboard-progress">
               <div class="onboard-dot active"></div>
@@ -1158,6 +1160,15 @@ html { scroll-behavior: smooth; }
               var f = document.getElementById('signupForm');
               if(!f) return;
               f.querySelectorAll('button').forEach(function(b){ if(!b.getAttribute('type')) b.setAttribute('type','button'); });
+            })();
+            // Fill the hidden tz field on both auth forms with the browser's
+            // IANA zone — the server captures it into user_metadata (signup
+            // always; login refreshes unless the user set a manual override).
+            (function(){
+              try {
+                var zone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+                document.querySelectorAll('input[name="tz"]').forEach(function(i){ i.value = zone; });
+              } catch (e) { /* leave blank — server treats missing tz as no-op */ }
             })();
           </script>
         </div>
