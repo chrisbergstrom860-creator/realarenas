@@ -451,7 +451,9 @@ function showToast(msg) {
   })();
 
   function searchText(a){
-    return [a.name, a.location, (a.sports || []).join(' '), a.level]
+    // Country/state fold in as display names + the USPS code so "United
+    // States", "California" and "CA" all match; cards still render city-only.
+    return [a.name, a.location, a.countryName, a.stateName, a.state, (a.sports || []).join(' '), a.level]
       .join(' ').toLowerCase();
   }
 

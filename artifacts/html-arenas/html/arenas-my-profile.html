@@ -521,7 +521,13 @@ button,select,input,textarea{font-family:var(--font)}
             <div class="form-field"><label class="form-label">Bio</label><textarea id="set-bio" class="form-textarea">Marathon runner, weekend cyclist, occasional wall climber. Chasing a sub-3:30 marathon. Hackney RC member since 2024.</textarea></div>
             <div class="form-row">
               <div class="form-field"><label class="form-label">City</label><input id="set-location" class="form-input" type="text" value="London"></div>
-              <div class="form-field"><label class="form-label">Country</label><select class="form-select"><option>United Kingdom</option><option>United States</option><option>Germany</option></select></div>
+              <div class="form-field"><label class="form-label">Country</label><select id="set-country" class="form-select"><option value="">Select country</option></select></div>
+            </div>
+            <!-- US-only: the row is shown/hidden by the country wiring script;
+                 the empty spacer keeps the two-column form grid aligned. -->
+            <div class="form-row" id="set-state-row" style="display:none">
+              <div class="form-field"><label class="form-label">State</label><select id="set-state" class="form-select"><option value="">Select state</option></select></div>
+              <div class="form-field"></div>
             </div>
           </div>
           <div class="settings-section">
@@ -788,10 +794,17 @@ document.getElementById('htab-overview').classList.add('active');
   var epPreview = document.getElementById('ep-avatar-preview');
   if (epPreview && window.avatarHtml) epPreview.innerHTML = window.avatarHtml.content(p.avatar_url || null, name);
 
-  // Hero subline: "Location · Member since Mon YYYY" (handles are hidden from
-  // display — kept in data only).
+  // Hero subline: "City, ST · Country · Member since Mon YYYY" (handles are
+  // hidden from display — kept in data only). Degrades per missing part:
+  // "Tustin, CA · United States" (US), "London · United Kingdom", city only,
+  // "California · United States" (state without city), country only, or
+  // member-since only when no place is set at all.
   var parts = [];
-  if (p.location) parts.push(p.location);
+  var place = '';
+  if (p.location) place = p.location + (p.state ? ', ' + p.state : '');
+  else if (p.stateName) place = p.stateName;
+  if (p.countryName) place = place ? place + ' · ' + p.countryName : p.countryName;
+  if (place) parts.push(place);
   if (data.memberSince) {
     var d = new Date(data.memberSince);
     if (!isNaN(d.getTime())) {
@@ -979,6 +992,36 @@ document.getElementById('htab-overview').classList.add('active');
   setVal('set-bio', p.bio || '');
   setVal('set-location', p.location || '');
 
+  // Country / State selects: options rendered from the server-injected
+  // registries (data.countries / data.usStates — ISO alpha-2 and USPS codes as
+  // values, display names as labels), pre-selected from the stored codes.
+  // The State row only exists while country === 'US'; switching away hides it
+  // and resets the value so a stale state is never re-submitted (the server
+  // clears the stored one regardless).
+  (function () {
+    var cSel = document.getElementById('set-country');
+    var sSel = document.getElementById('set-state');
+    var sRow = document.getElementById('set-state-row');
+    if (!cSel || !sSel || !sRow) return;
+    (data.countries || []).forEach(function (c) {
+      var o = document.createElement('option'); o.value = c.code; o.textContent = c.name; cSel.appendChild(o);
+    });
+    (data.usStates || []).forEach(function (s) {
+      var o = document.createElement('option'); o.value = s.code; o.textContent = s.name; sSel.appendChild(o);
+    });
+    cSel.value = p.country || '';
+    if (cSel.value !== (p.country || '')) cSel.value = '';
+    sSel.value = p.state || '';
+    if (sSel.value !== (p.state || '')) sSel.value = '';
+    function syncStateRow() {
+      var isUS = cSel.value === 'US';
+      sRow.style.display = isUS ? '' : 'none';
+      if (!isUS) sSel.value = '';
+    }
+    syncStateRow();
+    cSel.addEventListener('change', syncStateRow);
+  })();
+
   // "Your sports" chips: reflect the saved selection. The chips themselves are
   // rendered from the sports registry; here we only toggle .on for saved ids.
   var savedSports = Array.isArray(p.sports) ? p.sports : [];
@@ -995,9 +1038,12 @@ document.getElementById('htab-overview').classList.add('active');
       location: scope === 'modal' ? val('edit-location') : val('set-location'),
       bio: scope === 'modal' ? val('edit-bio') : val('set-bio')
     };
-    // Sports live only in the settings form. The modal payload omits the key
-    // entirely so the server leaves the saved selection untouched.
+    // Sports and country/state live only in the settings form. The modal
+    // payload omits those keys entirely so the server leaves the saved values
+    // untouched (absent key = no change; empty string = explicit clear).
     if (scope !== 'modal') {
+      out.country = val('set-country');
+      out.state = val('set-state');
       out.sports = Array.prototype.map.call(
         document.querySelectorAll('#settings-sport-chips .sport-chip.on'),
         function (chip) { return chip.getAttribute('data-sport'); }

@@ -17,6 +17,7 @@ const { subscriptionPriceLabel, PRICE_FALLBACK_LABEL } = require('./billing-pric
 // colors, scoring, distance-goal eligibility). SPORT_POINTS / KNOWN_SPORTS /
 // DISTANCE_SPORTS are DERIVED there and equivalence-tested in sports.test.js.
 const { SPORTS, SPORT_POINTS, KNOWN_SPORTS, DISTANCE_SPORTS, SPORT_ICONS, LEGACY_SPORT_EMOJI } = require('./sports');
+const { COUNTRIES, COUNTRY_NAMES, US_STATES, US_STATE_NAMES } = require('./countries');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -557,7 +558,13 @@ function displayFromUser(user) {
     name: meta.name || emailLocal || 'Athlete',
     handle: meta.handle || emailLocal || 'athlete',
     avatar_url: meta.avatar_url || null,
-    location: meta.location || null
+    location: meta.location || null,
+    // Structured place (additive; codes stored, names resolved from the
+    // registry so an unknown/legacy code degrades to null, never garbage).
+    country: meta.country || null,
+    countryName: COUNTRY_NAMES[meta.country] || null,
+    state: meta.state || null,
+    stateName: US_STATE_NAMES[meta.state] || null
   };
 }
 
@@ -3952,6 +3959,12 @@ app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
           avatar_url: disp.avatar_url || null,
           bio: meta.bio || null,
           location: meta.location || null,
+          // Structured place for the client-side search text (country/state
+          // display names + state code all match; cards still render city-only).
+          country: disp.country,
+          countryName: disp.countryName,
+          state: disp.state,
+          stateName: disp.stateName,
           sports: Array.isArray(meta.sports) ? meta.sports : [],
           level: meta.level || null,
           initials,
@@ -4582,11 +4595,21 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
         handle: display.handle,
         bio: meta.bio || '',
         location: meta.location || '',
+        // Structured place: stored codes + registry-resolved display names
+        // (hero renders names; the settings selects pre-select from codes).
+        country: display.country || '',
+        countryName: display.countryName || '',
+        state: display.state || '',
+        stateName: display.stateName || '',
         avatar_url: meta.avatar_url || null,
         // Saved "Your sports" selection (registry ids) — drives the settings
         // sport chips' initial .on state.
         sports: Array.isArray(meta.sports) ? meta.sports : []
       },
+      // Full registries for the settings dropdowns — injected here rather than
+      // into the shared shell script so only the profile page pays the ~7KB.
+      countries: COUNTRIES,
+      usStates: US_STATES,
       userId: req.user.id,
       email: req.user.email,
       memberSince: req.user.created_at || null,
@@ -5496,6 +5519,37 @@ app.post(BASE + '/api/profile/update', requireAuth, async (req, res) => {
       meta.handle = handle;
     }
     if (typeof body.location === 'string') meta.location = body.location.trim().slice(0, 120);
+    // Structured country/state. Codes only, validated against the registry.
+    // Country is processed BEFORE state so the state guard sees the country
+    // from this same payload. Empty string clears. State is US-only: any
+    // country change away from 'US' auto-clears a stored state (the
+    // "stale CA after moving to France" guard), and a state sent alongside a
+    // non-US country is dropped rather than rejected.
+    // Clears MUST be explicit nulls, never `delete`: updateUserById MERGES
+    // user_metadata, so a key missing from the payload keeps its old value —
+    // deleting from the local copy is a silent no-op against storage.
+    if (typeof body.country === 'string') {
+      const c = body.country.trim().toUpperCase();
+      if (!c) {
+        meta.country = null;
+        meta.state = null;
+      } else if (!COUNTRY_NAMES[c]) {
+        return res.status(400).json({ error: 'Invalid country' });
+      } else {
+        meta.country = c;
+        if (c !== 'US') meta.state = null;
+      }
+    }
+    if (typeof body.state === 'string') {
+      const s = body.state.trim().toUpperCase();
+      if (!s || meta.country !== 'US') {
+        meta.state = null;
+      } else if (!US_STATE_NAMES[s]) {
+        return res.status(400).json({ error: 'Invalid state' });
+      } else {
+        meta.state = s;
+      }
+    }
     if (typeof body.bio === 'string') meta.bio = body.bio.trim().slice(0, 600);
     // "Your sports" chips (settings). Only registry ids are accepted; deduped
     // and capped at the registry size (now 12). An empty array clears the list.
