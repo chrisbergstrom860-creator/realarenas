@@ -352,7 +352,7 @@ button,select,input,textarea{font-family:var(--font)}
         <div class="mh-av" id="modal-av">·</div>
         <div class="mh-info">
           <div class="mh-name" id="modal-name">Jamie King</div>
-          <div class="mh-handle" id="modal-handle">@jamiek · London, UK</div>
+          <div class="mh-handle" id="modal-handle"></div>
           <div class="mh-tags" id="modal-tags"></div>
         </div>
         <div class="mh-actions" id="modal-actions"></div>
@@ -454,8 +454,17 @@ function showToast(msg) {
   })();
 
   function searchText(a){
-    return [a.name, a.handle, a.location, (a.sports || []).join(' '), a.level]
+    return [a.name, a.location, (a.sports || []).join(' '), a.level]
       .join(' ').toLowerCase();
+  }
+
+  // Plain sport label ("Running") for secondary lines — no emoji, unlike the
+  // pill tags from arenasSportTag().
+  function sportName(id){
+    var s = (window.ARENAS_SPORTS_BY_ID || {})[id];
+    if (s) return s.label;
+    var t = String(id == null ? '' : id);
+    return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
   }
 
   function visibleList(){
@@ -485,7 +494,7 @@ function showToast(msg) {
           window.avatarHtml(a.avatar_url || null, a.name || 'Athlete', 'ac-av', 'background:' + av.bg + ';color:' + av.color) +
           '<div>' +
             '<div class="ac-name">' + esc(a.name || 'Athlete') + '</div>' +
-            '<div class="ac-location">' + (a.location ? '📍 ' + esc(a.location) : '📍 Location not set') + ' · @' + esc(a.handle || 'athlete') + '</div>' +
+            '<div class="ac-location">' + (a.location ? '📍 ' + esc(a.location) : '📍 Location not set') + (sports.length ? ' · ' + esc(sports.map(sportName).join(', ')) : '') + '</div>' +
           '</div>' +
         '</div>' +
         '<div class="ac-tags">' +
@@ -630,7 +639,7 @@ function showToast(msg) {
     const nameEl = document.getElementById('modal-name');
     if (nameEl) nameEl.textContent = a.name || 'Athlete';
     const handleEl = document.getElementById('modal-handle');
-    if (handleEl) handleEl.textContent = '@' + (a.handle || 'athlete') + (a.location ? ' · ' + a.location : '');
+    if (handleEl) handleEl.textContent = a.location ? '📍 ' + a.location : '';
     const tagsEl = document.getElementById('modal-tags');
     if (tagsEl) tagsEl.innerHTML = (a.sports || []).map(s => '<span class="mh-tag">' + esc(window.arenasSportTag(s)) + '</span>').join('');
     const statsEl = document.getElementById('modal-stats');

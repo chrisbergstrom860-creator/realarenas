@@ -308,7 +308,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="sidebar-footer">
     <div style="display:flex;align-items:center;gap:9px">
       <div class="sf-av" style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">·</div>
-      <div><div class="user-name" style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div><div style="font-size:10px;color:var(--gray-500)"><span class="user-handle">@jamiek</span></div></div>
+      <div><div class="user-name" style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div></div>
     </div>
   </div>
 </aside>
@@ -632,10 +632,9 @@ function postCardHtml(post, opts) {
   const o = opts || {};
   const self = (window.ARENAS_DATA && window.ARENAS_DATA.profile) || {};
   const name = o.name || self.name || 'Athlete';
-  const handle = o.handle || self.handle || 'athlete';
   const avatarUrl = ('avatarUrl' in o) ? o.avatarUrl : (self.avatar_url || null);
   const avStyle = o.avStyle || '';
-  const meta = o.meta || ('Just now · @' + handle);
+  const meta = o.meta || 'Just now';
   return `
     <div class="post-note-card">
       <div class="pn-head">
@@ -706,15 +705,13 @@ function renderInjectedPosts() {
     card.dataset.type = post.sport || 'note';
     const isOwn = post.user_id === data.userId;
     const name = post.authorName || 'Athlete';
-    const handle = post.authorHandle || 'athlete';
     card.innerHTML = postCardHtml(post, {
       name,
-      handle,
       avatarUrl: post.authorAvatarUrl || null,
       avStyle: isOwn
         ? 'background:var(--yellow);color:var(--gray-900)'
         : 'background:var(--gray-200);color:var(--gray-700)',
-      meta: getTimeAgo(new Date(post.created_at)) + ' · @' + handle,
+      meta: getTimeAgo(new Date(post.created_at)),
       likes: post.likeCount || 0,
       liked: !!post.userLiked
     });
@@ -763,9 +760,8 @@ function renderInjectedActivities() {
 
   // Render oldest-first with insertBefore so the newest activity ends up on top.
   data.feedActivities.slice().reverse().forEach(function(a) {
-    const author = a.author || { name: 'Athlete', handle: 'athlete' };
+    const author = a.author || { name: 'Athlete' };
     const name = author.name || 'Athlete';
-    const handle = author.handle || 'athlete';
     const icon = sportIcons[a.sport] || '🏃';
     const colorStyle = sportColors[a.sport] || '';
     const sportLabel = a.sport ? (a.sport.charAt(0).toUpperCase() + a.sport.slice(1)) : 'Activity';
@@ -780,7 +776,7 @@ function renderInjectedActivities() {
           window.avatarHtml(author.avatar_url || null, name, '', 'width:36px;height:36px;border-radius:50%;background:var(--gray-200);color:var(--gray-700);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0') +
           '<div style="flex:1;min-width:0">' +
             '<div style="font-size:13px;font-weight:600;color:var(--gray-900)">' + escFeedAct(name) + ' <span style="font-weight:400;color:var(--gray-400)">logged an activity</span></div>' +
-            '<div style="font-size:11px;color:var(--gray-400)">' + getTimeAgo(new Date(a.date || a.created_at)) + ' · @' + escFeedAct(handle) + '</div>' +
+            '<div style="font-size:11px;color:var(--gray-400)">' + getTimeAgo(new Date(a.date || a.created_at)) + '</div>' +
           '</div>' +
           '<span style="font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;border:1px solid;' + colorStyle + '">' + icon + ' ' + escFeedAct(sportLabel) + '</span>' +
         '</div>' +
@@ -804,9 +800,8 @@ function renderFollowingRsvps() {
   const sportIcons = window.ARENAS_SPORT_ICONS || {}; // registry emoji + legacy drift entries
 
   data.followingRsvps.slice().reverse().forEach(function (r) {
-    const author = r.author || { name:'Athlete', handle:'athlete' };
+    const author = r.author || { name:'Athlete' };
     const name = author.name || 'Athlete';
-    const handle = author.handle || 'athlete';
     const ev = r.event || {};
     const icon = sportIcons[ev.sport] || '🎟️';
     const when = ev.date ? new Date(ev.date).toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'long' }) : '';
@@ -821,7 +816,7 @@ function renderFollowingRsvps() {
           window.avatarHtml(author.avatar_url || null, name, '', 'width:36px;height:36px;border-radius:50%;background:var(--gray-200);color:var(--gray-700);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0') +
           '<div style="flex:1;min-width:0">' +
             '<div style="font-size:13px;font-weight:600;color:var(--gray-900)">' + escFeedAct(name) + ' <span style="font-weight:400;color:var(--gray-400)">is going to an event</span></div>' +
-            '<div style="font-size:11px;color:var(--gray-400)">' + ago + ' · @' + escFeedAct(handle) + '</div>' +
+            '<div style="font-size:11px;color:var(--gray-400)">' + ago + '</div>' +
           '</div>' +
           '<span style="font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;border:1px solid #86EFAC;background:#ECFDF5;color:#166534">✓ Going</span>' +
         '</div>' +
@@ -883,9 +878,7 @@ renderFeedEmptyState();
   var data = window.ARENAS_DATA;
   if (!data || !data.profile) return;
   var name = data.profile.name || 'Athlete';
-  var handle = data.profile.handle || 'athlete';
   document.querySelectorAll('.user-name').forEach(function (el) { el.textContent = name; });
-  document.querySelectorAll('.user-handle').forEach(function (el) { el.textContent = '@' + handle; });
   var composerAv = document.querySelector('.composer-av');
   if (composerAv && window.avatarHtml) {
     composerAv.innerHTML = window.avatarHtml.content(data.profile.avatar_url || null, name);

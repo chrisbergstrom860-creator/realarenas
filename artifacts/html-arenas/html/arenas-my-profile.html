@@ -361,7 +361,7 @@ button,select,input,textarea{font-family:var(--font)}
       </div>
       <div class="hero-info">
         <div class="hero-name-row"><div class="hero-name">Jamie King</div><!--PRO_BADGE_SLOT--></div>
-        <div class="hero-handle">@jamiek · London, UK · Member since Apr 2026</div>
+        <div class="hero-handle">London, UK · Member since Apr 2026</div>
         <div class="hero-tags">
           <span class="hero-tag sport-run">🏃 Running</span>
           <span class="hero-tag sport-cyc">🚴 Cycling</span>
@@ -518,7 +518,6 @@ button,select,input,textarea{font-family:var(--font)}
               <div class="form-field"><label class="form-label">First name</label><input id="set-first-name" class="form-input" type="text" value="Jamie"></div>
               <div class="form-field"><label class="form-label">Last name</label><input id="set-last-name" class="form-input" type="text" value="King"></div>
             </div>
-            <div class="form-field"><label class="form-label">Handle</label><input id="edit-handle" class="form-input" type="text" value="@jamiek"><div class="form-hint">How other athletes find you on Arenas</div></div>
             <div class="form-field"><label class="form-label">Bio</label><textarea id="set-bio" class="form-textarea">Marathon runner, weekend cyclist, occasional wall climber. Chasing a sub-3:30 marathon. Hackney RC member since 2024.</textarea></div>
             <div class="form-row">
               <div class="form-field"><label class="form-label">City</label><input id="set-location" class="form-input" type="text" value="London"></div>
@@ -730,13 +729,13 @@ function closeModals(e) {
 }
 function copyProfileLink() {
   // Profiles aren't publicly reachable (the app is auth-gated), so the copied
-  // text stays honest: real name + handle from the injected profile, plus the
-  // site URL — which sends a logged-out recipient to the Arenas landing page.
+  // text stays honest: real name from the injected profile (no handle — handles
+  // are hidden from display), plus the site URL — which sends a logged-out
+  // recipient to the Arenas landing page.
   var p = (window.ARENAS_DATA && window.ARENAS_DATA.profile) || {};
-  var handle = (p.handle || '').replace(/^@+/, '');
   var url = location.origin + (window.BASE || '');
   var text = p.name
-    ? 'Follow ' + p.name + (handle ? ' (@' + handle + ')' : '') + ' on Arenas — ' + url
+    ? 'Follow ' + p.name + ' on Arenas — ' + url
     : 'Join me on Arenas — ' + url;
   navigator.clipboard?.writeText(text).catch(() => {});
   showToast('✓ Share text copied');
@@ -793,8 +792,9 @@ document.getElementById('htab-overview').classList.add('active');
   var epPreview = document.getElementById('ep-avatar-preview');
   if (epPreview && window.avatarHtml) epPreview.innerHTML = window.avatarHtml.content(p.avatar_url || null, name);
 
-  // Handle line: "@handle · Location · Member since Mon YYYY"
-  var parts = ['@' + handle];
+  // Hero subline: "Location · Member since Mon YYYY" (handles are hidden from
+  // display — kept in data only).
+  var parts = [];
   if (p.location) parts.push(p.location);
   if (data.memberSince) {
     var d = new Date(data.memberSince);
@@ -958,10 +958,10 @@ document.getElementById('htab-overview').classList.add('active');
   setVal('edit-last-name', lastName);
   setVal('edit-bio', p.bio || '');
   setVal('edit-location', p.location || '');
-  // Settings "Profile information" form (handle lives here only)
+  // Settings "Profile information" form (no handle field — handles are kept in
+  // data but hidden from the UI; the server still accepts meta.handle if sent)
   setVal('set-first-name', firstName);
   setVal('set-last-name', lastName);
-  setVal('edit-handle', '@' + handle);
   setVal('set-bio', p.bio || '');
   setVal('set-location', p.location || '');
 
@@ -978,7 +978,6 @@ document.getElementById('htab-overview').classList.add('active');
     var ln = scope === 'modal' ? val('edit-last-name') : val('set-last-name');
     var out = {
       name: (fn + ' ' + ln).trim(),
-      handle: String(val('edit-handle') || handle).replace(/^@+/, ''),
       location: scope === 'modal' ? val('edit-location') : val('set-location'),
       bio: scope === 'modal' ? val('edit-bio') : val('set-bio')
     };
@@ -1085,11 +1084,10 @@ document.getElementById('htab-overview').classList.add('active');
 
   function subline(a){
     var primary = (a.sports && a.sports[0]) || null;
-    var bits = ['@' + esc(a.handle || 'athlete')];
+    var bits = [];
+    if (primary) bits.push(esc(window.arenasSportTag(primary) || primary));
     if (a.location) bits.push(esc(a.location));
-    var sub = bits.join(' · ');
-    if (primary) sub = esc(window.arenasSportTag(primary) || primary) + ' · ' + sub;
-    return sub;
+    return bits.join(' · ');
   }
 
   function cardHTML(a, i, canUnfollow){
