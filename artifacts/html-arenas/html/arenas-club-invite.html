@@ -728,7 +728,7 @@ updateCounts();
         var actions = (isAdmin && !m.isSelf)
           ? '<button class="btn btn-sm btn-red" data-remove="'+esc(m.user_id)+'">Remove</button>'
           : (m.isSelf ? '<span style="font-size:11px;color:var(--gray-400)">You</span>' : '');
-        return '<tr><td><div class="member-cell">'+window.avatarHtml(m.avatar_url||null, m.name||'Member', 'av-sm', 'background:var(--yellow-light);color:#7a5c00;overflow:hidden')+'<div><div class="member-name">'+esc(m.name)+'</div><div class="member-email">@'+esc(m.handle)+'</div></div></div></td>'+
+        return '<tr><td><div class="member-cell">'+window.avatarHtml(m.avatar_url||null, m.name||'Member', 'av-sm', 'background:var(--yellow-light);color:#7a5c00;overflow:hidden')+'<div><div class="member-name">'+esc(m.name)+'</div></div></div></td>'+
           '<td>'+roleCell+'</td>'+
           '<td class="time-ago">'+esc(fmtAgo(m.joined_at))+'</td>'+
           '<td><div class="actions-cell">'+actions+'</div></td></tr>';

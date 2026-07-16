@@ -225,7 +225,7 @@ button{font-family:var(--font)}
   <div class="sidebar-footer">
     <div style="display:flex;align-items:center;gap:9px">
       <div class="user-initials" style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">·</div>
-      <div><div class="user-name" style="font-size:12px;font-weight:600;color:var(--gray-900)"></div><div style="font-size:10px;color:var(--gray-500)"><span class="user-handle"></span></div></div>
+      <div><div class="user-name" style="font-size:12px;font-weight:600;color:var(--gray-900)"></div></div>
     </div>
   </div>
 </aside>
@@ -935,17 +935,15 @@ button{font-family:var(--font)}
 })();
 </script>
 <script>
-// Identity: swap placeholder initials/name/handle for the logged-in viewer.
+// Identity: swap placeholder initials/name for the logged-in viewer.
 (function () {
   var data = window.ARENAS_DATA;
   if (!data || !data.profile) return;
   var p = data.profile;
   var name = p.name || 'Athlete';
-  var handle = (p.handle || 'athlete').replace(/^@+/, '');
   var initials = (name.trim().split(/\s+/).map(function (w) { return w[0]; }).join('').slice(0, 2) || 'A').toUpperCase();
   document.querySelectorAll('.user-initials').forEach(function (el) { el.textContent = initials; });
   document.querySelectorAll('.user-name').forEach(function (el) { el.textContent = name; });
-  document.querySelectorAll('.user-handle').forEach(function (el) { el.textContent = '@' + handle; });
 })();
 </script>
 <script>

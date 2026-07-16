@@ -302,7 +302,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="sidebar-footer">
     <div style="display:flex;align-items:center;gap:9px">
       <div class="sf-av" style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">·</div>
-      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div><div style="font-size:10px;color:var(--gray-500)">@jamiek</div></div>
+      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div></div>
     </div>
   </div>
 </aside>
@@ -408,12 +408,9 @@ function showToast(msg) {
 
   // Update the logged-in user's identity in the nav + sidebar footer.
   const myName = (data.myProfile && data.myProfile.name) || 'Athlete';
-  const myHandle = ((data.myProfile && data.myProfile.handle) || 'athlete').replace(/^@+/, '');
   document.querySelectorAll('.sidebar-footer div').forEach(el => {
     if (el.childElementCount !== 0) return;
-    const t = el.textContent.trim();
-    if (t === 'Jamie King') el.textContent = myName;
-    else if (t === '@jamiek') el.textContent = '@' + myHandle;
+    if (el.textContent.trim() === 'Jamie King') el.textContent = myName;
   });
 
   const athletes = data.athletes || [];

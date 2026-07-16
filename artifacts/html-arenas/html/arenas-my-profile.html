@@ -340,7 +340,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="sidebar-footer">
     <div class="sf-row">
       <div class="sf-av" style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">·</div>
-      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div><div style="font-size:10px;color:var(--gray-500)">@jamiek</div></div>
+      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div></div>
     </div>
   </div>
 </aside>
@@ -753,7 +753,7 @@ document.getElementById('htab-overview').classList.add('active');
 <script>
 // Wire the logged-in user's real profile data into the page. The /profile route
 // injects window.ARENAS_DATA. This replaces the hardcoded "Jamie King" /
-// "@jamiek" placeholders with live identity, counts, sports, and posts.
+// placeholders with live identity, counts, sports, and posts.
 // There is no profiles table, so name/handle/bio/location come from auth
 // metadata; counts and posts are queried from the database.
 (function () {
@@ -762,7 +762,6 @@ document.getElementById('htab-overview').classList.add('active');
   var p = data.profile || {};
   var emailLocal = data.email ? data.email.split('@')[0] : '';
   var name = p.name || emailLocal || 'Athlete';
-  var handle = (p.handle || emailLocal || 'athlete').replace(/^@+/, '');
   var initials = (name.trim().split(/\s+/).map(function (w) { return w[0]; }).join('').slice(0, 2) || 'A').toUpperCase();
 
   function setText(sel, val) {
@@ -777,14 +776,11 @@ document.getElementById('htab-overview').classList.add('active');
     else el.textContent = initials;
   });
 
-  // Sidebar footer (avatar + name + handle)
+  // Sidebar footer (avatar + name)
   var sf = document.querySelector('.sf-row');
   if (sf) {
     var sfWrap = sf.children[1];
-    if (sfWrap) {
-      if (sfWrap.children[0]) sfWrap.children[0].textContent = name;
-      if (sfWrap.children[1]) sfWrap.children[1].textContent = '@' + handle;
-    }
+    if (sfWrap && sfWrap.children[0]) sfWrap.children[0].textContent = name;
   }
 
   // Edit-profile modal avatar preview — rendered directly (photo or initials);

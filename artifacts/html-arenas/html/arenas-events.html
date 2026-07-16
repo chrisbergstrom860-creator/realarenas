@@ -149,7 +149,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="sidebar-footer">
     <div style="display:flex;align-items:center;gap:9px">
       <div class="sf-av" style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">·</div>
-      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div><div style="font-size:10px;color:var(--gray-500)">@jamiek</div></div>
+      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div></div>
     </div>
   </div>
 </aside>
@@ -324,7 +324,7 @@ function showToast(msg){
             '<span class="ev-social-text" style="color:var(--gray-500)">' + social + '</span>' +
             '<div style="display:flex;gap:8px">' + actions + '</div>' +
           '</div>' +
-          '<div style="font-size:11px;color:var(--gray-400);margin-top:6px">Organised by ' + esc(ev.creatorName || 'Athlete') + ' · @' + esc(ev.creatorHandle || 'athlete') + '</div>' +
+          '<div style="font-size:11px;color:var(--gray-400);margin-top:6px">Organised by ' + esc(ev.creatorName || 'Athlete') + '</div>' +
         '</div>' +
       '</div>';
   }
@@ -496,7 +496,9 @@ function showToast(msg){
       clubs.map(function (c) { return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>'; }).join('');
     var inviteeRows = following.length
       ? following.map(function (f) {
-          return '<label class="evx-invitee"><input type="checkbox" value="' + esc(f.id) + '"> ' + esc(f.name) + ' <span style="color:var(--gray-400)">@' + esc(f.handle) + '</span></label>';
+          return '<label class="evx-invitee"><input type="checkbox" value="' + esc(f.id) + '"> ' +
+            window.avatarHtml(f.avatar_url || null, f.name || 'Athlete', '', 'width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;background:var(--gray-200);color:var(--gray-700);flex-shrink:0;overflow:hidden') +
+            ' ' + esc(f.name) + (f.location ? ' <span style="color:var(--gray-400)">' + esc(f.location) + '</span>' : '') + '</label>';
         }).join('')
       : '<div style="font-size:12px;color:var(--gray-400);padding:6px 8px">Follow people to invite them.</div>';
 
@@ -684,24 +686,21 @@ function showToast(msg){
 </script>
 <script>
 // Personalise the user chrome (top-right header avatar, sidebar-footer avatar +
-// name + handle) from the logged-in user's real identity. The server injects
-// window.ARENAS_DATA.profile.{name,handle} (from Supabase auth metadata). We match
+// name) from the logged-in user's real identity. The server injects
+// window.ARENAS_DATA.profile.name (from Supabase auth metadata). We match
 // by text content — inside <header> or .sidebar-footer, a leaf whose trimmed text
-// is "Jamie King" becomes the real name, "@jamiek" the
-// real handle — so chrome updates regardless of class. Content elsewhere untouched.
+// is "Jamie King" becomes the real name — so chrome updates regardless of
+// class. Content elsewhere untouched.
 (function () {
   var data = window.ARENAS_DATA;
   if (!data || !data.profile || !data.profile.name) return;
   var name = data.profile.name.trim();
-  var handle = (data.profile.handle || 'athlete').replace(/^@+/, '');
   ['header', '.sidebar-footer'].forEach(function (sel) {
     var root = document.querySelector(sel);
     if (!root) return;
     root.querySelectorAll('div').forEach(function (el) {
       if (el.childElementCount !== 0) return;
-      var t = el.textContent.trim();
-      if (t === 'Jamie King') el.textContent = name;
-      else if (t === '@jamiek') el.textContent = '@' + handle;
+      if (el.textContent.trim() === 'Jamie King') el.textContent = name;
     });
   });
 })();

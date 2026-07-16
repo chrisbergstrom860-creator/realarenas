@@ -216,7 +216,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
   <div class="sidebar-footer">
     <div style="display:flex;align-items:center;gap:9px">
       <div class="sf-av" style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">·</div>
-      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div><div style="font-size:10px;color:var(--gray-500)">@jamiek</div></div>
+      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div></div>
     </div>
   </div>
 </aside>
@@ -472,7 +472,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 
     if (!me) {
       set('yb-rank', '—'); set('yb-pts', '0'); set('yb-acts', '0');
-      set('yb-sport-label', data.profile && data.profile.handle ? '@' + data.profile.handle : '');
+      set('yb-sport-label', '');
       set('yb-progress-label', 'No ranking yet'); set('yb-progress-frac', '');
       var f0 = document.getElementById('yb-fill'); if (f0) f0.style.width = '0%';
       set('yb-next', 'Log an activity to join the leaderboard.');
@@ -483,7 +483,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
     set('yb-acts', me.activityCount || 0);
     set('yb-sport-label', (me.sports && me.sports.length)
       ? me.sports.map(cap).join(' · ')
-      : (data.profile && data.profile.handle ? '@' + data.profile.handle : ''));
+      : '');
 
     var ahead = null;
     for (var j = 0; j < rows.length; j++) { if (rows[j]._rank === me._rank - 1) { ahead = rows[j]; break; } }
@@ -684,24 +684,21 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 </script>
 <script>
 // Personalise the user chrome (top-right header avatar, sidebar-footer avatar +
-// name + handle) from the logged-in user's real identity. The server injects
-// window.ARENAS_DATA.profile.{name,handle} (from Supabase auth metadata). We match
+// name) from the logged-in user's real identity. The server injects
+// window.ARENAS_DATA.profile.name (from Supabase auth metadata). We match
 // by text content — inside <header> or .sidebar-footer, a leaf whose trimmed text
-// is "Jamie King" becomes the real name, "@jamiek" the real handle. The avatars
+// is "Jamie King" becomes the real name. The avatars
 // themselves are rendered by the shared identity script (window.avatarHtml).
 (function () {
   var data = window.ARENAS_DATA;
   if (!data || !data.profile || !data.profile.name) return;
   var name = data.profile.name.trim();
-  var handle = (data.profile.handle || 'athlete').replace(/^@+/, '');
   ['header', '.sidebar-footer'].forEach(function (sel) {
     var root = document.querySelector(sel);
     if (!root) return;
     root.querySelectorAll('div').forEach(function (el) {
       if (el.childElementCount !== 0) return;
-      var t = el.textContent.trim();
-      if (t === 'Jamie King') el.textContent = name;
-      else if (t === '@jamiek') el.textContent = '@' + handle;
+      if (el.textContent.trim() === 'Jamie King') el.textContent = name;
     });
   });
 })();

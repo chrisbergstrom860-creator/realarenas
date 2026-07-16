@@ -556,7 +556,8 @@ function displayFromUser(user) {
   return {
     name: meta.name || emailLocal || 'Athlete',
     handle: meta.handle || emailLocal || 'athlete',
-    avatar_url: meta.avatar_url || null
+    avatar_url: meta.avatar_url || null,
+    location: meta.location || null
   };
 }
 
@@ -4410,7 +4411,8 @@ app.get(BASE + '/events', requirePageAuth, async (req, res) => {
       id,
       name: (nameMap[id] || {}).name || 'Athlete',
       handle: (nameMap[id] || {}).handle || 'athlete',
-      avatar_url: (nameMap[id] || {}).avatar_url || null
+      avatar_url: (nameMap[id] || {}).avatar_url || null,
+      location: (nameMap[id] || {}).location || null
     }));
     const clubs = await getSidebarClubs(userId);
     const eventData = { userId, profile: displayFromUser(req.user), following: followingList, clubs };
@@ -4461,7 +4463,9 @@ app.get(BASE + '/challenges', requirePageAuth, async (req, res) => {
       following = ids.map((id) => ({
         id,
         name: (map[id] && map[id].name) || 'Athlete',
-        handle: (map[id] && map[id].handle) || 'athlete'
+        handle: (map[id] && map[id].handle) || 'athlete',
+        avatar_url: (map[id] && map[id].avatar_url) || null,
+        location: (map[id] && map[id].location) || null
       }));
     }
     const clubs = await getSidebarClubs(userId);

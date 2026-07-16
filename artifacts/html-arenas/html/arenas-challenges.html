@@ -326,7 +326,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
   <div class="sidebar-footer">
     <div style="display:flex;align-items:center;gap:9px">
       <div class="sf-av" style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">·</div>
-      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div><div style="font-size:10px;color:var(--gray-500)">@jamiek</div></div>
+      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div></div>
     </div>
   </div>
 </aside>
@@ -831,14 +831,11 @@ function showToast(msg) {
 
   // Personalise identity across the page.
   const name = (data.profile && data.profile.name) || 'Athlete';
-  const handle = (data.profile && data.profile.handle) || 'athlete';
   const initials = initialsOf(name);
   // Topbar/sidebar-footer avatars are rendered by the shared identity script.
   document.querySelectorAll('div').forEach(el => {
     if (el.childElementCount !== 0) return;
-    const t = el.textContent.trim();
-    if (t === 'Jamie King') el.textContent = name;
-    else if (t === '@jamiek') el.textContent = '@' + handle;
+    if (el.textContent.trim() === 'Jamie King') el.textContent = name;
   });
 
   // Icons and tag styles derived from the sports registry; 'any' is a
@@ -1231,7 +1228,7 @@ function showToast(msg) {
 
   function buildCreateModal() {
     const followingOptions = (data.following || []).map(f =>
-      `<option value="${esc(f.id)}">${esc(f.name)} (@${esc(f.handle)})</option>`).join('');
+      `<option value="${esc(f.id)}">${esc(f.name)}${f.location ? ' — ' + esc(f.location) : ''}</option>`).join('');
     return `
       <div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:560px;overflow:hidden;box-shadow:var(--shadow-lg);margin:auto">
         <div style="padding:16px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">
