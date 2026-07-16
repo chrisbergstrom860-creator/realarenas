@@ -1994,15 +1994,8 @@ function parseDurationHours(duration) {
   return num > 12 ? num / 60 : num;
 }
 
-// Monday 00:00 of the week `weeksAgo` weeks before the current week (0 = this week).
-function getWeekStart(weeksAgo) {
-  const now = new Date();
-  const day = now.getDay() || 7;
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - day + 1 - weeksAgo * 7);
-  monday.setHours(0, 0, 0, 0);
-  return monday;
-}
+// Week-grid boundaries now come from weekStartKey (tzdate.js) in the viewing
+// coach's zone — the old server-local getWeekStart helper is gone with them.
 
 // Shared streak computation now lives in tzdate.js (computeStreaks) and takes
 // the user's zone: distinct active days come from per-zone day keys instead of
@@ -2033,34 +2026,40 @@ app.get(BASE + '/api/clubs/:clubId/training-load', requireAuth, async (req, res)
     const memberIds = [...new Set((members || []).map((m) => m.user_id).filter(Boolean))];
     const profileMap = await buildUserProfileMap(memberIds);
 
-    // Week boundaries, oldest first.
-    const weekStarts = [];
-    for (let i = weeks - 1; i >= 0; i--) weekStarts.push(getWeekStart(i));
-    const periodStart = weekStarts[0];
-    const thisWeekStart = weekStarts[weekStarts.length - 1];
+    // Week grid boundaries come from the requesting COACH's zone (boundary
+    // policy rule 2); each member's activities bucket into that grid by their
+    // OWN local day keys (rule 1). Keys are plain calendar dates, so the two
+    // compose directly. Oldest week first.
+    const coachTz = getUserTimezone(req.user);
+    const weekKeys = [];
+    for (let i = weeks - 1; i >= 0; i--) weekKeys.push(weekStartKey(new Date(), coachTz, i));
+    const periodStartKey = weekKeys[0];
+    const thisWeekKey = weekKeys[weekKeys.length - 1];
 
     // Every activity in the window in one query (need `duration` for load).
-    // Fetched one day wider than the server-week window so a member whose
-    // zone is ahead of UTC still gets their full local current week for the
-    // rest-day count below — the weekly buckets re-filter by their own
-    // boundaries, so the extra day never changes the hour totals.
+    // Fetched one day wider than the grid window so a member whose zone is
+    // ahead of UTC still contributes their full local days — the per-member
+    // key filters below re-cut the exact buckets.
     let activities = [];
     if (memberIds.length) {
       const { data, error } = await supabaseAdmin
         .from('activities')
         .select('user_id, sport, distance, duration, date')
         .in('user_id', memberIds)
-        .gte('date', new Date(periodStart.getTime() - 86400000).toISOString());
+        .gte('date', keyToUtcDate(addDaysToKey(periodStartKey, -1)).toISOString());
       if (!error) activities = data || [];
     }
     const byUser = bucketActivities(activities);
 
     const memberData = memberIds.map((id) => {
-      const acts = byUser[id] || [];
-      const weeklyHours = weekStarts.map((weekStart) => {
-        const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 7);
+      const prof = profileMap[id] || {};
+      const memberTz = memberZone(prof);
+      // Each activity's local day key in the MEMBER's zone, computed once.
+      const acts = (byUser[id] || []).map((a) => ({ ...a, _k: dayKey(a.date, memberTz) }));
+      const weeklyHours = weekKeys.map((weekKey) => {
+        const weekEndKey = addDaysToKey(weekKey, 7);
         const sum = acts
-          .filter((a) => { const d = new Date(a.date); return d >= weekStart && d < weekEnd; })
+          .filter((a) => a._k >= weekKey && a._k < weekEndKey)
           .reduce((s, a) => s + parseDurationHours(a.duration), 0);
         return Math.round(sum * 10) / 10;
       });
@@ -2069,18 +2068,13 @@ app.get(BASE + '/api/clubs/:clubId/training-load', requireAuth, async (req, res)
       const avg = prevWeeks.length
         ? Math.round((prevWeeks.reduce((s, h) => s + h, 0) / prevWeeks.length) * 10) / 10
         : 0;
-      const thisWeekActs = acts.filter((a) => new Date(a.date) >= thisWeekStart);
+      const thisWeekActs = acts.filter((a) => a._k >= thisWeekKey);
       const kmThisWeek = Math.round(thisWeekActs.reduce((s, a) => s + parseDistanceKm(a.distance), 0) * 10) / 10;
-      // Rest days are a per-member day count, so they use the MEMBER'S zone:
-      // distinct active day keys in their current local week vs how far into
-      // that week they are. (The weekly hour buckets above stay on the shared
-      // server-week boundary — one consistent grid for the whole table.)
-      const prof = profileMap[id] || {};
-      const memberTz = isValidTimezone(prof.timezone) ? prof.timezone : 'UTC';
+      // Rest days are a per-member day count over the member's OWN current
+      // local week (how far they are into it vs distinct active days).
       const mWeekStartK = weekStartKey(new Date(), memberTz);
       const memberActiveDays = new Set(
-        acts.filter((a) => dayKey(a.date, memberTz) >= mWeekStartK)
-          .map((a) => dayKey(a.date, memberTz))
+        acts.filter((a) => a._k >= mWeekStartK).map((a) => a._k)
       ).size;
       const restDays = Math.max(0, Math.min(7, dateParts(new Date(), memberTz).weekday) - memberActiveDays);
 
@@ -2109,7 +2103,7 @@ app.get(BASE + '/api/clubs/:clubId/training-load', requireAuth, async (req, res)
     const statusOrder = { overdoing: 0, behind: 1, ontrack: 2, inactive: 3 };
     memberData.sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || b.thisWeek - a.thisWeek);
 
-    const clubWeekly = weekStarts.map((_, i) =>
+    const clubWeekly = weekKeys.map((_, i) =>
       Math.round(memberData.reduce((s, m) => s + (m.weeklyHours[i] || 0), 0) * 10) / 10);
     const clubThisWeek = clubWeekly[clubWeekly.length - 1];
     const clubPrev = clubWeekly.slice(Math.max(0, clubWeekly.length - 5), clubWeekly.length - 1);
@@ -2120,7 +2114,8 @@ app.get(BASE + '/api/clubs/:clubId/training-load', requireAuth, async (req, res)
     res.json({
       members: memberData,
       clubWeekly,
-      weekLabels: weekStarts.map((d) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })),
+      weekLabels: weekKeys.map((k) => keyToUtcDate(k)
+        .toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })),
       stats: {
         clubThisWeek,
         clubAvg,
@@ -2456,13 +2451,17 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
         .select('user_id')
         .eq('challenge_id', challenge.id);
       for (const participant of (participants || []).slice(0, 20)) {
-        const { data: acts } = await supabaseAdmin
+        // Fetch a day wide, then cut to the PARTICIPANT'S local challenge
+        // window (boundary policy; non-member participants fall back UTC).
+        const range = challengeFetchRange(challenge);
+        const { data: rawActs } = await supabaseAdmin
           .from('activities')
           .select('sport, distance, date')
           .eq('user_id', participant.user_id)
-          .gte('date', challenge.start_date)
-          .lte('date', challenge.end_date)
+          .gte('date', range.gteIso)
+          .lte('date', range.lteIso)
           .order('date', { ascending: true });
+        const acts = actsInChallengeWindow(rawActs, challenge, memberZone(prof(participant.user_id)));
         let progress = 0;
         let completedAt = null;
         for (const a of (acts || [])) {
@@ -2520,13 +2519,29 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
       .maybeSingle();
     if (!membership) return res.status(403).json({ error: 'Not authorised' });
 
-    // Month param format: YYYY-MM, default current month.
+    // Month boundaries follow the requesting COACH's calendar (boundary
+    // policy rule 2): the default month is "now" in the coach's zone, and
+    // club-level instants (joins, events, challenge overlap) are the coach's
+    // local month midnights. Month arithmetic is integer YYYY-MM math — never
+    // Date→toISOString round-trips, which skew a day in non-UTC zones.
+    const coachTz = getUserTimezone(req.user);
     const monthParam = (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month))
-      ? req.query.month : new Date().toISOString().slice(0, 7);
+      ? req.query.month : monthKey(new Date(), coachTz);
     const [year, month] = monthParam.split('-').map(Number);
-    const monthStart = new Date(year, month - 1, 1);
-    const monthEnd = new Date(year, month, 1);
-    const prevStart = new Date(year, month - 2, 1);
+    // First-of-month day key for calendar month `m` (1-based, may be out of
+    // 1..12 range — normalized by integer math).
+    const monthFirstKey = (y, m) => {
+      const total = y * 12 + (m - 1);
+      const ny = Math.floor(total / 12);
+      const nm = (total % 12) + 1;
+      return `${String(ny).padStart(4, '0')}-${String(nm).padStart(2, '0')}-01`;
+    };
+    const monthStartKey = monthFirstKey(year, month);
+    const monthEndKey = monthFirstKey(year, month + 1);
+    const prevStartKey = monthFirstKey(year, month - 1);
+    const monthStart = zoneMidnightUtc(monthStartKey, coachTz);
+    const monthEnd = zoneMidnightUtc(monthEndKey, coachTz);
+    const prevStart = zoneMidnightUtc(prevStartKey, coachTz);
     const prevEnd = monthStart;
 
     // All members with their join dates (created_at — no profiles table / joined_at).
@@ -2537,6 +2552,9 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
     const memberIds = (members || []).map(m => m.user_id);
     const safeIds = memberIds.length ? memberIds : ['00000000-0000-0000-0000-000000000000'];
     const joinedAt = (m) => m.created_at;
+    // Profiles (names + zones) for every member: zones drive per-member
+    // activity bucketing below (boundary policy rule 1).
+    const profileMap = await buildUserProfileMap(memberIds);
 
     // Membership metrics (a member with no join date is treated as pre-existing).
     const newJoins = (members || []).filter(m =>
@@ -2552,28 +2570,39 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
       !joinedAt(m) || new Date(joinedAt(m)) < monthStart
     ).length;
 
-    // Member count trend — count at the end of each of the last 6 months.
+    // Member count trend — count at the end of each of the last 6 months
+    // (coach-zone month boundaries, matching the header instants above).
     const memberTrend = [];
     for (let i = 5; i >= 0; i--) {
-      const trendEnd = new Date(year, month - i, 1);
+      const trendEnd = zoneMidnightUtc(monthFirstKey(year, month - i + 1), coachTz);
       memberTrend.push((members || []).filter(m =>
         !joinedAt(m) || new Date(joinedAt(m)) < trendEnd
       ).length);
     }
 
-    // Activities this month and previous month.
-    const { data: monthActivities } = await supabaseAdmin
-      .from('activities')
-      .select('user_id, sport, distance, duration, date')
-      .in('user_id', safeIds)
-      .gte('date', monthStart.toISOString())
-      .lt('date', monthEnd.toISOString());
-    const { data: prevActivities } = await supabaseAdmin
-      .from('activities')
-      .select('user_id, sport, distance, duration, date')
-      .in('user_id', safeIds)
-      .gte('date', prevStart.toISOString())
-      .lt('date', prevEnd.toISOString());
+    // Activities: ONE wide fetch spanning the 6-month hours trend through the
+    // report month, widened a day each side so members in any zone contribute
+    // their full local days. Each activity then buckets by its day key in the
+    // MEMBER'S zone (boundary policy rule 1); the month/prev/trend slices
+    // below are all key-range cuts of this list.
+    const trendStartKey = monthFirstKey(year, month - 5);
+    let allActs = [];
+    {
+      const { data } = await supabaseAdmin
+        .from('activities')
+        .select('user_id, sport, distance, duration, date')
+        .in('user_id', safeIds)
+        .gte('date', keyToUtcDate(addDaysToKey(trendStartKey, -1)).toISOString())
+        .lt('date', keyToUtcDate(addDaysToKey(monthEndKey, 1)).toISOString());
+      allActs = (data || []).map((a) => ({
+        ...a,
+        _k: dayKey(a.date, memberZone(profileMap[a.user_id]))
+      }));
+    }
+    const actsInKeyRange = (fromKey, toKey) =>
+      allActs.filter((a) => a._k >= fromKey && a._k < toKey);
+    const monthActivities = actsInKeyRange(monthStartKey, monthEndKey);
+    const prevActivities = actsInKeyRange(prevStartKey, monthStartKey);
 
     function summarizeActivities(acts) {
       const activeUsers = new Set((acts || []).map(a => a.user_id));
@@ -2603,24 +2632,17 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
     const thisMonth = summarizeActivities(monthActivities);
     const prevMonth = summarizeActivities(prevActivities);
 
-    // Most popular sport / most active member this month.
+    // Most popular sport / most active member this month. (Names come from
+    // the member-wide profileMap fetched above.)
     const topSport = Object.entries(thisMonth.sportCounts).sort((a, b) => b[1] - a[1])[0];
     const topMember = Object.entries(thisMonth.userStats).sort((a, b) => b[1].sessions - a[1].sessions)[0];
-    // Name only needed for the top member — read from auth metadata.
-    const profileMap = await buildUserProfileMap(topMember ? [topMember[0]] : []);
 
     // Training hours trend — total logged hours per month, last 6 months.
+    // Month cuts of the same member-zone-keyed activity list as above.
     const hoursTrend = [];
     for (let i = 5; i >= 0; i--) {
-      const tStart = new Date(year, month - 1 - i, 1);
-      const tEnd = new Date(year, month - i, 1);
-      const { data: tActs } = await supabaseAdmin
-        .from('activities')
-        .select('duration')
-        .in('user_id', safeIds)
-        .gte('date', tStart.toISOString())
-        .lt('date', tEnd.toISOString());
-      hoursTrend.push(Math.round((tActs || []).reduce((s, a) => s + parseDurationHours(a.duration), 0) * 10) / 10);
+      const tActs = actsInKeyRange(monthFirstKey(year, month - i), monthFirstKey(year, month - i + 1));
+      hoursTrend.push(Math.round(tActs.reduce((s, a) => s + parseDurationHours(a.duration), 0) * 10) / 10);
     }
 
     // Events this month + previous month, with "going" RSVP counts.
@@ -2676,12 +2698,16 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
         totalPossible += membersAtMonthEnd;
         let completed = 0;
         for (const p of (parts || [])) {
-          const { data: acts } = await supabaseAdmin
+          // Fetch a day wide, then cut to the PARTICIPANT'S local challenge
+          // window (boundary policy; non-member participants fall back UTC).
+          const range = challengeFetchRange(ch);
+          const { data: rawActs } = await supabaseAdmin
             .from('activities')
             .select('sport, distance, date')
             .eq('user_id', p.user_id)
-            .gte('date', ch.start_date)
-            .lte('date', ch.end_date);
+            .gte('date', range.gteIso)
+            .lte('date', range.lteIso);
+          const acts = actsInChallengeWindow(rawActs, ch, memberZone(profileMap[p.user_id]));
           let progress = 0;
           (acts || []).forEach(a => {
             if (ch.sport !== 'any' && a.sport !== ch.sport) return;
@@ -2716,7 +2742,11 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
       ? Math.round((thisMonth.activeCount / membersAtMonthEnd) * 100) : 0;
     const prevActivePct = membersAtPrevEnd > 0
       ? Math.round((prevMonth.activeCount / membersAtPrevEnd) * 100) : 0;
-    const monthName = monthStart.toLocaleDateString('en-GB', { month: 'long' });
+    // Labels render the month KEY on the UTC calendar — monthStart is a
+    // coach-zone instant, which lands in the previous UTC day for zones
+    // ahead of UTC and would mislabel the month.
+    const monthName = keyToUtcDate(monthStartKey)
+      .toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
     const growthPct = membersAtPrevEnd > 0
       ? Math.round(((membersAtMonthEnd - membersAtPrevEnd) / membersAtPrevEnd) * 100) : 0;
     let headline = '';
@@ -2736,7 +2766,8 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
 
     res.json({
       month: monthParam,
-      monthLabel: monthStart.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }),
+      monthLabel: keyToUtcDate(monthStartKey)
+        .toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
       headline: { text: headline, tone: headlineTone, title: `${monthName} at a glance` },
       membership: {
         total: membersAtMonthEnd,
@@ -2842,8 +2873,67 @@ app.post(BASE + '/api/clubs/:clubId/announce', requireAuth, async (req, res) => 
 // activities. `distance` sums numeric distance values; `sessions` counts
 // matching activities; `streak` counts distinct active days. Other goal types
 // report 0 (no logged-activity signal to derive them from yet).
-function computeChallengeProgress(challenge, activities) {
+// ── TIMEZONE BOUNDARY POLICY (multi-user rollups) ──
+// One rule, applied everywhere a rollup mixes users:
+//   1. Each member's activities bucket on that member's OWN local days —
+//      dayKey(activity.date, memberTz). Their July-31 evening run is their
+//      July; their Sunday-evening run is their Sunday.
+//   2. The rollup's WINDOW boundaries (which week/month is "current", the
+//      report month, the training-load week grid) come from the REQUESTING
+//      VIEWER's zone — weekStartKey/monthKey(now, viewerTz). A coach's
+//      dashboard follows the coach's calendar.
+// Both sides are calendar day KEYS ('YYYY-MM-DD'), so a member's local day
+// slots directly into the viewer's key window — no instant conversion at the
+// comparison point, and all-UTC clubs reproduce the legacy output exactly.
+// Challenge windows are the one instant-based case: legacy stored start/end
+// as UTC midnights and filtered instants INCLUSIVELY (gte/lte), so each
+// participant's window is [zoneMidnightUtc(startKey, memberTz),
+// zoneMidnightUtc(endKey, memberTz)] inclusive — identical for UTC users,
+// local-midnight-aligned for everyone else.
+
+// Resolve a member's zone from a buildUserProfileMap entry (validated; users
+// who predate capture fall back to UTC, preserving their legacy buckets).
+function memberZone(prof) {
+  return prof && isValidTimezone(prof.timezone) ? prof.timezone : 'UTC';
+}
+
+// A challenge's window for one participant, per the policy above. Start/end
+// keys come from the stored UTC-midnight timestamps; the instants are those
+// calendar days' midnights in the PARTICIPANT'S zone, compared inclusively
+// exactly like the legacy gte/lte pair.
+function challengeWindowFor(challenge, tz) {
+  // ASSUMPTION: challenge start/end_date are stored as UTC-midnight instants
+  // (all creation paths do this today). dayKey(.., 'UTC') snaps any
+  // non-midnight timestamp to its UTC day — if a creation path ever stores a
+  // non-midnight instant, UTC-user parity with the legacy gte/lte window
+  // breaks for that row.
+  const startKey = dayKey(challenge.start_date, 'UTC');
+  const endKey = dayKey(challenge.end_date, 'UTC');
+  return {
+    startMs: zoneMidnightUtc(startKey, tz).getTime(),
+    endMs: zoneMidnightUtc(endKey, tz).getTime()
+  };
+}
+function actsInChallengeWindow(activities, challenge, tz) {
+  const w = challengeWindowFor(challenge, tz);
+  return (activities || []).filter((a) => {
+    const t = new Date(a.date).getTime();
+    return t >= w.startMs && t <= w.endMs;
+  });
+}
+// DB fetch bounds for challenge activities: the stored UTC window widened by
+// one day each side so every zone's local window (UTC-12 … UTC+14) is covered;
+// actsInChallengeWindow re-filters exactly per participant.
+function challengeFetchRange(challenge) {
+  return {
+    gteIso: new Date(new Date(challenge.start_date).getTime() - 86400000).toISOString(),
+    lteIso: new Date(new Date(challenge.end_date).getTime() + 86400000).toISOString()
+  };
+}
+
+function computeChallengeProgress(challenge, activities, tz) {
   const acts = activities || [];
+  const zone = tz || 'UTC';
   const matches = (a) => challenge.sport === 'any' || a.sport === challenge.sport;
   let progress = 0;
   if (challenge.goal_type === 'distance') {
@@ -2855,7 +2945,8 @@ function computeChallengeProgress(challenge, activities) {
   } else if (challenge.goal_type === 'sessions') {
     progress = acts.filter(matches).length;
   } else if (challenge.goal_type === 'streak') {
-    const dates = [...new Set(acts.filter(matches).map((a) => new Date(a.date).toDateString()))];
+    // Distinct active days in the PARTICIPANT'S zone (policy rule 1).
+    const dates = [...new Set(acts.filter(matches).map((a) => dayKey(a.date, zone)))];
     progress = dates.length;
   }
   return Math.round(progress * 10) / 10;
@@ -2960,11 +3051,9 @@ async function gatherBadgeStats(userId, tz) {
       .in('id', challengeIds);
     for (const ch of (chs || [])) {
       if (!(Number(ch.goal_target) > 0)) continue;
-      const inRange = activities.filter(a => {
-        const d = new Date(a.date);
-        return d >= new Date(ch.start_date) && d <= new Date(ch.end_date);
-      });
-      if (computeChallengeProgress(ch, inRange) >= Number(ch.goal_target)) challengesCompleted++;
+      // Window + streak days in the badge owner's zone (boundary policy).
+      const inRange = actsInChallengeWindow(activities, ch, tz);
+      if (computeChallengeProgress(ch, inRange, tz) >= Number(ch.goal_target)) challengesCompleted++;
     }
   }
   return {
@@ -3045,11 +3134,10 @@ app.get(BASE + '/api/profile/achievements', requireAuth, async (req, res) => {
       };
     });
     const latestBadge = earned.length > 0 ? badges.find(b => b.id === earned[0].badge_id) : null;
-    const now = new Date();
-    const thisMonthCount = earned.filter(e => {
-      const d = new Date(e.earned_at);
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    }).length;
+    // "Earned this month" in the OWNER's zone (boundary policy) — earned_at
+    // is a timestamp, so bucket it by the achiever's local month.
+    const nowMonth = monthKey(new Date(), achTz);
+    const thisMonthCount = earned.filter(e => monthKey(e.earned_at, achTz) === nowMonth).length;
     res.json({
       badges,
       earnedCount: earned.length,
@@ -3136,13 +3224,16 @@ app.get(BASE + '/api/profile/overview', requireAuth, async (req, res) => {
         .in('id', challengeIds);
       for (const ch of (chRows || [])) {
         if (new Date(ch.end_date) < now) continue;
+        // Fetch a day wide, then cut to the VIEWER'S local challenge window
+        // (boundary policy — this is the viewer's own progress).
+        const range = challengeFetchRange(ch);
         const { data: chActs } = await supabaseAdmin
           .from('activities')
           .select('sport, distance, date')
           .eq('user_id', userId)
-          .gte('date', ch.start_date)
-          .lte('date', ch.end_date);
-        const progress = computeChallengeProgress(ch, chActs || []);
+          .gte('date', range.gteIso)
+          .lte('date', range.lteIso);
+        const progress = computeChallengeProgress(ch, actsInChallengeWindow(chActs, ch, tz), tz);
         const { count: totalParticipants } = await supabaseAdmin
           .from('challenge_participants')
           .select('*', { count: 'exact', head: true })
@@ -3283,16 +3374,20 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
       .from('challenge_participants').select('challenge_id, user_id')
       .in('challenge_id', allIds.length ? allIds : [PLACEHOLDER]);
 
-    // Progress for each challenge the user has joined.
+    // Progress for each challenge the user has joined — the viewer's own
+    // activities, cut to their local challenge window (boundary policy).
+    const viewerTz = getUserTimezone(req.user);
     const progressMap = {};
     for (const challengeId of myIds) {
       const challenge = allChallenges.find((c) => c.id === challengeId);
       if (!challenge) continue;
+      const range = challengeFetchRange(challenge);
       const { data: activities } = await supabaseAdmin
         .from('activities').select('distance, duration, sport, date')
         .eq('user_id', userId)
-        .gte('date', challenge.start_date).lte('date', challenge.end_date);
-      progressMap[challengeId] = computeChallengeProgress(challenge, activities);
+        .gte('date', range.gteIso).lte('date', range.lteIso);
+      progressMap[challengeId] =
+        computeChallengeProgress(challenge, actsInChallengeWindow(activities, challenge, viewerTz), viewerTz);
     }
 
     // Creator display names (auth metadata) and club names (clubs table).
@@ -3546,15 +3641,19 @@ app.get(BASE + '/api/challenges/:id/leaderboard', requireAuth, async (req, res) 
     if (!challenge) return res.json({ error: 'Challenge not found' });
     const { data: participants } = await supabaseAdmin
       .from('challenge_participants').select('user_id').eq('challenge_id', req.params.id);
-    const nameMap = await buildUserDisplayMap((participants || []).map((p) => p.user_id));
+    // Profile map (not display map): also carries each participant's zone so
+    // progress windows/streak days follow the PARTICIPANT (boundary policy).
+    const nameMap = await buildUserProfileMap((participants || []).map((p) => p.user_id));
     const target = Number(challenge.goal_target) || 0;
+    const range = challengeFetchRange(challenge);
     const leaderboard = [];
     for (const participant of (participants || [])) {
+      const pTz = memberZone(nameMap[participant.user_id]);
       const { data: activities } = await supabaseAdmin
         .from('activities').select('distance, duration, sport, date')
         .eq('user_id', participant.user_id)
-        .gte('date', challenge.start_date).lte('date', challenge.end_date);
-      const progress = computeChallengeProgress(challenge, activities);
+        .gte('date', range.gteIso).lte('date', range.lteIso);
+      const progress = computeChallengeProgress(challenge, actsInChallengeWindow(activities, challenge, pTz), pTz);
       const disp = nameMap[participant.user_id] || {};
       leaderboard.push({
         userId: participant.user_id,
@@ -6104,8 +6203,10 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
           challengeParticipants = cpRows || [];
         }
 
-        // One batched auth lookup for every distinct participant.
-        const chNameMap = await buildUserDisplayMap(challengeParticipants.map(p => p.user_id));
+        // One batched auth lookup for every distinct participant. Profile map
+        // (not display map): also carries each participant's zone so progress
+        // windows/streak days follow the PARTICIPANT (boundary policy).
+        const chNameMap = await buildUserProfileMap(challengeParticipants.map(p => p.user_id));
 
         const nowMs = Date.now();
         const enrichedChallenges = [];
@@ -6114,23 +6215,27 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
           const partIds = parts.map(p => p.user_id);
           const target = Number(challenge.goal_target) || 0;
 
-          // Pull every participant's in-window activities in one query, then
-          // group by user so each gets its own computeChallengeProgress pass.
+          // Pull every participant's activities in one query (a day wide so
+          // any zone's local window is covered), group by user, then cut each
+          // group to that PARTICIPANT'S local window (boundary policy).
+          const range = challengeFetchRange(challenge);
           let acts = [];
           if (partIds.length) {
             const { data: actRows } = await supabaseAdmin
               .from('activities')
               .select('user_id, distance, duration, sport, date')
               .in('user_id', partIds)
-              .gte('date', challenge.start_date)
-              .lte('date', challenge.end_date);
+              .gte('date', range.gteIso)
+              .lte('date', range.lteIso);
             acts = actRows || [];
           }
           const actsByUser = {};
           acts.forEach(a => { (actsByUser[a.user_id] = actsByUser[a.user_id] || []).push(a); });
 
           const leaderboard = partIds.map(uid => {
-            const progress = computeChallengeProgress(challenge, actsByUser[uid] || []);
+            const pTz = memberZone(chNameMap[uid]);
+            const progress = computeChallengeProgress(
+              challenge, actsInChallengeWindow(actsByUser[uid], challenge, pTz), pTz);
             const disp = chNameMap[uid] || {};
             return {
               userId: uid,
@@ -6400,14 +6505,18 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
         .eq('challenge_id', ch.id);
       let progress = 0;
       const streakDays = new Set();
+      // Viewer's own progress: window + streak days in the VIEWER'S zone
+      // (boundary policy), matching the shared challenge helpers.
+      const viewerTz = getUserTimezone(req.user);
+      const chWin = challengeWindowFor(ch, viewerTz);
       const chStart = new Date(ch.start_date);
       const chEnd = new Date(ch.end_date);
       myActRows.forEach((a) => {
-        const d = new Date(a.date);
-        if (d < chStart || d > chEnd) return;
+        const t = new Date(a.date).getTime();
+        if (t < chWin.startMs || t > chWin.endMs) return;
         if (ch.sport !== 'any' && a.sport !== ch.sport) return;
         if (ch.goal_type === 'distance') progress += parseDistanceKm(a.distance);
-        else if (ch.goal_type === 'streak') streakDays.add(d.toDateString());
+        else if (ch.goal_type === 'streak') streakDays.add(dayKey(a.date, viewerTz));
         else progress += 1;
       });
       if (ch.goal_type === 'streak') progress = streakDays.size;

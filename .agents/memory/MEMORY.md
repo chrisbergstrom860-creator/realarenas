@@ -42,6 +42,6 @@
 - [html-arenas Pro badge](html-arenas-pro-badge.md) — PRO badge = real subscription, never PLAN_GATES_ENABLED; server string-injection after injectBottomNav; exact-match patterns are the fragility.
 - [html-arenas goals](html-arenas-goals-mapping.md) — fully shipped (API, Goals tab, Overview mini-card, live pricing copy); server-truth enrichment, client never recomputes.
 - [html-arenas avatars](html-arenas-avatars.md) — SHIPPED app-wide: injected avatarHtml/clubTileHtml helpers (span+img onerror fallback), avatar_url payload convention, JK fully retired.
-- [html-arenas timezones](html-arenas-timezones.md) — single-user day-math uses tzdate.js user-zone keys (UTC parity proven); capture/override semantics; multi-user rollups still shared-UTC (Session ③).
+- [html-arenas timezones](html-arenas-timezones.md) — ALL day-math via tzdate.js zone keys, incl. multi-user boundary policy (member buckets / viewer windows / per-participant challenges); UTC parity proven.
 - [html-arenas country/state + tz](html-arenas-tz-country-audit.md) — country/state + /log date SHIPPED (countries.js SSOT; updateUserById MERGES metadata → clear with null not delete); single-user tz day-math now shipped, see timezones topic.
 - [html-arenas handle hiding](html-arenas-handle-hiding.md) — handles display-hidden but preserved in data; Session-1 surfaces done, sidebar chrome = Session 2; disambiguation via location+sports sublines.
