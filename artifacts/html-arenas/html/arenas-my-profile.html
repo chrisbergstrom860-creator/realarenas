@@ -518,7 +518,7 @@ button,select,input,textarea{font-family:var(--font)}
               <div class="form-field"><label class="form-label">First name</label><input id="set-first-name" class="form-input" type="text" value="Jamie"></div>
               <div class="form-field"><label class="form-label">Last name</label><input id="set-last-name" class="form-input" type="text" value="King"></div>
             </div>
-            <div class="form-field"><label class="form-label">Handle</label><input id="edit-handle" class="form-input" type="text" value="@jamiek"><div class="form-hint">arenas.io/athletes/jamiek</div></div>
+            <div class="form-field"><label class="form-label">Handle</label><input id="edit-handle" class="form-input" type="text" value="@jamiek"><div class="form-hint">How other athletes find you on Arenas</div></div>
             <div class="form-field"><label class="form-label">Bio</label><textarea id="set-bio" class="form-textarea">Marathon runner, weekend cyclist, occasional wall climber. Chasing a sub-3:30 marathon. Hackney RC member since 2024.</textarea></div>
             <div class="form-row">
               <div class="form-field"><label class="form-label">City</label><input id="set-location" class="form-input" type="text" value="London"></div>
@@ -729,8 +729,17 @@ function closeModals(e) {
     document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
 }
 function copyProfileLink() {
-  navigator.clipboard?.writeText('https://arenas.io/athletes/jamiek').catch(() => {});
-  showToast('✓ Profile link copied — arenas.io/athletes/jamiek');
+  // Profiles aren't publicly reachable (the app is auth-gated), so the copied
+  // text stays honest: real name + handle from the injected profile, plus the
+  // site URL — which sends a logged-out recipient to the Arenas landing page.
+  var p = (window.ARENAS_DATA && window.ARENAS_DATA.profile) || {};
+  var handle = (p.handle || '').replace(/^@+/, '');
+  var url = location.origin + (window.BASE || '');
+  var text = p.name
+    ? 'Follow ' + p.name + (handle ? ' (@' + handle + ')' : '') + ' on Arenas — ' + url
+    : 'Join me on Arenas — ' + url;
+  navigator.clipboard?.writeText(text).catch(() => {});
+  showToast('✓ Share text copied');
 }
 function showToast(msg) {
   const t = document.getElementById('toast');

@@ -710,10 +710,10 @@ button,select,input,textarea{font-family:var(--font)}
         <div class="form-field">
           <label class="form-label">Club handle</label>
           <div style="position:relative">
-            <input class="form-input" type="text" id="club-handle" placeholder="riversiderun" style="padding-left:100px">
-            <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--gray-400);font-family:var(--mono)">arenas.io/</span>
+            <input class="form-input" type="text" id="club-handle" placeholder="riversiderun" style="padding-left:28px">
+            <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--gray-400);font-family:var(--mono)">@</span>
           </div>
-          <div class="handle-preview" id="handle-preview">arenas.io/<span>yourclub</span></div>
+          <div class="handle-preview" id="handle-preview">@<span>yourclub</span></div>
         </div>
         <div class="form-field">
           <label class="form-label">Primary sport</label>
@@ -1040,7 +1040,7 @@ function matchCheck() {
 function updateHandle(name) {
   const h = name.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,20);
   document.getElementById('club-handle').value = h;
-  document.getElementById('handle-preview').innerHTML = 'arenas.io/<span>' + (h || 'yourclub') + '</span>';
+  document.getElementById('handle-preview').innerHTML = '@<span>' + (h || 'yourclub') + '</span>';
 }
 
 // ── STEP 3 helpers ──
@@ -1075,7 +1075,7 @@ function populateReview() {
   document.getElementById('review-email').textContent = d.email || '—';
   document.getElementById('review-sports').textContent = d.sports && d.sports.length ? d.sports.map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join(', ') : 'Not specified';
   document.getElementById('review-club').textContent = c.name || '—';
-  document.getElementById('review-handle').textContent = c.handle ? 'arenas.io/' + c.handle : '—';
+  document.getElementById('review-handle').textContent = c.handle ? '@' + c.handle : '—';
   const inviteRows = document.querySelectorAll('#invite-rows tr');
   const validInvites = [...inviteRows].filter(r => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.querySelector('input[type=email]')?.value || '')).length;
   document.getElementById('review-invites').textContent = validInvites ? validInvites + ' member invite' + (validInvites !== 1 ? 's' : '') + ' ready to send' : 'No invites added — you can invite members from your dashboard';
