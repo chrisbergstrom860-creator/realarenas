@@ -22,3 +22,7 @@ scroll container is the viewport/body. The sticky is effectively inert here anyw
 container can't scroll), so `top:0` is purely about removing the resting offset.
 This latent bug was masked while removed chrome (rec-strip/sport-tabs) occupied the
 overlapped zone; it only surfaced once the grid became the first child.
+
+**Not every page:** the feed page window-scrolls (its `.main` is a plain grid with no
+overflow), so its `.feed-header{top:56px}` is CORRECT there. Check which element actually
+scrolls before "fixing" a sticky offset either direction.

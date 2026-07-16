@@ -32,7 +32,11 @@ button,select,input,textarea{font-family:var(--font)}
 
 /* ── MAIN ── */
 .main{display:grid;grid-template-columns:1fr 300px;gap:0;align-items:start}
-.feed-col{padding:0;border-right:var(--border)}
+/* Symmetric gutters: the right gutter is the rail's 16px padding-left, so the
+   feed column gets the same 16px on its left (desktop only — the column goes
+   full-width when the shell collapses to one column on mobile). */
+.feed-col{padding:0 0 24px 16px}
+@media (max-width:768px){ .feed-col{padding-left:0} }
 .side-col{padding:20px 16px;display:flex;flex-direction:column;gap:14px;position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto}
 .side-col::-webkit-scrollbar{display:none}
 
@@ -48,8 +52,10 @@ button,select,input,textarea{font-family:var(--font)}
 .f-sort{padding:5px 10px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer;outline:none;margin-left:auto;flex-shrink:0}
 
 /* ── FEED ITEMS ── */
-.feed-items{display:flex;flex-direction:column;gap:0}
-.feed-item-wrap{border-bottom:var(--border);animation:fade-up .22s ease both}
+/* Each item is its own card (border + radius on the wrap, white bg) with a
+   14px vertical gap — same rhythm as the right rail's card stack (gap:14px). */
+.feed-items{display:flex;flex-direction:column;gap:14px;margin-top:14px}
+.feed-item-wrap{background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden;animation:fade-up .22s ease both}
 
 /* ── BUTTONS ── */
 .btn{padding:7px 14px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;border:var(--border);transition:all .13s;display:inline-flex;align-items:center;gap:6px;background:transparent;color:var(--gray-700)}
@@ -217,7 +223,7 @@ button,select,input,textarea{font-family:var(--font)}
 .form-label{font-size:12px;font-weight:600;color:var(--gray-700);margin-bottom:4px;display:block}
 
 /* ── TOAST ── */
-.post-composer{background:white;border-bottom:var(--border);padding:14px 20px}
+.post-composer{background:white;border:var(--border);border-radius:var(--radius-lg);padding:14px 20px;margin-top:14px}
 .composer-top{display:flex;gap:10px;align-items:flex-start}
 .composer-av{width:36px;height:36px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--gray-900);flex-shrink:0}
 .composer-input{flex:1;border:var(--border);border-radius:var(--radius-lg);padding:10px 14px;font-size:14px;font-family:var(--font);resize:none;min-height:44px;max-height:120px;outline:none;transition:border-color .15s,min-height .2s;color:var(--gray-800);line-height:1.5}
@@ -239,7 +245,7 @@ button,select,input,textarea{font-family:var(--font)}
 .composer-post-btn{padding:6px 16px;border-radius:7px;font-size:13px;font-weight:600;background:var(--gray-900);color:white;border:none;cursor:pointer;transition:all .13s}
 .composer-post-btn:hover:not(:disabled){background:var(--gray-700)}
 .composer-post-btn:disabled{opacity:.4;cursor:default}
-.post-note-card{background:white;border-bottom:var(--border);padding:16px 20px;animation:fade-up .2s ease both}
+.post-note-card{background:white;padding:16px 20px;animation:fade-up .2s ease both}
 .pn-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .pn-av{width:38px;height:38px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--gray-900);flex-shrink:0}
 .pn-name{font-size:14px;font-weight:600;color:var(--gray-900)}
