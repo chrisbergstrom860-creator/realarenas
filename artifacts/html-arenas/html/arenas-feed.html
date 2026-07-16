@@ -36,7 +36,9 @@ button,select,input,textarea{font-family:var(--font)}
    feed column gets the same 16px on its left (desktop only — the column goes
    full-width when the shell collapses to one column on mobile). */
 .feed-col{padding:0 0 24px 16px}
-@media (max-width:768px){ .feed-col{padding-left:0} }
+/* Mobile: symmetric 14px side padding so cards don't sit flush against the
+   screen edges — same side padding as other pages' mobile .main (calendar/log). */
+@media (max-width:768px){ .feed-col{padding:0 14px 24px} }
 .side-col{padding:20px 16px;display:flex;flex-direction:column;gap:14px;position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto}
 .side-col::-webkit-scrollbar{display:none}
 
