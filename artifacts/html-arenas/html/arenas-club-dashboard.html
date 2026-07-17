@@ -45,8 +45,12 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
 .club-logo-edit:hover { opacity: 1; background: var(--gray-100); }
 .club-name-small { font-size: 12px; font-weight: 600; color: var(--gray-900); }
 .club-plan { font-size: 10px; color: var(--gray-500); }
-/* Club feed tab: two-column desktop (feed left, composer + real-data cards right), single column mobile */
-.cf-cols { display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 14px; align-items: start; max-width: 980px; padding: 14px; }
+/* Club feed tab: two-column desktop (feed left, composer + real-data cards right), single column mobile.
+   Centered block with balanced outer gutters, like the athlete feed's polish: the feed column
+   matches the athlete feed's scale at common widths (~900px at 1500px viewport) but — unlike the
+   fully fluid athlete feed — caps at 1240px total so cards stay readable on very large monitors.
+   Rail stays 300px; 14px gap matches the athlete feed's rail rhythm. */
+.cf-cols { display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 14px; align-items: start; max-width: 1240px; margin: 0 auto; padding: 14px; }
 .cf-main { min-width: 0; }
 .cf-side { min-width: 0; position: sticky; top: 14px; }
 @media (max-width: 900px) {
