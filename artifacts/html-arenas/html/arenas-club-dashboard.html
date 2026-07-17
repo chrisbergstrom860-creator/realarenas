@@ -493,6 +493,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
       <div style="display:flex;gap:4px">
         <button class="tl-period-btn" data-weeks="6" onclick="setTlPeriod(this,6)" style="padding:5px 12px;border-radius:6px;font-size:12px;font-weight:500;border:none;background:var(--gray-900);color:white;cursor:pointer">Last 6 weeks</button>
         <button class="tl-period-btn" data-weeks="12" onclick="setTlPeriod(this,12)" style="padding:5px 12px;border-radius:6px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Last 12 weeks</button>
+        <button class="tl-period-btn" data-weeks="24" onclick="setTlPeriod(this,24)" style="padding:5px 12px;border-radius:6px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Last 24 weeks</button>
       </div>
     </div>
 
@@ -2412,14 +2413,25 @@ document.addEventListener('DOMContentLoaded', function () {
           var weekly = result.clubWeekly || [];
           var labels = result.weekLabels || [];
           var maxVal = Math.max.apply(null, weekly.concat([1]));
+          var nWeeks = weekly.length;
+          var narrow = window.innerWidth <= 480;
+          // Label thinning per the profile stats-chart precedent: at 24w
+          // value + axis labels drop to every 2nd week (4th when narrow),
+          // 12w thins to every 2nd only when narrow, 6w always shows all —
+          // aligned backward from the current week, which is always labeled
+          // "This week". Bars tighten (gap + cap) for the 24-bar layout.
+          var labelEvery = nWeeks === 24 ? (narrow ? 4 : 2) : nWeeks === 12 ? (narrow ? 2 : 1) : 1;
+          var barMaxW = nWeeks === 24 ? '26px' : '44px';
+          chartEl.style.gap = nWeeks === 24 ? '4px' : '10px';
           chartEl.innerHTML = weekly.map(function (hours, i) {
             var isCurrent = i === weekly.length - 1;
+            var onGrid = isCurrent || (nWeeks - 1 - i) % labelEvery === 0;
             var heightPct = Math.max(4, Math.round((hours / maxVal) * 88));
             return '' +
-              '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end">' +
-                '<div style="font-size:10px;font-family:var(--mono);color:' + (isCurrent ? 'var(--gray-900)' : 'var(--gray-500)') + ';font-weight:' + (isCurrent ? '600' : '400') + '">' + hours + 'h</div>' +
-                '<div style="width:100%;max-width:44px;height:' + heightPct + '%;border-radius:4px 4px 0 0;background:' + (isCurrent ? '#E6B800' : '#FFD21E') + '"></div>' +
-                '<div style="font-size:10px;color:' + (isCurrent ? 'var(--gray-600)' : 'var(--gray-400)') + ';font-weight:' + (isCurrent ? '600' : '400') + '">' + (isCurrent ? 'This week' : esc(labels[i])) + '</div>' +
+              '<div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end">' +
+                '<div style="font-size:10px;height:12px;line-height:12px;white-space:nowrap;font-family:var(--mono);color:' + (isCurrent ? 'var(--gray-900)' : 'var(--gray-500)') + ';font-weight:' + (isCurrent ? '600' : '400') + '">' + (onGrid ? hours + 'h' : '') + '</div>' +
+                '<div style="width:100%;max-width:' + barMaxW + ';height:' + heightPct + '%;border-radius:4px 4px 0 0;background:' + (isCurrent ? '#E6B800' : '#FFD21E') + '"></div>' +
+                '<div style="font-size:10px;height:12px;line-height:12px;white-space:nowrap;color:' + (isCurrent ? 'var(--gray-600)' : 'var(--gray-400)') + ';font-weight:' + (isCurrent ? '600' : '400') + '">' + (onGrid ? (isCurrent ? 'This week' : esc(labels[i])) : '') + '</div>' +
               '</div>';
           }).join('');
         }
@@ -2501,15 +2513,22 @@ document.addEventListener('DOMContentLoaded', function () {
       dd.setDate(dd.getDate() - day + 1 - i * 7);
       weekLabels.push(i === 0 ? 'This wk' : dd.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }));
     }
+    // Same thinning grid as the club volume chart so a 24-week drawer stays
+    // legible: values + axis labels every 2nd (4th when narrow) week, with
+    // the current week always labeled.
+    var dNWeeks = (m.weeklyHours || []).length;
+    var dNarrow = window.innerWidth <= 480;
+    var dEvery = dNWeeks === 24 ? (dNarrow ? 4 : 2) : dNWeeks === 12 ? (dNarrow ? 2 : 1) : 1;
     var bars = (m.weeklyHours || []).map(function (h, j) {
       var isLast = j === m.weeklyHours.length - 1;
+      var onGrid = isLast || (dNWeeks - 1 - j) % dEvery === 0;
       var pct = Math.max(6, Math.round((h / maxH) * 88));
       var isSpike = isLast && m.status === 'overdoing';
       return '' +
-        '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end">' +
-          '<div style="font-size:10px;font-family:var(--mono);color:' + (isSpike ? '#A32D2D' : 'var(--gray-500)') + ';font-weight:' + (isLast ? '600' : '400') + '">' + h + 'h</div>' +
-          '<div style="width:100%;max-width:38px;height:' + pct + '%;border-radius:3px 3px 0 0;background:' + (isSpike ? '#E24B4A' : '#FFD21E') + '"></div>' +
-          '<div style="font-size:9px;color:var(--gray-400);font-weight:' + (isLast ? '600' : '400') + '">' + esc(weekLabels[j]) + '</div>' +
+        '<div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end">' +
+          '<div style="font-size:10px;height:12px;line-height:12px;white-space:nowrap;font-family:var(--mono);color:' + (isSpike ? '#A32D2D' : 'var(--gray-500)') + ';font-weight:' + (isLast ? '600' : '400') + '">' + (onGrid ? h + 'h' : '') + '</div>' +
+          '<div style="width:100%;max-width:' + (dNWeeks === 24 ? '26px' : '38px') + ';height:' + pct + '%;border-radius:3px 3px 0 0;background:' + (isSpike ? '#E24B4A' : '#FFD21E') + '"></div>' +
+          '<div style="font-size:9px;height:11px;line-height:11px;white-space:nowrap;color:var(--gray-400);font-weight:' + (isLast ? '600' : '400') + '">' + (onGrid ? esc(weekLabels[j]) : '') + '</div>' +
         '</div>';
     }).join('');
     var statusNote = m.status === 'overdoing'

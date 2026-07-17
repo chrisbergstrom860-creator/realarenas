@@ -2010,7 +2010,12 @@ function parseDurationHours(duration) {
 app.get(BASE + '/api/clubs/:clubId/training-load', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured' });
   const clubId = req.params.clubId;
-  const weeks = Math.min(Math.max(parseInt(req.query.weeks, 10) || 6, 1), 26);
+  // `weeks` is whitelisted to the switcher's range options (6/12/24 — same
+  // precedent as the profile stats chart); anything else falls back to the
+  // page's historic 6. The window is computed on-read from the same
+  // zone-aware per-member bucketing below regardless of length.
+  const wq = parseInt(req.query.weeks, 10);
+  const weeks = wq === 6 || wq === 12 || wq === 24 ? wq : 6;
   try {
     const { data: membership } = await supabaseAdmin
       .from('memberships')
@@ -2036,18 +2041,30 @@ app.get(BASE + '/api/clubs/:clubId/training-load', requireAuth, async (req, res)
     const periodStartKey = weekKeys[0];
     const thisWeekKey = weekKeys[weekKeys.length - 1];
 
-    // Every activity in the window in one query (need `duration` for load).
-    // Fetched one day wider than the grid window so a member whose zone is
-    // ahead of UTC still contributes their full local days — the per-member
-    // key filters below re-cut the exact buckets.
+    // Every activity in the window (need `duration` for load). Fetched one
+    // day wider than the grid window so a member whose zone is ahead of UTC
+    // still contributes their full local days — the per-member key filters
+    // below re-cut the exact buckets. Paged in 1000-row chunks: PostgREST
+    // caps a single response at 1000 rows, and a 24-week window on an active
+    // club can exceed that — without paging the older weeks would silently
+    // read as zero. Row order doesn't matter (weekly sums are commutative).
     let activities = [];
     if (memberIds.length) {
-      const { data, error } = await supabaseAdmin
-        .from('activities')
-        .select('user_id, sport, distance, duration, date')
-        .in('user_id', memberIds)
-        .gte('date', keyToUtcDate(addDaysToKey(periodStartKey, -1)).toISOString());
-      if (!error) activities = data || [];
+      const sinceIso = keyToUtcDate(addDaysToKey(periodStartKey, -1)).toISOString();
+      const PAGE = 1000;
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await supabaseAdmin
+          .from('activities')
+          .select('user_id, sport, distance, duration, date')
+          .in('user_id', memberIds)
+          .gte('date', sinceIso)
+          .order('date', { ascending: false })
+          .order('id', { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (error || !data || data.length === 0) break;
+        activities = activities.concat(data);
+        if (data.length < PAGE) break;
+      }
     }
     const byUser = bucketActivities(activities);
 
