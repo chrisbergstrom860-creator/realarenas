@@ -24,6 +24,15 @@ comes from `buildUserProfileMap` (auth metadata — no `profiles` table). Challe
 "completed" must be guarded `goal_target > 0 && progress >= goal_target`, or
 0-target challenges count as completed for every participant.
 
+## Trend charts follow the app chart convention (2026-07)
+Both 6-month trend strips (member count, training hours) use the same `trendBars`
+renderer, which copies the Overview volume / profile Stats chart conventions:
+96px bar area, value labels above bars in honest units, zero months = no label +
+3px gray tick (never a `Math.max(min,…)` stub bar), latest bar #E6B800 and
+always axis-labeled, short month names under bars via integer YYYY-MM math.
+**How to apply:** any new bar strip in the app must follow this convention; the
+fake-minimum-stub pattern has now been cured twice (Overview card, Reports tab).
+
 ## Known non-blocking quirks
 Challenge participationRate can exceed 100% because challenge joins are permissive
 to non-members; the per-participant activity check is N+1 (fine at ~48-member scale).
