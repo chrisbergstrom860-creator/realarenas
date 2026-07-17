@@ -835,10 +835,14 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
     <!-- Header -->
     <div style="padding:14px 20px;border-bottom:var(--border);background:white;display:flex;align-items:center;justify-content:space-between">
       <div>
-        <div style="font-size:16px;font-weight:700;color:var(--gray-900)">Monthly club report</div>
+        <div style="font-size:16px;font-weight:700;color:var(--gray-900)">Club report</div>
         <div style="font-size:12px;color:var(--gray-400);margin-top:2px" id="rp-sub">Ready to share with your committee or sponsors</div>
       </div>
-      <div style="display:flex;align-items:center;gap:10px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end">
+        <div style="display:flex;gap:4px" id="rp-mode-chips">
+          <button data-rp-mode="month" onclick="rpSetPeriodMode('month')" style="font-family:inherit;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;border:var(--border);background:white;color:var(--gray-600)">Month</button>
+          <button data-rp-mode="year" onclick="rpSetPeriodMode('year')" style="font-family:inherit;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;border:var(--border);background:white;color:var(--gray-600)">Year</button>
+        </div>
         <div style="display:flex;align-items:center;gap:8px">
           <button onclick="rpChangeMonth(-1)" style="width:28px;height:28px;border-radius:7px;border:var(--border);background:white;cursor:pointer;color:var(--gray-600);font-size:14px">‹</button>
           <div style="font-size:13px;font-weight:600;min-width:120px;text-align:center" id="rp-month-label">—</div>
@@ -3207,14 +3211,51 @@ document.addEventListener('DOMContentLoaded', function () {
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
+    // Period state. Month/Year is persisted (arenas_reports_period_mode);
+    // the "now" clamps reuse the page's existing UTC-now convention (accepted
+    // Dec-31/Jan-1 edge in UTC+ zones — the server clamps the year too).
+    var RP_MODE_KEY = 'arenas_reports_period_mode';
+    var rpPeriodMode = 'month';
+    try { if (localStorage.getItem(RP_MODE_KEY) === 'year') rpPeriodMode = 'year'; } catch (e) { /* private mode — month default */ }
     var rpCurrentMonth = new Date().toISOString().slice(0, 7);
+    var rpCurrentYear = Number(new Date().toISOString().slice(0, 4));
+    // Set from each response so delta()/captions render the right mode.
+    var rpYearReport = false;
+    var rpPrevHasData = true;
 
     // Labels and icons derived from the sports registry.
     var sportNames = {};
     (window.ARENAS_SPORTS || []).forEach(function (s) { sportNames[s.id] = s.label; });
     var sportIcons2 = window.ARENAS_SPORT_ICONS || {};
 
+    function rpStyleModeChips() {
+      document.querySelectorAll('#rp-mode-chips button').forEach(function (b) {
+        var on = b.getAttribute('data-rp-mode') === rpPeriodMode;
+        b.style.border = on ? '1px solid var(--yellow-dark)' : 'var(--border)';
+        b.style.background = on ? 'var(--yellow-light)' : 'white';
+        b.style.color = on ? '#7a5c00' : 'var(--gray-600)';
+      });
+    }
+    rpStyleModeChips(); // reflect the persisted mode on load
+
+    window.rpSetPeriodMode = function (m) {
+      var mode = m === 'year' ? 'year' : 'month';
+      if (mode === rpPeriodMode) return;
+      rpPeriodMode = mode;
+      try { localStorage.setItem(RP_MODE_KEY, mode); } catch (e) { /* session-only */ }
+      rpStyleModeChips();
+      loadClubReport();
+    };
+
     window.rpChangeMonth = function (dir) {
+      if (rpPeriodMode === 'year') {
+        // Year mode: the ‹/› nav steps whole years, clamped to the current year.
+        var ny = rpCurrentYear + dir;
+        if (ny > Number(new Date().toISOString().slice(0, 4))) return;
+        rpCurrentYear = ny;
+        loadClubReport();
+        return;
+      }
       // Pure integer month math — avoid a Date/toISOString round-trip, which in
       // UTC+ timezones (e.g. London/BST) shifts local-midnight back a month.
       var parts = rpCurrentMonth.split('-').map(Number);
@@ -3245,14 +3286,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function delta(val, suffix, invert) {
       suffix = suffix || '';
+      // Year mode with an empty prior year: no honest comparison exists (the
+      // club had no presence then), so the line is omitted entirely.
+      if (rpYearReport && !rpPrevHasData) return '';
+      var vs = rpYearReport ? 'last year' : 'last month';
       if (val === 0 || val === null || val === undefined) {
-        return '<div style="font-size:10px;margin-top:3px;font-family:var(--mono);color:var(--gray-400)">— same as last month</div>';
+        return '<div style="font-size:10px;margin-top:3px;font-family:var(--mono);color:var(--gray-400)">— same as ' + vs + '</div>';
       }
       var isUp = val > 0;
       var good = invert ? !isUp : isUp;
       var color = good ? '#10B981' : '#A32D2D';
       var arrow = isUp ? '↑ +' : '↓ ';
-      return '<div style="font-size:10px;margin-top:3px;font-family:var(--mono);color:' + color + '">' + arrow + Math.abs(val) + suffix + ' vs last month</div>';
+      return '<div style="font-size:10px;margin-top:3px;font-family:var(--mono);color:' + color + '">' + arrow + Math.abs(val) + suffix + ' vs ' + vs + '</div>';
     }
 
     function metric(val, label, deltaHtml) {
@@ -3297,17 +3342,26 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function trendBarsInner(values, unit, monthLabels, maxV) {
+      var n = values.length;
+      // Label thinning at year scale — same grid rule as the line renderer
+      // and the training-load chart: value + month labels align backward from
+      // the always-labeled last bar. Twelve columns also tighten the gap so
+      // 380px viewports fit without overlap.
+      var narrow = window.innerWidth <= 480;
+      var every = n >= 24 ? (narrow ? 4 : 2) : n >= 12 ? (narrow ? 2 : 1) : 1;
+      var gap = n >= 12 ? 4 : 10;
       var cols = values.map(function (v, i) {
-        var isLast = i === values.length - 1;
+        var isLast = i === n - 1;
+        var onGrid = isLast || (n - 1 - i) % every === 0;
         var bar = v > 0
           ? '<div style="width:100%;max-width:68px;height:' + Math.max(4, Math.round((v / maxV) * 72)) + '%;border-radius:3px 3px 0 0;background:' + (isLast ? '#E6B800' : '#FFD21E') + '" title="' + esc(v + unit) + '"></div>'
           : '<div style="width:100%;max-width:68px;height:3px;border-radius:1px;background:var(--gray-200)"></div>';
         return '<div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end">'
-          + (v > 0 ? '<div style="font-size:9px;font-family:var(--mono);font-weight:600;white-space:nowrap;color:' + (isLast ? 'var(--gray-900)' : 'var(--gray-500)') + '">' + esc(v + unit) + '</div>' : '')
+          + (v > 0 && onGrid ? '<div style="font-size:9px;font-family:var(--mono);font-weight:600;white-space:nowrap;color:' + (isLast ? 'var(--gray-900)' : 'var(--gray-500)') + '">' + esc(v + unit) + '</div>' : '')
           + bar
-          + '<div style="font-size:9px;white-space:nowrap;color:' + (isLast ? 'var(--gray-600)' : 'var(--gray-400)') + ';font-weight:' + (isLast ? '600' : '400') + '">' + (monthLabels[i] || '') + '</div></div>';
+          + '<div style="font-size:9px;white-space:nowrap;color:' + (isLast ? 'var(--gray-600)' : 'var(--gray-400)') + ';font-weight:' + (isLast ? '600' : '400') + '">' + (onGrid ? (monthLabels[i] || '') : '') + '</div></div>';
       }).join('');
-      return '<div style="display:flex;align-items:flex-end;gap:10px;height:96px">' + cols + '</div>';
+      return '<div style="display:flex;align-items:flex-end;gap:' + gap + 'px;height:96px">' + cols + '</div>';
     }
 
     function trendLineInner(values, unit, monthLabels, maxV) {
@@ -3413,22 +3467,43 @@ document.addEventListener('DOMContentLoaded', function () {
       var body = document.getElementById('rp-report-body');
       if (body) body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Loading report…</div>';
       try {
-        var response = await fetch(B + '/api/clubs/' + encodeURIComponent(clubId) + '/report?month=' + encodeURIComponent(rpCurrentMonth));
+        var qs = rpPeriodMode === 'year'
+          ? 'mode=year&year=' + encodeURIComponent(rpCurrentYear)
+          : 'month=' + encodeURIComponent(rpCurrentMonth);
+        var response = await fetch(B + '/api/clubs/' + encodeURIComponent(clubId) + '/report?' + qs);
         var r = await response.json();
         if (!body) return;
         if (r.error) {
           body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">' + esc(r.error) + '</div>';
           return;
         }
+        // Sync to the server's (clamped) response and set the flags that
+        // delta() and the captions below read for this render.
+        rpYearReport = r.mode === 'year';
+        rpPrevHasData = r.prevHasData !== false;
+        if (rpYearReport && r.year) rpCurrentYear = r.year;
         var labelEl = document.getElementById('rp-month-label');
         if (labelEl) labelEl.textContent = r.monthLabel;
         var subEl = document.getElementById('rp-sub');
         if (subEl) subEl.textContent = ((data.club && data.club.name) || 'Your club') + ' · ready to share with your committee or sponsors';
         var nextBtn = document.getElementById('rp-next-btn');
-        if (nextBtn) nextBtn.style.opacity = rpCurrentMonth >= new Date().toISOString().slice(0, 7) ? '.3' : '1';
+        var rpAtNow = rpPeriodMode === 'year'
+          ? rpCurrentYear >= Number(new Date().toISOString().slice(0, 4))
+          : rpCurrentMonth >= new Date().toISOString().slice(0, 7);
+        if (nextBtn) nextBtn.style.opacity = rpAtNow ? '.3' : '1';
 
         var m = r.membership, e = r.engagement, ev = r.events, ch = r.challenges;
-        var rpMonthLabels = trendMonthLabels(r.month || rpCurrentMonth, 6);
+        // Year mode charts run Jan → last bucket of the report year; month
+        // mode keeps the trailing-6-months labels.
+        var rpMonthLabels = rpYearReport
+          ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].slice(0, (m.trend || []).length)
+          : trendMonthLabels(r.month || rpCurrentMonth, 6);
+        // Honest window caption per mode ("6 months" / "2026 · year to date"
+        // / "2025 · 12 months") and period noun for empty-state lines.
+        var rpWinDesc = rpYearReport
+          ? (r.ytd ? r.year + ' · year to date' : r.year + ' · 12 months')
+          : '6 months';
+        var rpPeriodNoun = rpYearReport ? (r.ytd ? 'this year so far' : 'in ' + r.year) : 'this month';
         rpTrendCharts = [];
         var toneColors = {
           good: { border: '#86EFAC', bg: '#ECFDF5', icon: '💚' },
@@ -3461,7 +3536,7 @@ document.addEventListener('DOMContentLoaded', function () {
           + metric(m.newJoins, 'New joins', delta(m.newJoinsDelta))
           + metric(m.departures, 'Departures', delta(0))
           + metric(m.retention + '%', 'Retention', delta(0))
-          + '</div>' + trendBars(m.trend, m.total, 'Member count · 6 months', '', rpMonthLabels) + '</div>'
+          + '</div>' + trendBars(m.trend, m.total, 'Member count · ' + rpWinDesc, '', rpMonthLabels) + '</div>'
 
           + '<div style="margin:0 14px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">'
           + '<div style="padding:11px 16px;border-bottom:var(--border);background:var(--gray-50);font-size:12px;font-weight:600">⚡ Engagement & training</div>'
@@ -3470,7 +3545,7 @@ document.addEventListener('DOMContentLoaded', function () {
           + metric(e.totalHours + 'h', 'Training hours', delta(e.hoursDelta, 'h'))
           + metric(e.sessions, 'Sessions logged', delta(e.sessionsDelta))
           + metric(e.sessionsPerActive, 'Sessions / active member', '')
-          + '</div>' + trendBars(e.hoursTrend, e.totalHours + 'h', 'Training hours · 6 months', 'h', rpMonthLabels)
+          + '</div>' + trendBars(e.hoursTrend, e.totalHours + 'h', 'Training hours · ' + rpWinDesc, 'h', rpMonthLabels)
           + hlRow('📍', 'Total distance logged across all sports', e.totalKm.toLocaleString() + ' km')
           + topSportHtml + topMemberHtml + '</div>'
 
@@ -3483,7 +3558,7 @@ document.addEventListener('DOMContentLoaded', function () {
           + '</div>'
           + (ev.best ? hlRow('🏆', 'Best attended — <strong style="color:var(--gray-900)">' + esc(ev.best.title) + '</strong>', ev.best.going + ' going · ' + ev.best.rate + '%') : '')
           + (ev.worst ? hlRow('📉', 'Lowest attended — <strong style="color:var(--gray-900)">' + esc(ev.worst.title) + '</strong>', ev.worst.going + ' going · ' + ev.worst.rate + '%') : '')
-          + (ev.count === 0 ? '<div style="padding:16px;text-align:center;font-size:12px;color:var(--gray-400)">No events were held this month</div>' : '') + '</div>'
+          + (ev.count === 0 ? '<div style="padding:16px;text-align:center;font-size:12px;color:var(--gray-400)">No events were held ' + rpPeriodNoun + '</div>' : '') + '</div>'
 
           + '<div style="margin:0 14px 14px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">'
           + '<div style="padding:11px 16px;border-bottom:var(--border);background:var(--gray-50);font-size:12px;font-weight:600">⚡ Challenges</div>'
@@ -3495,7 +3570,7 @@ document.addEventListener('DOMContentLoaded', function () {
           + (ch.highlights || []).map(function (h) {
             return hlRow('🔥', '<strong style="color:var(--gray-900)">' + esc(h.title) + '</strong> — ' + h.participants + ' joined, ' + h.completed + ' hit the goal', h.completionRate + '% completed');
           }).join('')
-          + (ch.count === 0 ? '<div style="padding:16px;text-align:center;font-size:12px;color:var(--gray-400)">No challenges ran this month</div>' : '') + '</div>';
+          + (ch.count === 0 ? '<div style="padding:16px;text-align:center;font-size:12px;color:var(--gray-400)">No challenges ran ' + rpPeriodNoun + '</div>' : '') + '</div>';
       } catch (err) {
         console.log('Could not load report:', err);
         if (body) body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Could not load report.</div>';

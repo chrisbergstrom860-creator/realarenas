@@ -1,11 +1,45 @@
 ---
 name: html-arenas reports tab
-description: Club dashboard monthly Reports tab — data sources, auth, and the month-navigation timezone gotcha.
+description: Club dashboard Reports tab (month + year modes) — year-mode semantics, data sources, auth, print/PDF, and the month-navigation timezone gotcha.
 ---
 
 # html-arenas Reports tab
 
-Monthly club report at `GET BASE+/api/clubs/:clubId/report?month=YYYY-MM`, admin/coach only.
+Club report at `GET BASE+/api/clubs/:clubId/report`, admin/coach only. Two modes:
+`?month=YYYY-MM` (default) and `?mode=year&year=YYYY` (year clamped to the coach's
+current year server-side AND in the client ‹/› nav).
+
+## Year mode semantics (2026-07)
+Computed on-read, no precomputed rollups. Window = Jan 1 → today+1 (exclusive) in
+the COACH's zone for the current year (YTD), or the full calendar year for past
+years. Per-metric rules:
+- **Member totals are point-in-time** (memberships with `created_at` before the
+  window end), not "distinct over the window"; the member trend is end-of-month
+  point-in-time counts per bucket.
+- **Active % = distinct members with ≥1 activity in the window / members at window
+  end** — over a year this reads much higher than monthly active %; that's by design.
+- **YTD comparisons are same-period prior year** (Jan 1 → same day last year,
+  Feb 29 → Feb 28), not full-prior-year, so deltas compare like-for-like. Past
+  years compare against the full prior year.
+- **`prevHasData` gate**: when the prior-year window has no members, activities,
+  or events, the client suppresses ALL "vs last year" lines (a club's first year
+  would otherwise show misleading jumps from zero). Month mode ignores the flag.
+- **Challenges overlap-match the window**, so a Dec–Jan challenge appears in BOTH
+  years' reports; its progress is still computed over the challenge's own window
+  (participant zone), not clipped to the report year.
+- **Activity bucketing stays member-zone** (same policy as everywhere): a
+  `2026-01-01T05:30Z` activity by a Pacific member lands in Dec 2025, excluded
+  from 2026 YTD. Verified with a seeded boundary case.
+- Activities fetch is PAGED (1000 rows/page via `.range`, ordered `date desc, id
+  asc`) — the old single `.limit(1000)` silently truncated; the shared paged
+  helper now serves month mode too.
+- Trend buckets: Jan → elapsed month for YTD, all 12 for past years; the client
+  thins bar labels when n ≥ 12 (keeps last bar's label always).
+- Mode chip persisted in localStorage `arenas_reports_period_mode`; labels are
+  "July 2026" / "2026 · Year to date" / "2025".
+- Year mode multiplies the challenge N+1 quirk (below): a year window can span
+  ~12× more challenges than a month, each participant costing one activities
+  query. Fine at current scale; first thing to batch if reports get slow.
 
 ## Month navigation must use integer math, not Date round-trips
 Stepping months as `new Date(y, m-1+dir, 1).toISOString().slice(0,7)` is WRONG: it

@@ -2536,15 +2536,16 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
       .maybeSingle();
     if (!membership) return res.status(403).json({ error: 'Not authorised' });
 
-    // Month boundaries follow the requesting COACH's calendar (boundary
-    // policy rule 2): the default month is "now" in the coach's zone, and
-    // club-level instants (joins, events, challenge overlap) are the coach's
-    // local month midnights. Month arithmetic is integer YYYY-MM math — never
-    // Date→toISOString round-trips, which skew a day in non-UTC zones.
+    // Window boundaries follow the requesting COACH's calendar (boundary
+    // policy rule 2): club-level instants (joins, events, challenge overlap)
+    // are the coach's local midnights. Month arithmetic is integer YYYY-MM
+    // math — never Date→toISOString round-trips, which skew a day in non-UTC
+    // zones. Two report modes:
+    //   ?month=YYYY-MM        (default — the original monthly report)
+    //   ?mode=year&year=YYYY  (computed on-read: the current year is YTD,
+    //                          Jan 1 → today inclusive in the coach's zone;
+    //                          past years cover the full calendar year)
     const coachTz = getUserTimezone(req.user);
-    const monthParam = (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month))
-      ? req.query.month : monthKey(new Date(), coachTz);
-    const [year, month] = monthParam.split('-').map(Number);
     // First-of-month day key for calendar month `m` (1-based, may be out of
     // 1..12 range — normalized by integer math).
     const monthFirstKey = (y, m) => {
@@ -2553,13 +2554,62 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
       const nm = (total % 12) + 1;
       return `${String(ny).padStart(4, '0')}-${String(nm).padStart(2, '0')}-01`;
     };
-    const monthStartKey = monthFirstKey(year, month);
-    const monthEndKey = monthFirstKey(year, month + 1);
-    const prevStartKey = monthFirstKey(year, month - 1);
-    const monthStart = zoneMidnightUtc(monthStartKey, coachTz);
-    const monthEnd = zoneMidnightUtc(monthEndKey, coachTz);
-    const prevStart = zoneMidnightUtc(prevStartKey, coachTz);
-    const prevEnd = monthStart;
+    const todayKey = dayKey(new Date(), coachTz);
+    const nowYear = Number(todayKey.slice(0, 4));
+    const yearMode = req.query.mode === 'year';
+
+    let monthParam = null;
+    let reportYear = null;
+    let isYtd = false;
+    let winStartKey, winEndKey, prevWinStartKey, prevWinEndKey;
+    // Month buckets for the two trend charts: [{ s, e }] day-key ranges.
+    let trendBuckets;
+    if (yearMode) {
+      const yRaw = String(req.query.year || '');
+      reportYear = /^\d{4}$/.test(yRaw) && Number(yRaw) <= nowYear ? Number(yRaw) : nowYear;
+      isYtd = reportYear === nowYear;
+      winStartKey = `${reportYear}-01-01`;
+      winEndKey = isYtd ? addDaysToKey(todayKey, 1) : `${reportYear + 1}-01-01`;
+      // "vs last year" compares like for like: YTD → the SAME Jan-1→today
+      // window of the prior year (Feb 29 falls back to Feb 28); a completed
+      // year → the full prior year.
+      prevWinStartKey = `${reportYear - 1}-01-01`;
+      if (isYtd) {
+        const md = todayKey.slice(5) === '02-29' ? '02-28' : todayKey.slice(5);
+        prevWinEndKey = addDaysToKey(`${reportYear - 1}-${md}`, 1);
+      } else {
+        prevWinEndKey = winStartKey;
+      }
+      // Honesty rule: the current year charts only ELAPSED months (future
+      // months haven't happened — zero bars for them would be false); past
+      // years chart all 12. The last YTD bucket is cut at the window end so
+      // the chart total always matches the cards.
+      const lastMonth = isYtd ? Number(todayKey.slice(5, 7)) : 12;
+      trendBuckets = [];
+      for (let mm = 1; mm <= lastMonth; mm++) {
+        trendBuckets.push({
+          s: monthFirstKey(reportYear, mm),
+          e: (isYtd && mm === lastMonth) ? winEndKey : monthFirstKey(reportYear, mm + 1)
+        });
+      }
+    } else {
+      monthParam = (req.query.month && /^\d{4}-\d{2}$/.test(req.query.month))
+        ? req.query.month : monthKey(new Date(), coachTz);
+      const [year, month] = monthParam.split('-').map(Number);
+      winStartKey = monthFirstKey(year, month);
+      winEndKey = monthFirstKey(year, month + 1);
+      prevWinStartKey = monthFirstKey(year, month - 1);
+      prevWinEndKey = winStartKey;
+      // Six trailing months ending at the report month.
+      trendBuckets = [];
+      for (let i = 5; i >= 0; i--) {
+        trendBuckets.push({ s: monthFirstKey(year, month - i), e: monthFirstKey(year, month - i + 1) });
+      }
+    }
+    const winStart = zoneMidnightUtc(winStartKey, coachTz);
+    const winEnd = zoneMidnightUtc(winEndKey, coachTz);
+    const prevStart = zoneMidnightUtc(prevWinStartKey, coachTz);
+    const prevEnd = zoneMidnightUtc(prevWinEndKey, coachTz);
 
     // All members with their join dates (created_at — no profiles table / joined_at).
     const { data: members } = await supabaseAdmin
@@ -2575,51 +2625,69 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
 
     // Membership metrics (a member with no join date is treated as pre-existing).
     const newJoins = (members || []).filter(m =>
-      joinedAt(m) && new Date(joinedAt(m)) >= monthStart && new Date(joinedAt(m)) < monthEnd
+      joinedAt(m) && new Date(joinedAt(m)) >= winStart && new Date(joinedAt(m)) < winEnd
     ).length;
     const prevJoins = (members || []).filter(m =>
       joinedAt(m) && new Date(joinedAt(m)) >= prevStart && new Date(joinedAt(m)) < prevEnd
     ).length;
-    const membersAtMonthEnd = (members || []).filter(m =>
-      !joinedAt(m) || new Date(joinedAt(m)) < monthEnd
+    const membersAtWinEnd = (members || []).filter(m =>
+      !joinedAt(m) || new Date(joinedAt(m)) < winEnd
     ).length;
+    // Comparison baseline = member count at the END of the previous window
+    // (month mode: prevEnd === winStart, identical to before; YTD: the same
+    // date last year; past year: Jan 1 of the report year).
     const membersAtPrevEnd = (members || []).filter(m =>
-      !joinedAt(m) || new Date(joinedAt(m)) < monthStart
+      !joinedAt(m) || new Date(joinedAt(m)) < prevEnd
     ).length;
 
-    // Member count trend — count at the end of each of the last 6 months
+    // Member count trend — the count at the end of each trend bucket
     // (coach-zone month boundaries, matching the header instants above).
-    const memberTrend = [];
-    for (let i = 5; i >= 0; i--) {
-      const trendEnd = zoneMidnightUtc(monthFirstKey(year, month - i + 1), coachTz);
-      memberTrend.push((members || []).filter(m =>
+    const memberTrend = trendBuckets.map((b) => {
+      const trendEnd = zoneMidnightUtc(b.e, coachTz);
+      return (members || []).filter(m =>
         !joinedAt(m) || new Date(joinedAt(m)) < trendEnd
-      ).length);
-    }
+      ).length;
+    });
 
-    // Activities: ONE wide fetch spanning the 6-month hours trend through the
-    // report month, widened a day each side so members in any zone contribute
-    // their full local days. Each activity then buckets by its day key in the
-    // MEMBER'S zone (boundary policy rule 1); the month/prev/trend slices
+    // Activities: ONE wide PAGED fetch spanning the trend window AND the
+    // previous comparison window, widened a day each side so members in any
+    // zone contribute their full local days. PostgREST silently caps a single
+    // response at 1000 rows — a year window (or an active club's 6-month
+    // span) can exceed that — so page in 1000-row chunks like the
+    // training-load tab (the id tiebreaker makes page boundaries
+    // deterministic). Each activity then buckets by its day key in the
+    // MEMBER'S zone (boundary policy rule 1); the window/prev/trend slices
     // below are all key-range cuts of this list.
-    const trendStartKey = monthFirstKey(year, month - 5);
+    const fetchStartKey = trendBuckets[0].s < prevWinStartKey ? trendBuckets[0].s : prevWinStartKey;
     let allActs = [];
     {
-      const { data } = await supabaseAdmin
-        .from('activities')
-        .select('user_id, sport, distance, duration, date')
-        .in('user_id', safeIds)
-        .gte('date', keyToUtcDate(addDaysToKey(trendStartKey, -1)).toISOString())
-        .lt('date', keyToUtcDate(addDaysToKey(monthEndKey, 1)).toISOString());
-      allActs = (data || []).map((a) => ({
+      const gteIso = keyToUtcDate(addDaysToKey(fetchStartKey, -1)).toISOString();
+      const ltIso = keyToUtcDate(addDaysToKey(winEndKey, 1)).toISOString();
+      const PAGE = 1000;
+      let rows = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data } = await supabaseAdmin
+          .from('activities')
+          .select('user_id, sport, distance, duration, date')
+          .in('user_id', safeIds)
+          .gte('date', gteIso)
+          .lt('date', ltIso)
+          .order('date', { ascending: false })
+          .order('id', { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (!data || data.length === 0) break;
+        rows = rows.concat(data);
+        if (data.length < PAGE) break;
+      }
+      allActs = rows.map((a) => ({
         ...a,
         _k: dayKey(a.date, memberZone(profileMap[a.user_id]))
       }));
     }
     const actsInKeyRange = (fromKey, toKey) =>
       allActs.filter((a) => a._k >= fromKey && a._k < toKey);
-    const monthActivities = actsInKeyRange(monthStartKey, monthEndKey);
-    const prevActivities = actsInKeyRange(prevStartKey, monthStartKey);
+    const windowActivities = actsInKeyRange(winStartKey, winEndKey);
+    const prevActivities = actsInKeyRange(prevWinStartKey, prevWinEndKey);
 
     function summarizeActivities(acts) {
       const activeUsers = new Set((acts || []).map(a => a.user_id));
@@ -2646,48 +2714,47 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
       };
     }
 
-    const thisMonth = summarizeActivities(monthActivities);
-    const prevMonth = summarizeActivities(prevActivities);
+    const curWin = summarizeActivities(windowActivities);
+    const prevWin = summarizeActivities(prevActivities);
 
-    // Most popular sport / most active member this month. (Names come from
-    // the member-wide profileMap fetched above.)
-    const topSport = Object.entries(thisMonth.sportCounts).sort((a, b) => b[1] - a[1])[0];
-    const topMember = Object.entries(thisMonth.userStats).sort((a, b) => b[1].sessions - a[1].sessions)[0];
+    // Most popular sport / most active member over the report window. (Names
+    // come from the member-wide profileMap fetched above.)
+    const topSport = Object.entries(curWin.sportCounts).sort((a, b) => b[1] - a[1])[0];
+    const topMember = Object.entries(curWin.userStats).sort((a, b) => b[1].sessions - a[1].sessions)[0];
 
-    // Training hours trend — total logged hours per month, last 6 months.
-    // Month cuts of the same member-zone-keyed activity list as above.
-    const hoursTrend = [];
-    for (let i = 5; i >= 0; i--) {
-      const tActs = actsInKeyRange(monthFirstKey(year, month - i), monthFirstKey(year, month - i + 1));
-      hoursTrend.push(Math.round(tActs.reduce((s, a) => s + parseDurationHours(a.duration), 0) * 10) / 10);
-    }
+    // Training hours trend — total logged hours per trend bucket. Month cuts
+    // of the same member-zone-keyed activity list as above.
+    const hoursTrend = trendBuckets.map((b) => {
+      const tActs = actsInKeyRange(b.s, b.e);
+      return Math.round(tActs.reduce((s, a) => s + parseDurationHours(a.duration), 0) * 10) / 10;
+    });
 
-    // Events this month + previous month, with "going" RSVP counts.
-    const { data: monthEvents } = await supabaseAdmin
+    // Events in the report window + the previous window, with "going" RSVP counts.
+    const { data: windowEvents } = await supabaseAdmin
       .from('events')
       .select('id, title, date')
       .eq('club_id', clubId)
-      .gte('date', monthStart.toISOString())
-      .lt('date', monthEnd.toISOString());
+      .gte('date', winStart.toISOString())
+      .lt('date', winEnd.toISOString());
     const { data: prevEvents } = await supabaseAdmin
       .from('events')
       .select('id')
       .eq('club_id', clubId)
       .gte('date', prevStart.toISOString())
       .lt('date', prevEnd.toISOString());
-    const eventIds = (monthEvents || []).map(e => e.id);
+    const eventIds = (windowEvents || []).map(e => e.id);
     const { data: eventRsvps } = await supabaseAdmin
       .from('event_rsvps')
       .select('event_id, status')
       .in('event_id', eventIds.length ? eventIds : ['00000000-0000-0000-0000-000000000000'])
       .eq('status', 'going');
-    const eventAttendance = (monthEvents || []).map(e => {
+    const eventAttendance = (windowEvents || []).map(e => {
       const going = (eventRsvps || []).filter(r => r.event_id === e.id).length;
       return {
         title: e.title,
         date: e.date,
         going,
-        rate: membersAtMonthEnd > 0 ? Math.round((going / membersAtMonthEnd) * 100) : 0
+        rate: membersAtWinEnd > 0 ? Math.round((going / membersAtWinEnd) * 100) : 0
       };
     }).sort((a, b) => b.going - a.going);
     const avgAttendees = eventAttendance.length > 0
@@ -2695,24 +2762,27 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
     const avgAttendanceRate = eventAttendance.length > 0
       ? Math.round(eventAttendance.reduce((s, e) => s + e.rate, 0) / eventAttendance.length) : 0;
 
-    // Challenges overlapping this month.
-    const { data: monthChallenges } = await supabaseAdmin
+    // Challenges overlapping the report window (a challenge spanning a
+    // window boundary counts in BOTH periods — same overlap semantics as the
+    // monthly report; progress is computed over the challenge's own
+    // per-participant window, not clipped to the report window).
+    const { data: windowChallenges } = await supabaseAdmin
       .from('challenges')
       .select('id, title, goal_type, goal_target, goal_unit, sport, start_date, end_date')
       .eq('club_id', clubId)
-      .lt('start_date', monthEnd.toISOString())
-      .gte('end_date', monthStart.toISOString());
+      .lt('start_date', winEnd.toISOString())
+      .gte('end_date', winStart.toISOString());
     let challengeStats = { count: 0, participationRate: 0, completionRate: 0, highlights: [] };
-    if ((monthChallenges || []).length > 0) {
+    if ((windowChallenges || []).length > 0) {
       let totalParticipants = 0, totalCompleted = 0, totalPossible = 0;
-      for (const ch of monthChallenges) {
+      for (const ch of windowChallenges) {
         const { data: parts } = await supabaseAdmin
           .from('challenge_participants')
           .select('user_id')
           .eq('challenge_id', ch.id);
         const partCount = (parts || []).length;
         totalParticipants += partCount;
-        totalPossible += membersAtMonthEnd;
+        totalPossible += membersAtWinEnd;
         let completed = 0;
         for (const p of (parts || [])) {
           // Fetch a day wide, then cut to the PARTICIPANT'S local challenge
@@ -2747,34 +2817,48 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
           completionRate: partCount > 0 ? Math.round((completed / partCount) * 100) : 0
         });
       }
-      challengeStats.count = monthChallenges.length;
+      challengeStats.count = windowChallenges.length;
       challengeStats.participationRate = totalPossible > 0
         ? Math.round((totalParticipants / totalPossible) * 100) : 0;
       challengeStats.completionRate = totalParticipants > 0
         ? Math.round((totalCompleted / totalParticipants) * 100) : 0;
     }
 
+    // Prior-window presence gate for the year view: when the previous year
+    // window has NO club presence at all (no members yet, no activities, no
+    // events), "vs last year" lines are suppressed client-side rather than
+    // shown as misleading jumps from zero. Month mode keeps its existing
+    // always-on deltas (the client only consults this flag in year mode).
+    const prevHasData = membersAtPrevEnd > 0 || prevActivities.length > 0 || (prevEvents || []).length > 0;
+
     // Health headline — template based.
-    const activePct = membersAtMonthEnd > 0
-      ? Math.round((thisMonth.activeCount / membersAtMonthEnd) * 100) : 0;
+    const activePct = membersAtWinEnd > 0
+      ? Math.round((curWin.activeCount / membersAtWinEnd) * 100) : 0;
     const prevActivePct = membersAtPrevEnd > 0
-      ? Math.round((prevMonth.activeCount / membersAtPrevEnd) * 100) : 0;
-    // Labels render the month KEY on the UTC calendar — monthStart is a
+      ? Math.round((prevWin.activeCount / membersAtPrevEnd) * 100) : 0;
+    // Labels render the window KEY on the UTC calendar — winStart is a
     // coach-zone instant, which lands in the previous UTC day for zones
     // ahead of UTC and would mislabel the month.
-    const monthName = keyToUtcDate(monthStartKey)
-      .toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
+    const periodName = yearMode
+      ? (isYtd ? `${reportYear} so far` : String(reportYear))
+      : keyToUtcDate(winStartKey).toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
+    const periodLabel = yearMode
+      ? (isYtd ? `${reportYear} · Year to date` : String(reportYear))
+      : keyToUtcDate(winStartKey).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    const prevPeriodNoun = yearMode ? 'the year before' : 'the month before';
     const growthPct = membersAtPrevEnd > 0
-      ? Math.round(((membersAtMonthEnd - membersAtPrevEnd) / membersAtPrevEnd) * 100) : 0;
+      ? Math.round(((membersAtWinEnd - membersAtPrevEnd) / membersAtPrevEnd) * 100) : 0;
     let headline = '';
     let headlineTone = 'good';
-    if (thisMonth.sessions === 0 && newJoins === 0) {
-      headline = `${monthName} was quiet — no activities were logged. Time to rally the club with a challenge or event.`;
+    if (curWin.sessions === 0 && newJoins === 0) {
+      headline = yearMode && isYtd
+        ? `${reportYear} has been quiet so far — no activities have been logged. Time to rally the club with a challenge or event.`
+        : `${periodName} was quiet — no activities were logged. Time to rally the club with a challenge or event.`;
       headlineTone = 'warn';
     } else {
       const parts = [];
-      if (newJoins > 0) parts.push(`Membership grew ${growthPct > 0 ? growthPct + '%' : 'by ' + newJoins} to ${membersAtMonthEnd} members`);
-      if (activePct > 0) parts.push(`${activePct}% of members trained at least once${prevActivePct > 0 && activePct !== prevActivePct ? ` — ${activePct > prevActivePct ? 'up' : 'down'} from ${prevActivePct}% the month before` : ''}`);
+      if (newJoins > 0) parts.push(`Membership grew ${growthPct > 0 ? growthPct + '%' : 'by ' + newJoins} to ${membersAtWinEnd} members`);
+      if (activePct > 0) parts.push(`${activePct}% of members trained at least once${prevHasData && prevActivePct > 0 && activePct !== prevActivePct ? ` — ${activePct > prevActivePct ? 'up' : 'down'} from ${prevActivePct}% ${prevPeriodNoun}` : ''}`);
       if (avgAttendanceRate > 0) parts.push(`event attendance averaged ${avgAttendanceRate}%`);
       if (challengeStats.participationRate > 0) parts.push(`challenge participation hit ${challengeStats.participationRate}%`);
       headline = parts.join('. ') + '.';
@@ -2782,13 +2866,16 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
     }
 
     res.json({
+      mode: yearMode ? 'year' : 'month',
       month: monthParam,
-      monthLabel: keyToUtcDate(monthStartKey)
-        .toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
-      headline: { text: headline, tone: headlineTone, title: `${monthName} at a glance` },
+      year: reportYear,
+      ytd: isYtd,
+      prevHasData,
+      monthLabel: periodLabel,
+      headline: { text: headline, tone: headlineTone, title: `${periodName} at a glance` },
       membership: {
-        total: membersAtMonthEnd,
-        totalDelta: membersAtMonthEnd - membersAtPrevEnd,
+        total: membersAtWinEnd,
+        totalDelta: membersAtWinEnd - membersAtPrevEnd,
         newJoins,
         newJoinsDelta: newJoins - prevJoins,
         departures: 0,
@@ -2798,17 +2885,17 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
       engagement: {
         activePct,
         activePctDelta: activePct - prevActivePct,
-        totalHours: thisMonth.totalHours,
-        hoursDelta: Math.round((thisMonth.totalHours - prevMonth.totalHours) * 10) / 10,
-        sessions: thisMonth.sessions,
-        sessionsDelta: thisMonth.sessions - prevMonth.sessions,
-        sessionsPerActive: thisMonth.activeCount > 0
-          ? Math.round((thisMonth.sessions / thisMonth.activeCount) * 10) / 10 : 0,
-        totalKm: thisMonth.totalKm,
+        totalHours: curWin.totalHours,
+        hoursDelta: Math.round((curWin.totalHours - prevWin.totalHours) * 10) / 10,
+        sessions: curWin.sessions,
+        sessionsDelta: curWin.sessions - prevWin.sessions,
+        sessionsPerActive: curWin.activeCount > 0
+          ? Math.round((curWin.sessions / curWin.activeCount) * 10) / 10 : 0,
+        totalKm: curWin.totalKm,
         topSport: topSport ? {
           name: topSport[0],
           count: topSport[1],
-          pct: thisMonth.sessions > 0 ? Math.round((topSport[1] / thisMonth.sessions) * 100) : 0
+          pct: curWin.sessions > 0 ? Math.round((topSport[1] / curWin.sessions) * 100) : 0
         } : null,
         topMember: topMember ? {
           name: (profileMap[topMember[0]] && profileMap[topMember[0]].name) || 'Member',
@@ -2819,8 +2906,8 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
         hoursTrend
       },
       events: {
-        count: (monthEvents || []).length,
-        countDelta: (monthEvents || []).length - (prevEvents || []).length,
+        count: (windowEvents || []).length,
+        countDelta: (windowEvents || []).length - (prevEvents || []).length,
         avgAttendanceRate,
         avgAttendees,
         best: eventAttendance[0] || null,
