@@ -1120,6 +1120,35 @@ async function computeProLocked(userId) {
   catch (err) { return false; }
 }
 
+// ── CLUB PLAN GATING (separate master switch) ──
+// Club Pro enforcement has its OWN flag so it can deploy fully dormant while
+// the athlete-side PLAN_GATES_ENABLED is already live in production. Parsed
+// identically; unset/false => pure pass-through everywhere (zero club gating).
+const CLUB_PLAN_GATES_ENABLED = /^(1|true|yes|on)$/i.test(String(process.env.CLUB_PLAN_GATES_ENABLED || '').trim());
+
+// Inline club-plan gate for the Club Pro feature routes. These routes resolve
+// manager authz INLINE (a memberships query → 403), not via middleware, so the
+// plan check is a helper called immediately AFTER that existing 403 — authz
+// first, plan second (the codified layering order). Returns true when it has
+// already sent the 403 (caller must `return`).
+async function clubProGateBlocked(res, clubId, feature) {
+  if (!CLUB_PLAN_GATES_ENABLED) return false;
+  if ((await getClubPlan(clubId)) !== 'free') return false;
+  res.status(403).json({ error: 'club_pro_required', feature, upgrade: '/billing' });
+  return true;
+}
+
+// True when this club's Pro features should render locked (flag on AND free
+// plan). Mirrors computeProLocked: only queries the plan when the flag is on;
+// never throws (any error resolves to unlocked = today's behaviour). Injected
+// into the club-dashboard page as gating.clubProLocked — no UI consumes it yet
+// (Session 2's hook).
+async function computeClubProLocked(clubId) {
+  if (!CLUB_PLAN_GATES_ENABLED || !clubId) return false;
+  try { return (await getClubPlan(clubId)) === 'free'; }
+  catch (err) { return false; }
+}
+
 // Inject a server-built object into a page as window.<varName>, escaping `<`
 // so club/member names can't break out of the <script> tag. Mirrors
 // injectArenasData but supports page-specific variable names.
@@ -1915,7 +1944,19 @@ app.get(BASE + '/api/leaderboard/club-dashboard', requireAuth, async (req, res) 
     const totalKm = Math.round(stats.reduce((s, u) => s + u.totalKm, 0));
     const totalSessions = stats.reduce((s, u) => s + u.sessionCount, 0);
     const activeCount = stats.filter((u) => u.sessionCount > 0).length;
-    res.json({
+    // Mixed endpoint: Starter rankings AND the Pro at-risk data share this
+    // response, so a locked club is NEVER 403'd here — the Pro fields (atRisk
+    // + stats.atRiskCount) are simply omitted and the rankings stay untouched.
+    // The client's `if (atRisk.length)` guard no-ops safely on the omission.
+    // Both branches spell out the full payload so the unlocked shape stays
+    // byte-identical to today (key order preserved).
+    const clubLocked = await computeClubProLocked(membership.club_id);
+    res.json(clubLocked ? {
+      byDistance,
+      bySessions,
+      stats: { totalMembers: memberIds.length, activeCount, totalKm, totalSessions },
+      period
+    } : {
       byDistance,
       bySessions,
       atRisk,
@@ -1943,6 +1984,7 @@ app.post(BASE + '/api/clubs/:clubId/nudge-atrisk', requireAuth, async (req, res)
       .in('role', ['admin', 'coach'])
       .maybeSingle();
     if (!membership) return res.status(403).json({ error: 'Not authorised' });
+    if (await clubProGateBlocked(res, clubId, 'club_at_risk')) return;
     const { data: members } = await supabaseAdmin
       .from('memberships').select('user_id').eq('club_id', clubId);
     const memberIds = [...new Set((members || []).map((m) => m.user_id).filter(Boolean))];
@@ -2025,6 +2067,7 @@ app.get(BASE + '/api/clubs/:clubId/training-load', requireAuth, async (req, res)
       .in('role', ['admin', 'coach'])
       .maybeSingle();
     if (!membership) return res.status(403).json({ error: 'Not authorised' });
+    if (await clubProGateBlocked(res, clubId, 'club_training_load')) return;
 
     const { data: members } = await supabaseAdmin
       .from('memberships').select('user_id').eq('club_id', clubId);
@@ -2166,6 +2209,9 @@ app.post(BASE + '/api/clubs/:clubId/checkin', requireAuth, async (req, res) => {
       .in('role', ['admin', 'coach'])
       .maybeSingle();
     if (!membership) return res.status(403).json({ error: 'Not authorised' });
+    // Check-in rides under the training-load feature (it's the Training tab's
+    // per-member action), so it shares that feature name.
+    if (await clubProGateBlocked(res, clubId, 'club_training_load')) return;
     const { data: target } = await supabaseAdmin
       .from('memberships')
       .select('user_id')
@@ -2535,6 +2581,8 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
       .in('role', ['admin', 'coach'])
       .maybeSingle();
     if (!membership) return res.status(403).json({ error: 'Not authorised' });
+    // One gate covers BOTH report modes (?month and ?mode=year) — same route.
+    if (await clubProGateBlocked(res, clubId, 'club_report')) return;
 
     // Window boundaries follow the requesting COACH's calendar (boundary
     // policy rule 2): club-level instants (joins, events, challenge overlap)
@@ -6408,7 +6456,11 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
       activeChallenges,
       pastChallenges: pastChallenges.slice(0, 5),
       challengeStats,
-      userEmail: req.user.email
+      userEmail: req.user.email,
+      // Session-2 hook: true only when CLUB_PLAN_GATES_ENABLED is on AND this
+      // club is on the free plan (never-throw, computeProLocked convention).
+      // No UI consumes it yet.
+      gating: { clubProLocked: await computeClubProLocked(clubId) }
     };
 
     const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-club-dashboard.html'), 'utf8'), clubData), 'club-dashboard'), (await getUserPlan(req.user.id)) === 'pro');
