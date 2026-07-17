@@ -684,22 +684,15 @@ async function likePost(btn, postId) {
   }
 }
 
-// Posts are now injected server-side via window.ARENAS_DATA.posts (see the
-// /feed route), so we render from that instead of a separate client fetch —
-// the old loadPosts() call was removed to avoid duplicate cards.
-function renderInjectedPosts() {
+// Posts are injected server-side via window.ARENAS_DATA.posts (see the /feed
+// route). Each collector below builds cards WITHOUT inserting them — it returns
+// {ts, id, el} items so renderMergedFeed() can interleave every type into one
+// strictly chronological timeline (newest first, sorted by when the item
+// ENTERED the feed — the social moment — not when its subject occurs).
+function collectPostItems() {
   const data = window.ARENAS_DATA;
-  if (!data) return;
-  const feedItems = document.getElementById('feed-items');
-  if (!feedItems) return;
-  // Remove any prototype training-note cards so real posts replace them.
-  document.querySelectorAll('.post-note-card').forEach(card => {
-    const wrap = card.closest('.feed-item-wrap');
-    if (wrap) wrap.remove();
-  });
-  if (!data.posts || data.posts.length === 0) return;
-  // Render oldest-first with insertBefore so the newest post ends up on top.
-  data.posts.slice().reverse().forEach(post => {
+  if (!data || !data.posts || data.posts.length === 0) return [];
+  return data.posts.map(post => {
     const card = document.createElement('div');
     card.className = 'feed-item-wrap';
     card.dataset.type = post.sport || 'note';
@@ -715,7 +708,8 @@ function renderInjectedPosts() {
       likes: post.likeCount || 0,
       liked: !!post.userLiked
     });
-    feedItems.insertBefore(card, feedItems.firstChild);
+    // Sort key: post creation time.
+    return { ts: Date.parse(post.created_at) || 0, id: String(post.id || ''), el: card };
   });
 }
 
@@ -730,13 +724,11 @@ function getTimeAgo(date) {
 function escFeedAct(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
-// Render activities from followed athletes above the posts. Server injects
+// Activity cards from followed athletes. Server injects
 // window.ARENAS_DATA.feedActivities (already enriched with author display info).
-function renderInjectedActivities() {
+function collectActivityItems() {
   const data = window.ARENAS_DATA;
-  if (!data || !data.feedActivities || !data.feedActivities.length) return;
-  const feedItems = document.getElementById('feed-items');
-  if (!feedItems) return;
+  if (!data || !data.feedActivities || !data.feedActivities.length) return [];
 
   // Icons and tag styles derived from the sports registry.
   const sportIcons = window.ARENAS_SPORT_ICONS || {};
@@ -758,8 +750,7 @@ function renderInjectedActivities() {
     return stats.join('<span style="color:var(--gray-300)">·</span>');
   }
 
-  // Render oldest-first with insertBefore so the newest activity ends up on top.
-  data.feedActivities.slice().reverse().forEach(function(a) {
+  return data.feedActivities.map(function(a) {
     const author = a.author || { name: 'Athlete' };
     const name = author.name || 'Athlete';
     const icon = sportIcons[a.sport] || '🏃';
@@ -784,22 +775,24 @@ function renderInjectedActivities() {
         (stats ? '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">' + stats + '</div>' : '') +
         (a.ai_insight ? '<div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:6px;padding:8px 11px;font-size:12px;color:#7a5c00;display:flex;gap:8px;align-items:flex-start"><span style="font-size:13px;flex-shrink:0">📝</span><span><strong>Coach&#39;s note:</strong> ' + escFeedAct(a.ai_insight) + '</span></div>' : '') +
       '</div>';
-    feedItems.insertBefore(wrap, feedItems.firstChild);
+    // Sort key: when the activity was LOGGED (created_at), not its `date`
+    // field — an activity logged today for last Tuesday sorts at today's
+    // position while the card still shows the Tuesday date above.
+    var ts = Date.parse(a.created_at || a.date) || 0;
+    return { ts: ts, id: String(a.id || ''), el: wrap };
   });
 }
 
-// Render "X is going to <event>" cards from people the viewer follows. Server
+// "X is going to <event>" cards from people the viewer follows. Server
 // injects window.ARENAS_DATA.followingRsvps (names from auth metadata, events
 // joined server-side). All dynamic text is escaped.
-function renderFollowingRsvps() {
+function collectRsvpItems() {
   const data = window.ARENAS_DATA;
-  if (!data || !data.followingRsvps || !data.followingRsvps.length) return;
-  const feedItems = document.getElementById('feed-items');
-  if (!feedItems) return;
+  if (!data || !data.followingRsvps || !data.followingRsvps.length) return [];
   const B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
   const sportIcons = window.ARENAS_SPORT_ICONS || {}; // registry emoji + legacy drift entries
 
-  data.followingRsvps.slice().reverse().forEach(function (r) {
+  return data.followingRsvps.map(function (r) {
     const author = r.author || { name:'Athlete' };
     const name = author.name || 'Athlete';
     const ev = r.event || {};
@@ -829,8 +822,34 @@ function renderFollowingRsvps() {
           '<span style="font-size:11px;color:var(--gray-400)">View →</span>' +
         '</div>' +
       '</div>';
-    feedItems.insertBefore(wrap, feedItems.firstChild);
+    // Sort key: when the RSVP action happened (row created_at), not the
+    // event's date — the card is about the follow-worthy moment of RSVPing.
+    return { ts: Date.parse(r.created_at) || 0, id: String(r.id || ''), el: wrap };
   });
+}
+
+// ── MERGED TIMELINE ── One strictly chronological render across all types:
+// newest first regardless of type, replacing the old per-type sections
+// (RSVPs, then activities, then posts). Stable sort with id tiebreak so
+// identical timestamps keep a deterministic order. Card designs, dataset.type
+// tagging (and therefore the filter pills) are untouched — this is ordering.
+function renderMergedFeed() {
+  const feedItems = document.getElementById('feed-items');
+  if (!feedItems) return;
+  // Remove any prototype training-note cards so real content replaces them.
+  document.querySelectorAll('.post-note-card').forEach(card => {
+    const wrap = card.closest('.feed-item-wrap');
+    if (wrap) wrap.remove();
+  });
+  const items = []
+    .concat(collectPostItems())
+    .concat(collectActivityItems())
+    .concat(collectRsvpItems());
+  items.sort(function (a, b) {
+    if (b.ts !== a.ts) return b.ts - a.ts;
+    return a.id < b.id ? 1 : (a.id > b.id ? -1 : 0);
+  });
+  items.forEach(function (item) { feedItems.appendChild(item.el); });
 }
 
 // Honest empty states — shown only when there is genuinely no real content in
@@ -866,9 +885,7 @@ function renderFeedEmptyState() {
   feedItems.appendChild(wrap);
 }
 
-renderInjectedPosts();
-renderInjectedActivities();
-renderFollowingRsvps();
+renderMergedFeed();
 renderFeedEmptyState();
 </script>
 <script>

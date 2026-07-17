@@ -1609,11 +1609,14 @@ async function buildFeedActivities(limit, currentUserId) {
   }
   const feedUserIds = [...new Set([...followingIds, currentUserId].filter(Boolean))];
   if (!feedUserIds.length) return [];
+  // Ordered by created_at (when the activity was LOGGED), not the activity's
+  // `date` field: the feed sorts by the social moment, so an activity logged
+  // today for last Tuesday must be inside the fetch window at today's position.
   const { data, error } = await supabaseAdmin
     .from('activities')
     .select('*')
     .in('user_id', feedUserIds)
-    .order('date', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(limit);
   if (error || !data) return [];
   return enrichActivities(data);
@@ -1631,7 +1634,7 @@ async function buildFeedRsvps(currentUserId) {
     if (!followingIds.length) return [];
     const { data: rsvpRows } = await supabaseAdmin
       .from('event_rsvps')
-      .select('event_id, user_id, status, created_at')
+      .select('id, event_id, user_id, status, created_at')
       .in('user_id', followingIds)
       .eq('status', 'going')
       .order('created_at', { ascending: false })
@@ -1647,6 +1650,7 @@ async function buildFeedRsvps(currentUserId) {
     const nameMap = await buildUserDisplayMap(rsvpRows.map(r => r.user_id));
     return rsvpRows
       .map(r => ({
+        id: r.id,
         user_id: r.user_id,
         created_at: r.created_at || null,
         author: nameMap[r.user_id] || { name: 'Athlete', handle: 'athlete' },

@@ -46,3 +46,4 @@
 - [html-arenas country/state + tz](html-arenas-tz-country-audit.md) — country/state + /log date SHIPPED (countries.js SSOT; updateUserById MERGES metadata → clear with null not delete); single-user tz day-math now shipped, see timezones topic.
 - [html-arenas handle hiding](html-arenas-handle-hiding.md) — handles display-hidden but preserved in data; Session-1 surfaces done, sidebar chrome = Session 2; disambiguation via location+sports sublines.
 - [html-arenas club creation](html-arenas-club-create.md) — dual-mode /for-clubs wizard (WIZARD_STEPS), /api/clubs/create w/ 3-club cap, signup fork dead, safe login `next`, email-check enumeration risk.
+- [html-arenas feed timeline](html-arenas-feed-timeline.md) — /feed is one merged newest-first list; sort by "entered feed" created_at per type (never subject date); server windows must order by the same key.
