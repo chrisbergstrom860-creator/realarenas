@@ -1252,7 +1252,22 @@ async function authedCreate(c, invites, nextBtn) {
   // Deep link: ?create=1 (sidebar "+ Create club" and the post-login return
   // path) opens the wizard immediately.
   try {
-    if (new URLSearchParams(window.location.search).get('create') === '1') openSignup();
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('create') === '1') openSignup();
+    // Post-redirect errors from the logged-out form-POST path (the wizard's
+    // state is gone after the redirect, so reopen it with a persistent banner
+    // on the first visible step).
+    const errCode = params.get('error');
+    if (errCode) {
+      openSignup();
+      const banner = document.getElementById('err-' + WIZARD_STEPS[0]);
+      if (banner) {
+        banner.textContent = errCode === 'handle_taken'
+          ? 'That club handle is already taken — please choose a different handle and try again.'
+          : 'Something went wrong creating your club — please try again.';
+        banner.classList.add('show');
+      }
+    }
   } catch (err) {}
 })();
 

@@ -404,6 +404,12 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
     if (clubErr || !club) {
       // Roll back the just-created account so the email can be retried.
       await supabaseAdmin.auth.admin.deleteUser(userId);
+      // The DB's unique index on lower(handle) rejecting the insert is the
+      // real duplicate gate — surface it as the friendly wizard error, not a
+      // generic failure. Rollback above already ran: no half-created account.
+      if (clubErr && clubErr.code === '23505') {
+        return res.redirect(BASE + '/for-clubs?error=handle_taken');
+      }
       return res.redirect(BASE + '/for-clubs?error=club');
     }
 
@@ -500,13 +506,14 @@ app.post(BASE + '/api/clubs/create', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'club_limit', limit: OWNED_CLUB_LIMIT });
     }
 
-    // Explicit handle dedupe. The signup path relies on the insert failing if
-    // the DB enforces uniqueness; this pre-check gives the wizard a friendly
-    // inline error instead.
+    // Friendly handle dedupe pre-check, case-insensitive to match the DB's
+    // unique index on lower(handle). (`ilike` is safe here: the handle regex
+    // above guarantees no wildcard characters.) The index below is the real
+    // gate — this just answers fast for the common case.
     const { data: taken } = await supabaseAdmin
       .from('clubs')
       .select('id')
-      .eq('handle', handle)
+      .ilike('handle', handle)
       .limit(1);
     if (Array.isArray(taken) && taken.length > 0) {
       return res.status(409).json({ error: 'handle_taken' });
@@ -517,7 +524,14 @@ app.post(BASE + '/api/clubs/create', requireAuth, async (req, res) => {
       .insert({ name, handle, sport, city, owner_id: req.user.id })
       .select('id')
       .single();
-    if (clubErr || !club) return res.status(500).json({ error: 'club' });
+    if (clubErr || !club) {
+      // Unique-index rejection (e.g. a race the pre-check missed) is still a
+      // duplicate handle — same friendly 409 as the pre-check, never a 500.
+      if (clubErr && clubErr.code === '23505') {
+        return res.status(409).json({ error: 'handle_taken' });
+      }
+      return res.status(500).json({ error: 'club' });
+    }
 
     const { error: memErr } = await supabaseAdmin
       .from('memberships')
