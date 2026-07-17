@@ -3262,29 +3262,114 @@ document.addEventListener('DOMContentLoaded', function () {
         + (deltaHtml || '') + '</div>';
     }
 
-    // Six-month trend chart, same conventions as the Overview volume card and
-    // the profile Stats chart: readable bar height, each non-zero bar carries
-    // its value above it in its honest unit; zero months get NO label and just
-    // a flat baseline tick (honest gap — no fake minimum stub bar); the report
-    // month is highlighted and always axis-labeled; month names under bars.
-    function trendBars(values, currentVal, label, unit, monthLabels) {
-      var maxV = Math.max.apply(null, values.concat([1]));
+    // ── Six-month trend charts (bars / line) ──────────────────────────────
+    // Same conventions as the Overview volume card and the profile Stats
+    // chart: each non-zero bar/point carries its value in its honest unit;
+    // zero months get NO label (bars: flat baseline tick — honest gap, no
+    // fake minimum stub; line: the polyline dips through the baseline with a
+    // muted tick-style dot — the dip IS the honest representation in a line
+    // chart). The report month is highlighted (#E6B800) and always
+    // axis-labeled; short month names under both modes.
+    // Bars/Line chip toggle: one shared preference for both charts
+    // (localStorage arenas_reports_chart_style, default bars); switching
+    // re-renders both charts instantly from the already-fetched data — no
+    // refetch. Chips are <button>s on purpose: the print stylesheet hides
+    // all buttons, so the PDF prints whichever mode is live, chip-free.
+    var RP_CHART_STYLE_KEY = 'arenas_reports_chart_style';
+    var rpTrendCharts = [];
+    function rpChartStyle() {
+      try { return localStorage.getItem(RP_CHART_STYLE_KEY) === 'line' ? 'line' : 'bars'; }
+      catch (e) { return 'bars'; }
+    }
+
+    function trendBarsInner(values, unit, monthLabels, maxV) {
       var cols = values.map(function (v, i) {
         var isLast = i === values.length - 1;
         var bar = v > 0
-          ? '<div style="width:100%;max-width:34px;height:' + Math.max(4, Math.round((v / maxV) * 72)) + '%;border-radius:3px 3px 0 0;background:' + (isLast ? '#E6B800' : '#FFD21E') + '" title="' + esc(v + unit) + '"></div>'
-          : '<div style="width:100%;max-width:34px;height:3px;border-radius:1px;background:var(--gray-200)"></div>';
+          ? '<div style="width:100%;max-width:68px;height:' + Math.max(4, Math.round((v / maxV) * 72)) + '%;border-radius:3px 3px 0 0;background:' + (isLast ? '#E6B800' : '#FFD21E') + '" title="' + esc(v + unit) + '"></div>'
+          : '<div style="width:100%;max-width:68px;height:3px;border-radius:1px;background:var(--gray-200)"></div>';
         return '<div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end">'
           + (v > 0 ? '<div style="font-size:9px;font-family:var(--mono);font-weight:600;white-space:nowrap;color:' + (isLast ? 'var(--gray-900)' : 'var(--gray-500)') + '">' + esc(v + unit) + '</div>' : '')
           + bar
           + '<div style="font-size:9px;white-space:nowrap;color:' + (isLast ? 'var(--gray-600)' : 'var(--gray-400)') + ';font-weight:' + (isLast ? '600' : '400') + '">' + (monthLabels[i] || '') + '</div></div>';
       }).join('');
-      return '<div style="padding:12px 16px;border-top:var(--border)">'
-        + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">'
-        + '<div style="font-size:11px;color:var(--gray-500)">' + label + '</div>'
-        + '<div style="font-size:12px;font-weight:600;font-family:var(--mono)">' + currentVal + '</div></div>'
-        + '<div style="display:flex;align-items:flex-end;gap:6px;height:96px">' + cols + '</div></div>';
+      return '<div style="display:flex;align-items:flex-end;gap:10px;height:96px">' + cols + '</div>';
     }
+
+    function trendLineInner(values, unit, monthLabels, maxV) {
+      var n = values.length;
+      var plotH = 82;
+      // Same thinning grid rule as the club volume / training-load charts —
+      // at 6 points nothing thins, but the convention is wired for more.
+      var narrow = window.innerWidth <= 480;
+      var every = n >= 24 ? (narrow ? 4 : 2) : n >= 12 ? (narrow ? 2 : 1) : 1;
+      var xPct = function (i) { return (i + 0.5) * 100 / n; };
+      var yPx = function (v) { return plotH - 4 - (v / maxV) * (plotH - 20); };
+      var pts = values.map(function (v, i) { return xPct(i) + ',' + yPx(v); }).join(' ');
+      var overlays = values.map(function (v, i) {
+        var isLast = i === n - 1;
+        var onGrid = isLast || (n - 1 - i) % every === 0;
+        var zero = !(v > 0);
+        var r = isLast ? 4 : 3;
+        var dot = '<div title="' + esc(v + unit) + '" style="position:absolute;left:calc(' + xPct(i) + '% - ' + r + 'px);top:' + (yPx(v) - r) + 'px;width:' + (r * 2) + 'px;height:' + (r * 2) + 'px;border-radius:50%;background:' + (zero ? 'var(--gray-200)' : isLast ? '#E6B800' : '#FFD21E') + ';border:1px solid ' + (zero ? 'var(--gray-400)' : '#E6B800') + '"></div>';
+        var lbl = (!zero && onGrid)
+          ? '<div style="position:absolute;left:' + xPct(i) + '%;top:' + (yPx(v) - 18) + 'px;transform:translateX(-50%);font-size:9px;font-family:var(--mono);font-weight:600;white-space:nowrap;color:' + (isLast ? 'var(--gray-900)' : 'var(--gray-500)') + '">' + esc(v + unit) + '</div>'
+          : '';
+        return dot + lbl;
+      }).join('');
+      var months = monthLabels.slice(0, n).map(function (ml, i) {
+        var isLast = i === n - 1;
+        return '<div style="flex:1;min-width:0;text-align:center;font-size:9px;white-space:nowrap;color:' + (isLast ? 'var(--gray-600)' : 'var(--gray-400)') + ';font-weight:' + (isLast ? '600' : '400') + '">' + (ml || '') + '</div>';
+      }).join('');
+      return '<div style="height:96px;display:flex;flex-direction:column">'
+        + '<div style="position:relative;height:' + plotH + 'px">'
+        + '<svg viewBox="0 0 100 ' + plotH + '" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible" aria-hidden="true">'
+        + '<polyline points="' + pts + '" fill="none" stroke="#E6B800" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>'
+        + overlays + '</div>'
+        + '<div style="display:flex;margin-top:3px">' + months + '</div></div>';
+    }
+
+    function trendChartHtml(cfg, style) {
+      var maxV = Math.max.apply(null, cfg.values.concat([1]));
+      return style === 'line'
+        ? trendLineInner(cfg.values, cfg.unit, cfg.monthLabels, maxV)
+        : trendBarsInner(cfg.values, cfg.unit, cfg.monthLabels, maxV);
+    }
+
+    function rpStyleChip(style, lbl, active) {
+      return '<button data-rp-style="' + style + '" onclick="rpSetChartStyle(\'' + style + '\')" style="font-family:inherit;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;' + (active
+        ? 'border:1px solid var(--yellow-dark);background:var(--yellow-light);color:#7a5c00'
+        : 'border:var(--border);background:white;color:var(--gray-600)') + '">' + lbl + '</button>';
+    }
+
+    function trendBars(values, currentVal, label, unit, monthLabels) {
+      var id = 'rp-trend-chart-' + rpTrendCharts.length;
+      var cfg = { id: id, values: values, unit: unit, monthLabels: monthLabels };
+      rpTrendCharts.push(cfg);
+      var style = rpChartStyle();
+      return '<div style="padding:12px 16px;border-top:var(--border)">'
+        + '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap">'
+        + '<div style="font-size:11px;color:var(--gray-500)">' + label + '</div>'
+        + '<div style="display:flex;align-items:center;gap:10px">'
+        + '<div style="display:flex;gap:4px">' + rpStyleChip('bars', 'Bars', style === 'bars') + rpStyleChip('line', 'Line', style === 'line') + '</div>'
+        + '<div style="font-size:12px;font-weight:600;font-family:var(--mono)">' + currentVal + '</div></div></div>'
+        + '<div id="' + id + '">' + trendChartHtml(cfg, style) + '</div></div>';
+    }
+
+    window.rpSetChartStyle = function (style) {
+      var active = style === 'line' ? 'line' : 'bars';
+      try { localStorage.setItem(RP_CHART_STYLE_KEY, active); } catch (e) { /* private mode — session-only toggle */ }
+      rpTrendCharts.forEach(function (cfg) {
+        var el = document.getElementById(cfg.id);
+        if (el) el.innerHTML = trendChartHtml(cfg, active);
+      });
+      document.querySelectorAll('button[data-rp-style]').forEach(function (b) {
+        var on = b.getAttribute('data-rp-style') === active;
+        b.style.border = on ? '1px solid var(--yellow-dark)' : 'var(--border)';
+        b.style.background = on ? 'var(--yellow-light)' : 'white';
+        b.style.color = on ? '#7a5c00' : 'var(--gray-600)';
+      });
+    };
 
     // Short month names for the 6-month trend window ending at the report
     // month. Integer YYYY-MM math only — Date/toISOString round-trips shift a
@@ -3328,6 +3413,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var m = r.membership, e = r.engagement, ev = r.events, ch = r.challenges;
         var rpMonthLabels = trendMonthLabels(r.month || rpCurrentMonth, 6);
+        rpTrendCharts = [];
         var toneColors = {
           good: { border: '#86EFAC', bg: '#ECFDF5', icon: '💚' },
           neutral: { border: 'var(--gray-200)', bg: 'var(--gray-50)', icon: '📊' },

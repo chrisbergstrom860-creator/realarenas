@@ -33,6 +33,16 @@ always axis-labeled, short month names under bars via integer YYYY-MM math.
 **How to apply:** any new bar strip in the app must follow this convention; the
 fake-minimum-stub pattern has now been cured twice (Overview card, Reports tab).
 
+Bars/Line toggle (2026-07): one shared pref `arenas_reports_chart_style` in
+localStorage (default bars); chip pairs in both chart headers re-render BOTH
+charts from cached configs (no refetch). Line mode = SVG polyline
+(`preserveAspectRatio:none` + `vector-effect:non-scaling-stroke` for uniform
+stroke) with HTML-overlay dots/labels so text stays crisp; zero months dip to
+baseline with a muted dot, no label (the dip IS honest in a line chart — no
+gap-breaking, unlike bars). Chips are `<button>`s ON PURPOSE: the print CSS
+hides all buttons, so the PDF prints whichever mode is live, chip-free —
+don't switch them to divs or they'll print.
+
 ## Known non-blocking quirks
 Challenge participationRate can exceed 100% because challenge joins are permissive
 to non-members; the per-participant activity check is N+1 (fine at ~48-member scale).
