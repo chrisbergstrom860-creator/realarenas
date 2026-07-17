@@ -3270,15 +3270,29 @@ document.addEventListener('DOMContentLoaded', function () {
     // muted tick-style dot — the dip IS the honest representation in a line
     // chart). The report month is highlighted (#E6B800) and always
     // axis-labeled; short month names under both modes.
-    // Bars/Line chip toggle: one shared preference for both charts
-    // (localStorage arenas_reports_chart_style, default bars); switching
-    // re-renders both charts instantly from the already-fetched data — no
-    // refetch. Chips are <button>s on purpose: the print stylesheet hides
-    // all buttons, so the PDF prints whichever mode is live, chip-free.
-    var RP_CHART_STYLE_KEY = 'arenas_reports_chart_style';
+    // Bars/Line chip toggle: INDEPENDENT per chart — a coach may want member
+    // count as bars and training hours as a line at the same time. Chart 0
+    // (Membership) and chart 1 (Engagement) each keep their own preference
+    // (localStorage keys below, default bars, index = render order which is
+    // fixed by the report template). The retired shared key
+    // arenas_reports_chart_style is migrated once: its value seeds any unset
+    // per-chart key, then it is removed. Switching re-renders only that chart
+    // from its already-fetched config — no refetch. Chips are <button>s on
+    // purpose: the print stylesheet hides all buttons, so the PDF prints each
+    // chart in its own live mode, chip-free.
+    var RP_STYLE_KEYS = ['arenas_reports_membership_style', 'arenas_reports_engagement_style'];
+    try {
+      var rpLegacyStyle = localStorage.getItem('arenas_reports_chart_style');
+      if (rpLegacyStyle !== null) {
+        RP_STYLE_KEYS.forEach(function (k) {
+          if (localStorage.getItem(k) === null) localStorage.setItem(k, rpLegacyStyle === 'line' ? 'line' : 'bars');
+        });
+        localStorage.removeItem('arenas_reports_chart_style');
+      }
+    } catch (e) { /* private mode — defaults apply */ }
     var rpTrendCharts = [];
-    function rpChartStyle() {
-      try { return localStorage.getItem(RP_CHART_STYLE_KEY) === 'line' ? 'line' : 'bars'; }
+    function rpChartStyle(idx) {
+      try { return localStorage.getItem(RP_STYLE_KEYS[idx]) === 'line' ? 'line' : 'bars'; }
       catch (e) { return 'bars'; }
     }
 
@@ -3336,34 +3350,36 @@ document.addEventListener('DOMContentLoaded', function () {
         : trendBarsInner(cfg.values, cfg.unit, cfg.monthLabels, maxV);
     }
 
-    function rpStyleChip(style, lbl, active) {
-      return '<button data-rp-style="' + style + '" onclick="rpSetChartStyle(\'' + style + '\')" style="font-family:inherit;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;' + (active
+    function rpStyleChip(idx, style, lbl, active) {
+      return '<button data-rp-chart="' + idx + '" data-rp-style="' + style + '" onclick="rpSetChartStyle(' + idx + ',\'' + style + '\')" style="font-family:inherit;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;' + (active
         ? 'border:1px solid var(--yellow-dark);background:var(--yellow-light);color:#7a5c00'
         : 'border:var(--border);background:white;color:var(--gray-600)') + '">' + lbl + '</button>';
     }
 
     function trendBars(values, currentVal, label, unit, monthLabels) {
-      var id = 'rp-trend-chart-' + rpTrendCharts.length;
-      var cfg = { id: id, values: values, unit: unit, monthLabels: monthLabels };
+      var idx = rpTrendCharts.length;
+      var id = 'rp-trend-chart-' + idx;
+      var cfg = { id: id, idx: idx, values: values, unit: unit, monthLabels: monthLabels };
       rpTrendCharts.push(cfg);
-      var style = rpChartStyle();
+      var style = rpChartStyle(idx);
       return '<div style="padding:12px 16px;border-top:var(--border)">'
         + '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap">'
         + '<div style="font-size:11px;color:var(--gray-500)">' + label + '</div>'
         + '<div style="display:flex;align-items:center;gap:10px">'
-        + '<div style="display:flex;gap:4px">' + rpStyleChip('bars', 'Bars', style === 'bars') + rpStyleChip('line', 'Line', style === 'line') + '</div>'
+        + '<div style="display:flex;gap:4px">' + rpStyleChip(idx, 'bars', 'Bars', style === 'bars') + rpStyleChip(idx, 'line', 'Line', style === 'line') + '</div>'
         + '<div style="font-size:12px;font-weight:600;font-family:var(--mono)">' + currentVal + '</div></div></div>'
         + '<div id="' + id + '">' + trendChartHtml(cfg, style) + '</div></div>';
     }
 
-    window.rpSetChartStyle = function (style) {
+    window.rpSetChartStyle = function (idx, style) {
       var active = style === 'line' ? 'line' : 'bars';
-      try { localStorage.setItem(RP_CHART_STYLE_KEY, active); } catch (e) { /* private mode — session-only toggle */ }
-      rpTrendCharts.forEach(function (cfg) {
+      try { localStorage.setItem(RP_STYLE_KEYS[idx], active); } catch (e) { /* private mode — session-only toggle */ }
+      var cfg = rpTrendCharts[idx];
+      if (cfg) {
         var el = document.getElementById(cfg.id);
         if (el) el.innerHTML = trendChartHtml(cfg, active);
-      });
-      document.querySelectorAll('button[data-rp-style]').forEach(function (b) {
+      }
+      document.querySelectorAll('button[data-rp-chart="' + idx + '"]').forEach(function (b) {
         var on = b.getAttribute('data-rp-style') === active;
         b.style.border = on ? '1px solid var(--yellow-dark)' : 'var(--border)';
         b.style.background = on ? 'var(--yellow-light)' : 'white';

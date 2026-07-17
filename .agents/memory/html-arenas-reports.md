@@ -33,9 +33,13 @@ always axis-labeled, short month names under bars via integer YYYY-MM math.
 **How to apply:** any new bar strip in the app must follow this convention; the
 fake-minimum-stub pattern has now been cured twice (Overview card, Reports tab).
 
-Bars/Line toggle (2026-07): one shared pref `arenas_reports_chart_style` in
-localStorage (default bars); chip pairs in both chart headers re-render BOTH
-charts from cached configs (no refetch). Line mode = SVG polyline
+Bars/Line toggle (2026-07): INDEPENDENT per chart — localStorage keys
+`arenas_reports_membership_style` (chart 0) / `arenas_reports_engagement_style`
+(chart 1), indexed by render order; both default bars. The old shared key
+`arenas_reports_chart_style` is retired: a one-time init migration seeds unset
+per-chart keys from it, then removes it. Each chip pair controls/reflects only
+its own chart (re-render from cached config, no refetch). If a third trend
+chart is ever added, RP_STYLE_KEYS must grow in lockstep. Line mode = SVG polyline
 (`preserveAspectRatio:none` + `vector-effect:non-scaling-stroke` for uniform
 stroke) with HTML-overlay dots/labels so text stays crisp; zero months dip to
 baseline with a muted dot, no label (the dip IS honest in a line chart — no
