@@ -838,7 +838,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
         <div style="font-size:16px;font-weight:700;color:var(--gray-900)">Club report</div>
         <div style="font-size:12px;color:var(--gray-400);margin-top:2px" id="rp-sub">Ready to share with your committee or sponsors</div>
       </div>
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end" id="rp-controls">
         <div style="display:flex;gap:4px" id="rp-mode-chips">
           <button data-rp-mode="month" onclick="rpSetPeriodMode('month')" style="font-family:inherit;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;border:var(--border);background:white;color:var(--gray-600)">Month</button>
           <button data-rp-mode="year" onclick="rpSetPeriodMode('year')" style="font-family:inherit;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;border:var(--border);background:white;color:var(--gray-600)">Year</button>
@@ -2242,6 +2242,10 @@ document.addEventListener('DOMContentLoaded', function () {
   var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
   var data = window.ARENAS_DATA || {};
   var clubId = (data.club && data.club.id) || null;
+  // Club Pro gating (dormant unless CLUB_PLAN_GATES_ENABLED server-side; false
+  // whenever the flag is off — today's behaviour). The server already omits
+  // atRisk/atRiskCount for a locked club; this drives the cosmetic states.
+  var clubProLocked = !!(data.gating && data.gating.clubProLocked);
   var lbPeriod = 'week';
 
   var avColors = [
@@ -2311,7 +2315,17 @@ document.addEventListener('DOMContentLoaded', function () {
         set('lb-stat-members', stats.totalMembers || 0);
         set('lb-stat-km', (stats.totalKm || 0) + ' km');
         set('lb-stat-sessions', stats.totalSessions || 0);
-        set('lb-stat-atrisk', stats.atRiskCount || 0);
+        if (clubProLocked) {
+          // Locked treatment: dashed value + Club Pro tag. Kept visible (not
+          // hidden) so the 4-column stat grid doesn't render with a hole; the
+          // server omits atRiskCount, so `|| 0` would otherwise show a
+          // misleading real-looking 0.
+          var arVal = document.getElementById('lb-stat-atrisk');
+          if (arVal) { arVal.textContent = '—'; arVal.style.color = 'var(--gray-300)'; }
+          if (arVal && arVal.nextElementSibling) arVal.nextElementSibling.textContent = 'At risk · 🔒 Club Pro';
+        } else {
+          set('lb-stat-atrisk', stats.atRiskCount || 0);
+        }
         set('lb-dist-period', 'km logged · ' + periodText);
         set('lb-sess-period', 'activities logged · ' + periodText);
         var distEl = document.getElementById('lb-distance-rows');
@@ -2379,6 +2393,9 @@ document.addEventListener('DOMContentLoaded', function () {
   var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
   var data = window.ARENAS_DATA || {};
   var clubId = (data.club && data.club.id) || null;
+  // Club Pro gating (dormant unless CLUB_PLAN_GATES_ENABLED server-side; false
+  // whenever the flag is off — today's behaviour).
+  var clubProLocked = !!(data.gating && data.gating.clubProLocked);
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -2409,8 +2426,36 @@ document.addEventListener('DOMContentLoaded', function () {
     renderTlMembers();
   };
 
+  // Club Pro gate: skip the gated fetch entirely (its 403 would leave broken
+  // charts) and swap the tab body for the locked panel, adapted from the
+  // profile Stats-tab treatment. The sidebar tab stays visible — locked, never
+  // vanished — and the nav badge stays silent because the only code that shows
+  // it lives in the success path below. Never runs when the flag is off.
+  var tlLockedRendered = false;
+  function renderTlLocked() {
+    if (tlLockedRendered) return;
+    var tab = document.getElementById('tab-training');
+    if (!tab) return;
+    tlLockedRendered = true;
+    tab.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:var(--border);background:white">' +
+        '<div><div style="font-size:16px;font-weight:700;color:var(--gray-900)">Training load</div>' +
+        '<div style="font-size:12px;color:var(--gray-400);margin-top:2px">Weekly training hours per member \u00b7 based on logged activity duration</div></div>' +
+      '</div>' +
+      '<div class="card" style="margin:14px">' +
+        '<div style="text-align:center;padding:48px 24px;max-width:460px;margin:0 auto">' +
+          '<div style="font-size:36px;margin-bottom:12px">📈</div>' +
+          '<div style="font-size:16px;font-weight:700;color:var(--gray-900);margin-bottom:8px">Training load is a Club Pro feature</div>' +
+          '<div style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:18px">See who\u2019s overdoing it and who\u2019s falling behind \u2014 weekly hours, load trends, and per-member training volume for your whole club.</div>' +
+          '<button onclick="window.location.href=window.BASE + \'/billing\'" style="padding:9px 20px;border-radius:8px;font-size:13px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">🔒 Upgrade to Club Pro →</button>' +
+          '<div style="font-size:11px;color:var(--gray-400);line-height:1.5;margin-top:10px;max-width:340px;margin-left:auto;margin-right:auto">Club Pro renews automatically every month at $29/month and continues until you cancel. Cancel anytime from the billing page.</div>' +
+        '</div>' +
+      '</div>';
+  }
+
   function loadTrainingLoad() {
     if (!clubId) return;
+    if (clubProLocked) { renderTlLocked(); return; }
     fetch(B + '/api/clubs/' + clubId + '/training-load?weeks=' + tlWeeks)
       .then(function (r) { return r.json(); })
       .then(function (result) {
@@ -2648,6 +2693,9 @@ document.addEventListener('DOMContentLoaded', function () {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
     var sportIcons = Object.assign({ any: '⚡' }, window.ARENAS_SPORT_ICONS); // registry + challenges-only 'any'
+    // Club Pro gating (dormant unless CLUB_PLAN_GATES_ENABLED server-side; false
+    // whenever the flag is off — today's behaviour).
+    var clubProLocked = !!(window.ARENAS_DATA && window.ARENAS_DATA.gating && window.ARENAS_DATA.gating.clubProLocked);
     function setText(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
 
     window.navToTab = function (tab) {
@@ -2693,9 +2741,11 @@ document.addEventListener('DOMContentLoaded', function () {
       setText('ov-kpi-challenges', activeChallenges.length);
       setText('ov-kpi-challenges-sub', totalParticipants + ' total participant' + (totalParticipants !== 1 ? 's' : ''));
 
-      // Training load (live fetch).
+      // Training load (live fetch). Skipped when Club Pro-locked — the endpoint
+      // would just 403; the hours KPI keeps its static placeholder and no
+      // at-risk/overdoing attention items (or their nudge buttons) are built.
       var tlData = null;
-      try {
+      if (!clubProLocked) try {
         var tlResponse = await fetch(B + '/api/clubs/' + clubId + '/training-load?weeks=6');
         tlData = await tlResponse.json();
         if (tlData && !tlData.error) {
@@ -3214,6 +3264,9 @@ document.addEventListener('DOMContentLoaded', function () {
     // Period state. Month/Year is persisted (arenas_reports_period_mode);
     // the "now" clamps reuse the page's existing UTC-now convention (accepted
     // Dec-31/Jan-1 edge in UTC+ zones — the server clamps the year too).
+    // Club Pro gating (dormant unless CLUB_PLAN_GATES_ENABLED server-side; false
+    // whenever the flag is off — today's behaviour).
+    var clubProLocked = !!(window.ARENAS_DATA && window.ARENAS_DATA.gating && window.ARENAS_DATA.gating.clubProLocked);
     var RP_MODE_KEY = 'arenas_reports_period_mode';
     var rpPeriodMode = 'month';
     try { if (localStorage.getItem(RP_MODE_KEY) === 'year') rpPeriodMode = 'year'; } catch (e) { /* private mode — month default */ }
@@ -3460,11 +3513,40 @@ document.addEventListener('DOMContentLoaded', function () {
         + '<div style="font-size:12px;font-weight:600;font-family:var(--mono);color:var(--gray-900)">' + val + '</div></div>';
     }
 
+    // Club Pro gate: skip the gated fetch (its 403 would render as an error
+    // string) and swap the report body for the locked panel, adapted from the
+    // profile Stats-tab treatment. The period chips, month nav, and Export PDF
+    // button hide — there is nothing to export. A raw Ctrl/Cmd+P still produces
+    // a sane document: the print CSS hides all buttons, so the locked card
+    // prints as icon + headline + copy + disclosure under the report header.
+    // Never runs when the flag is off.
+    var rpLockedRendered = false;
+    function renderRpLocked(body) {
+      if (rpLockedRendered) return;
+      rpLockedRendered = true;
+      var controls = document.getElementById('rp-controls');
+      if (controls) controls.style.display = 'none';
+      var subEl = document.getElementById('rp-sub');
+      if (subEl) subEl.textContent = 'Available on Club Pro';
+      if (!body) return;
+      body.innerHTML =
+        '<div class="card" style="margin:14px">' +
+          '<div style="text-align:center;padding:48px 24px;max-width:460px;margin:0 auto">' +
+            '<div style="font-size:36px;margin-bottom:12px">📊</div>' +
+            '<div style="font-size:16px;font-weight:700;color:var(--gray-900);margin-bottom:8px">Club reports are a Club Pro feature</div>' +
+            '<div style="font-size:13px;color:var(--gray-500);line-height:1.6;margin-bottom:18px">Membership, training volume, engagement, and month-over-month trends in one clean summary \u2014 exportable as a PDF for your committee or sponsors.</div>' +
+            '<button onclick="window.location.href=window.BASE + \'/billing\'" style="padding:9px 20px;border-radius:8px;font-size:13px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">🔒 Upgrade to Club Pro →</button>' +
+            '<div style="font-size:11px;color:var(--gray-400);line-height:1.5;margin-top:10px;max-width:340px;margin-left:auto;margin-right:auto">Club Pro renews automatically every month at $29/month and continues until you cancel. Cancel anytime from the billing page.</div>' +
+          '</div>' +
+        '</div>';
+    }
+
     async function loadClubReport() {
       var data = window.ARENAS_DATA;
       var clubId = data && data.club && data.club.id;
       if (!clubId) return;
       var body = document.getElementById('rp-report-body');
+      if (clubProLocked) { renderRpLocked(body); return; }
       if (body) body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Loading report…</div>';
       try {
         var qs = rpPeriodMode === 'year'
