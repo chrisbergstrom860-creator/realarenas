@@ -27,3 +27,24 @@ comes from `buildUserProfileMap` (auth metadata — no `profiles` table). Challe
 ## Known non-blocking quirks
 Challenge participationRate can exceed 100% because challenge joins are permissive
 to non-members; the per-participant activity check is N+1 (fine at ~48-member scale).
+
+## Print/PDF export (fixed 2026-07)
+Printing anything inside the app shell blanks out unless the shell is flattened:
+`<main class="main">` is the scrollport (overflow-y:auto) inside the fixed-100vh
+`.app` grid, and printing a scroll container emits only its visible sliver — with
+topbar/sidebar hidden, grid auto-placement collapses `<main>` into the 56px track.
+**Why:** the Reports PDF printed only the title strip; body vanished.
+**How to apply:** any future print view must, under `@media print`, set
+`.app { display:block }` + `main.main { display:block; overflow:visible; height:auto }`
+(`main.main` not bare `main` — must out-specify `body:has(.bottom-nav) .main
+{ padding-bottom:76px !important }`, which still matches when the nav is
+display:none). Also: A4 content width (~680px) is under the 768px mobile
+breakpoint, so mobile shell rules (incl. fixed `.bottom-nav`) apply in print —
+hide the nav explicitly; div-bar charts need `print-color-adjust: exact`;
+`break-inside: avoid` on `#rp-report-body > div` keeps cards whole. A
+`beforeprint` listener adds `printing-report` when the Reports tab is `.active`
+so plain Ctrl+P works, not just the Export PDF button.
+PDF verification tooling kept installed: nix `chromium` + `playwright-core`
+devDep in `scripts/` (page.pdf → pdftotext/pdftoppm). Gotcha: after
+`emulateMedia({media:'screen'})`, reset with `media:null` or page.pdf renders
+screen styles.

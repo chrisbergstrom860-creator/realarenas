@@ -268,17 +268,40 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
 @keyframes fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .fade-in { animation: fade-in 0.22s ease forwards; }
 
-/* Export PDF (Reports tab): print only the report, hiding chrome and buttons. */
+/* Export PDF (Reports tab): print only the report, hiding chrome and buttons.
+   The report body must be UN-TRAPPED from the app shell: on screen, <main> is
+   the scrollport (overflow-y:auto) inside the fixed-100vh .app grid, and
+   printing a scroll container emits only its visible sliver — with the topbar
+   and sidebar hidden, grid auto-placement collapsed <main> into the 56px track
+   and the whole report body vanished from the PDF (only the title strip
+   printed). Flattening .app/main to plain auto-height blocks lets the full
+   report flow across pages. The bottom nav must be hidden explicitly: print
+   page width (~680px at A4) is under the 768px mobile breakpoint, so the
+   mobile shell rules apply in print context and the fixed bottom nav would
+   otherwise stamp onto the output. print-color-adjust keeps the div-based
+   trend bars and card tints visible (browsers strip backgrounds by default). */
 @media print {
   body.printing-report .topbar,
   body.printing-report .sidebar,
+  body.printing-report .bottom-nav,
+  body.printing-report #notifications-panel,
   body.printing-report .toast,
+  body.printing-report .modal-overlay,
   body.printing-report button,
   body.printing-report .btn { display: none !important; }
   body.printing-report .tab-content { display: none !important; }
-  body.printing-report #tab-reports { display: block !important; }
-  body.printing-report main { padding: 0 !important; }
+  body.printing-report #tab-reports { display: block !important; padding: 0 !important; }
+  body.printing-report .app { display: block !important; min-height: 0 !important; }
+  /* main.main (not bare main): must out-specify the mobile shell's
+     body:has(.bottom-nav) .main { padding-bottom:76px !important }, which
+     still matches in print (a display:none bottom nav still exists). */
+  body.printing-report main.main { display: block !important; overflow: visible !important; height: auto !important; padding: 0 !important; }
   body.printing-report { background: white !important; }
+  body.printing-report * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  /* Sensible page breaks: never slice a report card (headline, Membership,
+     Engagement, Events, Challenges) or the header strip mid-row. */
+  body.printing-report #rp-report-body > div,
+  body.printing-report #tab-reports > div:first-child { break-inside: avoid; }
   @page { margin: 1.5cm; }
 }
 </style>
@@ -3208,6 +3231,17 @@ document.addEventListener('DOMContentLoaded', function () {
       window.print();
       setTimeout(function () { document.body.classList.remove('printing-report'); }, 500);
     };
+    // Plain browser print (Ctrl/Cmd+P) never went through exportReport, so the
+    // printing-report class was missing and NONE of the print rules applied —
+    // the raw app shell printed (scroll-clipped body, bottom nav leaking).
+    // Gate on the Reports tab being active so printing other tabs is unchanged.
+    window.addEventListener('beforeprint', function () {
+      var t = document.getElementById('tab-reports');
+      if (t && t.classList.contains('active')) document.body.classList.add('printing-report');
+    });
+    window.addEventListener('afterprint', function () {
+      document.body.classList.remove('printing-report');
+    });
 
     function delta(val, suffix, invert) {
       suffix = suffix || '';
