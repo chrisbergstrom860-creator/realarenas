@@ -24,6 +24,8 @@ description: Photo avatars + club logos end-state - storage pipeline, shared ren
 ## Payload convention
 - Any payload/API carrying people MUST include the avatar field: `avatar_url` everywhere, EXCEPT `avatarUrl` in recent-activity + club feed items and `coachAvatarUrl` in member-home announcements (legacy camelCase — match the page, don't rename).
 - Names AND avatars both come from auth user_metadata via displayFromUser/buildUserProfileMap/buildUserDisplayMap — one added field there propagates everywhere.
+- **Missed-surface bug class (found twice post-rollout):** a converted renderer calling `avatarHtml(x.avatar_url…)` silently shows initials forever if the route builds its people payload ad hoc (e.g. inline getUserById loop) and omits avatar_url. When debugging "photo user shows initials": check the PAYLOAD first, the renderer second. Fixed instances: /profile followingList/followerList; club-dashboard Training-load + Overview recent-activity had the opposite miss (payload fine, renderer initials-only); billing/calendar sidebar-footer lacked the `sf-av` class the identity script targets (it fills only `[onclick*="userMenu"]` + `.sf-av` — new sidebar footers must carry `sf-av` + `overflow:hidden`).
+- Deliberately-initials surfaces (OK to leave): club-invite pending/history rows — email-bound, no user_id linkage; email→user lookup would need a paged listUsers scan (non-additive, enumeration-shaped). Dead `initialsOf` helper defs remain in club-dashboard/challenges/leaderboards/club-member with zero call sites (rollout leftovers, harmless).
 - Club logos flow via getSidebarClubs (sidebar/dropdown/profile Clubs tab) + per-route selects (dashboard, club-member, JOIN_DATA club.logo_url).
 
 ## JK retirement convention (repo is grep-clean of "JK")

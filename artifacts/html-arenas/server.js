@@ -4993,6 +4993,10 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
           id,
           name: disp.name,
           handle: disp.handle,
+          // Real photo for the Following/Followers cards — the client renders
+          // via avatarHtml(a.avatar_url), which was silently falling back to
+          // initials because this payload never carried the field.
+          avatar_url: disp.avatar_url || null,
           bio: m.bio || null,
           location: m.location || null,
           sports: Array.isArray(m.sports) ? m.sports : [],
