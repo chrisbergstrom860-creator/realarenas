@@ -432,7 +432,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
           <div style="font-size:12px;font-weight:600">📊 Club training volume</div>
           <span onclick="navToTab('training')" style="font-size:11px;color:var(--gray-400);cursor:pointer">Details →</span>
         </div>
-        <div id="ov-volume-chart" style="display:flex;align-items:flex-end;gap:6px;height:70px;padding:12px 14px 8px">
+        <div id="ov-volume-chart" style="display:flex;align-items:flex-end;gap:6px;height:140px;padding:12px 14px 8px">
           <div style="flex:1;text-align:center;font-size:12px;color:var(--gray-400);align-self:center">Loading…</div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);border-top:var(--border)" id="ov-volume-stats"></div>
@@ -2788,10 +2788,17 @@ document.addEventListener('DOMContentLoaded', function () {
           var maxVal = Math.max.apply(null, weekly.concat([1]));
           chartEl.innerHTML = weekly.map(function (h, i) {
             var isCurrent = i === weekly.length - 1;
-            var heightPct = Math.max(6, Math.round((h / maxVal) * 85));
-            return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end">' +
-              '<div style="width:100%;max-width:30px;height:' + heightPct + '%;border-radius:3px 3px 0 0;background:' + (isCurrent ? '#E6B800' : '#FFD21E') + '" title="' + esc(h) + 'h"></div>' +
-              '<div style="font-size:9px;color:' + (isCurrent ? 'var(--gray-600)' : 'var(--gray-400)') + ';font-weight:' + (isCurrent ? '600' : '400') + '">' + (isCurrent ? 'Now' : esc(labels[i] || '')) + '</div></div>';
+            // Same conventions as the profile Stats chart: each bar carries its
+            // value ("Xh" — the chart plots total hours/week) above it; zero
+            // weeks get NO value label, just a flat baseline tick (honest gap).
+            // "Now" stays highlighted and always axis-labeled.
+            var bar = h > 0
+              ? '<div style="width:100%;max-width:30px;height:' + Math.max(4, Math.round((h / maxVal) * 78)) + '%;border-radius:3px 3px 0 0;background:' + (isCurrent ? '#E6B800' : '#FFD21E') + '" title="' + esc(h) + 'h"></div>'
+              : '<div style="width:100%;max-width:30px;height:3px;border-radius:1px;background:var(--gray-200)"></div>';
+            return '<div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end">' +
+              (h > 0 ? '<div style="font-size:9px;font-family:var(--mono);font-weight:600;white-space:nowrap;color:' + (isCurrent ? 'var(--gray-900)' : 'var(--gray-500)') + '">' + esc(h) + 'h</div>' : '') +
+              bar +
+              '<div style="font-size:9px;white-space:nowrap;color:' + (isCurrent ? 'var(--gray-600)' : 'var(--gray-400)') + ';font-weight:' + (isCurrent ? '600' : '400') + '">' + (isCurrent ? 'Now' : esc(labels[i] || '')) + '</div></div>';
           }).join('');
         }
         var statsEl = document.getElementById('ov-volume-stats');
@@ -2799,10 +2806,12 @@ document.addEventListener('DOMContentLoaded', function () {
           var tlMembers = tlData.members || [];
           var totalSessions = tlMembers.reduce(function (s, m) { return s + (m.sessionsThisWeek || 0); }, 0);
           var totalKm = Math.round(tlMembers.reduce(function (s, m) { return s + (m.kmThisWeek || 0); }, 0) * 10) / 10;
+          // Value/label scale matches the profile Overview stat cards
+          // (16px mono value, 9px small-caps label) — not invented sizes.
           statsEl.innerHTML =
-            '<div style="padding:9px 12px;text-align:center;border-right:var(--border)"><div style="font-size:13px;font-weight:700;font-family:var(--mono)">' + ((tlData.stats && tlData.stats.clubThisWeek) || 0) + 'h</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;margin-top:1px">This week</div></div>' +
-            '<div style="padding:9px 12px;text-align:center;border-right:var(--border)"><div style="font-size:13px;font-weight:700;font-family:var(--mono)">' + totalSessions + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;margin-top:1px">Sessions</div></div>' +
-            '<div style="padding:9px 12px;text-align:center"><div style="font-size:13px;font-weight:700;font-family:var(--mono)">' + totalKm + ' km</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;margin-top:1px">Distance</div></div>';
+            '<div style="padding:10px 12px;text-align:center;border-right:var(--border)"><div style="font-size:16px;font-weight:700;font-family:var(--mono);line-height:1">' + ((tlData.stats && tlData.stats.clubThisWeek) || 0) + 'h</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:3px">This week</div></div>' +
+            '<div style="padding:10px 12px;text-align:center;border-right:var(--border)"><div style="font-size:16px;font-weight:700;font-family:var(--mono);line-height:1">' + totalSessions + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Sessions</div></div>' +
+            '<div style="padding:10px 12px;text-align:center"><div style="font-size:16px;font-weight:700;font-family:var(--mono);line-height:1">' + totalKm + ' km</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:3px">Distance</div></div>';
         }
       }
 
