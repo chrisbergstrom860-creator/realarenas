@@ -4943,14 +4943,13 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
     const meta = req.user.user_metadata || {};
     const display = displayFromUser(req.user);
 
-    const [postCountRes, followerRes, followingRes, postsRes, membershipRes, clubsRes, followingListRes, followerListRes, activitiesRes, activityCountRes] = await Promise.all([
+    const [postCountRes, followerRes, followingRes, postsRes, clubsRes, followingListRes, followerListRes, activitiesRes, activityCountRes] = await Promise.all([
       supabaseAdmin.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', req.user.id),
       supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', req.user.id),
       supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', req.user.id),
       supabaseAdmin.from('posts').select('id, content, sport, feeling, created_at').eq('user_id', req.user.id).order('created_at', { ascending: false }).limit(10),
-      supabaseAdmin.from('memberships').select('role, clubs (name, handle)').eq('user_id', req.user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
-      // All clubs the viewer belongs to (My Clubs tab). No `status` column on
-      // memberships — every row is treated as an active membership.
+      // All clubs the viewer belongs to (hero club pills + My Clubs tab). No
+      // `status` column on memberships — every row is an active membership.
       supabaseAdmin.from('memberships').select('role, clubs:club_id (id, name, handle, sport, city, logo_url)').eq('user_id', req.user.id).order('created_at', { ascending: false }),
       // Raw follow edges (no `created_at` ordering — not guaranteed on this table).
       supabaseAdmin.from('follows').select('following_id').eq('follower_id', req.user.id),
@@ -4965,11 +4964,6 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
       // Activities list and the Stats & PRs tab. Missing table → count null → 0.
       supabaseAdmin.from('activities').select('*', { count: 'exact', head: true }).eq('user_id', req.user.id)
     ]);
-
-    const membership = membershipRes.data || null;
-    const club = membership && membership.clubs
-      ? (Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs)
-      : null;
 
     // Flatten all memberships into a clubs[] array (joined club + the viewer's role).
     const userClubs = (clubsRes.data || []).map(m => {
@@ -5065,7 +5059,6 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
       followingCount: followingRes.count || 0,
       posts: postsRes.data || [],
       activitySports,
-      membership: membership ? { role: membership.role, club } : null,
       clubs: userClubs,
       followingList,
       followerList,

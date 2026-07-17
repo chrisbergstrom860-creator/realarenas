@@ -76,11 +76,16 @@ button,select,input,textarea{font-family:var(--font)}
 .hero-stat-label{font-size:10px;color:var(--gray-500);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
 .hero-stat-sep{width:1px;background:rgba(255,255,255,.1);align-self:stretch;margin:2px 0}
 .hero-actions{display:flex;flex-direction:column;gap:8px;flex-shrink:0;align-self:center;animation:slide-in .3s ease .3s both}
-.hero-rank-badge{background:var(--yellow);color:var(--gray-900);padding:6px 16px;border-radius:20px;font-size:12px;font-weight:700;text-align:center;font-family:var(--mono);display:flex;align-items:center;gap:6px;justify-content:center}
+.hero-clubs{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;max-width:280px}
+.hero-club-pill{background:var(--yellow);color:var(--gray-900);padding:5px 13px 5px 6px;border-radius:20px;font-size:12px;font-weight:700;font-family:var(--mono);display:flex;align-items:center;gap:7px;cursor:pointer;border:none;transition:transform .15s,box-shadow .15s}
+.hero-club-pill:hover{transform:translateY(-1px);box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.hero-club-tile{width:22px;height:22px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.08);font-size:12px;flex-shrink:0}
 @media (max-width:768px){
   body:has(.bottom-nav) .hero-inner{flex-direction:column;align-items:stretch;gap:16px;padding:20px 16px}
   body:has(.bottom-nav) .hero-stats{gap:0;justify-content:space-between}
   body:has(.bottom-nav) .hero-actions{align-self:stretch}
+  body:has(.bottom-nav) .hero-clubs{justify-content:flex-start;max-width:none}
+  body:has(.bottom-nav) .hero-av-edit{opacity:1}
 }
 .hero-tab-bar{background:white;border-bottom:var(--border);position:sticky;top:56px;z-index:50}
 .htb-inner{max-width:1200px;margin:0 auto;padding:0 28px;display:flex;gap:0}
@@ -356,8 +361,8 @@ button,select,input,textarea{font-family:var(--font)}
     <div class="hero-bg-grid"></div>
     <div class="hero-inner">
       <div class="hero-av-wrap">
-        <div class="hero-av" onclick="openModal('edit-profile')">·</div>
-        <div class="hero-av-edit" onclick="openModal('edit-profile')">✏️</div>
+        <div class="hero-av" onclick="openModal('avatar-photo')" title="Change profile photo">·</div>
+        <div class="hero-av-edit" onclick="openModal('avatar-photo')" title="Change profile photo">📷</div>
         <div class="hero-online" title="Online now"></div>
       </div>
       <div class="hero-info">
@@ -381,8 +386,7 @@ button,select,input,textarea{font-family:var(--font)}
         <div class="hero-stat"><div class="hero-stat-val">0</div><div class="hero-stat-label">Following</div></div>
       </div>
       <div class="hero-actions">
-        <div class="hero-rank-badge" style="display:none"></div>
-        <button class="btn btn-yellow btn-sm" onclick="openModal('edit-profile')" style="justify-content:center">✏️ Edit profile</button>
+        <div class="hero-clubs" style="display:none"></div>
         <button class="btn btn-ghost btn-sm" style="color:rgba(255,255,255,.6);border-color:rgba(255,255,255,.15);justify-content:center" onclick="copyProfileLink()">🔗 Share profile</button>
       </div>
     </div>
@@ -620,9 +624,13 @@ button,select,input,textarea{font-family:var(--font)}
 </div>
 
 <!-- MODALS -->
-<div class="modal-overlay" id="modal-edit-profile" onclick="closeModals(event)">
-  <div class="modal">
-    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Edit profile</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
+<!-- Profile photo modal (opened by clicking the hero avatar). Photo management
+     only — all other profile fields live in the Settings tab. The ep-* element
+     IDs are kept from the retired edit-profile modal so the upload script and
+     hydration code work unchanged. -->
+<div class="modal-overlay" id="modal-avatar-photo" onclick="closeModals(event)">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Profile photo</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
     <div class="modal-body">
       <div style="display:flex;align-items:center;gap:14px;padding:12px;background:var(--gray-50);border-radius:var(--radius)">
         <div id="ep-avatar-preview" style="width:56px;height:56px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:var(--gray-900);overflow:hidden;flex-shrink:0">·</div>
@@ -636,17 +644,8 @@ button,select,input,textarea{font-family:var(--font)}
         </div>
         <input id="ep-avatar-file" type="file" accept="image/jpeg,image/png,image/webp" style="display:none">
       </div>
-      <div class="form-row">
-        <div class="form-field"><label class="form-label">First name</label><input id="edit-first-name" class="form-input" type="text" value="Jamie"></div>
-        <div class="form-field"><label class="form-label">Last name</label><input id="edit-last-name" class="form-input" type="text" value="King"></div>
-      </div>
-      <div class="form-field"><label class="form-label">Bio</label><textarea id="edit-bio" class="form-textarea">Marathon runner, weekend cyclist, occasional wall climber. Chasing a sub-3:30 marathon. Hackney RC member since 2024.</textarea></div>
-      <div class="form-row">
-        <div class="form-field"><label class="form-label">City</label><input id="edit-location" class="form-input" value="London"></div>
-        <div class="form-field"><label class="form-label">Level</label><select id="edit-level" class="form-select"><option>Intermediate</option><option selected>Advanced</option><option>Elite</option></select></div>
-      </div>
     </div>
-    <div class="modal-footer"><button id="save-edit-profile" class="btn btn-yellow" style="flex:1;justify-content:center">Save changes</button><button class="btn btn-ghost" onclick="closeModals()">Cancel</button></div>
+    <div class="modal-footer"><button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModals()">Done</button></div>
   </div>
 </div>
 
@@ -797,7 +796,7 @@ document.getElementById('htab-overview').classList.add('active');
     if (sfWrap && sfWrap.children[0]) sfWrap.children[0].textContent = name;
   }
 
-  // Edit-profile modal avatar preview — rendered directly (photo or initials);
+  // Photo modal avatar preview — rendered directly (photo or initials);
   // the upload script below keeps it in sync after upload/remove.
   var epPreview = document.getElementById('ep-avatar-preview');
   if (epPreview && window.avatarHtml) epPreview.innerHTML = window.avatarHtml.content(p.avatar_url || null, name);
@@ -840,7 +839,7 @@ document.getElementById('htab-overview').classList.add('active');
   });
 
   // Bio
-  setText('.hero-bio', p.bio || 'No bio yet — add one from Edit profile.');
+  setText('.hero-bio', p.bio || 'No bio yet — add one from Settings.');
 
   // Page title
   document.title = 'Arenas — ' + name + ' · Profile';
@@ -912,16 +911,34 @@ document.getElementById('htab-overview').classList.add('active');
     }
   }
 
-  // Hero club pill: shows "🏆 [club name]" only when the viewer is in a real
-  // club. It starts hidden/empty in the markup (no fabricated rank fallback) and
-  // is revealed here only when a real club membership exists, so a club-less user
-  // sees no badge rather than fake ranks. The sidebar "My clubs" list is rendered
-  // by the shared sidebar renderer near the end of the page.
-  var clubName = data.membership && data.membership.club && data.membership.club.name;
-  var heroBadge = document.querySelector('.hero-rank-badge');
-  if (heroBadge && clubName) {
-    heroBadge.textContent = '🏆 ' + clubName;
-    heroBadge.style.display = '';
+  // Hero club pills: one pill per membership (data.clubs), each with the
+  // club's real logo via the shared clubTileHtml helper (sport-emoji tile is
+  // the honest fallback for clubs with no uploaded logo). Clicking a pill goes
+  // where the sidebar "My clubs" items go: dashboard for admin/coach, member
+  // page otherwise. The container starts hidden/empty in the markup, so a
+  // club-less user sees nothing here — no fabricated badge.
+  var heroClubsWrap = document.querySelector('.hero-clubs');
+  if (heroClubsWrap && (data.clubs || []).length) {
+    heroClubsWrap.innerHTML = '';
+    (data.clubs || []).forEach(function (club) {
+      var pill = document.createElement('button');
+      pill.type = 'button';
+      pill.className = 'hero-club-pill';
+      pill.title = club.name || 'Club';
+      pill.onclick = function () {
+        if (typeof nav !== 'function') return;
+        if (club.role === 'admin' || club.role === 'coach') nav('/clubs/dashboard?club=' + club.id);
+        else nav('/clubs/member/' + club.id);
+      };
+      var tile = document.createElement('span');
+      tile.className = 'hero-club-tile';
+      if (window.clubTileHtml) tile.innerHTML = window.clubTileHtml.content(club.logo_url || null, club.sport);
+      else tile.textContent = (window.ARENAS_SPORT_ICONS || {})[club.sport] || '🏟';
+      pill.appendChild(tile);
+      pill.appendChild(document.createTextNode(club.name || 'Club'));
+      heroClubsWrap.appendChild(pill);
+    });
+    heroClubsWrap.style.display = '';
   }
 
   // My Clubs tab: the static markup starts empty (no fabricated club cards).
@@ -1006,11 +1023,6 @@ document.getElementById('htab-overview').classList.add('active');
   var lastName = nameParts.join(' ');
 
   function setVal(id, val) { var el = document.getElementById(id); if (el) el.value = val; }
-  // Modal "Edit profile" form
-  setVal('edit-first-name', firstName);
-  setVal('edit-last-name', lastName);
-  setVal('edit-bio', p.bio || '');
-  setVal('edit-location', p.location || '');
   // Settings "Profile information" form (no handle field — handles are kept in
   // data but hidden from the UI; the server still accepts meta.handle if sent)
   setVal('set-first-name', firstName);
@@ -1072,33 +1084,28 @@ document.getElementById('htab-overview').classList.add('active');
   });
 
   function val(id) { var el = document.getElementById(id); return el ? el.value : ''; }
-  function gather(scope) {
-    var fn = scope === 'modal' ? val('edit-first-name') : val('set-first-name');
-    var ln = scope === 'modal' ? val('edit-last-name') : val('set-last-name');
+  // Profile fields are edited only in the Settings tab (the old edit-profile
+  // modal is retired — the hero avatar now opens a photo-only modal).
+  function gather() {
     var out = {
-      name: (fn + ' ' + ln).trim(),
-      location: scope === 'modal' ? val('edit-location') : val('set-location'),
-      bio: scope === 'modal' ? val('edit-bio') : val('set-bio')
-    };
-    // Sports and country/state live only in the settings form. The modal
-    // payload omits those keys entirely so the server leaves the saved values
-    // untouched (absent key = no change; empty string = explicit clear).
-    if (scope !== 'modal') {
-      out.country = val('set-country');
-      out.state = val('set-state');
-      out.sports = Array.prototype.map.call(
+      name: (val('set-first-name') + ' ' + val('set-last-name')).trim(),
+      location: val('set-location'),
+      bio: val('set-bio'),
+      country: val('set-country'),
+      state: val('set-state'),
+      sports: Array.prototype.map.call(
         document.querySelectorAll('#settings-sport-chips .sport-chip.on'),
         function (chip) { return chip.getAttribute('data-sport'); }
-      );
+      ),
       // Timezone: '' = back to Auto (server adopts browserTz immediately);
       // a zone name = manual override.
-      out.timezone = val('set-timezone');
-      try { out.browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { out.browserTz = ''; }
-    }
+      timezone: val('set-timezone')
+    };
+    try { out.browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { out.browserTz = ''; }
     return out;
   }
-  async function saveProfile(scope, btn) {
-    var payload = gather(scope);
+  async function saveProfile(btn) {
+    var payload = gather();
     if (!payload.name) { if (window.showToast) showToast('Name cannot be empty'); return; }
     var orig = btn ? btn.textContent : '';
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
@@ -1122,10 +1129,8 @@ document.getElementById('htab-overview').classList.add('active');
       if (window.showToast) showToast('Could not save profile — please try again');
     }
   }
-  var modalSave = document.getElementById('save-edit-profile');
-  if (modalSave) modalSave.onclick = function () { saveProfile('modal', modalSave); };
   var settingsSave = document.getElementById('save-settings-profile');
-  if (settingsSave) settingsSave.onclick = function () { saveProfile('settings', settingsSave); };
+  if (settingsSave) settingsSave.onclick = function () { saveProfile(settingsSave); };
 })();
 </script>
 <script>
@@ -2358,7 +2363,7 @@ if (logHashMatch) {
 })();
 </script>
 <script>
-// ── PROFILE PHOTO UPLOAD (Edit-profile modal) ──
+// ── PROFILE PHOTO UPLOAD (photo modal, opened from the hero avatar) ──
 // Uploads immediately on file select to POST /api/profile/avatar (multipart),
 // separate from the JSON /api/profile/update form. On success the modal
 // preview and this page's own topbar + hero avatars update in place via the

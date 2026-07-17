@@ -31,3 +31,8 @@ description: Photo avatars + club logos end-state - storage pipeline, shared ren
 
 ## Verification harness lesson
 - Temp self-login route for screenshots must live under `/landing/...` (screenshot tool prepends previewPath `/html/landing`); signInWithPassword + setSession + redirect works. REMOVE the route after — it's an unauthenticated login-as-user hole.
+
+## Profile photo modal (my-profile hero)
+- The edit-profile modal is RETIRED — all profile field editing lives only in the Settings tab. The hero avatar (+ always-visible-on-mobile 📷 overlay) opens `#modal-avatar-photo`, a photo-only modal that kept every `ep-*` element ID so the upload script and hydration code needed zero changes.
+- **How to apply:** when moving UI blocks between containers, preserve element IDs so ID-wired scripts survive untouched; don't reintroduce an "Edit profile" entry point — Settings is the single edit surface.
+- Hero club area = `.hero-clubs` wrapping pill row rendering ALL of `data.clubs` (clubTileHtml tile + name; admin/coach→dashboard, else member page — same routing as sidebar My clubs). The /profile route's single-`membership` payload key was removed with it.
