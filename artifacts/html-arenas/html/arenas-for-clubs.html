@@ -340,7 +340,7 @@ button,select,input,textarea{font-family:var(--font)}
     <button class="nav-link" onclick="document.getElementById('features').scrollIntoView({behavior:'smooth'})">Features</button>
     <button class="nav-link" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">Pricing</button>
     <button class="nav-link" onclick="document.getElementById('how-it-works').scrollIntoView({behavior:'smooth'})">How it works</button>
-    <button class="nav-link" onclick="nav('/landing#login')">Sign in</button>
+    <button class="nav-link" id="nav-signin" onclick="nav('/landing#login')">Sign in</button>
     <button class="nav-cta yellow" onclick="openSignup()">Start your club →</button>
   </div>
 </nav>
@@ -628,6 +628,9 @@ button,select,input,textarea{font-family:var(--font)}
       <button class="sm-close" onclick="closeSignup()">✕</button>
     </div>
 
+    <!-- Logged-in identity indicator (shortened wizard only) -->
+    <div id="creating-as" style="display:none;margin:12px 24px 0;padding:8px 12px;background:var(--gray-50);border:var(--border);border-radius:8px;font-size:12.5px;color:var(--gray-600)">👤 Creating as <strong id="creating-as-name" style="color:var(--gray-900)"></strong><span id="creating-as-email" style="color:var(--gray-400)"></span></div>
+
     <!-- Progress -->
     <div class="sm-progress">
       <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:20%"></div></div>
@@ -664,6 +667,7 @@ button,select,input,textarea{font-family:var(--font)}
           <label class="form-label">Email address</label>
           <input class="form-input" type="email" id="admin-email" placeholder="you@example.com" autocomplete="email">
           <div class="form-hint">You'll use this to log in. Club invite emails are sent on your behalf from this address.</div>
+          <div id="email-exists-note" style="display:none;margin-top:8px;padding:10px 12px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;font-size:12.5px;color:#854D0E;line-height:1.5">This email already has an Arenas account — log in to create your club. <a id="email-exists-login" href="#" style="color:#633806;font-weight:700;text-decoration:underline;white-space:nowrap">Log in →</a></div>
         </div>
         <div class="form-field">
           <label class="form-label">Password</label>
@@ -877,8 +881,14 @@ button,select,input,textarea{font-family:var(--font)}
 <div class="toast" id="toast"></div>
 
 <script>
-let currentStep = 1;
-const totalSteps = 5;
+// Logged-in visitors (window.ARENAS_SESSION injected server-side) get the
+// shortened wizard: the account step is removed and launch calls the
+// authenticated /api/clubs/create endpoint instead of the signup form-POST.
+// Logged-out visitors get the original 5-step flow unchanged.
+const SESSION = window.ARENAS_SESSION || null;
+const WIZARD_STEPS = SESSION ? [2, 3, 4, 5] : [1, 2, 3, 4, 5];
+function stepPos(n) { return WIZARD_STEPS.indexOf(n) + 1; }
+let currentStep = WIZARD_STEPS[0];
 let adminSports = [];
 
 // Upgrade-aware Club Pro CTA. Logged-in club managers go straight to a real
@@ -917,24 +927,28 @@ function handleOverlayClick(e) {
 }
 
 // ── PROGRESS ──
+// All chrome (bar, dots, counters) is computed from the step's POSITION in
+// WIZARD_STEPS, so the same code drives both the 5-step and 4-step wizards.
 function updateProgress() {
-  const pct = Math.round((currentStep / totalSteps) * 100);
+  const pos = stepPos(currentStep);
+  const total = WIZARD_STEPS.length;
+  const pct = Math.round((pos / total) * 100);
   document.getElementById('progress-fill').style.width = pct + '%';
-  document.getElementById('progress-text').textContent = 'Step ' + currentStep + ' of ' + totalSteps;
+  document.getElementById('progress-text').textContent = 'Step ' + pos + ' of ' + total;
   document.getElementById('progress-pct').textContent = pct + '%';
-  document.getElementById('step-counter').textContent = 'Step ' + currentStep + ' of ' + totalSteps;
+  document.getElementById('step-counter').textContent = 'Step ' + pos + ' of ' + total;
   // Dots
   const dots = document.querySelectorAll('.step-dot');
   dots.forEach((d, i) => {
     d.classList.remove('done','current');
-    if (i + 1 < currentStep) d.classList.add('done');
-    else if (i + 1 === currentStep) d.classList.add('current');
+    if (i + 1 < pos) d.classList.add('done');
+    else if (i + 1 === pos) d.classList.add('current');
   });
   // Back btn
-  document.getElementById('back-btn').disabled = currentStep === 1;
+  document.getElementById('back-btn').disabled = pos === 1;
   // Next btn
   const nextBtn = document.getElementById('next-btn');
-  if (currentStep === totalSteps) {
+  if (pos === total) {
     nextBtn.textContent = '🚀 Launch my club';
     nextBtn.className = 'step-next-btn primary';
   } else {
@@ -953,13 +967,52 @@ function showStep(n) {
   if (n === 5) populateReview();
 }
 
-function goNext() {
+async function goNext() {
   if (!validateStep(currentStep)) return;
-  if (currentStep < totalSteps) showStep(currentStep + 1);
+  // Inline existing-email check at the account step (logged-out flow only),
+  // so "already registered" surfaces here instead of after the whole wizard.
+  if (currentStep === 1 && !SESSION && !(await emailStepClear())) return;
+  const pos = stepPos(currentStep);
+  if (pos < WIZARD_STEPS.length) showStep(WIZARD_STEPS[pos]);
   else launchClub();
 }
 function goBack() {
-  if (currentStep > 1) showStep(currentStep - 1);
+  const pos = stepPos(currentStep);
+  if (pos > 1) showStep(WIZARD_STEPS[pos - 2]);
+}
+
+// Returns true when the email is free to register. Fails OPEN: if the check
+// endpoint is unreachable the wizard continues — the final submit still
+// handles a duplicate server-side.
+async function emailStepClear() {
+  const note = document.getElementById('email-exists-note');
+  note.style.display = 'none';
+  const email = document.getElementById('admin-email').value.trim();
+  const nextBtn = document.getElementById('next-btn');
+  const prevLabel = nextBtn.textContent;
+  nextBtn.disabled = true;
+  nextBtn.textContent = 'Checking…';
+  let exists = false;
+  try {
+    const r = await fetch(window.BASE + '/auth/email-check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    if (r.ok) { const d = await r.json(); exists = !!d.exists; }
+  } catch (err) { exists = false; }
+  nextBtn.disabled = false;
+  nextBtn.textContent = prevLabel;
+  if (exists) {
+    // The login link round-trips back to the (now session-aware) shortened
+    // wizard after auth via the login form's safe `next` param.
+    document.getElementById('email-exists-login').href =
+      window.BASE + '/landing?next=' + encodeURIComponent(window.BASE + '/for-clubs?create=1') + '#login';
+    note.style.display = 'block';
+    note.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return false;
+  }
+  return true;
 }
 
 // ── VALIDATION ──
@@ -1071,11 +1124,18 @@ function updateInviteCount() {
 
 // ── STEP 5: Review ──
 function populateReview() {
-  const d = window.adminData || {};
   const c = window.clubData || {};
-  document.getElementById('review-name').textContent = d.name || '—';
-  document.getElementById('review-email').textContent = d.email || '—';
-  document.getElementById('review-sports').textContent = d.sports && d.sports.length ? d.sports.map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join(', ') : 'Not specified';
+  if (SESSION) {
+    // Logged-in: the club joins the EXISTING account — show it, no ambiguity.
+    document.getElementById('review-name').textContent = SESSION.name || '—';
+    document.getElementById('review-email').textContent = SESSION.email || '';
+    document.getElementById('review-sports').textContent = 'Your existing account';
+  } else {
+    const d = window.adminData || {};
+    document.getElementById('review-name').textContent = d.name || '—';
+    document.getElementById('review-email').textContent = d.email || '—';
+    document.getElementById('review-sports').textContent = d.sports && d.sports.length ? d.sports.map(s=>s.charAt(0).toUpperCase()+s.slice(1)).join(', ') : 'Not specified';
+  }
   document.getElementById('review-club').textContent = c.name || '—';
   document.getElementById('review-handle').textContent = c.handle ? '@' + c.handle : '—';
   const inviteRows = document.querySelectorAll('#invite-rows tr');
@@ -1086,7 +1146,7 @@ function populateReview() {
 function launchClub() {
   const a = window.adminData || {};
   const c = window.clubData || {};
-  if (!a.email || !a.password || !c.name || !c.handle || !c.sport) {
+  if (!c.name || !c.handle || !c.sport || (!SESSION && (!a.email || !a.password))) {
     showToast('Please complete all required steps first');
     return;
   }
@@ -1099,6 +1159,9 @@ function launchClub() {
     const role = (tr.querySelector('select')?.value || 'Member').toLowerCase();
     return { email, name, role };
   }).filter(r => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email));
+  // Logged-in: authenticated JSON create against the EXISTING account — no
+  // second account is ever created on this path.
+  if (SESSION) { authedCreate(c, invites, nextBtn); return; }
   const fields = {
     email: a.email,
     password: a.password,
@@ -1124,6 +1187,74 @@ function launchClub() {
   document.body.appendChild(form);
   form.submit();
 }
+
+// Authenticated create for logged-in users — surfaces field errors inline
+// instead of the signup path's redirect-with-query-param convention.
+async function authedCreate(c, invites, nextBtn) {
+  const fail = (step, msg) => {
+    nextBtn.disabled = false;
+    nextBtn.textContent = '🚀 Launch my club';
+    if (step !== 5) showStep(step);
+    showErr(step, msg);
+  };
+  try {
+    const r = await fetch(window.BASE + '/api/clubs/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: c.name, handle: c.handle, sport: c.sport, city: c.city || '', invites: invites })
+    });
+    let d = {};
+    try { d = await r.json(); } catch (e) { d = {}; }
+    if (r.ok && d.redirect) { window.location.href = d.redirect; return; }
+    if (d.error === 'handle_taken') return fail(2, 'That handle is already taken — try another.');
+    if (d.error === 'invalid_handle') return fail(2, 'Handles are 2–20 lowercase letters or numbers.');
+    if (d.error === 'invalid_name' || d.error === 'invalid_sport') return fail(2, 'Please check your club name and sport.');
+    if (d.error === 'club_limit') return fail(5, 'You\'ve reached the limit of ' + (d.limit || 3) + ' clubs per account.');
+    return fail(5, 'Could not create your club right now — please try again.');
+  } catch (err) {
+    return fail(5, 'Could not create your club right now — please try again.');
+  }
+}
+
+// ── SESSION-AWARE INIT ──
+(function () {
+  if (SESSION) {
+    // Shortened wizard: hide the account step, drop one progress dot, and
+    // re-number the step chrome (labels after the '·' are kept as-is).
+    document.getElementById('step-1').classList.remove('active');
+    document.getElementById('step-' + WIZARD_STEPS[0]).classList.add('active');
+    const dots = document.getElementById('step-dots');
+    while (dots && dots.children.length > WIZARD_STEPS.length) dots.removeChild(dots.lastElementChild);
+    WIZARD_STEPS.forEach(function (id) {
+      const eb = document.querySelector('#step-' + id + ' .step-eyebrow');
+      if (eb) {
+        const label = (eb.textContent.split('·')[1] || '').trim();
+        eb.textContent = 'Step ' + stepPos(id) + ' of ' + WIZARD_STEPS.length + (label ? ' · ' + label : '');
+      }
+    });
+    // Identity indicator — the club joins THIS account.
+    document.getElementById('creating-as-name').textContent = SESSION.name || 'your account';
+    document.getElementById('creating-as-email').textContent = SESSION.email ? ' (' + SESSION.email + ')' : '';
+    document.getElementById('creating-as').style.display = 'block';
+    // Topbar: a logged-in visitor is not asked to "Sign in".
+    const signin = document.getElementById('nav-signin');
+    if (signin) {
+      signin.textContent = 'Open app →';
+      signin.onclick = function () { nav('/feed'); };
+    }
+    updateProgress();
+  }
+  // Hide the existing-email note as soon as the email is edited.
+  const emailInp = document.getElementById('admin-email');
+  if (emailInp) emailInp.addEventListener('input', function () {
+    document.getElementById('email-exists-note').style.display = 'none';
+  });
+  // Deep link: ?create=1 (sidebar "+ Create club" and the post-login return
+  // path) opens the wizard immediately.
+  try {
+    if (new URLSearchParams(window.location.search).get('create') === '1') openSignup();
+  } catch (err) {}
+})();
 
 // ── SPORT STRIP ──
 document.querySelectorAll('.sport-tag').forEach(t => t.addEventListener('click', function() {

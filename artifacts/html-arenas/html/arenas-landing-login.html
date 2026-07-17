@@ -1048,6 +1048,7 @@ html { scroll-behavior: smooth; }
           <div class="auth-subtitle">Log in to your Arenas account</div>
           <form action="/html/auth/login" method="POST">
             <input type="hidden" name="tz">
+            <input type="hidden" name="next">
             <div class="form-field">
               <label class="form-label">Email</label>
               <input class="form-input" name="email" type="email" placeholder="you@example.com" required>
@@ -1169,6 +1170,18 @@ html { scroll-behavior: smooth; }
                 var zone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
                 document.querySelectorAll('input[name="tz"]').forEach(function(i){ i.value = zone; });
               } catch (e) { /* leave blank — server treats missing tz as no-op */ }
+            })();
+            // Carry the optional return path (?next=) into the login form so
+            // the server can send the user back where they came from (e.g. the
+            // /for-clubs club wizard). Same-app paths only; the server
+            // re-validates before redirecting.
+            (function(){
+              try {
+                var nextParam = new URLSearchParams(window.location.search).get('next') || '';
+                if (/^\/(?!\/)/.test(nextParam)) {
+                  document.querySelectorAll('input[name="next"]').forEach(function(i){ i.value = nextParam; });
+                }
+              } catch (e) { /* no-op */ }
             })();
           </script>
         </div>

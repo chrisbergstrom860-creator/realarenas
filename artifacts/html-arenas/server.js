@@ -288,6 +288,15 @@ app.post(BASE + '/auth/login', async (req, res) => {
     } catch (tzErr) {
       console.log('Login tz capture error (ignored):', tzErr.message);
     }
+    // Optional same-app return path (used by /for-clubs' "log in to create
+    // your club" link). Only absolute paths under BASE are honored; anything
+    // else — external URLs, protocol-relative, backslash tricks — falls
+    // through to the default destination.
+    const next = typeof req.body.next === 'string' ? req.body.next.trim() : '';
+    if (next && next.startsWith(BASE + '/') && !next.startsWith('//') &&
+        !next.includes('://') && !next.includes('\\')) {
+      return res.redirect(next);
+    }
     // Club admins/coaches land on the dashboard; everyone else on the feed.
     const dest = (await isClubManager(data.user && data.user.id)) ? '/clubs/dashboard' : '/feed';
     return res.redirect(BASE + dest);
@@ -346,6 +355,12 @@ app.post(BASE + '/auth/signup', async (req, res) => {
 });
 
 app.post(BASE + '/auth/signup-club', async (req, res) => {
+  // Identity-fork guard: a logged-in user must never create a SECOND account
+  // through the club wizard (it would silently overwrite their session).
+  // Route them to the session-aware shortened flow instead.
+  if (await getOptionalUser(req)) {
+    return res.redirect(BASE + '/for-clubs?create=1');
+  }
   const { email, password, name, club_name, handle, sport, city } = req.body;
   try {
     if (!supabaseAdmin) {
@@ -434,6 +449,114 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
     return res.redirect(BASE + '/clubs/dashboard');
   } catch (err) {
     return res.redirect(BASE + '/for-clubs?error=signup');
+  }
+});
+
+// Pre-flight email check for the club wizard's account step, so "this email
+// already has an account" surfaces at the step where the email is typed
+// instead of a dead redirect after the whole wizard. Uses the paged admin
+// list (supabase-js v2 has no getUserByEmail) — fine at prototype scale.
+app.post(BASE + '/auth/email-check', async (req, res) => {
+  const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !supabaseAdmin) {
+    return res.json({ exists: false });
+  }
+  try {
+    const users = await listAllAuthUsers();
+    const exists = users.some(u => (u.email || '').toLowerCase() === email);
+    return res.json({ exists });
+  } catch (err) {
+    return res.json({ exists: false });
+  }
+});
+
+// Authenticated club creation for EXISTING users (the shortened /for-clubs
+// wizard). Same invariants as /auth/signup-club minus the account step: one
+// clubs row owned by the caller + one admin membership row, then best-effort
+// invites. JSON in/out (unlike the form-POST signup path) so the wizard can
+// surface field errors inline. Deliberately a NEW endpoint rather than a
+// session-aware retrofit — the signup handler's form/redirect + account
+// rollback semantics serve the public funnel and stay untouched.
+const OWNED_CLUB_LIMIT = 3;
+app.post(BASE + '/api/clubs/create', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'server' });
+  const body = req.body || {};
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const handle = typeof body.handle === 'string' ? body.handle.trim().toLowerCase() : '';
+  const sport = typeof body.sport === 'string' ? body.sport.trim() : '';
+  const city = typeof body.city === 'string' ? body.city.trim().slice(0, 80) : '';
+  if (!name || name.length > 80) return res.status(400).json({ error: 'invalid_name' });
+  if (!/^[a-z0-9]{2,20}$/.test(handle)) return res.status(400).json({ error: 'invalid_handle' });
+  if (!SPORTS.some(s => s.id === sport)) return res.status(400).json({ error: 'invalid_sport' });
+  try {
+    // Soft anti-abuse cap on clubs OWNED per account (handle squatting and
+    // invite spam scale with free club creation). Memberships in other
+    // people's clubs are unaffected — this counts owned clubs only.
+    const { count: ownedCount } = await supabaseAdmin
+      .from('clubs')
+      .select('id', { count: 'exact', head: true })
+      .eq('owner_id', req.user.id);
+    if ((ownedCount || 0) >= OWNED_CLUB_LIMIT) {
+      return res.status(403).json({ error: 'club_limit', limit: OWNED_CLUB_LIMIT });
+    }
+
+    // Explicit handle dedupe. The signup path relies on the insert failing if
+    // the DB enforces uniqueness; this pre-check gives the wizard a friendly
+    // inline error instead.
+    const { data: taken } = await supabaseAdmin
+      .from('clubs')
+      .select('id')
+      .eq('handle', handle)
+      .limit(1);
+    if (Array.isArray(taken) && taken.length > 0) {
+      return res.status(409).json({ error: 'handle_taken' });
+    }
+
+    const { data: club, error: clubErr } = await supabaseAdmin
+      .from('clubs')
+      .insert({ name, handle, sport, city, owner_id: req.user.id })
+      .select('id')
+      .single();
+    if (clubErr || !club) return res.status(500).json({ error: 'club' });
+
+    const { error: memErr } = await supabaseAdmin
+      .from('memberships')
+      .insert({ user_id: req.user.id, club_id: club.id, role: 'admin' });
+    if (memErr) {
+      // Compensating cleanup — never leave an orphaned club row.
+      await supabaseAdmin.from('clubs').delete().eq('id', club.id);
+      return res.status(500).json({ error: 'membership' });
+    }
+
+    // Queued invites, best-effort exactly like the signup path — the club is
+    // already created, so invite failures must never fail the request.
+    try {
+      const queued = Array.isArray(body.invites) ? body.invites.slice(0, 50) : [];
+      if (queued.length > 0) {
+        const userByEmail = {};
+        (await listAllAuthUsers()).forEach(u => { if (u.email) userByEmail[u.email.toLowerCase()] = u; });
+        const inviter = displayFromUser(req.user);
+        for (const inv of queued) {
+          await createClubInviteRecord({
+            clubId: club.id,
+            inviterUser: req.user,
+            email: inv && inv.email,
+            role: inv && inv.role,
+            req,
+            userByEmail,
+            clubName: name,
+            inviterName: inviter.name
+          });
+        }
+      }
+    } catch (err) {
+      // Best-effort only.
+    }
+
+    return res.json({ redirect: BASE + '/clubs/dashboard?club=' + club.id });
+  } catch (err) {
+    console.log('Club create error:', err.message);
+    return res.status(500).json({ error: 'server' });
   }
 });
 
@@ -557,6 +680,21 @@ async function requirePageAuth(req, res, next) {
     next();
   } catch (err) {
     return res.redirect(BASE + '/landing');
+  }
+}
+
+// Resolve the session user when a valid cookie is present, or null. For
+// surfaces that render differently for logged-in visitors but must stay
+// public (e.g. /for-clubs). Never throws, never blocks the request.
+async function getOptionalUser(req) {
+  const token = req.signedCookies && req.signedCookies.sb_access_token;
+  if (!token) return null;
+  try {
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data || !data.user) return null;
+    return data.user;
+  } catch (err) {
+    return null;
   }
 }
 
@@ -6150,7 +6288,22 @@ const CLUB_SPORT_OPTIONS = '<option value="">Select a sport…</option>'
 const ADMIN_SPORT_CHIPS = SPORTS.map((s) =>
   `<button type="button" class="sport-chip" onclick="toggleSport(this,'${s.id}')">${s.emoji} ${s.label}</button>`
 ).join('\n            ');
-app.get(BASE + '/for-clubs', (req, res) => {
+app.get(BASE + '/for-clubs', async (req, res) => {
+  // Minimal session awareness for this public marketing page: logged-in
+  // visitors get the shortened club wizard (no account step, authenticated
+  // create), logged-out visitors get today's flow unchanged. Auth failures
+  // never block the page — it just renders logged-out.
+  let session = null;
+  try {
+    const user = await getOptionalUser(req);
+    if (user) {
+      const d = displayFromUser(user);
+      session = { name: d.name, email: user.email || '' };
+    }
+  } catch (err) {
+    session = null;
+  }
+  const sessionJson = JSON.stringify(session).replace(/</g, '\\u003c');
   const html = fs.readFileSync(path.join(HTML, 'arenas-for-clubs.html'), 'utf8')
     .replace(
       /(<select class="form-select" id="club-sport">)[\s\S]*?(<\/select>)/,
@@ -6159,7 +6312,8 @@ app.get(BASE + '/for-clubs', (req, res) => {
     .replace(
       /(<div class="sport-chips" id="admin-sports">)[\s\S]*?(<\/div>)/,
       `$1${ADMIN_SPORT_CHIPS}$2`
-    );
+    )
+    .replace('</head>', `<script>window.ARENAS_SESSION = ${sessionJson};</script></head>`);
   res.type('html').send(html);
 });
 // About is a public marketing/content page (no auth), served raw like /for-clubs.

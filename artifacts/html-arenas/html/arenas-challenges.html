@@ -1448,7 +1448,6 @@ function showToast(msg) {
     empty.style.cssText = 'color:var(--gray-400);cursor:default';
     empty.textContent = 'No clubs yet';
     parent.insertBefore(empty, anchor);
-    return;
   }
   clubs.forEach(function (club) {
     var item = document.createElement('div');
@@ -1470,6 +1469,18 @@ function showToast(msg) {
     item.appendChild(document.createTextNode(' ' + (club.name || 'Club')));
     parent.insertBefore(item, anchor);
   });
+  // "+ Create club" entry point — always the LAST item in My clubs, including
+  // the zero-clubs case (that's the primary audience). ?create=1 opens the
+  // session-aware /for-clubs wizard directly.
+  var create = document.createElement('div');
+  create.className = 'nav-item';
+  create.onclick = function () { if (typeof nav === 'function') nav('/for-clubs?create=1'); };
+  var cic = document.createElement('span');
+  cic.className = 'nav-icon';
+  cic.textContent = '➕';
+  create.appendChild(cic);
+  create.appendChild(document.createTextNode(' Create club'));
+  parent.insertBefore(create, anchor);
 })();
 </script>
 </body>
