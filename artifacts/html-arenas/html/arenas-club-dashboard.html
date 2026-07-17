@@ -2758,6 +2758,17 @@ document.addEventListener('DOMContentLoaded', function () {
           }
         }
       } catch (err) { /* training-load is best-effort */ }
+      if (clubProLocked) {
+        // Locked: the hours KPI keeps its em-dash, but gets a sublabel so the
+        // dash reads as "locked", not "failed to load" (same convention as the
+        // leaderboard's at-risk stat). The KPI cell already deep-links to the
+        // Training tab, which shows the full locked panel.
+        var hoursSubLockedEl = document.getElementById('ov-kpi-hours-sub');
+        if (hoursSubLockedEl) {
+          hoursSubLockedEl.textContent = '🔒 Club Pro';
+          hoursSubLockedEl.style.color = 'var(--gray-400)';
+        }
+      }
 
       // ── NEEDS ATTENTION ──
       var attentionItems = [];
@@ -2880,7 +2891,27 @@ document.addEventListener('DOMContentLoaded', function () {
       }
 
       // ── TRAINING VOLUME SNAPSHOT ──
-      if (tlData && !tlData.error) {
+      if (clubProLocked) {
+        // Compact locked state in place of the chart + stats — a scaled-down
+        // sibling of the Training tab's locked panel. No ARL line here: this
+        // CTA only navigates to /billing (the disclosure sits adjacent to the
+        // tab panels' CTAs and on the billing page itself, before any
+        // purchase action). The "Details →" header link stays live — it lands
+        // on the Training tab's full locked panel.
+        var lockedChartEl = document.getElementById('ov-volume-chart');
+        if (lockedChartEl) {
+          lockedChartEl.style.height = 'auto';
+          lockedChartEl.innerHTML =
+            '<div style="flex:1;text-align:center;padding:18px 16px">' +
+              '<div style="font-size:22px;margin-bottom:8px">📈</div>' +
+              '<div style="font-size:13px;font-weight:700;color:var(--gray-900);margin-bottom:4px">Training volume is a Club Pro feature</div>' +
+              '<div style="font-size:11px;color:var(--gray-500);line-height:1.5;margin-bottom:10px">Weekly training hours for your whole club, charted week by week.</div>' +
+              '<button onclick="window.location.href=window.BASE + \'/billing\'" style="padding:6px 14px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">🔒 Upgrade to Club Pro →</button>' +
+            '</div>';
+        }
+        var lockedStatsEl = document.getElementById('ov-volume-stats');
+        if (lockedStatsEl) lockedStatsEl.style.display = 'none';
+      } else if (tlData && !tlData.error) {
         var chartEl = document.getElementById('ov-volume-chart');
         if (chartEl) {
           var weekly = tlData.clubWeekly || [];
