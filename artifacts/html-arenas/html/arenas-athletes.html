@@ -407,7 +407,7 @@ function showToast(msg) {
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
   // Update the logged-in user's identity in the nav + sidebar footer.
-  const myName = (data.myProfile && data.myProfile.name) || 'Athlete';
+  const myName = (data.profile && data.profile.name) || 'Athlete';
   document.querySelectorAll('.sidebar-footer div').forEach(el => {
     if (el.childElementCount !== 0) return;
     if (el.textContent.trim() === 'Jamie King') el.textContent = myName;

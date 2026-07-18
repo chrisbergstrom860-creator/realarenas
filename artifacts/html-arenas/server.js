@@ -4432,7 +4432,7 @@ app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
 app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
   let athleteData = {
     athletes: [],
-    myProfile: displayFromUser(req.user),
+    profile: displayFromUser(req.user),
     userId: req.user.id,
     followingIds: [],
     clubs: []
@@ -4495,7 +4495,7 @@ app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
 
       athleteData = {
         athletes,
-        myProfile: displayFromUser(req.user),
+        profile: displayFromUser(req.user),
         userId: req.user.id,
         followingIds,
         clubs: await getSidebarClubs(req.user.id)
