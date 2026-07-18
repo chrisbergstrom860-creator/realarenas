@@ -617,8 +617,8 @@ button,select,input,textarea{font-family:var(--font)}
           <div class="dz-title">Danger zone</div>
           <div class="dz-sub">These actions are permanent and cannot be undone.</div>
           <div style="display:flex;flex-direction:column;gap:7px">
-            <button class="btn btn-ghost btn-full btn-sm" onclick="showToast('Export started — you\'ll receive an email within 24h')">📥 Export my data</button>
-            <button class="btn btn-full btn-sm" style="background:var(--red-light);color:#A32D2D;border-color:#FECACA" onclick="showToast('Contact support to delete your account')">🗑 Delete account</button>
+            <button class="btn btn-ghost btn-full btn-sm" onclick="exportMyData(this)">📥 Export my data</button>
+            <button class="btn btn-full btn-sm" style="background:var(--red-light);color:#A32D2D;border-color:#FECACA" onclick="openDeleteModal()">🗑 Delete account</button>
           </div>
         </div>
       </div>
@@ -652,6 +652,34 @@ button,select,input,textarea{font-family:var(--font)}
       </div>
     </div>
     <div class="modal-footer"><button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModals()">Done</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-delete-account" onclick="closeModals(event)">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:#A32D2D">Delete account</div><div style="font-size:12px;color:var(--gray-500);margin-top:3px">This is permanent. There is no undo.</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
+    <div class="modal-body">
+      <div style="font-size:13px;color:var(--gray-700);font-weight:600">Deleting your account removes, permanently:</div>
+      <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--gray-700)">
+        <li>Your profile, photo, preferences and settings</li>
+        <li>All activities, goals, planned sessions and achievements</li>
+        <li>Your posts, comments and likes</li>
+        <li>Your followers and everyone you follow</li>
+        <li>Event RSVPs and challenge entries — plus any events and challenges you created</li>
+        <li>Club memberships and invites, and any club where you're the only member</li>
+        <li>Any paid subscription is canceled first — you won't be billed again</li>
+      </ul>
+      <div style="font-size:12px;color:var(--gray-500)">If you're the only admin of a club that still has members, deletion is blocked until you hand over the admin role or delete the club.</div>
+      <div class="form-field" style="margin-top:2px">
+        <label class="form-label">Type <b>DELETE</b> to confirm</label>
+        <input id="del-confirm-input" class="form-input" type="text" autocomplete="off" spellcheck="false" placeholder="DELETE" oninput="delConfirmChanged()" onkeydown="if(event.key==='Enter'){event.preventDefault();confirmDeleteAccount();}">
+      </div>
+      <div id="del-error" style="display:none;font-size:13px;color:#B91C1C;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:10px 12px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModals()">Cancel</button>
+      <button id="del-confirm-btn" class="btn" style="flex:1;justify-content:center;background:#DC2626;color:white;border-color:#DC2626" disabled onclick="confirmDeleteAccount()">Delete forever</button>
+    </div>
   </div>
 </div>
 
@@ -778,6 +806,73 @@ function openModal(id) { document.getElementById('modal-' + id).classList.add('o
 function closeModals(e) {
   if (!e || e.target.classList.contains('modal-overlay'))
     document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
+}
+// ── Danger zone: export + delete (real) ──
+// Export is fetch+blob (not location.href) so a server error surfaces as a
+// toast instead of navigating the page to a JSON error body.
+function exportMyData(btn) {
+  var orig = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = '📥 Preparing your export…';
+  fetch(window.BASE + '/api/account/export')
+    .then(function (r) {
+      if (!r.ok) throw new Error('export_failed');
+      var cd = r.headers.get('Content-Disposition') || '';
+      var m = cd.match(/filename="([^"]+)"/);
+      var fname = (m && m[1]) || 'arenas-export.json';
+      return r.blob().then(function (b) {
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(b);
+        a.download = fname;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+        showToast('✓ Your data export has downloaded');
+      });
+    })
+    .catch(function () { showToast('Export failed — please try again'); })
+    .finally(function () { btn.disabled = false; btn.innerHTML = orig; });
+}
+function openDeleteModal() {
+  var input = document.getElementById('del-confirm-input');
+  input.value = '';
+  document.getElementById('del-confirm-btn').disabled = true;
+  var err = document.getElementById('del-error');
+  err.style.display = 'none'; err.textContent = '';
+  openModal('delete-account');
+  setTimeout(function () { input.focus(); }, 50);
+}
+function delConfirmChanged() {
+  document.getElementById('del-confirm-btn').disabled =
+    document.getElementById('del-confirm-input').value.trim() !== 'DELETE';
+}
+async function confirmDeleteAccount() {
+  var btn = document.getElementById('del-confirm-btn');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  var orig = btn.textContent;
+  btn.textContent = 'Deleting…';
+  var err = document.getElementById('del-error');
+  err.style.display = 'none';
+  try {
+    var r = await fetch(window.BASE + '/api/account/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: document.getElementById('del-confirm-input').value.trim() })
+    });
+    var data = await r.json().catch(function () { return {}; });
+    if (r.ok && data.ok) {
+      window.location.href = data.redirect || (window.BASE + '/landing');
+      return;
+    }
+    err.textContent = data.message || 'Deletion failed — please try again or contact support.';
+    err.style.display = 'block';
+  } catch (e) {
+    err.textContent = 'Network error — nothing was deleted. Please try again.';
+    err.style.display = 'block';
+  }
+  btn.textContent = orig;
+  delConfirmChanged();
 }
 function copyProfileLink() {
   // Profiles aren't publicly reachable (the app is auth-gated), so the copied

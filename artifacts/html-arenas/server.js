@@ -6168,6 +6168,330 @@ app.post(BASE + '/api/profile/update', requireAuth, async (req, res) => {
   }
 });
 
+// ── ACCOUNT EXPORT & DELETION (Danger zone, real) ──
+
+// Paged fetch so exports/deletes never silently truncate at PostgREST's
+// default 1000-row page. Returns ALL matching rows.
+async function fetchAllRows(table, applyFilters) {
+  const PAGE = 1000;
+  const out = [];
+  for (let from = 0; ; from += PAGE) {
+    let q = supabaseAdmin.from(table).select('*').range(from, from + PAGE - 1);
+    q = applyFilters(q);
+    const { data, error } = await q;
+    if (error) throw new Error(table + ': ' + error.message);
+    out.push(...(data || []));
+    if (!data || data.length < PAGE) break;
+  }
+  return out;
+}
+
+// Full-coverage data export. One structured JSON document, downloaded
+// directly (no email queue — instant download is simpler and more honest).
+// The avatar is included as its public URL rather than embedded bytes: the
+// bucket is public, the URL is durable, and a single JSON file keeps the
+// export dependency-free (no zip library, nothing to stream).
+app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  const uid = req.user.id;
+  const email = req.user.email || null;
+  try {
+    const meta = req.user.user_metadata || {};
+    const ownedClubs = await fetchAllRows('clubs', q => q.eq('owner_id', uid));
+    const ownedClubIds = ownedClubs.map(c => c.id);
+    const [
+      activities, posts, postComments, postLikes,
+      following, followers, goals, plannedSessions, achievements,
+      notificationsReceived, notificationsTriggered,
+      eventRsvps, eventsCreated, challengesCreated, challengeParticipations,
+      memberships, clubInvitesSent, userSubs
+    ] = await Promise.all([
+      fetchAllRows('activities', q => q.eq('user_id', uid)),
+      fetchAllRows('posts', q => q.eq('user_id', uid)),
+      fetchAllRows('post_comments', q => q.eq('user_id', uid)),
+      fetchAllRows('post_likes', q => q.eq('user_id', uid)),
+      fetchAllRows('follows', q => q.eq('follower_id', uid)),
+      fetchAllRows('follows', q => q.eq('following_id', uid)),
+      fetchAllRows('goals', q => q.eq('user_id', uid)),
+      fetchAllRows('planned_sessions', q => q.eq('user_id', uid)),
+      fetchAllRows('achievements', q => q.eq('user_id', uid)),
+      fetchAllRows('notifications', q => q.eq('user_id', uid)),
+      fetchAllRows('notifications', q => q.eq('actor_id', uid)),
+      fetchAllRows('event_rsvps', q => q.eq('user_id', uid)),
+      fetchAllRows('events', q => q.eq('created_by', uid)),
+      fetchAllRows('challenges', q => q.eq('created_by', uid)),
+      fetchAllRows('challenge_participants', q => q.eq('user_id', uid)),
+      fetchAllRows('memberships', q => q.eq('user_id', uid)),
+      fetchAllRows('club_invites', q => q.eq('invited_by', uid)),
+      fetchAllRows('subscriptions', q => q.eq('owner_type', 'user').eq('owner_id', uid))
+    ]);
+    const clubInvitesReceived = email
+      ? await fetchAllRows('club_invites', q => q.eq('email', email))
+      : [];
+    const clubSubs = ownedClubIds.length
+      ? await fetchAllRows('subscriptions', q => q.eq('owner_type', 'club').in('owner_id', ownedClubIds))
+      : [];
+    const exportDoc = {
+      export_version: 1,
+      generated_at: new Date().toISOString(),
+      account: {
+        id: uid,
+        email,
+        created_at: req.user.created_at || null,
+        profile: meta,
+        preferences_resolved: prefsFromMeta(meta),
+        avatar_url: meta.avatar_url || null
+      },
+      activities,
+      posts,
+      post_comments: postComments,
+      post_likes: postLikes,
+      follows: { following, followers },
+      goals,
+      planned_sessions: plannedSessions,
+      achievements,
+      notifications: { received: notificationsReceived, triggered: notificationsTriggered },
+      events: { created: eventsCreated, rsvps: eventRsvps },
+      challenges: { created: challengesCreated, participations: challengeParticipations },
+      clubs: { owned: ownedClubs, memberships },
+      club_invites: { sent: clubInvitesSent, received: clubInvitesReceived },
+      subscriptions: { user: userSubs, owned_clubs: clubSubs }
+    };
+    const fname = 'arenas-export-' + new Date().toISOString().slice(0, 10) + '.json';
+    res.setHeader('Content-Disposition', 'attachment; filename="' + fname + '"');
+    res.type('application/json').send(JSON.stringify(exportDoc, null, 2));
+  } catch (err) {
+    console.log('Account export error:', err.message);
+    res.status(500).json({ error: 'Export failed — please try again' });
+  }
+});
+
+// Account deletion. Hard ordering rule: Stripe cancellation runs FIRST — any
+// active/past_due subscription (the user's own, or a club sub on a club that
+// dies with the account) is canceled via the API before a single row is
+// touched, and a Stripe failure aborts the whole delete with nothing removed.
+// A billing relationship must never outlive the account it bills.
+//
+// Club rules:
+//  - sole admin of a club that still has OTHER members → deletion is blocked
+//    (409) naming the club: transfer the admin role or delete the club first.
+//  - sole member (no one else at all) of a club they admin/own → the club
+//    dies with the account: its challenges/events/posts (+ children), invites,
+//    memberships, logo, subscription row — everything.
+//  - club survives (another admin exists): if this user is the stored
+//    owner_id, ownership transfers to the longest-standing other admin so no
+//    club ever points at a deleted owner.
+app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  const uid = req.user.id;
+  const email = req.user.email || null;
+  const meta = req.user.user_metadata || {};
+  if ((req.body || {}).confirm !== 'DELETE') {
+    return res.status(400).json({ error: 'confirm_mismatch', message: 'Type DELETE to confirm.' });
+  }
+  try {
+    // ── Phase 1: club situation (pure reads; can block) ──
+    const { data: adminMemberships, error: amErr } = await supabaseAdmin
+      .from('memberships').select('club_id, role').eq('user_id', uid).eq('role', 'admin');
+    if (amErr) throw new Error('memberships: ' + amErr.message);
+    const { data: ownedClubRows, error: ocErr } = await supabaseAdmin
+      .from('clubs').select('id, name, owner_id, logo_url').eq('owner_id', uid);
+    if (ocErr) throw new Error('clubs: ' + ocErr.message);
+    const relevantClubIds = [...new Set([
+      ...(adminMemberships || []).map(m => m.club_id),
+      ...(ownedClubRows || []).map(c => c.id)
+    ])];
+    const clubById = {};
+    if (relevantClubIds.length) {
+      const { data: clubRows } = await supabaseAdmin
+        .from('clubs').select('id, name, owner_id, logo_url').in('id', relevantClubIds);
+      for (const c of (clubRows || [])) clubById[c.id] = c;
+    }
+    const blocked = [];   // clubs that prevent deletion
+    const dying = [];     // club rows that die with the account
+    const transfers = []; // { clubId, newOwnerId } ownership hand-offs
+    for (const clubId of relevantClubIds) {
+      const club = clubById[clubId];
+      if (!club) continue;
+      const { data: members, error: mErr } = await supabaseAdmin
+        .from('memberships').select('user_id, role, created_at').eq('club_id', clubId);
+      if (mErr) throw new Error('memberships(club): ' + mErr.message);
+      const others = (members || []).filter(m => m.user_id !== uid);
+      const otherAdmins = others.filter(m => m.role === 'admin');
+      if (!others.length) {
+        dying.push(club);
+      } else if (!otherAdmins.length) {
+        blocked.push(club.name);
+      } else if (club.owner_id === uid) {
+        const sorted = otherAdmins.slice().sort((a, b) =>
+          String(a.created_at || '').localeCompare(String(b.created_at || '')));
+        transfers.push({ clubId, newOwnerId: sorted[0].user_id });
+      }
+    }
+    if (blocked.length) {
+      const names = blocked.join(', ');
+      return res.status(409).json({
+        error: 'sole_admin',
+        clubs: blocked,
+        message: `You are the only admin of ${names}. Transfer the admin role to another member, or delete the club first — then come back and delete your account.`
+      });
+    }
+
+    // ── Phase 2: Stripe cancellation FIRST (abort on any failure) ──
+    const subsToCancel = [];
+    const { data: userSubRows } = await supabaseAdmin
+      .from('subscriptions').select('*').eq('owner_type', 'user').eq('owner_id', uid);
+    for (const s of (userSubRows || [])) {
+      if (PAID_SUB_STATUSES.includes(s.status) && s.stripe_subscription_id) subsToCancel.push(s);
+    }
+    for (const club of dying) {
+      const { data: clubSubRows } = await supabaseAdmin
+        .from('subscriptions').select('*').eq('owner_type', 'club').eq('owner_id', club.id);
+      for (const s of (clubSubRows || [])) {
+        if (PAID_SUB_STATUSES.includes(s.status) && s.stripe_subscription_id) subsToCancel.push(s);
+      }
+    }
+    const STRIPE_ABORT = {
+      error: 'stripe_cancel_failed',
+      message: "We couldn't cancel your subscription — nothing was deleted. Try again in a minute or contact support."
+    };
+    if (subsToCancel.length && !stripe) {
+      console.log('Account delete aborted: paid subscription exists but Stripe is not configured');
+      return res.status(502).json(STRIPE_ABORT);
+    }
+    for (const s of subsToCancel) {
+      try {
+        // Retrieve first: a sub Stripe verifiably shows as canceled is safe
+        // to skip. ANY error — including "no such subscription" (a DB row
+        // claiming active for a sub this Stripe account can't see is exactly
+        // the suspicious case) — aborts the whole delete with nothing removed.
+        const live = await stripe.subscriptions.retrieve(s.stripe_subscription_id);
+        if (live && live.status === 'canceled') {
+          console.log('Account delete: subscription already canceled in Stripe (ok):', s.stripe_subscription_id);
+          continue;
+        }
+        await stripe.subscriptions.cancel(s.stripe_subscription_id);
+        console.log('Account delete: canceled subscription', s.stripe_subscription_id);
+      } catch (err) {
+        console.log('Account delete aborted: Stripe cancel failed:', err.message);
+        return res.status(502).json(STRIPE_ABORT);
+      }
+    }
+
+    // ── Phase 3: the sweep (zero residue). Child rows before parents. ──
+    const del = async (table, applyFilters) => {
+      let q = supabaseAdmin.from(table).delete();
+      q = applyFilters(q);
+      const { error } = await q;
+      if (error) throw new Error('delete ' + table + ': ' + error.message);
+    };
+    const idsOf = rows => (rows || []).map(r => r.id);
+
+    // 3a. Dying clubs' full sub-cascade.
+    for (const club of dying) {
+      const cid = club.id;
+      const { data: clubChallenges } = await supabaseAdmin.from('challenges').select('id').eq('club_id', cid);
+      if (idsOf(clubChallenges).length) {
+        await del('challenge_participants', q => q.in('challenge_id', idsOf(clubChallenges)));
+        await del('challenges', q => q.in('id', idsOf(clubChallenges)));
+      }
+      const { data: clubEvents } = await supabaseAdmin.from('events').select('id').eq('club_id', cid);
+      if (idsOf(clubEvents).length) {
+        await del('event_rsvps', q => q.in('event_id', idsOf(clubEvents)));
+        await del('events', q => q.in('id', idsOf(clubEvents)));
+      }
+      // (posts are user-scoped — no club_id column; the club feed derives
+      // from member activity — so there is no club-posts table to sweep)
+      await del('club_invites', q => q.eq('club_id', cid));
+      await del('memberships', q => q.eq('club_id', cid));
+      await del('subscriptions', q => q.eq('owner_type', 'club').eq('owner_id', cid));
+      if (club.logo_url) await deleteAvatarObject(club.logo_url, 'clubs/' + cid);
+      await del('clubs', q => q.eq('id', cid));
+    }
+
+    // 3b. Ownership transfers for surviving clubs. If the surviving club has a
+    // paid subscription it is still billed to the departed owner's card, so the
+    // new owner MUST be told to update payment. actorId stays null so this
+    // notification survives the actor_id sweep below.
+    for (const t of transfers) {
+      const { error } = await supabaseAdmin.from('clubs')
+        .update({ owner_id: t.newOwnerId }).eq('id', t.clubId);
+      if (error) throw new Error('owner transfer: ' + error.message);
+      try {
+        const { data: clubSub } = await supabaseAdmin.from('subscriptions')
+          .select('status').eq('owner_type', 'club').eq('owner_id', t.clubId)
+          .in('status', PAID_SUB_STATUSES).limit(1).maybeSingle();
+        const clubName = (clubById[t.clubId] && clubById[t.clubId].name) || 'your club';
+        await createNotification({
+          userId: t.newOwnerId,
+          type: 'billing',
+          title: 'You are now the owner of ' + clubName,
+          body: 'The previous owner deleted their account.' + (clubSub
+            ? ' The club\'s subscription is still billed to their payment card — update the payment method in the club\'s billing settings to keep it active.'
+            : ''),
+          link: '/clubs/dashboard?club=' + t.clubId
+        });
+      } catch (err) {
+        console.error('transfer notification failed (non-fatal):', err.message);
+      }
+    }
+
+    // 3c. User-owned rows everywhere else.
+    const { data: userPosts } = await supabaseAdmin.from('posts').select('id').eq('user_id', uid);
+    if (idsOf(userPosts).length) {
+      await del('post_likes', q => q.in('post_id', idsOf(userPosts)));
+      await del('post_comments', q => q.in('post_id', idsOf(userPosts)));
+    }
+    await del('post_likes', q => q.eq('user_id', uid));
+    await del('post_comments', q => q.eq('user_id', uid));
+    if (idsOf(userPosts).length) await del('posts', q => q.in('id', idsOf(userPosts)));
+
+    const { data: userEvents } = await supabaseAdmin.from('events').select('id').eq('created_by', uid);
+    if (idsOf(userEvents).length) {
+      await del('event_rsvps', q => q.in('event_id', idsOf(userEvents)));
+      await del('events', q => q.in('id', idsOf(userEvents)));
+    }
+    const { data: userChallenges } = await supabaseAdmin.from('challenges').select('id').eq('created_by', uid);
+    if (idsOf(userChallenges).length) {
+      await del('challenge_participants', q => q.in('challenge_id', idsOf(userChallenges)));
+      await del('challenges', q => q.in('id', idsOf(userChallenges)));
+    }
+    await del('notifications', q => q.eq('user_id', uid));
+    await del('notifications', q => q.eq('actor_id', uid));
+    await del('follows', q => q.eq('follower_id', uid));
+    await del('follows', q => q.eq('following_id', uid));
+    await del('activities', q => q.eq('user_id', uid));
+    await del('goals', q => q.eq('user_id', uid));
+    await del('planned_sessions', q => q.eq('user_id', uid));
+    await del('achievements', q => q.eq('user_id', uid));
+    await del('event_rsvps', q => q.eq('user_id', uid));
+    await del('challenge_participants', q => q.eq('user_id', uid));
+    await del('memberships', q => q.eq('user_id', uid));
+    await del('club_invites', q => q.eq('invited_by', uid));
+    if (email) await del('club_invites', q => q.eq('email', email));
+    await del('subscriptions', q => q.eq('owner_type', 'user').eq('owner_id', uid));
+
+    // 3d. Storage avatar, then the auth user LAST.
+    if (meta.avatar_url) await deleteAvatarObject(meta.avatar_url, 'users/' + uid);
+    const { error: authErr } = await supabaseAdmin.auth.admin.deleteUser(uid);
+    if (authErr) throw new Error('auth delete: ' + authErr.message);
+
+    res.clearCookie('sb_access_token');
+    res.clearCookie('sb_refresh_token');
+    console.log('Account deleted:', uid, '| dying clubs:', dying.length, '| transfers:', transfers.length, '| subs canceled:', subsToCancel.length);
+    res.json({ ok: true, redirect: BASE + '/landing' });
+  } catch (err) {
+    // Honest partial-failure report: by this point Stripe cancellation may
+    // already have happened (that is the safe direction — a canceled sub
+    // never bills a half-deleted account).
+    console.log('Account delete error:', err.message);
+    res.status(500).json({
+      error: 'delete_failed',
+      message: 'Something failed partway through deletion. Any paid subscription was already canceled. Please try again or contact support to finish removing your data.'
+    });
+  }
+});
+
 // ── AVATARS & CLUB LOGOS (Supabase Storage) ──
 // One PUBLIC bucket, path-namespaced: users/{userId}/{ts}.webp and
 // clubs/{clubId}/{ts}.webp. All writes are server-mediated via the service
