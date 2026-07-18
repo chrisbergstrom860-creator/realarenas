@@ -248,6 +248,9 @@ button,select,input,textarea{font-family:var(--font)}
 .toggle.on::after{left:18px}.toggle.off::after{left:2px}
 .privacy-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:var(--border)}
 .privacy-row:last-child{border-bottom:none}
+/* Subtle per-card save indicator for the preference toggles (flip = save). */
+.pref-saved{font-size:11px;font-weight:600;color:var(--gray-400);opacity:0;transition:opacity .25s}
+.pref-saved.err{color:#A32D2D}
 .pr-text{font-size:13px;color:var(--gray-800)}
 .pr-sub{font-size:11px;color:var(--gray-500);margin-top:1px}
 .danger-zone{border:1px solid #FECACA;border-radius:var(--radius-lg);padding:16px 20px;background:#FFF5F5}
@@ -586,25 +589,28 @@ button,select,input,textarea{font-family:var(--font)}
       </div>
 
       <div style="width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:14px">
+        <!-- Real preferences: every toggle below is stored server-side
+             (user_metadata.prefs) and ENFORCED. Flip = save immediately (no
+             save button); initial on/off state is hydrated from
+             ARENAS_DATA.prefs so a reload shows the stored truth. Former
+             chrome-only toggles (Public profile, GPS routes, DMs, AI summary)
+             were removed — those features don't exist yet; their toggles
+             return when they do. -->
         <div class="card">
-          <div class="card-hdr"><span class="card-title">🔒 Privacy</span></div>
+          <div class="card-hdr"><span class="card-title">🔒 Privacy</span><span class="pref-saved" aria-live="polite"></span></div>
           <div class="settings-section">
-            <div class="privacy-row"><div><div class="pr-text">Public profile</div><div class="pr-sub">Anyone can see your profile and activities</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
-            <div class="privacy-row"><div><div class="pr-text">Show on leaderboards</div><div class="pr-sub">Appear in public and club rankings</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
-            <div class="privacy-row"><div><div class="pr-text">Share GPS routes</div><div class="pr-sub">Show map and route on activities</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
-            <div class="privacy-row"><div><div class="pr-text">Activity feed visible</div><div class="pr-sub">Followers can see your activities</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
-            <div class="privacy-row" style="border-bottom:none"><div><div class="pr-text">Allow direct messages</div><div class="pr-sub">From athletes you don't follow</div></div><div class="toggle off" onclick="toggleIt(this)"></div></div>
+            <div class="privacy-row"><div><div class="pr-text">Show on leaderboards</div><div class="pr-sub">Appear in public and club rankings</div></div><div class="toggle on" data-pref="show_on_leaderboards" onclick="prefToggle(this)"></div></div>
+            <div class="privacy-row" style="border-bottom:none"><div><div class="pr-text">Activity feed visible</div><div class="pr-sub">Followers can see your activities</div></div><div class="toggle on" data-pref="activity_feed_visible" onclick="prefToggle(this)"></div></div>
           </div>
         </div>
         <div class="card">
-          <div class="card-hdr"><span class="card-title">🔔 Notifications</span></div>
+          <div class="card-hdr"><span class="card-title">🔔 Notifications</span><span class="pref-saved" aria-live="polite"></span></div>
           <div class="settings-section">
-            <div class="privacy-row"><div><div class="pr-text">Kudos on activities</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
-            <div class="privacy-row"><div><div class="pr-text">Comments</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
-            <div class="privacy-row"><div><div class="pr-text">New followers</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
-            <div class="privacy-row"><div><div class="pr-text">Challenge updates</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
-            <div class="privacy-row"><div><div class="pr-text">Club event invites</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
-            <div class="privacy-row" style="border-bottom:none"><div><div class="pr-text">Weekly AI training summary</div></div><div class="toggle on" onclick="toggleIt(this)"></div></div>
+            <div class="privacy-row"><div><div class="pr-text">Kudos on activities</div></div><div class="toggle on" data-pref="notify_kudos" onclick="prefToggle(this)"></div></div>
+            <div class="privacy-row"><div><div class="pr-text">Comments</div></div><div class="toggle on" data-pref="notify_comments" onclick="prefToggle(this)"></div></div>
+            <div class="privacy-row"><div><div class="pr-text">New followers</div></div><div class="toggle on" data-pref="notify_followers" onclick="prefToggle(this)"></div></div>
+            <div class="privacy-row"><div><div class="pr-text">Challenge updates</div></div><div class="toggle on" data-pref="notify_challenges" onclick="prefToggle(this)"></div></div>
+            <div class="privacy-row" style="border-bottom:none"><div><div class="pr-text">Event invites &amp; RSVPs</div></div><div class="toggle on" data-pref="notify_events" onclick="prefToggle(this)"></div></div>
           </div>
         </div>
         <div class="danger-zone">
@@ -730,11 +736,44 @@ function toggleLike(btn) {
   const n = parseInt(btn.textContent.match(/\d+/)[0]);
   btn.textContent = '👍 ' + (liked ? n - 1 : n + 1) + ' kudos';
 }
-function toggleIt(el) {
-  const on = el.classList.contains('on');
-  el.classList.toggle('on', !on);
-  el.classList.toggle('off', on);
+// Settings toggles are real stored preferences: flip = optimistic UI + an
+// immediate save to /api/profile/prefs. On failure the flip reverts and the
+// card's indicator says so. Initial state is hydrated from ARENAS_DATA.prefs
+// (see the hydration IIFE below), so a reload always shows the stored truth.
+function prefToggle(el) {
+  var key = el.getAttribute('data-pref');
+  var wasOn = el.classList.contains('on');
+  var next = !wasOn;
+  el.classList.toggle('on', next);
+  el.classList.toggle('off', !next);
+  var card = el.closest('.card');
+  var ind = card ? card.querySelector('.pref-saved') : null;
+  if (ind) { ind.textContent = 'Saving…'; ind.classList.remove('err'); ind.style.opacity = '1'; clearTimeout(ind._t); }
+  fetch(window.BASE + '/api/profile/prefs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: key, value: next })
+  })
+    .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return r.ok && d && d.ok; }); })
+    .then(function (ok) {
+      if (!ok) throw new Error('save failed');
+      if (ind) { ind.textContent = 'Saved ✓'; ind._t = setTimeout(function () { ind.style.opacity = '0'; }, 1500); }
+    })
+    .catch(function () {
+      el.classList.toggle('on', wasOn);
+      el.classList.toggle('off', !wasOn);
+      if (ind) { ind.textContent = "Couldn't save — reverted"; ind.classList.add('err'); ind._t = setTimeout(function () { ind.style.opacity = '0'; }, 3000); }
+    });
 }
+// Hydrate the toggles from the server-injected preferences (missing key = on).
+(function () {
+  var prefs = (window.ARENAS_DATA && window.ARENAS_DATA.prefs) || {};
+  document.querySelectorAll('.toggle[data-pref]').forEach(function (el) {
+    var on = prefs[el.getAttribute('data-pref')] !== false;
+    el.classList.toggle('on', on);
+    el.classList.toggle('off', !on);
+  });
+})();
 function openModal(id) { document.getElementById('modal-' + id).classList.add('open'); }
 function closeModals(e) {
   if (!e || e.target.classList.contains('modal-overlay'))

@@ -45,5 +45,6 @@
 - [html-arenas timezones](html-arenas-timezones.md) — ALL day-math via tzdate.js zone keys, incl. multi-user boundary policy (member buckets / viewer windows / per-participant challenges); UTC parity proven.
 - [html-arenas country/state + tz](html-arenas-tz-country-audit.md) — country/state + /log date SHIPPED (countries.js SSOT; updateUserById MERGES metadata → clear with null not delete); single-user tz day-math now shipped, see timezones topic.
 - [html-arenas handle hiding](html-arenas-handle-hiding.md) — handles display-hidden but preserved in data; Session-1 surfaces done, sidebar chrome = Session 2; disambiguation via location+sports sublines.
+- [html-arenas settings prefs](html-arenas-settings-prefs.md) — 7 real toggles in user_metadata.prefs (absent=true, read-merge-write only); enforcement map + deliberate non-gates; only /api/profile/prefs may write prefs.
 - [html-arenas club creation](html-arenas-club-create.md) — dual-mode /for-clubs wizard (WIZARD_STEPS), /api/clubs/create w/ 3-club cap, signup fork dead, safe login `next`, email-check enumeration risk.
 - [html-arenas feed timeline](html-arenas-feed-timeline.md) — /feed is one merged newest-first list; sort by "entered feed" created_at per type (never subject date); server windows must order by the same key.

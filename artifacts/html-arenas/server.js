@@ -751,6 +751,37 @@ function displayFromUser(user) {
   };
 }
 
+// ── USER PREFERENCES (Settings toggles) ────────────────────────────────────
+// Stored as an object under user_metadata.prefs. A missing key means TRUE
+// (default-on): nobody's experience changes until they explicitly opt out.
+// NOTE: updateUserById merges top-level metadata keys but replaces nested
+// objects wholesale — writers must read-merge-write the prefs object.
+const PREF_KEYS = [
+  'show_on_leaderboards',  // off = excluded from rankings (leaderboards page all scopes + feed club-rank)
+  'activity_feed_visible', // off = activities hidden from followers' feeds + no follower fan-out notifs
+  'notify_kudos',          // gates type 'like'
+  'notify_comments',       // gates type 'comment'
+  'notify_followers',      // gates type 'follow'
+  'notify_challenges',     // gates type 'challenge' (invites + reminders)
+  'notify_events'          // gates type 'event' (invites, RSVPs, friend-going)
+];
+function prefsFromMeta(meta) {
+  const stored = (meta && meta.prefs) || {};
+  const out = {};
+  PREF_KEYS.forEach((k) => { out[k] = stored[k] !== false; });
+  return out;
+}
+// Which recipient preference gates each notification type. Types not listed
+// ('club', 'achievement', 'activity') have no toggle and are never gated here
+// — 'activity' fan-out is gated ACTOR-side by activity_feed_visible instead.
+const NOTIF_PREF_BY_TYPE = {
+  like: 'notify_kudos',
+  comment: 'notify_comments',
+  follow: 'notify_followers',
+  challenge: 'notify_challenges',
+  event: 'notify_events'
+};
+
 // Safely inject a server-built data object into an HTML page as
 // window.ARENAS_DATA, escaping `<` so club/member names can't break out of the
 // <script> tag.
@@ -1079,6 +1110,17 @@ function injectProBadge(html, isPro) {
 // succeeds. Uses the shared supabaseAdmin singleton.
 async function createNotification({ userId, type, title, body, link, actorId, entityId }) {
   if (!supabaseAdmin || !userId) return;
+  // Respect the recipient's notification preferences for gated types. Fail
+  // OPEN: if the lookup errors we deliver (current behavior), never drop.
+  const prefKey = NOTIF_PREF_BY_TYPE[type];
+  if (prefKey) {
+    try {
+      const { data: u } = await supabaseAdmin.auth.admin.getUserById(userId);
+      if (u && u.user && !prefsFromMeta(u.user.user_metadata)[prefKey]) return;
+    } catch (err) {
+      // Lookup failure → deliver.
+    }
+  }
   try {
     const { error } = await supabaseAdmin.from('notifications').insert({
       user_id: userId,
@@ -1607,6 +1649,15 @@ async function buildFeedActivities(limit, currentUserId) {
       .eq('follower_id', currentUserId);
     followingIds = (following || []).map(f => f.following_id).filter(Boolean);
   }
+  // "Activity feed visible" off = the author's activities are hidden from
+  // FOLLOWERS' feeds. The viewer's own activities always stay in their own
+  // feed (the preference hides you from others, never from yourself). Club
+  // feeds are intentionally untouched — club membership is its own opt-in
+  // sharing context. Fail open: a failed lookup keeps the author visible.
+  if (followingIds.length) {
+    const authorProfiles = await buildUserProfileMap(followingIds);
+    followingIds = followingIds.filter((id) => !(authorProfiles[id] && authorProfiles[id].prefs && !authorProfiles[id].prefs.activity_feed_visible));
+  }
   const feedUserIds = [...new Set([...followingIds, currentUserId].filter(Boolean))];
   if (!feedUserIds.length) return [];
   // Ordered by created_at (when the activity was LOGGED), not the activity's
@@ -1768,12 +1819,17 @@ app.post(BASE + '/api/activities/create', requireAuth, async (req, res) => {
     }
   }
   // Notify followers (best-effort). The actor name comes from auth metadata
-  // (no `profiles` table), not a DB join.
+  // (no `profiles` table), not a DB join. Gated ACTOR-side by the logger's
+  // "Activity feed visible" preference: if their activities are hidden from
+  // followers' feeds, the "X logged a new activity" fan-out would leak the
+  // same information, so it is skipped too.
   try {
-    const { data: followers } = await supabaseAdmin
-      .from('follows')
-      .select('follower_id')
-      .eq('following_id', req.user.id);
+    const { data: followers } = (prefsFromMeta(req.user.user_metadata).activity_feed_visible)
+      ? await supabaseAdmin
+          .from('follows')
+          .select('follower_id')
+          .eq('following_id', req.user.id)
+      : { data: [] };
     const actor = displayFromUser(req.user);
     for (const f of (followers || [])) {
       await createNotification({
@@ -1938,7 +1994,11 @@ async function buildUserProfileMap(ids) {
           location: m.location || null,
           // Stored zone (validated at read time by consumers via
           // isValidTimezone; absent for users who predate capture).
-          timezone: m.timezone || null
+          timezone: m.timezone || null,
+          // Resolved preference booleans (default-on) — additive, used by
+          // ranking surfaces to exclude leaderboard opt-outs. A failed lookup
+          // leaves the entry absent → callers default to include.
+          prefs: prefsFromMeta(m)
         };
       }
     } catch (err) {
@@ -1956,7 +2016,11 @@ app.get(BASE + '/api/leaderboard/platform', requireAuth, async (req, res) => {
   const sport = req.query.sport || 'all';
   if (!supabaseAdmin) return res.json({ leaderboard: [], period, sport });
   try {
-    const users = await listAllAuthUsers();
+    // "Show on leaderboards" opt-outs are excluded for EVERY viewer, including
+    // themselves — a self-only rank that nobody else sees would be a lie. The
+    // opted-out user can still browse the boards; they just hold no rank.
+    const users = (await listAllAuthUsers())
+      .filter((u) => prefsFromMeta(u.user_metadata).show_on_leaderboards);
     const userIds = users.map((u) => u.id);
     const byUser = bucketActivities(await fetchActivitiesForUsers(userIds, period, sport));
     const leaderboard = users.map((u) => {
@@ -1994,9 +2058,12 @@ app.get(BASE + '/api/leaderboard/following', requireAuth, async (req, res) => {
   try {
     const { data: following } = await supabaseAdmin
       .from('follows').select('following_id').eq('follower_id', req.user.id);
-    const userIds = [...new Set([...(following || []).map((f) => f.following_id), req.user.id].filter(Boolean))];
+    const allIds = [...new Set([...(following || []).map((f) => f.following_id), req.user.id].filter(Boolean))];
+    const profileMap = await buildUserProfileMap(allIds);
+    // Leaderboard opt-outs drop out here too (universal exclusion — including
+    // the viewer's own row if THEY opted out). Failed lookups stay ranked.
+    const userIds = allIds.filter((id) => !(profileMap[id] && profileMap[id].prefs && !profileMap[id].prefs.show_on_leaderboards));
     const byUser = bucketActivities(await fetchActivitiesForUsers(userIds, period, sport));
-    const profileMap = await buildUserProfileMap(userIds);
     const leaderboard = userIds.map((id) => {
       const p = profileMap[id] || { name: 'Athlete', handle: 'athlete', sports: [], location: null };
       const acts = byUser[id] || [];
@@ -2032,9 +2099,11 @@ app.get(BASE + '/api/leaderboard/club', requireAuth, async (req, res) => {
     const club = Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs;
     const { data: members } = await supabaseAdmin
       .from('memberships').select('user_id').eq('club_id', membership.club_id);
-    const memberIds = [...new Set((members || []).map((m) => m.user_id).filter(Boolean))];
+    const allMemberIds = [...new Set((members || []).map((m) => m.user_id).filter(Boolean))];
+    const profileMap = await buildUserProfileMap(allMemberIds);
+    // Same universal opt-out exclusion as the platform/following scopes.
+    const memberIds = allMemberIds.filter((id) => !(profileMap[id] && profileMap[id].prefs && !profileMap[id].prefs.show_on_leaderboards));
     const byUser = bucketActivities(await fetchActivitiesForUsers(memberIds, period, sport));
-    const profileMap = await buildUserProfileMap(memberIds);
     const leaderboard = memberIds.map((id) => {
       const p = profileMap[id] || { name: 'Member', handle: 'member', sports: [], location: null };
       const acts = byUser[id] || [];
@@ -4269,7 +4338,13 @@ async function buildFeedSidebar(userId, tz) {
       const club = Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs;
       const { data: members } = await supabaseAdmin
         .from('memberships').select('user_id').eq('club_id', membership.club_id);
-      const memberIds = [...new Set((members || []).map(m => m.user_id).filter(Boolean))];
+      const allMemberIds = [...new Set((members || []).map(m => m.user_id).filter(Boolean))];
+      // Leaderboard opt-outs leave the ranking pool here too (this widget IS a
+      // club ranking). Metadata lookups are now required for the prefs — the
+      // sets are club-sized, so per-member lookups stay acceptable. An
+      // opted-out VIEWER gets no rank widget at all (idx === -1 below).
+      const memberProfiles = await buildUserProfileMap(allMemberIds);
+      const memberIds = allMemberIds.filter((id) => !(memberProfiles[id] && memberProfiles[id].prefs && !memberProfiles[id].prefs.show_on_leaderboards));
       if (memberIds.length) {
         // Rank by points earned since the same viewer-zone Monday-midnight
         // instant used for the viewer's "this week" km — NOT the rolling-7-day
@@ -5051,6 +5126,9 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
         timezone: isValidTimezone(meta.timezone) ? meta.timezone : '',
         timezoneSource: meta.timezone_source === 'manual' ? 'manual' : 'auto'
       },
+      // Resolved Settings toggles (default-on) — drives the privacy/notification
+      // toggles' initial on/off state, so a reload always shows the stored truth.
+      prefs: prefsFromMeta(meta),
       // Full registries for the settings dropdowns — injected here rather than
       // into the shared shell script so only the profile page pays the ~7KB.
       countries: COUNTRIES,
@@ -5963,6 +6041,32 @@ app.get(BASE + '/log', requirePageAuth, async (req, res) => {
   }
 });
 
+// Persist a single Settings toggle preference. Flip = save (no separate save
+// button). Whitelisted keys, boolean values only. updateUserById merges
+// top-level metadata but replaces nested objects wholesale, so the prefs
+// object is read (fresh via requireAuth's getUser) and merged here before the
+// write — a key missing from this request keeps its stored value.
+app.post(BASE + '/api/profile/prefs', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  const key = req.body && req.body.key;
+  const value = req.body && req.body.value;
+  if (!PREF_KEYS.includes(key) || typeof value !== 'boolean') {
+    return res.status(400).json({ error: 'Invalid preference' });
+  }
+  try {
+    const current = (req.user.user_metadata && req.user.user_metadata.prefs) || {};
+    const prefs = Object.assign({}, current, { [key]: value });
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.user.id, {
+      user_metadata: { prefs }
+    });
+    if (error) return res.status(500).json({ error: 'Could not save your setting' });
+    res.json({ ok: true, prefs: prefsFromMeta({ prefs }) });
+  } catch (err) {
+    console.log('Prefs update error:', err.message);
+    res.status(500).json({ error: 'Could not save your setting' });
+  }
+});
+
 // Persist profile edits. There is no `profiles` table, so changes are written to
 // the user's auth metadata (name/handle/bio/location), merged over any existing
 // metadata so unrelated keys are preserved. Returns JSON for the edit form fetch.
@@ -6046,6 +6150,12 @@ app.post(BASE + '/api/profile/update', requireAuth, async (req, res) => {
       if (cleaned.length > KNOWN_SPORTS.length) return res.status(400).json({ error: 'Too many sports' });
       meta.sports = cleaned;
     }
+    // Never carry the prefs subobject through this route. updateUserById merges
+    // top-level keys but REPLACES nested objects, so including the (possibly
+    // stale) prefs copy here would clobber a settings toggle flipped between
+    // this request's auth lookup and its write. Omitting the key keeps the
+    // stored prefs untouched; /api/profile/prefs is the only prefs writer.
+    delete meta.prefs;
     const { error } = await supabaseAdmin.auth.admin.updateUserById(req.user.id, { user_metadata: meta });
     if (error) {
       console.log('Profile update error:', error.message);
