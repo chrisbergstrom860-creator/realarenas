@@ -16,6 +16,17 @@ Collapsing the shell to one column with `grid-template-columns: 1fr` is WRONG. `
 **Fix:** use `grid-template-columns: minmax(0, 1fr)` on BOTH `.app` and `.main`, plus `min-width:0` on the column children (`.feed-col`, `.side-col`, `.right-col`). Also override fixed-width topbar pieces (`.topbar-search{width:260px}` → `width:100%;min-width:0`).
 **Why:** `min-width:0`/`minmax(0,..)` lets flex/grid children shrink below content width so text wraps. This is the canonical CSS blowout fix and applies to every page rolled out.
 
+## Gotcha variant: nested grid→flex trap (my-profile Following list)
+Grid of flex cards + `white-space:nowrap` text: `min-width:0` on the INNER flex
+child is NOT enough — the `1fr` track's auto minimum resolves to the flex CARD's
+intrinsic min-content (full nowrap text width), blowing the row past the viewport
+(~540px card in a 380px viewport, silently clipped by the shell's overflow).
+**Fix:** put `min-width:0` on the grid ITEM itself (the card). The my-profile
+Following/Followers grid stacks to one column in the gated mobile block with
+ellipsized `.fc-name`/`.fc-sport` and `flex-shrink:0` on the button; desktop
+keeps `1fr 1fr`. Sibling tabs (Clubs = flex column; Achievements/Stats tiles)
+measured clean at 380px — don't "fix" them.
+
 ## Rails stack for free
 `.side-col` / `.right-col` are the LAST child of `.main`, so once the grid is single-column they flow below the main content automatically — just reset them to `position:static;height:auto;overflow:visible;width:auto`.
 

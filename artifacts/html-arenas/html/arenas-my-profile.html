@@ -86,6 +86,17 @@ button,select,input,textarea{font-family:var(--font)}
   body:has(.bottom-nav) .hero-actions{align-self:stretch}
   body:has(.bottom-nav) .hero-clubs{justify-content:flex-start;max-width:none}
   body:has(.bottom-nav) .hero-av-edit{opacity:1}
+  /* Following/Followers: stack people one per row — two columns cramps names
+     at phone width. Name/subline left (ellipsized, never multi-line), button
+     pinned right and never shrinking. Desktop keeps the 2-col grid above. */
+  body:has(.bottom-nav) .following-grid{grid-template-columns:1fr;gap:4px;padding:10px 12px}
+  /* min-width:0 on the grid ITEM is load-bearing: with nowrap names the 1fr
+     track's auto minimum otherwise grows to the card's intrinsic width and
+     the row blows out past the phone viewport instead of ellipsizing. */
+  body:has(.bottom-nav) .follow-card{padding:8px 6px;gap:10px;min-width:0}
+  body:has(.bottom-nav) .fc-name,
+  body:has(.bottom-nav) .fc-sport{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  body:has(.bottom-nav) .follow-card .btn{flex-shrink:0}
 }
 .hero-tab-bar{background:white;border-bottom:var(--border);position:sticky;top:56px;z-index:50}
 .htb-inner{max-width:1200px;margin:0 auto;padding:0 28px;display:flex;gap:0}
