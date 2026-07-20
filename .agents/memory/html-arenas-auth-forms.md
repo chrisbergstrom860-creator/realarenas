@@ -27,6 +27,19 @@ if you also want an onclick toast — disabled buttons swallow click events. Use
 `showToast(...)`. The landing page has no `#toast` element, so its `showToast` is
 self-contained (creates the element on first call).
 
+## Existing-email signup = enumeration-safe honest pattern
+With confirmations ON, Supabase signUp on an EXISTING confirmed email returns an
+obfuscated user with an EMPTY `identities` array, sends nothing, and the person waits
+forever for a confirmation. Detection is `data.user.identities.length === 0`. The route
+keeps the redirect byte-identical to a fresh signup (`?error=confirm_email` → "check
+your inbox") but fires `buildExistingEmailSignupEmail` (log-in / reset links) via the
+shared Resend sender, NOT awaited (so timing stays flat and a failed send can't break
+signup). Existing UNCONFIRMED emails still get Supabase's own re-sent confirmation
+(identities non-empty → falls through). Club wizard is separately covered by the
+inline `/auth/email-check` step gate (deliberately explicit — documented accepted risk).
+Known: fresh-vs-existing response timing differs (~0.9s, Supabase's own send dominates)
+— accepted at prototype scale; `/auth/email-check` is the bigger oracle anyway.
+
 ## Auth error codes the banner understands
 `/auth/signup` redirects use: `missing_fields`, `signup_failed`, `confirm_email`.
 `/auth/login` uses `invalid`. The `?error=` banner maps these to messages and opens the

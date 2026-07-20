@@ -305,6 +305,52 @@ app.post(BASE + '/auth/login', async (req, res) => {
   }
 });
 
+// Email sent to an EXISTING address when someone tries to sign up with it.
+// Enumeration-safe honest pattern: the on-page response stays identical to a
+// fresh signup ("check your inbox"), but instead of silence the real owner
+// gets this note — so a legitimate returning user learns to log in or reset,
+// and a stranger probing the form learns nothing from the page.
+function buildExistingEmailSignupEmail({ loginUrl, resetUrl }) {
+  const lUrl = escapeHtml(loginUrl);
+  const rUrl = escapeHtml(resetUrl);
+  const subject = 'Someone tried to sign up with your email on Arenas';
+  const html = `<!doctype html><html><body style="margin:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 16px">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e4e4e7">
+        <tr><td style="background:#18181b;padding:22px 28px">
+          <span style="color:#fde047;font-size:20px;font-weight:800;letter-spacing:-.02em">🏆 Arenas</span>
+        </td></tr>
+        <tr><td style="padding:28px">
+          <h1 style="margin:0 0 14px;font-size:20px;color:#18181b">You already have an account</h1>
+          <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.55">Someone (probably you) just tried to sign up on Arenas with this email address &mdash; but it already has an account. No new account was created.</p>
+          <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.55">If that was you, just log in. Forgot your password? Reset it below.</p>
+          <table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 12px">
+            <tr><td style="border-radius:10px;background:#fde047">
+              <a href="${lUrl}" style="display:inline-block;padding:13px 26px;font-size:15px;font-weight:700;color:#18181b;text-decoration:none">Log in &rarr;</a>
+            </td></tr>
+          </table>
+          <p style="margin:0 0 22px"><a href="${rUrl}" style="color:#2563eb;font-size:14px">Reset your password</a></p>
+          <p style="margin:0;color:#71717a;font-size:13px;line-height:1.5">If this wasn't you, you can safely ignore this email &mdash; your account is unchanged and no one gained access to it.</p>
+        </td></tr>
+        <tr><td style="padding:18px 28px;border-top:1px solid #e4e4e7;background:#fafafa">
+          <p style="margin:0;color:#a1a1aa;font-size:12px;line-height:1.5">Arenas &mdash; every sport, one community.</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+  </body></html>`;
+  const text = [
+    'Someone (probably you) just tried to sign up on Arenas with this email address — but it already has an account. No new account was created.',
+    '',
+    `If that was you, just log in: ${loginUrl}`,
+    `Forgot your password? Reset it here: ${resetUrl}`,
+    '',
+    "If this wasn't you, you can safely ignore this email — your account is unchanged and no one gained access to it."
+  ].join('\n');
+  return { subject, html, text };
+}
+
 app.post(BASE + '/auth/signup', async (req, res) => {
   const email = (req.body.email || '').trim();
   const password = req.body.password;
@@ -338,6 +384,23 @@ app.post(BASE + '/auth/signup', async (req, res) => {
     if (error || !data || !data.user) {
       console.log('Signup failed:', error && error.message);
       return res.redirect(BASE + '/landing?error=signup_failed');
+    }
+    // EXISTING email: Supabase (confirmations on) returns an obfuscated user
+    // with an EMPTY identities array and sends nothing — the person would wait
+    // forever for a confirmation email. Honest enumeration-safe pattern: the
+    // on-page outcome below stays byte-identical to a fresh signup, but the
+    // real owner gets a "someone tried to sign up with your email" email via
+    // the shared Resend sender. Fire-and-forget (not awaited) so the response
+    // timing matches the new-user branch and a failed send can't break signup.
+    if (Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      console.log('Signup on existing email — sending already-registered notice');
+      const origin = publicBaseUrl(req);
+      const notice = buildExistingEmailSignupEmail({
+        loginUrl: origin + '/landing',
+        resetUrl: origin + '/forgot-password'
+      });
+      sendEmail({ to: email, subject: notice.subject, html: notice.html, text: notice.text });
+      return res.redirect(BASE + '/landing?error=confirm_email');
     }
     if (!data.session) {
       // No session means Supabase requires email confirmation before sign-in,
