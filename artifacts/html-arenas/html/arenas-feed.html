@@ -95,6 +95,7 @@ button,select,input,textarea{font-family:var(--font)}
 .ac-stat .sl{font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px;display:block}
 .ac-stat.tx-tile{flex:2 1 auto;min-width:110px}
 .ac-stat .sv.tx{font-family:inherit;font-size:12px;font-weight:600;line-height:1.3;padding-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;margin:0 auto}
+.ac-stat .si{font-size:11px;font-weight:400}
 .ac-desc{font-size:13px;color:var(--gray-600);line-height:1.6;margin-bottom:10px}
 .ac-ai-panel{background:var(--yellow-light);border:1px solid #fde68a;border-radius:8px;padding:10px 13px;display:flex;gap:8px;align-items:flex-start;margin-bottom:0}
 .ac-ai-icon{width:20px;height:20px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:var(--gray-900);flex-shrink:0;margin-top:1px}
@@ -743,26 +744,32 @@ function collectActivityItems() {
   // value large, small-caps label beneath. Numeric-ish values render mono via
   // .sv; free-text values (course name, terrain) get .sv.tx (smaller, sans)
   // and a wider tile so they don't balloon the row. No stats → no row at all.
+  // Each tile carries the stat's emoji from the old inline row (or its
+  // established icon elsewhere in the app) as a small .si accent IN FRONT OF
+  // the value — beside the 9px small-caps label it would dwarf the label and
+  // break the rhythm. Fields that never had an emoji (terrain) get none.
   function buildStats(a) {
-    function tile(value, label, isText) {
+    function tile(emoji, value, label, isText) {
       return '<div class="ac-stat' + (isText ? ' tx-tile' : '') + '">' +
-        '<span class="sv' + (isText ? ' tx' : '') + '">' + escFeedAct(value) + '</span>' +
+        '<span class="sv' + (isText ? ' tx' : '') + '">' +
+          (emoji ? '<span class="si">' + emoji + '</span> ' : '') + escFeedAct(value) +
+        '</span>' +
         '<span class="sl">' + escFeedAct(label) + '</span>' +
       '</div>';
     }
     const stats = [];
-    if (a.duration) stats.push(tile(a.duration, 'Duration'));
-    if (a.distance) stats.push(tile(a.distance, 'Distance'));
-    if (a.pace) stats.push(tile(a.pace, 'Pace'));
-    if (a.avg_power) stats.push(tile(a.avg_power, 'Power'));
-    if (a.avg_hr) stats.push(tile(a.avg_hr, 'Avg HR'));
-    if (a.elevation) stats.push(tile(a.elevation, 'Elevation'));
-    if (a.top_grade) stats.push(tile(a.top_grade, 'Top grade'));
-    if (a.problems_count) stats.push(tile(a.problems_count, 'Problems'));
-    if (a.golf_strokes) stats.push(tile(a.golf_strokes, 'Strokes'));
-    if (a.golf_course) stats.push(tile(a.golf_course, 'Course', true));
-    if (a.terrain) stats.push(tile(a.terrain, 'Terrain', true));
-    if (a.rpe) stats.push(tile(a.rpe, 'RPE'));
+    if (a.duration) stats.push(tile('⏱', a.duration, 'Duration'));
+    if (a.distance) stats.push(tile('📍', a.distance, 'Distance'));
+    if (a.pace) stats.push(tile('⚡', a.pace, 'Pace'));
+    if (a.avg_power) stats.push(tile('⚡', a.avg_power, 'Power'));
+    if (a.avg_hr) stats.push(tile('❤️', a.avg_hr, 'Avg HR'));
+    if (a.elevation) stats.push(tile('⛰', a.elevation, 'Elevation'));
+    if (a.top_grade) stats.push(tile('✓', a.top_grade, 'Top grade'));
+    if (a.problems_count) stats.push(tile('🧗', a.problems_count, 'Problems'));
+    if (a.golf_strokes) stats.push(tile('⛳', a.golf_strokes, 'Strokes'));
+    if (a.golf_course) stats.push(tile('🏌️', a.golf_course, 'Course', true));
+    if (a.terrain) stats.push(tile(null, a.terrain, 'Terrain', true));
+    if (a.rpe) stats.push(tile('💪', a.rpe, 'RPE'));
     return stats.join('');
   }
 
