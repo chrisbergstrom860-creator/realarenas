@@ -6205,7 +6205,19 @@ app.post(BASE + '/api/profile/update', requireAuth, async (req, res) => {
         meta.timezone_source = 'manual';
       }
     }
-    if (typeof body.bio === 'string') meta.bio = body.bio.trim().slice(0, 600);
+    // Bio: 220-word limit (word = whitespace-separated token — trim, split on
+    // /\s+/, count non-empty tokens; the Settings counter uses the identical
+    // rule) plus a 2,000-char ceiling as a backstop against no-space abuse.
+    // Over-limit input is REJECTED with a 400, never silently truncated (the
+    // old .slice(0, 600) cap cut stored bios off mid-word). Existing stored
+    // bios are never touched here — the limit applies only to new saves.
+    if (typeof body.bio === 'string') {
+      const bio = body.bio.trim();
+      if (bio.length > 2000) return res.status(400).json({ error: 'Bio is too long (2,000 character max)' });
+      const bioWords = bio ? bio.split(/\s+/).length : 0;
+      if (bioWords > 220) return res.status(400).json({ error: 'Bio is too long (220 word max)' });
+      meta.bio = bio;
+    }
     // "Your sports" chips (settings). Only registry ids are accepted; deduped
     // and capped at the registry size (now 12). An empty array clears the list.
     if (Array.isArray(body.sports)) {

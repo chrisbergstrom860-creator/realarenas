@@ -70,6 +70,11 @@ button,select,input,textarea{font-family:var(--font)}
 .hero-tag.sport-cyc{background:rgba(59,130,246,.2);color:#93C5FD;border-color:rgba(59,130,246,.3)}
 .hero-tag.sport-clm{background:rgba(139,92,246,.2);color:#C4B5FD;border-color:rgba(139,92,246,.3)}
 .hero-bio{font-size:13px;color:var(--gray-400);line-height:1.6;max-width:480px;animation:fade-up .3s ease .22s both}
+/* Long bios clamp to 4 lines (ellipsis lands at a word boundary); the
+   "Show more" toggle appears only when the text actually overflows. */
+.hero-bio.clamped{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.hero-bio-more{background:none;border:0;padding:0;margin-top:4px;font-size:12px;font-weight:600;color:var(--yellow);cursor:pointer;font-family:inherit;align-self:flex-start;animation:fade-up .3s ease .22s both}
+.hero-bio-more:hover{text-decoration:underline}
 .hero-stats{display:flex;gap:28px;animation:fade-up .3s ease .25s both}
 .hero-stat{text-align:center}
 .hero-stat-val{font-size:20px;font-weight:700;color:white;font-family:var(--mono);line-height:1}
@@ -238,6 +243,11 @@ button,select,input,textarea{font-family:var(--font)}
 .form-field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
 .form-label{font-size:12px;font-weight:600;color:var(--gray-700)}
 .form-label span{font-weight:400;color:var(--gray-400);margin-left:4px}
+/* Live bio word counter (limit 220; amber from 200, red at/over the limit) */
+.bio-counter{font-size:11px;font-family:var(--mono);color:var(--gray-500);margin-top:4px;text-align:right}
+.bio-counter.warn{color:var(--orange);font-weight:600}
+.bio-counter.over{color:var(--red);font-weight:700}
+.bio-limit-msg{font-size:12px;color:var(--red);margin-top:4px;line-height:1.5}
 /* .form-input/.form-select/.form-textarea promoted to arenas.css when the
    activity entry form moved to /log */
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -389,6 +399,7 @@ button,select,input,textarea{font-family:var(--font)}
           <span class="hero-tag" style="background:rgba(16,185,129,.15);color:#6EE7B7;border-color:rgba(16,185,129,.25)">Advanced</span>
         </div>
         <div class="hero-bio" id="profile-bio">Marathon runner, weekend cyclist, occasional wall climber. Chasing a sub-3:30 marathon. Hackney RC member since 2024. Always looking for Sunday long run partners in East London.</div>
+        <button class="hero-bio-more" id="hero-bio-more" type="button" style="display:none">Show more</button>
       </div>
       <div class="hero-stats">
         <div class="hero-stat"><div class="hero-stat-val">0</div><div class="hero-stat-label">Activities</div></div>
@@ -537,7 +548,7 @@ button,select,input,textarea{font-family:var(--font)}
               <div class="form-field"><label class="form-label">First name</label><input id="set-first-name" class="form-input" type="text" value="Jamie"></div>
               <div class="form-field"><label class="form-label">Last name</label><input id="set-last-name" class="form-input" type="text" value="King"></div>
             </div>
-            <div class="form-field"><label class="form-label">Bio</label><textarea id="set-bio" class="form-textarea">Marathon runner, weekend cyclist, occasional wall climber. Chasing a sub-3:30 marathon. Hackney RC member since 2024.</textarea></div>
+            <div class="form-field"><label class="form-label">Bio</label><textarea id="set-bio" class="form-textarea">Marathon runner, weekend cyclist, occasional wall climber. Chasing a sub-3:30 marathon. Hackney RC member since 2024.</textarea><div class="bio-counter" id="bio-counter">0 / 220 words</div><div class="bio-limit-msg" id="bio-limit-msg" style="display:none"></div></div>
             <div class="form-row">
               <div class="form-field"><label class="form-label">City</label><input id="set-location" class="form-input" type="text" value="London"></div>
               <div class="form-field"><label class="form-label">Country</label><select id="set-country" class="form-select"><option value="">Select country</option></select></div>
@@ -983,8 +994,28 @@ document.getElementById('htab-overview').classList.add('active');
     el.style.display = (place || memberSince) ? '' : 'none';
   });
 
-  // Bio
+  // Bio. Long bios clamp to 4 lines with an honest word-boundary ellipsis;
+  // the "Show more" toggle appears only when the text actually overflows the
+  // clamp (the button is a SIBLING of .hero-bio — setText rewrites would wipe
+  // a child). Measured after a frame so layout is settled.
   setText('.hero-bio', p.bio || 'No bio yet — add one from Settings.');
+  (function () {
+    var bioEl = document.querySelector('.hero-bio');
+    var moreBtn = document.getElementById('hero-bio-more');
+    if (!bioEl || !moreBtn) return;
+    bioEl.classList.add('clamped');
+    requestAnimationFrame(function () {
+      if (bioEl.scrollHeight > bioEl.clientHeight + 1) {
+        moreBtn.style.display = 'inline-block';
+        moreBtn.onclick = function () {
+          var nowClamped = bioEl.classList.toggle('clamped');
+          moreBtn.textContent = nowClamped ? 'Show more' : 'Show less';
+        };
+      } else {
+        bioEl.classList.remove('clamped');
+      }
+    });
+  })();
 
   // Page title
   document.title = 'Arenas — ' + name + ' · Profile';
@@ -1175,6 +1206,32 @@ document.getElementById('htab-overview').classList.add('active');
   setVal('set-bio', p.bio || '');
   setVal('set-location', p.location || '');
 
+  // ── Bio word counter (220-word limit) ──
+  // Word = whitespace-separated token: trim, split on /\s+/, count non-empty
+  // tokens — the EXACT rule the server uses in /api/profile/update, so the
+  // counter and the boundary always agree. 2,000-char ceiling is the server's
+  // no-space-abuse backstop, mirrored here. Amber from 200, red at/over 220;
+  // saves are blocked client-side only when OVER the limit (220 exactly saves).
+  var BIO_WORD_LIMIT = 220, BIO_WARN_AT = 200, BIO_CHAR_LIMIT = 2000;
+  function countBioWords(s) {
+    s = (s || '').trim();
+    return s ? s.split(/\s+/).length : 0;
+  }
+  function updateBioCounter() {
+    var ta = document.getElementById('set-bio');
+    var counter = document.getElementById('bio-counter');
+    if (!ta || !counter) return;
+    var words = countBioWords(ta.value);
+    counter.textContent = words + ' / ' + BIO_WORD_LIMIT + ' words';
+    counter.classList.toggle('warn', words >= BIO_WARN_AT && words < BIO_WORD_LIMIT);
+    counter.classList.toggle('over', words >= BIO_WORD_LIMIT);
+    var msg = document.getElementById('bio-limit-msg');
+    if (msg && words <= BIO_WORD_LIMIT && ta.value.trim().length <= BIO_CHAR_LIMIT) msg.style.display = 'none';
+  }
+  var bioTa = document.getElementById('set-bio');
+  if (bioTa) bioTa.addEventListener('input', updateBioCounter);
+  updateBioCounter();
+
   // Country / State selects: options rendered from the server-injected
   // registries (data.countries / data.usStates — ISO alpha-2 and USPS codes as
   // values, display names as labels), pre-selected from the stored codes.
@@ -1252,6 +1309,23 @@ document.getElementById('htab-overview').classList.add('active');
   async function saveProfile(btn) {
     var payload = gather();
     if (!payload.name) { if (window.showToast) showToast('Name cannot be empty'); return; }
+    // Bio limit: block over-limit saves client-side with a clear inline
+    // message (the server remains the real boundary and rejects with a 400).
+    var bioTrimmed = (payload.bio || '').trim();
+    var bioWords = countBioWords(bioTrimmed);
+    if (bioWords > BIO_WORD_LIMIT || bioTrimmed.length > BIO_CHAR_LIMIT) {
+      var limitMsg = document.getElementById('bio-limit-msg');
+      if (limitMsg) {
+        var overBy = bioWords - BIO_WORD_LIMIT;
+        limitMsg.textContent = bioWords > BIO_WORD_LIMIT
+          ? 'Your bio is ' + overBy + (overBy === 1 ? ' word' : ' words') + ' over the ' + BIO_WORD_LIMIT + '-word limit — please shorten it to save.'
+          : 'Your bio is over the 2,000-character limit — please shorten it to save.';
+        limitMsg.style.display = 'block';
+      }
+      var bioField = document.getElementById('set-bio');
+      if (bioField) bioField.focus();
+      return;
+    }
     var orig = btn ? btn.textContent : '';
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
     try {
@@ -1267,7 +1341,7 @@ document.getElementById('htab-overview').classList.add('active');
         setTimeout(function () { location.reload(); }, 600);
       } else {
         if (btn) { btn.disabled = false; btn.textContent = orig; }
-        if (window.showToast) showToast('Could not save profile — please try again');
+        if (window.showToast) showToast(result.error || 'Could not save profile — please try again');
       }
     } catch (err) {
       if (btn) { btn.disabled = false; btn.textContent = orig; }
