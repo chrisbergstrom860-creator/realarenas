@@ -297,9 +297,12 @@ app.post(BASE + '/auth/login', async (req, res) => {
         !next.includes('://') && !next.includes('\\')) {
       return res.redirect(next);
     }
-    // Club admins/coaches land on the dashboard; everyone else on the feed.
-    const dest = (await isClubManager(data.user && data.user.id)) ? '/clubs/dashboard' : '/feed';
-    return res.redirect(BASE + dest);
+    // Everyone lands on the athlete feed after login. Club admins/coaches are
+    // NOT special-cased to a dashboard: with multiple managed clubs there is
+    // no "the" dashboard (the old redirect picked the most recently created
+    // club, silently teleporting managers), and their clubs are one tap away
+    // via the sidebar "My clubs" list and the avatar "Clubs you manage" menu.
+    return res.redirect(BASE + '/feed');
   } catch (err) {
     return res.redirect(BASE + '/landing?error=invalid');
   }
@@ -515,7 +518,9 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
     }
 
     setSession(res, signInData.session);
-    return res.redirect(BASE + '/clubs/dashboard');
+    // Land on the dashboard of the club that was JUST created — explicit id,
+    // never "whatever club resolves as most recent".
+    return res.redirect(BASE + '/clubs/dashboard?club=' + club.id);
   } catch (err) {
     return res.redirect(BASE + '/for-clubs?error=signup');
   }
@@ -772,25 +777,6 @@ async function getOptionalUser(req) {
     return data.user;
   } catch (err) {
     return null;
-  }
-}
-
-// Returns true if the user holds an admin/coach membership in any club, so we
-// can route club managers to the dashboard instead of the athlete feed. Safe to
-// call without the service role key (returns false rather than throwing).
-async function isClubManager(userId) {
-  if (!userId || !supabaseAdmin) return false;
-  try {
-    const { data, error } = await supabaseAdmin
-      .from('memberships')
-      .select('role')
-      .eq('user_id', userId)
-      .in('role', ['admin', 'coach'])
-      .limit(1);
-    if (error) return false;
-    return Array.isArray(data) && data.length > 0;
-  } catch (err) {
-    return false;
   }
 }
 
@@ -4229,8 +4215,10 @@ app.get(BASE === '' ? '/' : BASE, async (req, res) => {
   try {
     const { data, error } = await supabase.auth.getUser(token);
     if (error || !data || !data.user) return res.redirect(BASE + '/landing');
-    const dest = (await isClubManager(data.user.id)) ? '/clubs/dashboard' : '/feed';
-    return res.redirect(BASE + dest);
+    // Same policy as the login redirect: everyone lands on the athlete feed
+    // (no manager special-case — it teleported multi-club managers to the
+    // most recently created club's dashboard).
+    return res.redirect(BASE + '/feed');
   } catch (err) {
     return res.redirect(BASE + '/landing');
   }
@@ -7416,14 +7404,27 @@ app.get(BASE + '/clubs/invite', requirePageAuth, async (req, res) => {
   try {
     if (!supabaseAdmin) return servePlain();
 
-    const { data: membership } = await supabaseAdmin
-      .from('memberships')
-      .select('club_id, role, clubs (id, name, handle, sport, city, logo_url)')
-      .eq('user_id', req.user.id)
-      .in('role', ['admin', 'coach'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // Same club resolution as the dashboard: honor an explicit ?club=<id>
+    // when the viewer manages it (so the invite console stays on the club the
+    // manager came from), otherwise fall back to the most recent admin/coach
+    // membership. The role filter keeps this IDOR-safe — an unmanaged or
+    // unknown id silently falls back to the default club.
+    const requestedClubId = typeof req.query.club === 'string' ? req.query.club : null;
+    const pickManagedMembership = async (clubFilter) => {
+      let q = supabaseAdmin
+        .from('memberships')
+        .select('club_id, role, clubs (id, name, handle, sport, city, logo_url)')
+        .eq('user_id', req.user.id)
+        .in('role', ['admin', 'coach']);
+      if (clubFilter) q = q.eq('club_id', clubFilter);
+      const { data } = await q
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data;
+    };
+    let membership = requestedClubId ? await pickManagedMembership(requestedClubId) : null;
+    if (!membership) membership = await pickManagedMembership(null);
 
     if (!membership || !membership.club_id) return servePlain();
     const clubId = membership.club_id;
@@ -8515,7 +8516,7 @@ app.post(BASE + '/auth/join/:token', async (req, res) => {
         type: 'club',
         title: 'New member joined',
         body: `${name} accepted your invite and joined ${clubName}`,
-        link: '/clubs/dashboard',
+        link: '/clubs/dashboard?club=' + invite.club_id,
         actorId: userId,
         entityId: invite.club_id
       })));
@@ -8580,7 +8581,7 @@ app.post(BASE + '/auth/join/:token/existing', requireAuth, async (req, res) => {
         type: 'club',
         title: 'New member joined',
         body: `${joiner.name} accepted your invite and joined ${clubName}`,
-        link: '/clubs/dashboard',
+        link: '/clubs/dashboard?club=' + invite.club_id,
         actorId: req.user.id,
         entityId: invite.club_id
       })));

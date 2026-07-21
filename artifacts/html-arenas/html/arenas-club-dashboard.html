@@ -4,6 +4,19 @@
 <script>
 window.BASE = window.location.pathname.startsWith('/html') ? '/html' : '';
 window.nav = function(path){ window.location.href = window.BASE + path; };
+// Navigate to a club-scoped page carrying THIS dashboard's explicit club id
+// (?club=<id>). Without it the server falls back to "most recent managed
+// membership", silently teleporting multi-club managers to their last-created
+// club. Falls back to a plain nav when ARENAS_DATA hasn't been injected.
+window.navClub = function(path){
+  var id = window.ARENAS_DATA && window.ARENAS_DATA.club && window.ARENAS_DATA.club.id;
+  if (id) {
+    var h = path.indexOf('#'), hash = '';
+    if (h >= 0) { hash = path.slice(h); path = path.slice(0, h); }
+    path += (path.indexOf('?') >= 0 ? '&' : '?') + 'club=' + encodeURIComponent(id) + hash;
+  }
+  nav(path);
+};
 // No-op stubs so the topbar/members search handlers never throw if the page is
 // served without injected ARENAS_DATA (they are replaced by the real
 // implementations in the members-table script once data is present).
@@ -311,7 +324,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
 
 <!-- TOPBAR -->
 <header class="topbar">
-  <div class="topbar-logo" onclick="nav('/clubs/dashboard')" style="cursor:pointer">
+  <div class="topbar-logo" onclick="navClub('/clubs/dashboard')" style="cursor:pointer">
     <div class="logo-icon">🏟</div>
     <span class="logo-text">Arenas</span>
   </div>
@@ -385,7 +398,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
       <div style="display:flex;gap:6px">
         <button onclick="switchToTabAndCreate('events')" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;font-size:12px;font-weight:600;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">🎟️ Event</button>
         <button onclick="switchToTabAndCreate('challenges')" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;font-size:12px;font-weight:600;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">⚡ Challenge</button>
-        <button onclick="nav('/clubs/invite')" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">+ Invite members</button>
+        <button onclick="navClub('/clubs/invite')" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">+ Invite members</button>
       </div>
     </div>
 
@@ -484,7 +497,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
       <div class="page-hdr-left"><h1>Members</h1><p><span class="member-count">48</span> members</p></div>
       <div class="page-hdr-right">
         <button class="btn btn-ghost" onclick="showToast('Importing CSV…')">📥 Import CSV</button>
-        <button class="btn btn-yellow" onclick="nav('/clubs/invite')">+ Invite members</button>
+        <button class="btn btn-yellow" onclick="navClub('/clubs/invite')">+ Invite members</button>
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
@@ -2809,7 +2822,7 @@ document.addEventListener('DOMContentLoaded', function () {
           icon: '✉️', iconBg: 'var(--yellow-light)',
           text: '<strong>' + expiringSoon.length + ' invite' + (expiringSoon.length !== 1 ? 's' : '') + ' expiring soon</strong> — ' + expiringSoon.slice(0, 2).map(function (i) { return esc(i.email); }).join(' and '),
           actionLabel: 'Manage invites',
-          action: "nav('/clubs/invite')"
+          action: "navClub('/clubs/invite')"
         });
       }
 
