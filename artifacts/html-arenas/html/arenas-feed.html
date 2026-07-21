@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/html/arenas.css">
 <script src="/html/arenas-stat-tiles.js"></script>
+<script src="/html/arenas-time.js"></script>
 <style>:root{--green-light:#ECFDF5;--blue-light:#EFF6FF;--orange-light:#FFF7ED;--purple-light:#F5F3FF;--teal:#14B8A6;--teal-light:#F0FDFA}
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -703,21 +704,13 @@ function collectPostItems() {
       avStyle: isOwn
         ? 'background:var(--yellow);color:var(--gray-900)'
         : 'background:var(--gray-200);color:var(--gray-700)',
-      meta: getTimeAgo(new Date(post.created_at)),
+      meta: window.arenasTimeAgo(post.created_at),
       likes: post.likeCount || 0,
       liked: !!post.userLiked
     });
     // Sort key: post creation time.
     return { ts: Date.parse(post.created_at) || 0, id: String(post.id || ''), el: card };
   });
-}
-
-function getTimeAgo(date) {
-  const seconds = Math.floor((new Date() - date) / 1000);
-  if (seconds < 60) return 'Just now';
-  if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
-  if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
-  return Math.floor(seconds / 86400) + 'd ago';
 }
 
 function escFeedAct(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -757,7 +750,7 @@ function collectActivityItems() {
           window.avatarHtml(author.avatar_url || null, name, '', 'width:36px;height:36px;border-radius:50%;background:var(--gray-200);color:var(--gray-700);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0') +
           '<div style="flex:1;min-width:0">' +
             '<div style="font-size:13px;font-weight:600;color:var(--gray-900)">' + escFeedAct(name) + ' <span style="font-weight:400;color:var(--gray-400)">logged an activity</span></div>' +
-            '<div style="font-size:11px;color:var(--gray-400)">' + getTimeAgo(new Date(a.date || a.created_at)) + '</div>' +
+            '<div style="font-size:11px;color:var(--gray-400)">' + window.arenasTimeAgo(a.created_at || a.date) + '</div>' +
           '</div>' +
           '<span style="font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;border:1px solid;' + colorStyle + '">' + icon + ' ' + escFeedAct(sportLabel) + '</span>' +
         '</div>' +
@@ -788,7 +781,7 @@ function collectRsvpItems() {
     const ev = r.event || {};
     const icon = sportIcons[ev.sport] || '🎟️';
     const when = ev.date ? new Date(ev.date).toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'long' }) : '';
-    const ago = r.created_at ? getTimeAgo(new Date(r.created_at)) : 'recently';
+    const ago = r.created_at ? window.arenasTimeAgo(r.created_at) : 'recently';
 
     const wrap = document.createElement('div');
     wrap.className = 'feed-item-wrap';

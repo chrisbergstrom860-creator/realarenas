@@ -256,6 +256,12 @@ app.get(['/html/arenas-stat-tiles.js', '/arenas-stat-tiles.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-stat-tiles.js'));
 });
 
+// Shared relative-time helper ("X ago" buckets). One implementation for the
+// feed, my-profile, club-member, and club-dashboard pages. Dual-path as above.
+app.get(['/html/arenas-time.js', '/arenas-time.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-time.js'));
+});
+
 // ── AUTH (Supabase) ──
 const COOKIE_OPTS = {
   httpOnly: true,
@@ -2547,12 +2553,14 @@ app.get(BASE + '/api/clubs/:clubId/recent-activity', requireAuth, async (req, re
     const memberIds = [...new Set((members || []).map((m) => m.user_id).filter(Boolean))];
     const safeIds = memberIds.length ? memberIds : ['00000000-0000-0000-0000-000000000000'];
 
-    // Latest logged activities (`date` is a full ISO timestamp set on insert).
+    // Latest logged activities. Ordered/stamped by `created_at` (the logged
+    // moment) — `date` is the local-noon training-day anchor, so using it in
+    // "X ago" lines shows hours-since-noon instead of time since logging.
     const { data: recentActivities } = await supabaseAdmin
       .from('activities')
-      .select('user_id, sport, distance, duration, date')
+      .select('user_id, sport, distance, duration, date, created_at')
       .in('user_id', safeIds)
-      .order('date', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(8);
 
     // Latest "going" RSVPs to this club's events.
@@ -2604,7 +2612,7 @@ app.get(BASE + '/api/clubs/:clubId/recent-activity', requireAuth, async (req, re
         name: nameOf(a.user_id),
         avatarUrl: avatarOf(a.user_id),
         text: `logged a ${dist}${sportLabels[a.sport] || a.sport || 'session'}`,
-        timestamp: a.date
+        timestamp: a.created_at || a.date
       });
     });
     recentRsvps.forEach((r) => {
@@ -2701,12 +2709,14 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
       });
     });
 
-    // 2. Activities from members (ordered by `date` — no created_at column).
+    // 2. Activities from members. Ordered/stamped by `created_at` (logged
+    // moment) so "X ago" reflects when it was logged, not the local-noon
+    // training-day anchor stored in `date`.
     const { data: activities } = await supabaseAdmin
       .from('activities')
-      .select('id, user_id, sport, title, notes, distance, duration, pace, ai_insight, date')
+      .select('id, user_id, sport, title, notes, distance, duration, pace, ai_insight, date, created_at')
       .in('user_id', safeIds)
-      .order('date', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(20);
     (activities || []).forEach((a) => {
       feed.push({
@@ -2722,7 +2732,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
         duration: a.duration,
         pace: a.pace,
         aiInsight: a.ai_insight,
-        timestamp: a.date
+        timestamp: a.created_at || a.date
       });
     });
 
@@ -3591,8 +3601,9 @@ app.get(BASE + '/api/profile/achievements', requireAuth, async (req, res) => {
 // logged-in athlete. Reuses the shared scoring/duration/progress helpers so the
 // numbers agree with the leaderboard and challenges pages. Self-only via
 // req.user.id. FK embeds aren't used in this codebase, so joined challenge/event
-// rows are fetched separately via .in(); activities have no created_at column,
-// so recent activities are ordered by their `date` timestamp.
+// rows are fetched separately via .in(). Recent activities are deliberately
+// ordered by `date` (the training-day anchor, rendered as Today/Yesterday day
+// buckets client-side) — not `created_at`, which is the logged moment.
 app.get(BASE + '/api/profile/overview', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.status(503).json({ error: 'Server is not configured for overview' });
   try {
@@ -3637,7 +3648,8 @@ app.get(BASE + '/api/profile/overview', requireAuth, async (req, res) => {
       .from('activities').select('date').eq('user_id', userId);
     const { currentStreak } = computeStreaks(allActs || [], tz);
 
-    // Recent activities (last 3) — ordered by `date` (no created_at column).
+    // Recent activities (last 3) — deliberately ordered by training-day `date`
+    // (the client renders Today/Yesterday day buckets from it).
     const { data: recentActs } = await supabaseAdmin
       .from('activities')
       .select('id, sport, title, distance, duration, pace, date')

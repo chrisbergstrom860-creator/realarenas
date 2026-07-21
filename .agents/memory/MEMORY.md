@@ -45,6 +45,7 @@
 - [html-arenas timezones](html-arenas-timezones.md) — ALL day-math via tzdate.js zone keys, incl. multi-user boundary policy (member buckets / viewer windows / per-participant challenges); UTC parity proven.
 - [html-arenas country/state + tz](html-arenas-tz-country-audit.md) — country/state + /log date SHIPPED (countries.js SSOT; updateUserById MERGES metadata → clear with null not delete); single-user tz day-math now shipped, see timezones topic.
 - [html-arenas handle hiding](html-arenas-handle-hiding.md) — handles display-hidden but preserved in data; Session-1 surfaces done, sidebar chrome = Session 2; disambiguation via location+sports sublines.
+- [html-arenas time-ago rule](html-arenas-timeago.md) — "ago" lines use created_at via shared arenas-time.js, never the noon-anchored `date`; day-bucket widgets stay on `date` with calendar-day math.
 - [html-arenas bio limit](html-arenas-bio-limit.md) — 220-word rule (trim + /\s+/ split, exact client/server parity), 2000-char backstop, 400 not silent truncate; hero clamps 4 lines w/ sibling Show-more.
 - [html-arenas stat tiles](html-arenas-feed-stat-tiles.md) — SHARED builder arenas-stat-tiles.js + CSS in arenas.css powers feed AND profile Activities tab; never fork tiles per page.
 - [html-arenas club context](html-arenas-club-context.md) — club-scoped nav must CARRY ?club= (navClub helpers); never infer "the club" from most-recent membership; login lands everyone on /feed.

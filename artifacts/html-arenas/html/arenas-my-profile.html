@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/html/arenas.css">
 <script src="/html/arenas-stat-tiles.js"></script>
+<script src="/html/arenas-time.js"></script>
 <style>:root{--green-light:#ECFDF5;--blue-light:#EFF6FF;--orange-light:#FFF7ED;--purple-light:#F5F3FF;--teal:#14B8A6;--teal-light:#F0FDFA;--radius-xl:16px;--shadow-lg:0 10px 40px rgba(0,0,0,0.12)}
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -1509,15 +1510,6 @@ async function deleteActivity(id, card) {
   }
 }
 
-function actTimeAgo(dateStr) {
-  var seconds = Math.floor((new Date() - new Date(dateStr)) / 1000);
-  if (seconds < 60) return 'Just now';
-  if (seconds < 3600) return Math.floor(seconds/60) + 'm ago';
-  if (seconds < 86400) return Math.floor(seconds/3600) + 'h ago';
-  if (seconds < 604800) return Math.floor(seconds/86400) + 'd ago';
-  return new Date(dateStr).toLocaleDateString();
-}
-
 function renderActivities(activities) {
   var list = document.getElementById('activities-list');
   var empty = document.getElementById('activities-empty');
@@ -1553,7 +1545,7 @@ function renderActivities(activities) {
           '<div style="width:38px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;' + avBg + '">' + icon + '</div>' +
           '<div style="flex:1;min-width:0">' +
             '<div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:2px">' + escAct(a.title) + '</div>' +
-            '<div style="font-size:11px;color:var(--gray-400)">' + actTimeAgo(a.date || a.created_at) + '</div>' +
+            '<div style="font-size:11px;color:var(--gray-400)">' + window.arenasTimeAgo(a.created_at || a.date, { dateAfterDays: 7 }) + '</div>' +
           '</div>' +
           '<div style="display:flex;align-items:center;gap:6px">' +
             '<span style="font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;border:1px solid;' + colorStyle + '">' + escAct(sportLabel) + '</span>' +
@@ -2066,8 +2058,15 @@ if (logHashMatch) {
       // Recent activities
       var actsHtml = '';
       if ((r.recentActivities || []).length > 0) {
+        // Day-bucket label for the TRAINING day (a.date, local-noon anchored)
+        // — this widget deliberately shows the training date, not log time.
+        // Compare local calendar days, not raw ms: ms-diff from a noon anchor
+        // mis-buckets (yesterday's session read "Today" before ~noon).
         var timeAgo = function (ts) {
-          var n = Math.floor((new Date() - new Date(ts)) / 86400000);
+          var d = new Date(ts), now = new Date();
+          var n = Math.round(
+            (new Date(now.getFullYear(), now.getMonth(), now.getDate()) -
+             new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
           if (n <= 0) return 'Today';
           if (n === 1) return 'Yesterday';
           return n + 'd ago';

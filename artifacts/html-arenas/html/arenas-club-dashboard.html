@@ -36,6 +36,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/html/arenas.css">
+<script src="/html/arenas-time.js"></script>
 <style>:root{--green-light:#ECFDF5;--blue-light:#EFF6FF;--orange-light:#FFF7ED;--purple-light:#F5F3FF;--teal:#14B8A6}
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1212,14 +1213,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var dot = document.querySelector('.notif-dot');
     if (dot) dot.style.display = unread > 0 ? 'block' : 'none';
   }
-  function timeAgo(dateStr) {
-    var s = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
-    if (isNaN(s)) return '';
-    if (s < 60) return 'Just now';
-    if (s < 3600) return Math.floor(s / 60) + 'm ago';
-    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
-    return Math.floor(s / 86400) + 'd ago';
-  }
+  // Shared "ago" math (arenas-time.js) — thin shim so call sites stay short.
+  function timeAgo(dateStr) { return window.arenasTimeAgo(dateStr); }
   function refreshCount() {
     fetch(B + '/api/notifications').then(function (r) { return r.json(); })
       .then(function (d) { syncDot((d && d.unreadCount) || 0); }).catch(function () {});
@@ -2972,12 +2967,8 @@ document.addEventListener('DOMContentLoaded', function () {
               { bg: '#E0F2FE', c: '#0369A1' }, { bg: '#F5F3FF', c: '#5B21B6' },
               { bg: '#ECFDF5', c: '#065F46' }, { bg: '#FAEEDA', c: '#633806' }
             ];
-            var timeAgo = function (ts) {
-              var s = Math.floor((new Date() - new Date(ts)) / 1000);
-              if (s < 3600) return Math.max(1, Math.floor(s / 60)) + 'm ago';
-              if (s < 86400) return Math.floor(s / 3600) + 'h ago';
-              return Math.floor(s / 86400) + 'd ago';
-            };
+            // Shared "ago" math (arenas-time.js).
+            var timeAgo = function (ts) { return window.arenasTimeAgo(ts); };
             feedEl.innerHTML = feedData.feed.slice(0, 6).map(function (item, i) {
               var av = avColors[i % avColors.length];
               return '<div style="display:flex;align-items:flex-start;gap:9px;padding:9px 14px;border-bottom:var(--border)">' +
@@ -3045,13 +3036,8 @@ document.addEventListener('DOMContentLoaded', function () {
     function initialsOf(name) {
       return String(name || 'M').trim().split(/\s+/).map(function (n) { return n[0] || ''; }).join('').slice(0, 2).toUpperCase() || 'M';
     }
-    function timeAgo(ts) {
-      var s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
-      if (isNaN(s)) return '';
-      if (s < 3600) return Math.max(1, Math.floor(s / 60)) + 'm ago';
-      if (s < 86400) return Math.floor(s / 3600) + 'h ago';
-      return Math.floor(s / 86400) + 'd ago';
-    }
+    // Shared "ago" math (arenas-time.js) — thin shim so call sites stay short.
+    function timeAgo(ts) { return window.arenasTimeAgo(ts); }
     var avColors = [
       { bg: '#FEF9C3', c: '#854D0E' }, { bg: '#FCE7F3', c: '#9D174D' },
       { bg: '#E0F2FE', c: '#0369A1' }, { bg: '#F5F3FF', c: '#5B21B6' },

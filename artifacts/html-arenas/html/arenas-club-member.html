@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/html/arenas.css">
+<script src="/html/arenas-time.js"></script>
 <style>:root{--green-light:#ECFDF5;--blue-light:#EFF6FF;--orange-light:#FFF7ED;--purple-light:#F5F3FF;--teal:#14B8A6}
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -519,13 +520,8 @@ function showToast(msg) {
   function ini(name) {
     return (name || 'M').split(/\s+/).map(function(n){ return n[0]; }).join('').slice(0, 2).toUpperCase();
   }
-  function timeAgo(ts) {
-    var s = Math.floor((new Date() - new Date(ts)) / 1000);
-    if (s < 60) return 'just now';
-    if (s < 3600) return Math.floor(s / 60) + 'm ago';
-    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
-    return Math.floor(s / 86400) + 'd ago';
-  }
+  // Shared "ago" math (arenas-time.js) — thin shim so call sites stay short.
+  function timeAgo(ts) { return window.arenasTimeAgo(ts); }
 
   // Icons and tile backgrounds derived from the sports registry.
   var sportIcons = window.ARENAS_SPORT_ICONS || {};
