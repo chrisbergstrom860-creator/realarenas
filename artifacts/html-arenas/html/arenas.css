@@ -245,6 +245,20 @@ body {
 }
 
 /* ===========================================================================
+   Activity stat tiles — the shared boxed treatment rendered by
+   arenas-stat-tiles.js (feed + my-profile Activities tab). Base rules live
+   here so both pages read one source; the mobile wrap override is in the
+   @media block below.
+   =========================================================================== */
+.ac-stats-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.ac-stat{background:var(--gray-50);border:var(--border);border-radius:7px;padding:6px 10px;text-align:center;flex:1;min-width:60px}
+.ac-stat .sv{font-size:15px;font-weight:700;color:var(--gray-900);font-family:var(--mono);line-height:1.1;display:block}
+.ac-stat .sl{font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px;display:block}
+.ac-stat.tx-tile{flex:2 1 auto;min-width:110px}
+.ac-stat .sv.tx{font-family:inherit;font-size:12px;font-weight:600;line-height:1.3;padding-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;margin:0 auto}
+.ac-stat .si{font-size:11px;font-weight:400}
+
+/* ===========================================================================
    Mobile bottom nav + responsive shell (<=768px).
    The bottom-nav element is injected server-side only on shell pages. The
    shell-collapse rules are gated on `body:has(.bottom-nav)` so pages that have

@@ -46,7 +46,7 @@
 - [html-arenas country/state + tz](html-arenas-tz-country-audit.md) — country/state + /log date SHIPPED (countries.js SSOT; updateUserById MERGES metadata → clear with null not delete); single-user tz day-math now shipped, see timezones topic.
 - [html-arenas handle hiding](html-arenas-handle-hiding.md) — handles display-hidden but preserved in data; Session-1 surfaces done, sidebar chrome = Session 2; disambiguation via location+sports sublines.
 - [html-arenas bio limit](html-arenas-bio-limit.md) — 220-word rule (trim + /\s+/ split, exact client/server parity), 2000-char backstop, 400 not silent truncate; hero clamps 4 lines w/ sibling Show-more.
-- [html-arenas stat tiles](html-arenas-feed-stat-tiles.md) — 4 independent activity-stat renderers (no shared code); feed uses boxed .ac-stat tiles w/ flex-wrap not grid; watch for orphaned pre-staged CSS.
+- [html-arenas stat tiles](html-arenas-feed-stat-tiles.md) — SHARED builder arenas-stat-tiles.js + CSS in arenas.css powers feed AND profile Activities tab; never fork tiles per page.
 - [html-arenas club context](html-arenas-club-context.md) — club-scoped nav must CARRY ?club= (navClub helpers); never infer "the club" from most-recent membership; login lands everyone on /feed.
 - [html-arenas danger zone](html-arenas-danger-zone.md) — export+delete: Stripe cancel FIRST (any error aborts), club survival matrix, transfer billing notif (actor_id null), posts have no club_id.
 - [html-arenas settings prefs](html-arenas-settings-prefs.md) — 7 real toggles in user_metadata.prefs (absent=true, read-merge-write only); enforcement map + deliberate non-gates; only /api/profile/prefs may write prefs.

@@ -250,6 +250,12 @@ app.get(['/html/arenas-notifications-panel.js', '/arenas-notifications-panel.js'
   res.sendFile(path.join(HTML, 'arenas-notifications-panel.js'));
 });
 
+// Shared activity stat-tile builder (feed + my-profile Activities tab render
+// the same boxed tiles from this one file). Dual-path like the panel above.
+app.get(['/html/arenas-stat-tiles.js', '/arenas-stat-tiles.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-stat-tiles.js'));
+});
+
 // ── AUTH (Supabase) ──
 const COOKIE_OPTS = {
   httpOnly: true,

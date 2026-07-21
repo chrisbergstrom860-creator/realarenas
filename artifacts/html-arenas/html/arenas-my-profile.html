@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/html/arenas.css">
+<script src="/html/arenas-stat-tiles.js"></script>
 <style>:root{--green-light:#ECFDF5;--blue-light:#EFF6FF;--orange-light:#FFF7ED;--purple-light:#F5F3FF;--teal:#14B8A6;--teal-light:#F0FDFA;--radius-xl:16px;--shadow-lg:0 10px 40px rgba(0,0,0,0.12)}
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -151,10 +152,8 @@ button,select,input,textarea{font-family:var(--font)}
 .ac-body{padding:16px 18px}
 .ac-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .ac-sport-tag{margin-left:auto;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;flex-shrink:0}
-.ac-stats-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-.ac-stat{background:var(--gray-50);border:var(--border);border-radius:6px;padding:6px 10px;text-align:center;min-width:60px}
-.ac-stat .sv{font-size:15px;font-weight:700;color:var(--gray-900);font-family:var(--mono);line-height:1}
-.ac-stat .sl{font-size:9px;color:var(--gray-400);margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
+/* .ac-stats-row / .ac-stat tile rules live in arenas.css (shared with the
+   feed; builder in arenas-stat-tiles.js) — no page-local copy, no drift. */
 .ac-desc{font-size:13px;color:var(--gray-600);line-height:1.55}
 .ac-ai{background:var(--yellow-light);border:1px solid #fde68a;border-radius:6px;padding:9px 12px;display:flex;gap:8px;align-items:flex-start;margin-top:8px}
 .ai-icon{width:18px;height:18px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:var(--gray-900);flex-shrink:0;margin-top:1px}
@@ -320,9 +319,12 @@ button,select,input,textarea{font-family:var(--font)}
 .goal-type-card:disabled{opacity:.55;cursor:default}
 .goal-type-card .gt-title{font-size:12px;font-weight:600;color:var(--gray-900)}
 .goal-type-card .gt-desc{font-size:10px;color:var(--gray-500);margin-top:2px;line-height:1.4}
-.activity-card-item{border-bottom:var(--border);padding:16px 20px;background:white}
-.activity-card-item:last-child{border-bottom:none}
-.ac-stat-item{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--gray-600);background:var(--gray-50);border:var(--border);border-radius:5px;padding:3px 9px;font-family:var(--mono)}
+/* Activities tab: each activity is its own card — same treatment as the
+   feed's cards (white, 1px border, 12px radius, 14px vertical gaps). */
+.activities-wrap{padding:14px 16px}
+.activities-hdr-card{background:white;border:var(--border);border-radius:var(--radius-lg);display:flex;align-items:center;justify-content:space-between;padding:16px 20px}
+#activities-list{display:flex;flex-direction:column;gap:14px;margin-top:14px}
+.activity-card-item{background:white;border:var(--border);border-radius:var(--radius-lg);padding:16px 18px}
 </style>
 </head>
 <body>
@@ -441,9 +443,9 @@ button,select,input,textarea{font-family:var(--font)}
 
 <!-- ═══ ACTIVITIES TAB ═══ -->
 <div class="tab-content" id="tab-activities">
-  <div id="activities-tab-content">
-    <!-- Header -->
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:var(--border);background:white">
+  <div id="activities-tab-content" class="activities-wrap">
+    <!-- Header (same card rhythm as the list below it) -->
+    <div class="activities-hdr-card">
       <div>
         <div style="font-size:15px;font-weight:600;color:var(--gray-900)">Your activities</div>
         <div style="font-size:12px;color:var(--gray-500);margin-top:2px">Log training manually · Strava sync coming soon</div>
@@ -454,9 +456,9 @@ button,select,input,textarea{font-family:var(--font)}
       </button>
     </div>
 
-    <!-- Activities list -->
-    <div id="activities-list" style="background:white">
-      <div style="text-align:center;padding:48px 24px" id="activities-empty">
+    <!-- Activities list: one card per activity, 14px gaps -->
+    <div id="activities-list">
+      <div style="text-align:center;padding:48px 24px;background:white;border:var(--border);border-radius:var(--radius-lg)" id="activities-empty">
         <div style="font-size:36px;margin-bottom:12px">🏃</div>
         <div style="font-size:15px;font-weight:600;color:var(--gray-900);margin-bottom:6px">No activities yet</div>
         <div style="font-size:13px;color:var(--gray-500);line-height:1.6">Log your first training session on the <a href="#" onclick="nav('/log');return false" style="color:var(--orange);text-decoration:none;font-weight:500">Log activity</a> page.<br>Activities appear in your followers' feeds and your coach's dashboard.</div>
@@ -1563,27 +1565,14 @@ function renderActivities(activities) {
     sportColors[s.id] = 'background:' + s.colors.bg + ';color:' + s.colors.text + ';border-color:' + s.colors.border;
   });
 
-  function buildStats(a) {
-    var stats = [];
-    if (a.duration) stats.push('<div class="ac-stat-item">⏱ <strong>' + escAct(a.duration) + '</strong></div>');
-    if (a.distance) stats.push('<div class="ac-stat-item">📍 <strong>' + escAct(a.distance) + '</strong></div>');
-    if (a.pace) stats.push('<div class="ac-stat-item">⚡ <strong>' + escAct(a.pace) + '</strong> pace</div>');
-    if (a.avg_power) stats.push('<div class="ac-stat-item">⚡ <strong>' + escAct(a.avg_power) + '</strong></div>');
-    if (a.avg_hr) stats.push('<div class="ac-stat-item">❤️ <strong>' + escAct(a.avg_hr) + '</strong></div>');
-    if (a.elevation) stats.push('<div class="ac-stat-item">⛰ <strong>' + escAct(a.elevation) + '</strong> elev</div>');
-    if (a.top_grade) stats.push('<div class="ac-stat-item">✓ <strong>' + escAct(a.top_grade) + '</strong> sent</div>');
-    if (a.problems_count) stats.push('<div class="ac-stat-item">🧗 <strong>' + escAct(a.problems_count) + '</strong> problems</div>');
-    if (a.golf_strokes) stats.push('<div class="ac-stat-item">⛳ <strong>' + escAct(a.golf_strokes) + '</strong> strokes</div>');
-    if (a.golf_course) stats.push('<div class="ac-stat-item">🏌️ <strong>' + escAct(a.golf_course) + '</strong></div>');
-    if (a.rpe) stats.push('<div class="ac-stat-item">💪 <strong>RPE ' + escAct(a.rpe) + '</strong></div>');
-    return stats.join('');
-  }
-
+  // Boxed stat tiles: shared builder (arenas-stat-tiles.js) — the exact same
+  // renderer the feed uses. One source, no drift; emoji accents, text-tile
+  // treatment (course/terrain), and no-stats→no-row all live there.
   var html = activities.map(function(a) {
     var icon = sportIcons[a.sport] || '🏃';
     var colorStyle = sportColors[a.sport] || '';
     var avBg = colorStyle.split(';')[0];
-    var stats = buildStats(a);
+    var statsRow = window.activityStatTilesRow(a);
     var sportLabel = a.sport ? (a.sport.charAt(0).toUpperCase() + a.sport.slice(1)) : 'Activity';
     var cardId = 'act-card-' + escAct(a.id);
     return '' +
@@ -1599,10 +1588,10 @@ function renderActivities(activities) {
             '<button onclick="deleteActivity(\'' + escAct(a.id) + '\', document.getElementById(\'' + cardId + '\'))" style="width:26px;height:26px;border-radius:6px;border:var(--border);background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--gray-400);font-size:12px" title="Delete activity">✕</button>' +
           '</div>' +
         '</div>' +
-        (stats ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">' + stats + '</div>' : '') +
+        statsRow +
         (a.notes ? '<div style="font-size:12px;color:var(--gray-600);line-height:1.6;padding:8px 10px;background:var(--gray-50);border-radius:6px;margin-bottom:8px">' + escAct(a.notes) + '</div>' : '') +
-        (a.ai_insight ? '<div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:6px;padding:8px 11px;font-size:12px;color:#7a5c00;display:flex;gap:8px;align-items:flex-start;margin-bottom:8px"><span style="font-size:13px;flex-shrink:0">📝</span><span><strong>Coach&#39;s note:</strong> ' + escAct(a.ai_insight) + '</span></div>' : '') +
-        (a.feeling ? '<div style="font-size:11px;color:var(--gray-500);margin-top:4px">Feeling: ' + escAct(a.feeling) + '</div>' : '') +
+        (a.ai_insight ? '<div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:6px;padding:8px 11px;font-size:12px;color:#7a5c00;display:flex;gap:8px;align-items:flex-start"><span style="font-size:13px;flex-shrink:0">📝</span><span><strong>Coach&#39;s note:</strong> ' + escAct(a.ai_insight) + '</span></div>' : '') +
+        (a.feeling ? '<div style="font-size:11px;color:var(--gray-500);margin-top:8px">Feeling: ' + escAct(a.feeling) + '</div>' : '') +
       '</div>';
   }).join('');
 
