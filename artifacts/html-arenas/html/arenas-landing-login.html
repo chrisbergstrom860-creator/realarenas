@@ -770,7 +770,7 @@ html { scroll-behavior: smooth; }
         <div class="feature-card">
           <div class="feature-icon" style="background:#FFF7ED">🔗</div>
           <h3>Log your activities</h3>
-          <p>Log workouts in a few taps and your stats flow straight into your Arenas feed. Automatic Strava and device sync is coming soon.</p>
+          <p>Log workouts in a few taps and your stats flow straight into your Arenas feed.</p>
           <span class="feature-badge badge-free">Free forever</span>
         </div>
         <div class="feature-card">
@@ -1072,7 +1072,6 @@ html { scroll-behavior: smooth; }
             <div class="onboard-progress">
               <div class="onboard-dot active"></div>
               <div class="onboard-dot"></div>
-              <div class="onboard-dot"></div>
             </div>
             <div class="auth-title">Create your account</div>
             <div class="auth-subtitle">Free forever — no credit card needed</div>
@@ -1093,7 +1092,7 @@ html { scroll-behavior: smooth; }
 
           <div class="onboard-step" id="step-2">
             <div class="onboard-progress">
-              <div class="onboard-dot done"></div><div class="onboard-dot active"></div><div class="onboard-dot"></div>
+              <div class="onboard-dot done"></div><div class="onboard-dot active"></div>
             </div>
             <div class="auth-title">Your sports</div>
             <div class="auth-subtitle">Pick the sports you train in — we'll personalise your feed.</div>
@@ -1126,32 +1125,6 @@ html { scroll-behavior: smooth; }
             </div>
             <div style="display:flex;gap:8px;margin-top:20px">
               <button class="btn btn-ghost" style="flex:1" onclick="goStep(1)">◂ Back</button>
-              <button class="btn btn-primary" style="flex:2" onclick="goStep(3)">Continue ▸</button>
-            </div>
-          </div>
-
-          <div class="onboard-step" id="step-3">
-            <div class="onboard-progress">
-              <div class="onboard-dot done"></div><div class="onboard-dot done"></div><div class="onboard-dot active"></div>
-            </div>
-            <div class="auth-title">Device sync — coming soon</div>
-            <div class="auth-subtitle">Automatic Strava, Garmin & Apple Health sync is on the way. For now, you can log your activities in seconds.</div>
-            <div style="display:flex;flex-direction:column;gap:8px;margin:20px 0">
-              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:var(--border);border-radius:9px;background:white">
-                <div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">🔶</span><div><div style="font-size:14px;font-weight:600;color:var(--gray-900)">Strava</div><div style="font-size:12px;color:var(--gray-500)">Sync runs, rides, swims & more</div></div></div>
-                <span style="font-size:12px;padding:5px 12px;border-radius:999px;background:var(--gray-100);color:var(--gray-500);font-weight:600">Coming soon</span>
-              </div>
-              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:var(--border);border-radius:9px;background:white">
-                <div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">⌚</span><div><div style="font-size:14px;font-weight:600;color:var(--gray-900)">Garmin Connect</div><div style="font-size:12px;color:var(--gray-500)">Sync GPS data and heart rate</div></div></div>
-                <span style="font-size:12px;padding:5px 12px;border-radius:999px;background:var(--gray-100);color:var(--gray-500);font-weight:600">Coming soon</span>
-              </div>
-              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:var(--border);border-radius:9px;background:white">
-                <div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">🍎</span><div><div style="font-size:14px;font-weight:600;color:var(--gray-900)">Apple Health</div><div style="font-size:12px;color:var(--gray-500)">Workouts, steps and activity</div></div></div>
-                <span style="font-size:12px;padding:5px 12px;border-radius:999px;background:var(--gray-100);color:var(--gray-500);font-weight:600">Coming soon</span>
-              </div>
-            </div>
-            <div style="display:flex;gap:8px;margin-top:8px">
-              <button class="btn btn-ghost" style="flex:1" onclick="goStep(2)">◂ Back</button>
               <button type="submit" class="btn btn-primary" style="flex:2">Finish setup ▸</button>
             </div>
           </div>
@@ -1264,13 +1237,6 @@ function handleSignup() {
   var f = document.getElementById('signupForm');
   if (f) f.requestSubmit(); else nav('/feed');
 }
-function markConnected(btn) {
-  btn.textContent = 'Connected ✓';
-  btn.disabled = true;
-  btn.style.opacity = '0.65';
-  btn.style.cursor = 'default';
-}
-
 // ── SMOOTH SCROLL + NAV ACTIVE STATE ──
 // Maps nav data-section values to element IDs on the page
 const sectionMap = {

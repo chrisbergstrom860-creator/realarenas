@@ -521,7 +521,7 @@ button,select,input,textarea{font-family:var(--font)}
             <div class="hiw-num">4</div>
             <div>
               <div class="hiw-title">Members log their training</div>
-              <div class="hiw-desc">Members log their activities in a few taps and they flow straight into your club dashboard. Automatic Strava and device sync is coming soon.</div>
+              <div class="hiw-desc">Members log their activities in a few taps and they flow straight into your club dashboard.</div>
             </div>
           </div>
           <div class="hiw-step">
@@ -633,11 +633,10 @@ button,select,input,textarea{font-family:var(--font)}
 
     <!-- Progress -->
     <div class="sm-progress">
-      <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:20%"></div></div>
-      <div class="progress-label"><span id="progress-text">Step 1 of 5</span><span id="progress-pct">20%</span></div>
+      <div class="progress-track"><div class="progress-fill" id="progress-fill" style="width:25%"></div></div>
+      <div class="progress-label"><span id="progress-text">Step 1 of 4</span><span id="progress-pct">25%</span></div>
       <div class="step-dots" id="step-dots">
         <div class="step-dot current"></div>
-        <div class="step-dot"></div>
         <div class="step-dot"></div>
         <div class="step-dot"></div>
         <div class="step-dot"></div>
@@ -649,7 +648,7 @@ button,select,input,textarea{font-family:var(--font)}
 
       <!-- ── STEP 1: Create account ── -->
       <div class="signup-step active" id="step-1">
-        <div class="step-eyebrow">Step 1 of 5 · Account</div>
+        <div class="step-eyebrow">Step 1 of 4 · Account</div>
         <h2 class="step-title">Create your Arenas account</h2>
         <p class="step-sub">Your personal account is separate from your club — you train and compete as an athlete too. Takes 60 seconds.</p>
         <div class="error-banner" id="err-1"></div>
@@ -705,7 +704,7 @@ button,select,input,textarea{font-family:var(--font)}
 
       <!-- ── STEP 2: Club details ── -->
       <div class="signup-step" id="step-2">
-        <div class="step-eyebrow">Step 2 of 5 · Your club</div>
+        <div class="step-eyebrow">Step 2 of 4 · Your club</div>
         <h2 class="step-title">Tell us about your club</h2>
         <p class="step-sub">This is your club's public profile on Arenas. You can update everything later from your settings.</p>
         <div class="error-banner" id="err-2"></div>
@@ -763,7 +762,7 @@ button,select,input,textarea{font-family:var(--font)}
 
       <!-- ── STEP 3: Invite members ── -->
       <div class="signup-step" id="step-3">
-        <div class="step-eyebrow">Step 3 of 5 · Invite members</div>
+        <div class="step-eyebrow">Step 3 of 4 · Invite members</div>
         <h2 class="step-title">Invite your first members</h2>
         <p class="step-sub">Add their emails below. Each person gets a personalised invite with your name on it. They click, create an account, and auto-join your club. You can skip this and invite later.</p>
         <div class="error-banner" id="err-3"></div>
@@ -800,20 +799,9 @@ button,select,input,textarea{font-family:var(--font)}
         </div>
       </div>
 
-      <!-- ── STEP 4: Integrations ── -->
-      <div class="signup-step" id="step-4">
-        <div class="step-eyebrow">Step 4 of 5 · Integrations</div>
-        <h2 class="step-title">Device sync — coming soon</h2>
-        <p class="step-sub">Members log their activities in a few taps from day one. Automatic device sync is on the way — you don't need to set anything up here.</p>
-        <div class="error-banner" id="err-4"></div>
-        <div style="background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:16px 18px;font-size:13px;color:var(--gray-600);line-height:1.6">
-          <strong style="color:var(--gray-900)">Coming soon:</strong> one-tap sync from Strava, Garmin, Wahoo and COROS, so member activities flow in without manual logging. Until then, manual logging keeps your club dashboard fully up to date — nothing to configure now.
-        </div>
-      </div>
-
       <!-- ── STEP 5: Review & launch ── -->
       <div class="signup-step" id="step-5">
-        <div class="step-eyebrow">Step 5 of 5 · Launch</div>
+        <div class="step-eyebrow">Step 4 of 4 · Launch</div>
         <h2 class="step-title">Review and launch your club</h2>
         <p class="step-sub">Everything looks good? Hit launch and your club goes live instantly.</p>
         <div class="error-banner" id="err-5"></div>
@@ -844,7 +832,7 @@ button,select,input,textarea{font-family:var(--font)}
     <!-- Footer nav -->
     <div class="sm-footer">
       <button class="step-back-btn" id="back-btn" onclick="goBack()" disabled>← Back</button>
-      <span class="step-counter" id="step-counter">Step 1 of 5</span>
+      <span class="step-counter" id="step-counter">Step 1 of 4</span>
       <button class="step-next-btn" id="next-btn" onclick="goNext()">Continue →</button>
     </div>
 
@@ -866,7 +854,7 @@ button,select,input,textarea{font-family:var(--font)}
       <h2 class="success-title">Your club is live!</h2>
       <p class="success-sub">Welcome to Arenas. Your club dashboard is ready and your member invites are on their way. Here's what to do next:</p>
       <div class="success-steps">
-        <div class="ss-item"><div class="ss-num">1</div><span>Log your first activity so it appears in the club feed — automatic Strava sync coming soon</span></div>
+        <div class="ss-item"><div class="ss-num">1</div><span>Log your first activity so it appears in the club feed</span></div>
         <div class="ss-item"><div class="ss-num">2</div><span>Set your first club challenge to get members engaged immediately</span></div>
         <div class="ss-item"><div class="ss-num">3</div><span>Create your first club event so members have something to train toward</span></div>
       </div>
@@ -886,7 +874,7 @@ button,select,input,textarea{font-family:var(--font)}
 // authenticated /api/clubs/create endpoint instead of the signup form-POST.
 // Logged-out visitors get the original 5-step flow unchanged.
 const SESSION = window.ARENAS_SESSION || null;
-const WIZARD_STEPS = SESSION ? [2, 3, 4, 5] : [1, 2, 3, 4, 5];
+const WIZARD_STEPS = SESSION ? [2, 3, 5] : [1, 2, 3, 5];
 function stepPos(n) { return WIZARD_STEPS.indexOf(n) + 1; }
 let currentStep = WIZARD_STEPS[0];
 let adminSports = [];
@@ -928,7 +916,7 @@ function handleOverlayClick(e) {
 
 // ── PROGRESS ──
 // All chrome (bar, dots, counters) is computed from the step's POSITION in
-// WIZARD_STEPS, so the same code drives both the 5-step and 4-step wizards.
+// WIZARD_STEPS, so the same code drives both the 4-step and 3-step wizards.
 function updateProgress() {
   const pos = stepPos(currentStep);
   const total = WIZARD_STEPS.length;

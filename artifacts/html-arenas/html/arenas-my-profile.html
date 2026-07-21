@@ -255,12 +255,6 @@ button,select,input,textarea{font-family:var(--font)}
 .sport-chip{padding:5px 13px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer;transition:all .12s}
 .sport-chip:hover{border-color:var(--gray-400)}
 .sport-chip.on{background:var(--yellow-light);border-color:#fde68a;color:#7a5c00}
-.integration-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:var(--border)}
-.integration-row:last-child{border-bottom:none}
-.ir-left{display:flex;align-items:center;gap:12px}
-.ir-icon{font-size:22px;width:36px;text-align:center}
-.ir-name{font-size:13px;font-weight:600;color:var(--gray-900)}
-.ir-status{font-size:11px;margin-top:1px}
 .toggle-wrap{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--gray-700)}
 .toggle{width:36px;height:20px;border-radius:10px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
 .toggle.on{background:var(--green)}.toggle.off{background:var(--gray-300)}
@@ -446,10 +440,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div id="activities-tab-content" class="activities-wrap">
     <!-- Header (same card rhythm as the list below it) -->
     <div class="activities-hdr-card">
-      <div>
-        <div style="font-size:15px;font-weight:600;color:var(--gray-900)">Your activities</div>
-        <div style="font-size:12px;color:var(--gray-500);margin-top:2px">Log training manually · Strava sync coming soon</div>
-      </div>
+      <div style="font-size:15px;font-weight:600;color:var(--gray-900)">Your activities</div>
       <button onclick="nav('/log')" id="log-activity-btn"
         style="display:flex;align-items:center;gap:6px;padding:8px 16px;background:var(--yellow);color:var(--gray-900);border:1px solid var(--yellow-dark);border-radius:7px;font-size:13px;font-weight:600;cursor:pointer">
         + Log activity
@@ -589,25 +580,6 @@ button,select,input,textarea{font-family:var(--font)}
               </script>
             </div>
             <div class="form-field" style="margin-top:10px"><label class="form-label">Experience level</label><select id="set-level" class="form-select"><option>Beginner</option><option>Intermediate</option><option selected>Advanced</option><option>Elite / Professional</option></select></div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-hdr"><span class="card-title">🔗 Connected accounts</span></div>
-          <div class="settings-section">
-            <div style="padding:13px 16px;font-size:12px;color:var(--gray-500);line-height:1.6">Automatic sync from Strava, Garmin, Apple Health and Wahoo is coming soon — your activities will flow in without manual logging. For now, log your training from the Activities tab.</div>
-            <div class="integration-row">
-              <div class="ir-left"><span class="ir-icon">🔶</span><div><div class="ir-name">Strava</div><div class="ir-status" style="color:var(--gray-400)">Coming soon</div></div></div>
-            </div>
-            <div class="integration-row">
-              <div class="ir-left"><span class="ir-icon">⌚</span><div><div class="ir-name">Garmin Connect</div><div class="ir-status" style="color:var(--gray-400)">Coming soon</div></div></div>
-            </div>
-            <div class="integration-row">
-              <div class="ir-left"><span class="ir-icon">🍎</span><div><div class="ir-name">Apple Health</div><div class="ir-status" style="color:var(--gray-400)">Coming soon</div></div></div>
-            </div>
-            <div class="integration-row" style="border-bottom:none">
-              <div class="ir-left"><span class="ir-icon">🌀</span><div><div class="ir-name">Wahoo</div><div class="ir-status" style="color:var(--gray-400)">Coming soon</div></div></div>
-            </div>
           </div>
         </div>
       </div>
