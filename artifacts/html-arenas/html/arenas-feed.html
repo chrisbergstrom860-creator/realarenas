@@ -93,6 +93,8 @@ button,select,input,textarea{font-family:var(--font)}
 .ac-stat{background:var(--gray-50);border:var(--border);border-radius:7px;padding:6px 10px;text-align:center;flex:1;min-width:60px}
 .ac-stat .sv{font-size:15px;font-weight:700;color:var(--gray-900);font-family:var(--mono);line-height:1.1;display:block}
 .ac-stat .sl{font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px;display:block}
+.ac-stat.tx-tile{flex:2 1 auto;min-width:110px}
+.ac-stat .sv.tx{font-family:inherit;font-size:12px;font-weight:600;line-height:1.3;padding-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;margin:0 auto}
 .ac-desc{font-size:13px;color:var(--gray-600);line-height:1.6;margin-bottom:10px}
 .ac-ai-panel{background:var(--yellow-light);border:1px solid #fde68a;border-radius:8px;padding:10px 13px;display:flex;gap:8px;align-items:flex-start;margin-bottom:0}
 .ac-ai-icon{width:20px;height:20px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:var(--gray-900);flex-shrink:0;margin-top:1px}
@@ -737,17 +739,31 @@ function collectActivityItems() {
     sportColors[s.id] = 'background:' + s.colors.bg + ';color:' + s.colors.text + ';border-color:' + s.colors.border;
   });
 
+  // Boxed stat tiles (same treatment as the club feed's activity cards):
+  // value large, small-caps label beneath. Numeric-ish values render mono via
+  // .sv; free-text values (course name, terrain) get .sv.tx (smaller, sans)
+  // and a wider tile so they don't balloon the row. No stats → no row at all.
   function buildStats(a) {
+    function tile(value, label, isText) {
+      return '<div class="ac-stat' + (isText ? ' tx-tile' : '') + '">' +
+        '<span class="sv' + (isText ? ' tx' : '') + '">' + escFeedAct(value) + '</span>' +
+        '<span class="sl">' + escFeedAct(label) + '</span>' +
+      '</div>';
+    }
     const stats = [];
-    if (a.duration) stats.push('<span style="font-size:11px;color:var(--gray-600)">⏱ ' + escFeedAct(a.duration) + '</span>');
-    if (a.distance) stats.push('<span style="font-size:11px;color:var(--gray-600)">📍 ' + escFeedAct(a.distance) + '</span>');
-    if (a.pace) stats.push('<span style="font-size:11px;color:var(--gray-600)">⚡ ' + escFeedAct(a.pace) + '</span>');
-    if (a.avg_power) stats.push('<span style="font-size:11px;color:var(--gray-600)">⚡ ' + escFeedAct(a.avg_power) + '</span>');
-    if (a.avg_hr) stats.push('<span style="font-size:11px;color:var(--gray-600)">❤️ ' + escFeedAct(a.avg_hr) + '</span>');
-    if (a.top_grade) stats.push('<span style="font-size:11px;color:var(--gray-600)">✓ ' + escFeedAct(a.top_grade) + '</span>');
-    if (a.golf_strokes) stats.push('<span style="font-size:11px;color:var(--gray-600)">⛳ ' + escFeedAct(a.golf_strokes) + ' strokes</span>');
-    if (a.golf_course) stats.push('<span style="font-size:11px;color:var(--gray-600)">🏌️ ' + escFeedAct(a.golf_course) + '</span>');
-    return stats.join('<span style="color:var(--gray-300)">·</span>');
+    if (a.duration) stats.push(tile(a.duration, 'Duration'));
+    if (a.distance) stats.push(tile(a.distance, 'Distance'));
+    if (a.pace) stats.push(tile(a.pace, 'Pace'));
+    if (a.avg_power) stats.push(tile(a.avg_power, 'Power'));
+    if (a.avg_hr) stats.push(tile(a.avg_hr, 'Avg HR'));
+    if (a.elevation) stats.push(tile(a.elevation, 'Elevation'));
+    if (a.top_grade) stats.push(tile(a.top_grade, 'Top grade'));
+    if (a.problems_count) stats.push(tile(a.problems_count, 'Problems'));
+    if (a.golf_strokes) stats.push(tile(a.golf_strokes, 'Strokes'));
+    if (a.golf_course) stats.push(tile(a.golf_course, 'Course', true));
+    if (a.terrain) stats.push(tile(a.terrain, 'Terrain', true));
+    if (a.rpe) stats.push(tile(a.rpe, 'RPE'));
+    return stats.join('');
   }
 
   return data.feedActivities.map(function(a) {
@@ -772,7 +788,7 @@ function collectActivityItems() {
           '<span style="font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;border:1px solid;' + colorStyle + '">' + icon + ' ' + escFeedAct(sportLabel) + '</span>' +
         '</div>' +
         '<div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:6px">' + escFeedAct(a.title) + '</div>' +
-        (stats ? '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">' + stats + '</div>' : '') +
+        (stats ? '<div class="ac-stats-row">' + stats + '</div>' : '') +
         (a.ai_insight ? '<div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:6px;padding:8px 11px;font-size:12px;color:#7a5c00;display:flex;gap:8px;align-items:flex-start"><span style="font-size:13px;flex-shrink:0">📝</span><span><strong>Coach&#39;s note:</strong> ' + escFeedAct(a.ai_insight) + '</span></div>' : '') +
       '</div>';
     // Sort key: when the activity was LOGGED (created_at), not its `date`
