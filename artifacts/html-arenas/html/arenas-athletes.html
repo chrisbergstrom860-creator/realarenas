@@ -733,6 +733,15 @@ function showToast(msg) {
     }
     item.appendChild(ic);
     item.appendChild(document.createTextNode(' ' + (club.name || 'Club')));
+    // Server-decided plan badge (club.plan comes from getClubPlan on the
+    // sidebar-clubs data path; free clubs have no plan field, so their rows
+    // carry zero badge markup — never client-guessed).
+    if (club.plan === 'club_pro') {
+      var pb = document.createElement('span');
+      pb.className = 'pro-badge';
+      pb.textContent = 'PRO';
+      item.appendChild(pb);
+    }
     parent.insertBefore(item, anchor);
   });
   // "+ Create club" entry point — always the LAST item in My clubs, including

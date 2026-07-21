@@ -1140,6 +1140,9 @@ function injectBottomNav(html, pageKey) {
 //      entry point on the club dashboard, and the mobile path to the profile —
 //      the bottom nav's cramped icon pills stay badge-free on purpose).
 const PRO_BADGE_HTML = '<span class="pro-badge">PRO</span>';
+// Club plan variant — same .pro-badge pill, longer label for the dashboard
+// footer identity block where the plan name has room to read unambiguously.
+const CLUB_PRO_BADGE_HTML = '<span class="pro-badge">CLUB PRO</span>';
 function injectProBadge(html, isPro) {
   if (!isPro) return html;
   let out = html.replaceAll(
@@ -4319,10 +4322,19 @@ async function getSidebarClubs(userId) {
       .select('role, clubs:club_id (id, name, handle, sport, logo_url)')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
-    return (data || []).map(m => {
+    const clubs = (data || []).map(m => {
       const c = Array.isArray(m.clubs) ? m.clubs[0] : m.clubs;
       return c ? Object.assign({}, c, { role: m.role }) : null;
     }).filter(Boolean);
+    // Additive plan field for the sidebar PRO badge: resolved server-side from
+    // the real subscription (getClubPlan — deliberately independent of the
+    // CLUB_PLAN_GATES_ENABLED flag, same rule as the individual PRO badge).
+    // Free clubs' objects stay untouched (no field), so their rendered rows
+    // carry zero badge markup and the client never guesses.
+    await Promise.all(clubs.map(async c => {
+      if ((await getClubPlan(c.id)) === 'club_pro') c.plan = 'club_pro';
+    }));
+    return clubs;
   } catch (e) {
     return [];
   }
@@ -5100,6 +5112,12 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
       const c = Array.isArray(m.clubs) ? m.clubs[0] : m.clubs;
       return c ? Object.assign({}, c, { role: m.role }) : null;
     }).filter(Boolean);
+    // Same additive plan field as getSidebarClubs (this route builds its own
+    // clubs list because the My Clubs tab also needs `city`): real subscription
+    // via getClubPlan, flag-independent; free clubs' objects stay untouched.
+    await Promise.all(userClubs.map(async c => {
+      if ((await getClubPlan(c.id)) === 'club_pro') c.plan = 'club_pro';
+    }));
 
     // Resolve the people the viewer follows / who follow them into display info.
     // There is no `profiles` table, so map each follow edge to its auth metadata
@@ -7117,7 +7135,14 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
       gating: { clubProLocked: await computeClubProLocked(clubId) }
     };
 
-    const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-club-dashboard.html'), 'utf8'), clubData), 'club-dashboard'), (await getUserPlan(req.user.id)) === 'pro');
+    let html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-club-dashboard.html'), 'utf8'), clubData), 'club-dashboard'), (await getUserPlan(req.user.id)) === 'pro');
+    // Sidebar-footer identity badge: real subscription via getClubPlan, NOT
+    // the CLUB_PLAN_GATES_ENABLED flag (a paying club shows its status even
+    // with gates off — individual PRO badge precedent). Free clubs get '' so
+    // their pages contain zero badge markup. Sibling of .club-name, so the
+    // client's textContent rewrite can't wipe it.
+    html = html.replace('<!--CLUB_PRO_BADGE_SLOT-->',
+      (await getClubPlan(clubId)) === 'club_pro' ? CLUB_PRO_BADGE_HTML : '');
     res.type('html').send(html);
   } catch (err) {
     console.log('Dashboard data error:', err.message);

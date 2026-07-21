@@ -39,7 +39,7 @@
 - [/log standalone page](html-arenas-log-page.md) — activity form lives at /log now; save→/feed or /calendar#month from date INPUT (no toast); profile Activities tab list-only; #log= forwards.
 - [html-arenas calendar](html-arenas-calendar.md) — day panel; local text dates; gate split; insights dual-bucket (trimmed vs wide, rebuild both in load+refresh); ±8d server window; ?_today hook; mobile dots not pills.
 - [html-arenas sports registry](html-arenas-sports-registry.md) — sports.js is the SSOT; all sport maps/pickers derive from injected ARENAS_SPORTS; never hand-write a sport map again.
-- [html-arenas Pro badge](html-arenas-pro-badge.md) — PRO badge = real subscription, never PLAN_GATES_ENABLED; server string-injection after injectBottomNav; exact-match patterns are the fragility.
+- [html-arenas Pro badge](html-arenas-pro-badge.md) — PRO badges (user + club) = real subscription, never the gate flags; server-injected/server-decided; exact-match patterns + dual clubs data paths are the fragility.
 - [html-arenas goals](html-arenas-goals-mapping.md) — fully shipped (API, Goals tab, Overview mini-card, live pricing copy); server-truth enrichment, client never recomputes.
 - [html-arenas avatars](html-arenas-avatars.md) — SHIPPED app-wide: injected avatarHtml/clubTileHtml helpers (span+img onerror fallback), avatar_url payload convention, JK fully retired.
 - [html-arenas timezones](html-arenas-timezones.md) — ALL day-math via tzdate.js zone keys, incl. multi-user boundary policy (member buckets / viewer windows / per-participant challenges); UTC parity proven.
