@@ -1956,23 +1956,17 @@ app.get(BASE + '/api/feed/activities', requireAuth, async (req, res) => {
 // distance-based sports score per km; the rest score per session. The derived
 // map is asserted identical to the historic literal in sports.test.js.
 
-// `distance` is a free-form string (e.g. "12.4 km"); units are ignored app-wide,
-// so we only extract the numeral — same pattern used elsewhere in this file.
-function parseDistanceKm(distance) {
-  const n = parseFloat(String(distance == null ? '0' : distance).replace(/[^0-9.]/g, ''));
-  return isNaN(n) ? 0 : n;
-}
-
-// Unit-aware distance parser used by the profile "km logged" headline stat,
-// goals, and POINTS SCORING (calculatePoints). Unlike parseDistanceKm (which
-// ignores units), this converts to real km: "km" as-is, "mi"/miles ×1.609,
-// bare "m"/metres ÷1000, no unit → assume km. Strips thousands separators
-// first so "2,000m" parses as 2000 m → 2 km.
-// KNOWN ISSUE (intentionally out of scope here): parseDistanceKm still treats
-// swim-in-metres as km for DISPLAY distance totals (weekly km, club rollups),
-// inflating those ~1000× — needs a unit-aware fix app-wide in a future
-// dedicated pass. Points are safe: only per-km sports feed distance into
-// scoring, and those go through this unit-aware parser.
+// THE canonical distance parser — every km figure in the app (points scoring,
+// profile hero + Stats & PRs, weekly km, club rollups/reports, challenges,
+// goals, achievement badges) must go through this. `distance` is a free-form
+// string with the unit inside it (no unit column), so this converts to real
+// km: "km" as-is, "mi"/miles ×1.609, bare "m"/metres ÷1000, no unit → assume
+// km. Strips thousands separators first so "2,000m" parses as 2000 m → 2 km.
+// HISTORY: a unit-blind parseDistanceKm (numeral-only, "10mi" read as 10 km,
+// swim metres inflated ~1000×) used to power display totals; it was retired
+// app-wide when the profile hero (unit-aware) and Stats & PRs (unit-blind)
+// visibly disagreed on the same all-time total. Do not reintroduce a second
+// distance parser.
 function parseDistanceKmUnitAware(distance) {
   if (distance == null) return 0;
   const raw = String(distance).toLowerCase().replace(/,/g, '');
@@ -2236,7 +2230,7 @@ app.get(BASE + '/api/leaderboard/club-dashboard', requireAuth, async (req, res) 
 
     const stats = memberIds.map((id) => {
       const a = byUser[id] || [];
-      let totalKm = 0; a.forEach((x) => { totalKm += parseDistanceKm(x.distance); });
+      let totalKm = 0; a.forEach((x) => { totalKm += parseDistanceKmUnitAware(x.distance); });
       return {
         userId: id,
         name: (profileMap[id] && profileMap[id].name) || 'Member',
@@ -2436,7 +2430,7 @@ app.get(BASE + '/api/clubs/:clubId/training-load', requireAuth, async (req, res)
         ? Math.round((prevWeeks.reduce((s, h) => s + h, 0) / prevWeeks.length) * 10) / 10
         : 0;
       const thisWeekActs = acts.filter((a) => a._k >= thisWeekKey);
-      const kmThisWeek = Math.round(thisWeekActs.reduce((s, a) => s + parseDistanceKm(a.distance), 0) * 10) / 10;
+      const kmThisWeek = Math.round(thisWeekActs.reduce((s, a) => s + parseDistanceKmUnitAware(a.distance), 0) * 10) / 10;
       // Rest days are a per-member day count over the member's OWN current
       // local week (how far they are into it vs distinct active days).
       const mWeekStartK = weekStartKey(new Date(), memberTz);
@@ -2841,7 +2835,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
         for (const a of (acts || [])) {
           if (challenge.sport !== 'any' && a.sport !== challenge.sport) continue;
           if (challenge.goal_type === 'distance') {
-            const dist = parseFloat(String(a.distance || '0').replace(/[^0-9.]/g, ''));
+            const dist = parseDistanceKmUnitAware(a.distance);
             if (!isNaN(dist)) progress += dist;
           } else if (challenge.goal_type === 'sessions' || challenge.goal_type === 'streak') {
             progress += 1;
@@ -3055,7 +3049,7 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
       const userStats = {};
       (acts || []).forEach(a => {
         totalHours += parseDurationHours(a.duration);
-        const dist = parseFloat(String(a.distance || '0').replace(/[^0-9.]/g, ''));
+        const dist = parseDistanceKmUnitAware(a.distance);
         if (!isNaN(dist)) totalKm += dist;
         sportCounts[a.sport] = (sportCounts[a.sport] || 0) + 1;
         if (!userStats[a.user_id]) userStats[a.user_id] = { sessions: 0, hours: 0, km: 0 };
@@ -3158,7 +3152,7 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
           (acts || []).forEach(a => {
             if (ch.sport !== 'any' && a.sport !== ch.sport) return;
             if (ch.goal_type === 'distance') {
-              const dist = parseFloat(String(a.distance || '0').replace(/[^0-9.]/g, ''));
+              const dist = parseDistanceKmUnitAware(a.distance);
               if (!isNaN(dist)) progress += dist;
             } else {
               progress += 1;
@@ -3402,7 +3396,7 @@ function computeChallengeProgress(challenge, activities, tz) {
   if (challenge.goal_type === 'distance') {
     acts.forEach((a) => {
       if (!matches(a)) return;
-      const dist = parseFloat((a.distance || '0').replace(/[^0-9.]/g, ''));
+      const dist = parseDistanceKmUnitAware(a.distance);
       if (!isNaN(dist)) progress += dist;
     });
   } else if (challenge.goal_type === 'sessions') {
@@ -3454,10 +3448,11 @@ const BADGES = [
   { id: 'popular', cat: 'community', icon: '🌟', name: 'Popular', desc: 'Reach 25 followers', check: s => s.followerCount >= 25, progress: s => [s.followerCount, 25] }
 ];
 
-// Parse a distance string ("12.3 km") into a number of kilometres.
+// Parse a distance string ("12.3 km") into a number of kilometres — thin
+// wrapper over the canonical unit-aware parser so badge thresholds count
+// real km ("10mi" = 16.09, "2,000m" = 2), same as every other km surface.
 function badgeKm(a) {
-  const d = parseFloat((a.distance || '0').replace(/[^0-9.]/g, ''));
-  return isNaN(d) ? 0 : d;
+  return parseDistanceKmUnitAware(a.distance);
 }
 
 // Gather every stat the badge checks need for one user, via the global
@@ -3641,7 +3636,7 @@ app.get(BASE + '/api/profile/overview', requireAuth, async (req, res) => {
       .eq('user_id', userId)
       .gte('date', weekStartInstant.toISOString());
     const acts = weekActs || [];
-    const weekKm = Math.round(acts.reduce((s, a) => s + parseDistanceKm(a.distance), 0) * 10) / 10;
+    const weekKm = Math.round(acts.reduce((s, a) => s + parseDistanceKmUnitAware(a.distance), 0) * 10) / 10;
     const weekHours = Math.round(acts.reduce((s, a) => s + parseDurationHours(a.duration), 0) * 10) / 10;
     const weekPoints = calculatePoints(acts);
 
@@ -4401,7 +4396,7 @@ async function buildFeedSidebar(userId, tz) {
       .eq('user_id', userId);
     const acts = allActs || [];
     const weekActs = acts.filter(a => dayKey(a.date, viewerTz) >= weekStartK);
-    const weekKm = Math.round(weekActs.reduce((s, a) => s + parseDistanceKm(a.distance), 0) * 10) / 10;
+    const weekKm = Math.round(weekActs.reduce((s, a) => s + parseDistanceKmUnitAware(a.distance), 0) * 10) / 10;
     sidebar.week = { activities: weekActs.length, km: weekKm };
 
     // Day strip — which weekdays (Mon=0) had activity this week (viewer zone).
@@ -5300,14 +5295,17 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
       const nowYear = dateParts(now, statsTz).y;
       periodActs = acts.filter((a) => { const p = dateParts(a.date, statsTz); return !!p && p.y === nowYear; });
     } else {
-      const allStart = new Date(2020, 0, 1);
-      periodActs = acts.filter((a) => new Date(a.date) >= allStart);
+      // 'all' means ALL activities — the exact same set the profile hero's
+      // "km logged" sums, so the two all-time totals can never diverge.
+      periodActs = acts;
     }
 
-    const km = (a) => parseDistanceKm(a.distance);
+    // Canonical unit-aware parser — the same one the profile hero uses.
+    const km = (a) => parseDistanceKmUnitAware(a.distance);
 
     // ── Hero stats (period) ──
-    const totalKm = Math.round(periodActs.reduce((s, a) => s + km(a), 0));
+    // 1dp rounding matches the profile hero's kmLogged exactly.
+    const totalKm = Math.round(periodActs.reduce((s, a) => s + km(a), 0) * 10) / 10;
     const totalHours = Math.round(periodActs.reduce((s, a) => s + parseDurationHours(a.duration), 0) * 10) / 10;
     const totalPoints = calculatePoints(periodActs);
 
@@ -5349,7 +5347,7 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
     const sportBreakdown = Object.entries(sportMap).map(([sport, s]) => ({
       sport,
       sessions: s.sessions,
-      km: Math.round(s.km),
+      km: Math.round(s.km * 10) / 10,
       hours: Math.round(s.hours * 10) / 10,
       pct: periodActs.length > 0 ? Math.round((s.sessions / periodActs.length) * 100) : 0
     })).sort((a, b) => b.sessions - a.sessions);
@@ -5364,7 +5362,7 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
     const runs = acts.filter((a) => a.sport === 'running' && km(a) > 0);
     if (runs.length) {
       const best = runs.reduce((m, a) => km(a) > km(m) ? a : m);
-      prs.push({ icon: '🏃', label: 'Longest run', value: km(best) + ' km', meta: fmtDate(best.date) + (best.title ? ' · ' + best.title : ''), isNew: isNew(best.date) });
+      prs.push({ icon: '🏃', label: 'Longest run', value: Math.round(km(best) * 10) / 10 + ' km', meta: fmtDate(best.date) + (best.title ? ' · ' + best.title : ''), isNew: isNew(best.date) });
     }
     const pacedRuns = runs.filter((a) => km(a) >= 3 && parseDurationHours(a.duration) > 0);
     if (pacedRuns.length) {
@@ -5377,7 +5375,7 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
     const rides = acts.filter((a) => a.sport === 'cycling' && km(a) > 0);
     if (rides.length) {
       const best = rides.reduce((m, a) => km(a) > km(m) ? a : m);
-      prs.push({ icon: '🚴', label: 'Longest ride', value: km(best) + ' km', meta: fmtDate(best.date) + (best.title ? ' · ' + best.title : ''), isNew: isNew(best.date) });
+      prs.push({ icon: '🚴', label: 'Longest ride', value: Math.round(km(best) * 10) / 10 + ' km', meta: fmtDate(best.date) + (best.title ? ' · ' + best.title : ''), isNew: isNew(best.date) });
     }
     const timed = acts.filter((a) => parseDurationHours(a.duration) > 0);
     if (timed.length) {
@@ -5405,7 +5403,7 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
         monthTotals[key] = (monthTotals[key] || 0) + km(a);
       });
       const bestMonth = Object.entries(monthTotals).reduce((m, x) => x[1] > m[1] ? x : m);
-      prs.push({ icon: '📍', label: 'Biggest month', value: Math.round(bestMonth[1]) + ' km', meta: keyToUtcDate(bestMonth[0]).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) + ' · across all sports', isNew: false });
+      prs.push({ icon: '📍', label: 'Biggest month', value: Math.round(bestMonth[1] * 10) / 10 + ' km', meta: keyToUtcDate(bestMonth[0]).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) + ' · across all sports', isNew: false });
     }
 
     res.json({
@@ -5428,9 +5426,8 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
 // counters (the challenges enrich() pattern: the server computes progress/pct/
 // isComplete/onTrack; clients must consume these, never recompute). Stored
 // status is only 'active' | 'archived'; "completed"/"expired" are derived.
-// Distance math is deliberately UNIT-AWARE (parseDistanceKmUnitAware, the
-// profile "km logged" precedent) — accepted drift from challenges' distance
-// math, which still uses the unit-blind parseDistanceKm.
+// Distance math uses the canonical unit-aware parser (parseDistanceKmUnitAware),
+// same as challenges and every other km surface.
 // Gating: creates/edits require the Pro plan; reads and archive/delete are
 // requireAuth-only (self-only), so a lapsed subscriber keeps read access and
 // can always archive — exit actions are never gated.
@@ -7297,7 +7294,7 @@ app.get(BASE + '/clubs/member/:clubId', requirePageAuth, async (req, res) => {
 // events (with the viewer's RSVP), active challenges (with the viewer's
 // progress), and the roster. Membership-gated. Display names come from auth
 // metadata via buildUserProfileMap (there is no profiles table); points reuse
-// the shared calculatePoints/parseDistanceKm heuristic.
+// the shared calculatePoints heuristic (unit-aware distance).
 app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Service unavailable' });
   const { clubId } = req.params;
@@ -7436,7 +7433,7 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
         const t = new Date(a.date).getTime();
         if (t < chWin.startMs || t > chWin.endMs) return;
         if (ch.sport !== 'any' && a.sport !== ch.sport) return;
-        if (ch.goal_type === 'distance') progress += parseDistanceKm(a.distance);
+        if (ch.goal_type === 'distance') progress += parseDistanceKmUnitAware(a.distance);
         else if (ch.goal_type === 'streak') streakDays.add(dayKey(a.date, viewerTz));
         else progress += 1;
       });

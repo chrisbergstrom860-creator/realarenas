@@ -1,40 +1,59 @@
 ---
 name: html-arenas distance units
-description: How activity distance strings are parsed to km, the remaining display-only unit bug, and which consumers use the unit-aware parser (points scoring included).
+description: One canonical unit-aware km parser app-wide (parseDistanceKmUnitAware); the legacy unit-blind parser is RETIRED — never reintroduce a second distance parser.
 ---
 
 # html-arenas distance parsing & units
 
-`activities.distance` is a **free-form string** (e.g. `"10.5 km"`, `"45 km"`,
-swimming `"2,000m"`, football `"9.2 km"` optional). There is **no unit column** —
-the unit lives inside the string.
+`activities.distance` is a **free-form string** (e.g. `"10.5 km"`, `"5mi"`,
+swimming `"2,000m"`). There is **no unit column** — the unit lives inside the
+string.
 
-## Display parser (`parseDistanceKm`) — still has a known unit bug
-The shared helper strips everything except digits/`.` and treats the number as km,
-**ignoring the unit**. Still used for DISPLAY distance totals (weekly km, club
-rollups, challenges distance progress).
+## ONE canonical parser: `parseDistanceKmUnitAware`
+Every km figure in the app goes through it: points scoring (`calculatePoints`),
+profile hero `kmLogged`, Stats & PRs (hero/breakdown/PRs), overview + feed
+weekly km, club dashboard rankings & training load, club report, challenges
+distance progress (all 4 code paths incl. `computeChallengeProgress`), goals,
+and achievement `badgeKm` (thin wrapper).
 
-- Correct for km-entered sports (running/cycling/hiking/football).
-- **BUG:** swimming is entered in **metres** (`"2,000m"`) → parsed as **2000 km**,
-  inflating distance **~1000×** anywhere `parseDistanceKm` is used.
+Rules: lowercase + strip thousands commas, then `km`→as-is, `mi`/`miles`→×1.609,
+bare `m`/metres→÷1000, no unit→assume km, null/≤0→0.
 
-**Decision (deferred):** display totals need a dedicated app-wide unit-aware pass.
-Do NOT silently "fix" `parseDistanceKm` as a side effect of a small change.
-The bug is flagged in a code comment above `parseDistanceKmUnitAware` in server.js.
+**Why:** the profile hero (unit-aware, 69.5) and Stats & PRs (unit-blind, 47)
+visibly disagreed on the same all-time total for a mile-logging user. The
+unit-blind `parseDistanceKm` ("10mi" read as 10 km, swim "2,000m" inflated to
+2000 km) was deleted; its 6 call sites and 5 inline `parseFloat(replace())`
+duplicates all converged on the canonical parser. The old swim-1000× display
+bug is gone.
 
-## Unit-aware parser (`parseDistanceKmUnitAware`) — now includes POINTS SCORING
-Used by the profile "km logged" stat, goals, AND `calculatePoints` (leaderboard
-points): lowercase + strip thousands commas, then `km`→as-is, `mi`/miles→×1.609,
-bare `m`/metres→÷1000, no unit→assume km.
-**Why points are safe from the swim bug:** only per-km sports (running, cycling)
-feed distance into scoring; swimming is per-session. The unit-aware points rule
-("10 mi" = 16.09 km) is publicly documented on `/how-points-work` — keep
-calculatePoints and that page's worked examples in lockstep (verify script:
-`scripts/verify-points-page.js`).
+**How to apply:** never add a second distance parser or an inline numeral-strip
+on a distance string. Guard: `scripts/verify-km-consistency.js` (static asserts
++ parser unit tests + real-account recompute + seeded mixed-unit e2e across all
+profile/feed surfaces; seeds only `@arenas-test.dev` emails, self-cleans).
+
+## Rounding convention
+Sum first, then round to 1dp (`Math.round(x*10)/10`) at each display site.
+Stats & PRs `period=all` uses ALL activities (the 2020 epoch cut was removed)
+so its set is identical to the hero's. Per-sport breakdown rows are rounded
+individually — their sum may drift from the hero by ±0.05/row; that is
+cosmetic, do NOT "fix" by summing rounded rows.
+
+## Intentional behavior shifts from the retirement (July 2026)
+- Distance-challenge progress: mile entries ×1.609, swim-metre entries ÷1000 —
+  a previously "completed" swim distance challenge can render incomplete
+  (progress is computed on read, nothing stored, no data corruption).
+- Badge km thresholds now count real km; already-awarded badges are never
+  revoked (awards idempotent).
+- Club report km totals changed accordingly.
+
+## Points scoring notes
+The unit-aware points rule ("10 mi" = 16.09 km) is publicly documented on
+`/how-points-work` — keep `calculatePoints` and that page's worked examples in
+lockstep (verify script: `scripts/verify-points-page.js`).
 
 ## Profile header has NO fabricated numbers
 All hero stats (Activities, km logged, Followers, Following) and tab counts
-(Activities, Achievements, Clubs, Following) have static fallback `0` and hydrate
-from real data. Eager hydration on load: hero stats + Activities/Following/Clubs
-tab counts. **Lazy:** the Achievements tab count only updates on tab open (fetch
-to `/api/profile/achievements`), so it reads `0` until that tab is visited.
+have static fallback `0` and hydrate from real data. Eager on load: hero stats
++ Activities/Following/Clubs tab counts. **Lazy:** the Achievements tab count
+only updates on tab open (`/api/profile/achievements`), so it reads `0` until
+that tab is visited.

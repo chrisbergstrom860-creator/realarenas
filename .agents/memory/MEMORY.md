@@ -31,7 +31,7 @@
 - [html-arenas landing honesty](html-arenas-landing-honesty.md) — pre-launch, no real users: landing copy must carry NO traction numbers or named testimonials; "8 sports" hard / "every sport" via 20pt fallback.
 - [html-arenas landing race-timing design](html-arenas-landing-design.md) — approved tokens (800 italic, #111827 band, skew -8deg) + lane-line calibration: bg-layer only, #EFEFEA/#1D2736, even 20-80%, never gap-aligned.
 - [html-arenas feed right-rail](html-arenas-feed-rightrail.md) — right-rail from buildFeedSidebar; getDateRange('week') is rolling-7-day but Monday-week stats use local weekStart — keep rank & km on one boundary.
-- [html-arenas distance units](html-arenas-distance-units.md) — app-wide parseDistanceKm ignores units (swim metres inflate ~1000×, known/deferred); profile + goals use the unit-aware parser.
+- [html-arenas distance units](html-arenas-distance-units.md) — ONE canonical unit-aware km parser app-wide; unit-blind parseDistanceKm RETIRED (never reintroduce); guard script verify-km-consistency.js.
 - [html-arenas reset/confirm](html-arenas-password-reset.md) — server-side token_hash+verifyOtp (no browser supabase-js); whitelist OTP type per endpoint (confirm=signup, reset=recovery) or a recovery token replays into auto-login.
 - [html-arenas sticky filter offset](html-arenas-sticky-scrollport.md) — sticky bars inside .main (overflow:hidden = the scrollport, already below topbar) must use top:0 not top:56px, else 56px gap + first row occluded.
 - [html-arenas Stripe/plans + gating](html-arenas-stripe.md) — $9 Pro / $29 Club Pro; raw-mount webhook sole subscriptions writer; Pro gating LIVE; Club Pro gating shipped end-to-end, dormant flag.
