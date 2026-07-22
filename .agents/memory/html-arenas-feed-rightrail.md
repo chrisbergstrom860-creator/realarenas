@@ -1,6 +1,6 @@
 ---
 name: html-arenas feed right-rail widgets
-description: How the feed page right-rail is data-driven, and the week-boundary trap between rolling-7-day and local-Monday windows.
+description: How the feed page right-rail is data-driven, and the (now resolved) week-boundary trap between rolling and local-Monday windows.
 ---
 
 The `arenas-feed.html` right rail (Your week, Activity streak, Athletes to follow,
@@ -10,20 +10,18 @@ empty/low-data state and contains no hardcoded users or numbers. Follow buttons 
 real POST/DELETE against `BASE + '/api/follow/:id'` and reflect the server's
 `{following}` response.
 
-**Week-boundary trap:** `getDateRange('week')` (and therefore
-`fetchActivitiesForUsers(ids, 'week', ...)`) is a **rolling last-7-days** window,
-but the feed's "this week" stats (weekly km, day strip, this-week club rank) use a
-**local-Monday 00:00 `weekStart`** (matching `/api/profile/overview`). If you compute
-a "this week" metric and its companion (e.g. km + club rank) from different windows,
-the two numbers silently disagree.
+**Week-boundary trap (RESOLVED):** `getDateRange('week')` is now Monday 00:00 in
+the viewer's timezone (and `'month'` is the calendar month), so leaderboards and
+the feed's Monday-bound "this week" stats finally agree. The trap to preserve:
+any "this week" metric and its companion (km + club rank) must come from the SAME
+window definition, and the at-risk/nudge 5-day checks must use `'rolling7'` —
+a Monday-bound week clips to <5 days early in the week and produces false
+at-risk flags.
 
-**Why:** code review caught club rank being ranked over rolling-7-day points while the
-km beside it was Monday-bound, so a user could see a rank that didn't match their
-own displayed distance.
-
-**How to apply:** for any Monday-week feed/profile stat, query activities with
-`.gte('date', weekStart.toISOString())` directly — do not reuse the rolling
-`getDateRange('week')` helper. Only mix windows on purpose.
+**Why:** code review once caught club rank ranked over rolling-7-day points while
+the km beside it was Monday-bound; later the /how-points-work page publicly
+promised "weeks start Monday in your timezone", which forced getDateRange itself
+to become Monday-true.
 
 Note: the feed **center-column activity cards** and the **notifications modal** are a
 separate concern and still contain prototype/fabricated content (Hackney RC, Alena/

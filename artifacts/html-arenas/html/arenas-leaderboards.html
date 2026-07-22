@@ -171,6 +171,9 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 .topbar-search input::placeholder { color: var(--gray-400); }
 .icon-btn { width: 34px; height: 34px; border-radius: 7px; border: var(--border); background: white; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 15px; position: relative; }
 .main { overflow-y: auto; }
+/* "ⓘ How points work" link — same treatment on leaderboards, challenges and profile. */
+.hpw-link{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--gray-500);text-decoration:none}
+.hpw-link:hover{color:var(--gray-700);text-decoration:underline}
 </style>
 </head>
 <body>
@@ -228,7 +231,8 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
   <div class="page-header-inner">
     <div class="page-header-left">
       <h1>Leaderboards 🏆</h1>
-      <p>Rankings across your sports — updated every Monday at midnight.</p>
+      <p>Rankings across your sports — the weekly board starts fresh every Monday in your timezone.</p>
+      <a class="hpw-link" href="/html/how-points-work" style="margin-top:6px">ⓘ How points work</a>
     </div>
     <div class="page-header-right">
       <div class="period-tabs">

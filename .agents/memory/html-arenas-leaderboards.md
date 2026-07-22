@@ -10,10 +10,10 @@ Two leaderboards: the athlete-facing `/leaderboards` page and the coach dashboar
 ## Points are a deliberate heuristic
 Scores come from a `SPORT_POINTS` table (distance sports score per-km, the rest per-session), computed from raw `activities`.
 **Why:** there is no stored points/score column in Supabase; ranking must be derived.
-**How to apply:** to change scoring, edit `SPORT_POINTS` + `calculatePoints` — don't invent a parallel scheme. `distance` is a free-form string; only the numeral is used (units ignored app-wide).
+**How to apply:** to change scoring, edit `SPORT_POINTS` + `calculatePoints` — don't invent a parallel scheme. Scoring is UNIT-AWARE (`parseDistanceKmUnitAware`: "10 mi" = 16.09 km) and publicly documented on `/how-points-work`, whose table + worked examples render from the registry at request time — the verify script `scripts/verify-points-page.js` asserts page==registry. Period windows: 'week' = Monday 00:00 viewer tz, 'month' = calendar month viewer tz (getDateRange takes tz; callers pass `getUserTimezone(req.user)`).
 
 ## At-risk + nudge are ALWAYS recomputed server-side
-At-risk = club members with no activity in the last 5 days, computed from the full membership roster (so zero-activity members count). The nudge endpoint recomputes this set itself and ignores any client-supplied IDs.
+At-risk = club members with no activity in the last 5 days, computed from the full membership roster (so zero-activity members count). The nudge endpoint recomputes this set itself and ignores any client-supplied IDs. Both checks fetch via `'rolling7'` — never the Monday-bound `'week'`, which clips to <5 days early in the week and creates false at-risk flags.
 **Why:** accepting recipient IDs from the client would let a coach spam arbitrary users with notifications — the same anti-spam convention other notification endpoints here follow.
 **How to apply:** never pass user IDs in the nudge body; verify the caller's admin/coach role for the specific clubId first. The dashboard view excludes the viewing coach from at-risk so its count matches the nudge recipient count.
 

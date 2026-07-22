@@ -320,6 +320,9 @@ button,select,input,textarea{font-family:var(--font)}
 .activities-hdr-card{background:white;border:var(--border);border-radius:var(--radius-lg);display:flex;align-items:center;justify-content:space-between;padding:16px 20px}
 #activities-list{display:flex;flex-direction:column;gap:14px;margin-top:14px}
 .activity-card-item{background:white;border:var(--border);border-radius:var(--radius-lg);padding:16px 18px}
+/* "ⓘ How points work" link — same treatment on leaderboards, challenges and profile. */
+.hpw-link{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--gray-500);text-decoration:none}
+.hpw-link:hover{color:var(--gray-700);text-decoration:underline}
 </style>
 </head>
 <body>
@@ -2098,7 +2101,7 @@ if (logHashMatch) {
       body.innerHTML =
         '<div style="background:white;border-bottom:var(--border);padding:14px 16px">' +
           '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">' +
-            '<div style="font-size:12px;font-weight:600">This week</div>' +
+            '<div style="display:flex;align-items:baseline;gap:10px"><div style="font-size:12px;font-weight:600">This week</div><a class="hpw-link" href="' + window.BASE + '/how-points-work">ⓘ How points work</a></div>' +
             (r.currentStreak > 0 ? '<div style="font-size:11px;color:#E6B800;font-weight:600">🔥 ' + r.currentStreak + '-day streak — keep it going</div>' : '') +
           '</div>' +
           '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">' +

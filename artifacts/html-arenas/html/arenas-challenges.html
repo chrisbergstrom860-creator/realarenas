@@ -44,6 +44,9 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 .header-stats { display: flex; gap: 20px; margin-top: 16px; flex-wrap: wrap; }
 .header-stat { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--gray-600); }
 .header-stat strong { color: var(--gray-900); font-family: var(--mono); font-weight: 500; }
+/* "ⓘ How points work" link — same treatment on leaderboards, challenges and profile. */
+.hpw-link{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--gray-500);text-decoration:none}
+.hpw-link:hover{color:var(--gray-700);text-decoration:underline}
 .stat-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 
 /* ── TABS BAR ── */
@@ -344,6 +347,7 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
         <div class="header-stat"><div class="stat-dot" style="background:#FFD21E"></div> <strong id="pts-month">—</strong> pts earned this month</div>
         <div class="header-stat"><div class="stat-dot" style="background:#3B82F6"></div> <strong id="challenges-available">—</strong> challenges available</div>
         <div class="header-stat"><div class="stat-dot" style="background:#8B5CF6"></div> <strong id="longest-streak">—</strong> day longest streak</div>
+        <div class="header-stat"><a class="hpw-link" href="/html/how-points-work">ⓘ How points work</a></div>
       </div>
     </div>
     <div style="display:flex;align-items:flex-start;gap:10px;flex-shrink:0;margin-top:4px">
@@ -442,7 +446,10 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 
     <!-- Points breakdown (real: per-sport points for the current month) -->
     <div class="side-card">
-      <div class="side-title" id="pts-breakdown-title">Points breakdown</div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;padding-right:16px">
+        <div class="side-title" id="pts-breakdown-title">Points breakdown</div>
+        <a class="hpw-link" href="/html/how-points-work">ⓘ How points work</a>
+      </div>
       <div id="pts-breakdown-body">
         <div style="padding:14px 16px;color:var(--gray-400);font-size:13px">Loading…</div>
       </div>

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+window.BASE = window.location.pathname.startsWith('/html') ? '/html' : '';
+window.nav = function(path){ window.location.href = window.BASE + path; };
+document.addEventListener('DOMContentLoaded', function(){
+  if (window.BASE === '') {
+    document.querySelectorAll('[href^="/html/"]').forEach(function(el){ el.setAttribute('href', el.getAttribute('href').slice(5)); });
+    document.querySelectorAll('[action^="/html/"]').forEach(function(el){ el.setAttribute('action', el.getAttribute('action').slice(5)); });
+  }
+});
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arenas — How points work</title>
+<meta name="description" content="The complete Arenas scoring system — how every sport earns points, with the full table and worked examples. No hidden multipliers.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --yellow:#FFD21E;--yellow-dark:#E6B800;--yellow-light:#FFF9E0;
+  --gray-50:#F9FAFB;--gray-100:#F3F4F6;--gray-200:#E5E7EB;--gray-300:#D1D5DB;
+  --gray-400:#9CA3AF;--gray-500:#6B7280;--gray-600:#4B5563;--gray-700:#374151;
+  --gray-800:#1F2937;--gray-900:#111827;
+  --green:#10B981;
+  --font:'Source Sans 3',sans-serif;--mono:'IBM Plex Mono',monospace;
+  --border:1px solid var(--gray-200);--radius:8px;--radius-lg:12px;
+  --shadow:0 1px 3px rgba(0,0,0,0.07);--shadow-md:0 4px 16px rgba(0,0,0,0.09);
+}
+html{scroll-behavior:smooth}
+body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);font-size:14px;line-height:1.5;overflow-x:hidden}
+button,select,input,textarea{font-family:var(--font)}
+a{color:inherit}
+
+/* ── MARKETING NAV ── */
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-bottom:var(--border);padding:0 40px;height:60px;display:flex;align-items:center;gap:24px}
+.nav-logo{display:flex;align-items:center;gap:8px;cursor:pointer;text-decoration:none}
+.nav-logo-icon{width:30px;height:30px;background:var(--yellow);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.nav-logo-text{font-size:16px;font-weight:700;color:var(--gray-900)}
+.nav-links{display:flex;align-items:center;gap:4px;margin-left:auto}
+.nav-link{padding:6px 12px;font-size:13px;font-weight:500;color:var(--gray-600);cursor:pointer;border-radius:6px;transition:all .12s;text-decoration:none;border:none;background:none}
+.nav-link:hover{color:var(--gray-900);background:var(--gray-100)}
+.nav-cta{padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .13s;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.nav-cta.yellow{background:var(--yellow);color:var(--gray-900);border:1px solid var(--yellow-dark)}
+.nav-cta.yellow:hover{background:var(--yellow-dark)}
+
+/* ── HERO ── */
+.hero{background:var(--gray-900);padding:150px 40px 84px;position:relative;overflow:hidden;text-align:center}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% -10%,rgba(255,210,30,.14) 0%,transparent 60%);pointer-events:none}
+.hero-inner{max-width:760px;margin:0 auto;position:relative;z-index:1}
+.hero-eyebrow{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--yellow);background:rgba(255,210,30,.1);border:1px solid rgba(255,210,30,.25);padding:4px 12px;border-radius:20px;margin-bottom:20px;font-family:var(--mono)}
+.hero-title{font-size:52px;font-weight:800;color:white;letter-spacing:-.025em;line-height:1.05;margin-bottom:18px}
+.hero-title span{color:var(--yellow)}
+.hero-sub{font-size:18px;color:var(--gray-400);line-height:1.65;max-width:560px;margin:0 auto}
+
+/* ── PROSE CONTENT ── */
+.content{background:#fff}
+.prose{max-width:720px;margin:0 auto;padding:60px 40px 84px}
+.doc-section{padding:30px 0}
+.doc-section:first-of-type{padding-top:18px}
+.doc-section+.doc-section{border-top:var(--border)}
+.doc-title{font-size:24px;font-weight:800;color:var(--gray-900);letter-spacing:-.015em;line-height:1.25;margin-bottom:18px}
+.prose p{font-size:16px;line-height:1.78;color:var(--gray-600);margin-bottom:16px}
+.prose p:last-child{margin-bottom:0}
+.prose strong{color:var(--gray-900);font-weight:700}
+.prose ul{list-style:disc;margin:0 0 16px;padding-left:22px}
+.prose li{font-size:16px;line-height:1.7;color:var(--gray-600);margin-bottom:9px}
+.prose li:last-child{margin-bottom:0}
+.prose a{color:var(--yellow-dark);text-decoration:underline;font-weight:600}
+.prose a:hover{color:var(--gray-900)}
+
+/* ── SCORING-TYPE CARDS ── */
+.type-cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:6px 0 10px}
+.type-card{border:var(--border);border-radius:var(--radius-lg);padding:18px 20px;background:var(--gray-50)}
+.type-card .tc-badge{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:3px 10px;border-radius:20px;margin-bottom:10px}
+.type-card .tc-badge.km{background:var(--yellow-light);color:#7a5c00;border:1px solid var(--yellow-dark)}
+.type-card .tc-badge.session{background:var(--gray-100);color:var(--gray-700);border:var(--border)}
+.type-card h3{font-size:16px;font-weight:700;color:var(--gray-900);margin-bottom:6px;letter-spacing:-.01em}
+.type-card p{font-size:14px;line-height:1.65;color:var(--gray-600);margin:0}
+
+/* ── SPORT TABLE ── */
+.points-table{width:100%;border:var(--border);border-radius:var(--radius-lg);border-collapse:separate;border-spacing:0;overflow:hidden;margin:6px 0 12px}
+.points-table th{background:var(--gray-50);border-bottom:var(--border);padding:10px 16px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-500)}
+.points-table td{padding:11px 16px;font-size:14px;color:var(--gray-700);border-bottom:var(--border)}
+.points-table tr:last-child td{border-bottom:none}
+.points-table .pt-sport{font-weight:600;color:var(--gray-900);white-space:nowrap}
+.points-table .pt-emoji{display:inline-block;width:22px;margin-right:4px}
+.points-table .pt-val{font-family:var(--mono);font-size:13px;white-space:nowrap}
+.table-note{font-size:13px;color:var(--gray-500);line-height:1.6}
+
+/* ── WORKED EXAMPLES ── */
+.example-card{border:var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px;background:white}
+.example-card .ex-head{background:var(--gray-50);border-bottom:var(--border);padding:12px 18px;font-size:14px;font-weight:700;color:var(--gray-900)}
+.example-card .ex-body{padding:16px 18px}
+.example-card .ex-body p{font-size:15px;margin-bottom:12px}
+.ex-math{font-family:var(--mono);font-size:13px;line-height:1.9;color:var(--gray-700);background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:12px 16px;margin-bottom:12px}
+.ex-math .ex-total{color:var(--gray-900);font-weight:600;border-top:var(--border);display:block;margin-top:8px;padding-top:8px}
+.ex-note{font-size:13px;color:var(--gray-500);line-height:1.6;margin:0}
+
+/* ── FOOTER ── */
+.footer{background:white;border-top:var(--border);padding:32px 40px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.footer-brand{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--gray-700);font-weight:500}
+.footer-brand-icon{width:22px;height:22px;background:var(--yellow);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px}
+.footer-links{display:flex;gap:20px}
+.footer-links a{font-size:13px;color:var(--gray-500);text-decoration:none;transition:color .1s}
+.footer-links a:hover{color:var(--gray-700)}
+
+/* ══ MOBILE RESPONSIVE (≤768px) ══ */
+@media (max-width:768px){
+  .nav{height:auto;flex-wrap:wrap;padding:10px 16px;gap:10px}
+  .nav-links{width:100%;margin-left:0;flex-wrap:wrap;justify-content:center;gap:6px}
+  .hero{padding:130px 20px 60px}
+  .hero-title{font-size:36px}
+  .hero-sub{font-size:16px}
+  .prose{padding:44px 22px 60px}
+  .doc-title{font-size:21px}
+  .prose p,.prose li{font-size:15px}
+  .type-cards{grid-template-columns:1fr}
+  .points-table th,.points-table td{padding:9px 10px}
+  .points-table .pt-emoji{width:18px;margin-right:2px}
+  .points-table td{font-size:13px}
+  .points-table .pt-val{font-size:12px;white-space:normal}
+  .footer{padding:24px 20px;flex-direction:column;text-align:center}
+  .footer-links{flex-wrap:wrap;justify-content:center}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <a class="nav-logo" href="/html/landing">
+    <div class="nav-logo-icon">🏟</div>
+    <span class="nav-logo-text">Arenas</span>
+  </a>
+  <div class="nav-links">
+    <a class="nav-link" href="/html/landing#features">Features</a>
+    <a class="nav-link" href="/html/landing#pricing">Pricing</a>
+    <a class="nav-link" href="/html/for-clubs">For clubs</a>
+    <a class="nav-link" href="/html/landing#login">Log in</a>
+    <a class="nav-cta yellow" href="/html/landing#login">Sign up free</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<header class="hero">
+  <div class="hero-inner">
+    <div class="hero-eyebrow">🏟 Scoring</div>
+    <h1 class="hero-title">How points <span>work</span></h1>
+    <p class="hero-sub">Every point on Arenas comes from an activity someone logged. This page is the entire scoring system — no hidden multipliers, no boosts.</p>
+  </div>
+</header>
+
+<!-- CONTENT -->
+<main class="content">
+  <div class="prose">
+
+    <section class="doc-section">
+      <h2 class="doc-title">Two ways to earn points</h2>
+      <p>Every sport on Arenas scores one of two ways. There is no third way, and no way to earn points without logging an activity.</p>
+      <div class="type-cards">
+        <div class="type-card">
+          <div class="tc-badge km">Per kilometre</div>
+          <h3>Distance sports</h3>
+          <p>{{KM_SPORTS_SENTENCE}} score points for every kilometre you log. The further you go, the more you earn.</p>
+        </div>
+        <div class="type-card">
+          <div class="tc-badge session">Per session</div>
+          <h3>Everything else</h3>
+          <p>Every other sport earns a fixed number of points per session. One logged activity is one session, whether it lasted 20 minutes or 4 hours.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="doc-section">
+      <h2 class="doc-title">The full table</h2>
+      <table class="points-table" id="points-table">
+        <thead>
+          <tr><th>Sport</th><th>Scoring</th><th>Points</th></tr>
+        </thead>
+        <tbody>
+          <!--SPORT_ROWS-->
+        </tbody>
+      </table>
+      <p class="table-note">This table is generated from the live scoring registry every time the page loads — it is exactly what the leaderboards use. If scoring ever changes, this page changes with it.</p>
+    </section>
+
+    <section class="doc-section">
+      <h2 class="doc-title">Two worked examples</h2>
+
+      <div class="example-card">
+        <div class="ex-head">Example 1 — a week of running</div>
+        <div class="ex-body">
+          <p>You log three runs: <strong>8 km</strong> on Tuesday, <strong>5 km</strong> on Thursday, and <strong>10 mi</strong> on Sunday.</p>
+          <div class="ex-math">
+            8 km × {{RUN_RATE}} = {{EX1_A}} pts<br>
+            5 km × {{RUN_RATE}} = {{EX1_B}} pts<br>
+            10 mi = 16.09 km (miles × 1.609) &nbsp;→&nbsp; 16.09 km × {{RUN_RATE}} = {{EX1_C}} pts
+            <span class="ex-total">Week total: {{EX1_A}} + {{EX1_B}} + {{EX1_C}} = {{EX1_RAW}} &nbsp;→&nbsp; {{EX1_TOTAL}} pts</span>
+          </div>
+          <p class="ex-note">Totals are rounded once, at the end — never per activity.</p>
+        </div>
+      </div>
+
+      <div class="example-card">
+        <div class="ex-head">Example 2 — a mixed week</div>
+        <div class="ex-body">
+          <p>You log a <strong>25 km ride</strong>, one <strong>climbing session</strong>, and one <strong>yoga session</strong>.</p>
+          <div class="ex-math">
+            25 km × {{RIDE_RATE}} = {{EX2_A}} pts<br>
+            Climbing session = {{CLIMB_RATE}} pts<br>
+            Yoga session = {{YOGA_RATE}} pts
+            <span class="ex-total">Week total: {{EX2_A}} + {{CLIMB_RATE}} + {{YOGA_RATE}} = {{EX2_TOTAL}} pts</span>
+          </div>
+          <p class="ex-note">Session sports pay the same whether the session was easy or brutal — only you know the difference.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="doc-section">
+      <h2 class="doc-title">The ground rules</h2>
+      <ul>
+        <li><strong>Points come from logged activities — nothing else.</strong> No sign-up bonuses, no streak multipliers. Delete an activity and its points go with it.</li>
+        <li><strong>Distance is unit-aware.</strong> Log a run as "10 mi" and it counts as 16.1 km. Metres work too — "2,000 m" counts as 2 km. No unit means kilometres.</li>
+        <li><strong>Weekly leaderboards start Monday at 00:00 in your own timezone.</strong> Monthly figures use calendar months. All-time means all time.</li>
+        <li><strong>Values are set for rough effort-parity across sports.</strong> A climbing session is worth about the same as a 5 km run. These are judgment calls, honestly made — not sports science.</li>
+        <li><strong>Two small edge cases, for completeness:</strong> a distance-sport activity logged without a distance earns twice its per-km rate as a flat credit, and an activity in a sport Arenas no longer recognises earns a flat 20 points.</li>
+      </ul>
+    </section>
+
+  </div>
+</main>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-brand">
+    <div class="footer-brand-icon">🏟</div>
+    <span>Arenas © 2026</span>
+  </div>
+  <div class="footer-links">
+    <a href="/html/about">About</a><a href="/html/terms">Terms</a><a href="/html/privacy">Privacy</a><a href="/html/how-points-work">How points work</a><a href="mailto:support@realarenas.com">Contact</a>
+  </div>
+</footer>
+
+</body>
+</html>

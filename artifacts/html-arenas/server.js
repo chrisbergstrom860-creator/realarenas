@@ -1963,13 +1963,16 @@ function parseDistanceKm(distance) {
   return isNaN(n) ? 0 : n;
 }
 
-// Unit-aware distance parser used ONLY for the profile "km logged" headline stat.
-// Unlike parseDistanceKm (which ignores units app-wide), this converts to real km:
-// "km" as-is, "mi"/miles ×1.609, bare "m"/metres ÷1000, no unit → assume km.
-// Strips thousands separators first so "2,000m" parses as 2000 m → 2 km.
-// KNOWN ISSUE (intentionally out of scope here): parseDistanceKm treats
-// swim-in-metres as km, inflating distance ~1000× across leaderboards/weekly/
-// scoring — needs a unit-aware fix app-wide in a future dedicated pass.
+// Unit-aware distance parser used by the profile "km logged" headline stat,
+// goals, and POINTS SCORING (calculatePoints). Unlike parseDistanceKm (which
+// ignores units), this converts to real km: "km" as-is, "mi"/miles ×1.609,
+// bare "m"/metres ÷1000, no unit → assume km. Strips thousands separators
+// first so "2,000m" parses as 2000 m → 2 km.
+// KNOWN ISSUE (intentionally out of scope here): parseDistanceKm still treats
+// swim-in-metres as km for DISPLAY distance totals (weekly km, club rollups),
+// inflating those ~1000× — needs a unit-aware fix app-wide in a future
+// dedicated pass. Points are safe: only per-km sports feed distance into
+// scoring, and those go through this unit-aware parser.
 function parseDistanceKmUnitAware(distance) {
   if (distance == null) return 0;
   const raw = String(distance).toLowerCase().replace(/,/g, '');
@@ -1981,14 +1984,17 @@ function parseDistanceKmUnitAware(distance) {
   return n;
 }
 
-// Total leaderboard points for a set of activities.
+// Total leaderboard points for a set of activities. Distance is UNIT-AWARE:
+// "10 mi" credits 16.09 km, "2,000m" credits 2 km (parseDistanceKmUnitAware) —
+// this is the exact math documented on the public /how-points-work page, so
+// any change here must stay in sync with that page's worked examples.
 function calculatePoints(activities) {
   let total = 0;
   (activities || []).forEach((a) => {
     const cfg = SPORT_POINTS[a.sport];
     if (!cfg) { total += 20; return; } // unknown sport: flat per-session credit
     if (cfg.per === 'km') {
-      const dist = parseDistanceKm(a.distance);
+      const dist = parseDistanceKmUnitAware(a.distance);
       total += dist > 0 ? dist * cfg.rate : cfg.rate * 2; // logged-but-no-distance fallback
     } else {
       total += cfg.rate;
@@ -1997,26 +2003,36 @@ function calculatePoints(activities) {
   return Math.round(total);
 }
 
-// ISO bounds for a leaderboard period. 'all' returns a null start (no lower
-// bound) — callers must branch on it and skip the `.gte` filter.
-function getDateRange(period) {
+// ISO bounds for a leaderboard period, resolved in the VIEWER's timezone:
+// 'week' starts Monday 00:00 in `tz` (matching the feed/profile Monday-week
+// stats and the leaderboards page copy), 'month' starts on the 1st of the
+// current calendar month in `tz` (matching the challenges header "pts this
+// month"). 'rolling7' is a plain instant window 7×24h back — used ONLY for
+// the at-risk 5-day check, which must never clip at a Monday boundary.
+// 'all' returns a null start (no lower bound) — callers must branch on it
+// and skip the `.gte` filter.
+function getDateRange(period, tz) {
+  const zone = isValidTimezone(tz) ? tz : 'UTC';
   const now = new Date();
   if (period === 'week') {
-    const s = new Date(); s.setDate(now.getDate() - 7);
-    return { start: s.toISOString(), end: now.toISOString() };
+    return { start: zoneMidnightUtc(weekStartKey(now, zone), zone).toISOString(), end: now.toISOString() };
   }
   if (period === 'month') {
-    const s = new Date(); s.setDate(now.getDate() - 30);
-    return { start: s.toISOString(), end: now.toISOString() };
+    return { start: zoneMidnightUtc(monthKey(now, zone) + '-01', zone).toISOString(), end: now.toISOString() };
+  }
+  if (period === 'rolling7') {
+    return { start: new Date(now.getTime() - 7 * 86400000).toISOString(), end: now.toISOString() };
   }
   return { start: null, end: now.toISOString() };
 }
 
 // Fetch activities for a set of users within a period (one query — callers
-// bucket by user_id; never query per-user). Sport is optional.
-async function fetchActivitiesForUsers(userIds, period, sport) {
+// bucket by user_id; never query per-user). Sport is optional. `tz` is the
+// requesting VIEWER's zone (window boundaries follow the viewer, per the
+// timezone boundary policy).
+async function fetchActivitiesForUsers(userIds, period, sport, tz) {
   if (!supabaseAdmin || !userIds.length) return [];
-  const { start } = getDateRange(period);
+  const { start } = getDateRange(period, tz);
   let q = supabaseAdmin
     .from('activities')
     .select('user_id, sport, distance, date')
@@ -2086,7 +2102,7 @@ app.get(BASE + '/api/leaderboard/platform', requireAuth, async (req, res) => {
     const users = (await listAllAuthUsers())
       .filter((u) => prefsFromMeta(u.user_metadata).show_on_leaderboards);
     const userIds = users.map((u) => u.id);
-    const byUser = bucketActivities(await fetchActivitiesForUsers(userIds, period, sport));
+    const byUser = bucketActivities(await fetchActivitiesForUsers(userIds, period, sport, getUserTimezone(req.user)));
     const leaderboard = users.map((u) => {
       const m = u.user_metadata || {};
       const disp = displayFromUser(u);
@@ -2127,7 +2143,7 @@ app.get(BASE + '/api/leaderboard/following', requireAuth, async (req, res) => {
     // Leaderboard opt-outs drop out here too (universal exclusion — including
     // the viewer's own row if THEY opted out). Failed lookups stay ranked.
     const userIds = allIds.filter((id) => !(profileMap[id] && profileMap[id].prefs && !profileMap[id].prefs.show_on_leaderboards));
-    const byUser = bucketActivities(await fetchActivitiesForUsers(userIds, period, sport));
+    const byUser = bucketActivities(await fetchActivitiesForUsers(userIds, period, sport, getUserTimezone(req.user)));
     const leaderboard = userIds.map((id) => {
       const p = profileMap[id] || { name: 'Athlete', handle: 'athlete', sports: [], location: null };
       const acts = byUser[id] || [];
@@ -2167,7 +2183,7 @@ app.get(BASE + '/api/leaderboard/club', requireAuth, async (req, res) => {
     const profileMap = await buildUserProfileMap(allMemberIds);
     // Same universal opt-out exclusion as the platform/following scopes.
     const memberIds = allMemberIds.filter((id) => !(profileMap[id] && profileMap[id].prefs && !profileMap[id].prefs.show_on_leaderboards));
-    const byUser = bucketActivities(await fetchActivitiesForUsers(memberIds, period, sport));
+    const byUser = bucketActivities(await fetchActivitiesForUsers(memberIds, period, sport, getUserTimezone(req.user)));
     const leaderboard = memberIds.map((id) => {
       const p = profileMap[id] || { name: 'Member', handle: 'member', sports: [], location: null };
       const acts = byUser[id] || [];
@@ -2204,12 +2220,14 @@ app.get(BASE + '/api/leaderboard/club-dashboard', requireAuth, async (req, res) 
     const { data: members } = await supabaseAdmin
       .from('memberships').select('user_id').eq('club_id', membership.club_id);
     const memberIds = [...new Set((members || []).map((m) => m.user_id).filter(Boolean))];
-    const acts = await fetchActivitiesForUsers(memberIds, period, 'all');
+    const acts = await fetchActivitiesForUsers(memberIds, period, 'all', getUserTimezone(req.user));
     const byUser = bucketActivities(acts);
     const profileMap = await buildUserProfileMap(memberIds);
 
     // At-risk: no activity in the last 5 days, regardless of the selected period.
-    const recent = period === 'week' ? acts : await fetchActivitiesForUsers(memberIds, 'week', 'all');
+    // Always a rolling instant window — a Monday-bound 'week' would clip to
+    // less than 5 days early in the week and mark active members at-risk.
+    const recent = await fetchActivitiesForUsers(memberIds, 'rolling7', 'all');
     const fiveDaysAgo = new Date(); fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
     const recentUserIds = new Set((recent || []).filter((a) => new Date(a.date) >= fiveDaysAgo).map((a) => a.user_id));
     const atRisk = memberIds
@@ -2277,7 +2295,7 @@ app.post(BASE + '/api/clubs/:clubId/nudge-atrisk', requireAuth, async (req, res)
     const { data: members } = await supabaseAdmin
       .from('memberships').select('user_id').eq('club_id', clubId);
     const memberIds = [...new Set((members || []).map((m) => m.user_id).filter(Boolean))];
-    const recent = await fetchActivitiesForUsers(memberIds, 'week', 'all');
+    const recent = await fetchActivitiesForUsers(memberIds, 'rolling7', 'all');
     const fiveDaysAgo = new Date(); fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
     const recentUserIds = new Set((recent || []).filter((a) => new Date(a.date) >= fiveDaysAgo).map((a) => a.user_id));
     const atRiskIds = memberIds.filter((id) => !recentUserIds.has(id) && id !== req.user.id);
@@ -6870,6 +6888,44 @@ app.get(BASE + '/about', (req, res) => res.sendFile(path.join(HTML, 'arenas-abou
 app.get(BASE + '/terms', (req, res) => res.sendFile(path.join(HTML, 'arenas-terms.html')));
 // Privacy Policy is a public content page (no auth), served raw like /terms.
 app.get(BASE + '/privacy', (req, res) => res.sendFile(path.join(HTML, 'arenas-privacy.html')));
+// How points work is a PUBLIC content page (no auth), like /terms and /privacy:
+// scoring transparency is a marketing asset and the page contains nothing
+// personal. The sport table AND every worked-example number are rendered from
+// the sports registry (sports.js) at request time — never hand-written — so
+// the page can never drift from the scoring the leaderboards actually use.
+app.get(BASE + '/how-points-work', (req, res) => {
+  const rows = SPORTS.map((s) => {
+    const perKm = s.scoring.per === 'km';
+    return `<tr><td class="pt-sport"><span class="pt-emoji">${s.emoji}</span>${s.label}</td>` +
+      `<td>${perKm ? 'Per kilometre' : 'Per session'}</td>` +
+      `<td class="pt-val">${s.scoring.rate} pts per ${perKm ? 'km' : 'session'}</td></tr>`;
+  }).join('\n          ');
+  // "Running and cycling" — the per-km sport list, derived so a future
+  // distance sport shows up here automatically.
+  const kmLabels = SPORTS.filter((s) => s.scoring.per === 'km').map((s) => s.label);
+  const kmSentence = kmLabels.length > 1
+    ? kmLabels.slice(0, -1).join(', ') + ' and ' + kmLabels[kmLabels.length - 1]
+    : kmLabels.join('');
+  // Worked examples — same math as calculatePoints (unit-aware distance,
+  // one Math.round on the total). round1 keeps float noise out of the copy
+  // (16.09 × 10 = 160.90000000000002 in IEEE 754).
+  const round1 = (n) => Math.round(n * 10) / 10;
+  const run = SPORT_POINTS.running.rate, ride = SPORT_POINTS.cycling.rate;
+  const climb = SPORT_POINTS.climbing.rate, yoga = SPORT_POINTS.yoga.rate;
+  const ex1a = round1(8 * run), ex1b = round1(5 * run), ex1c = round1(10 * 1.609 * run);
+  const ex1raw = round1(ex1a + ex1b + ex1c), ex1total = Math.round(8 * run + 5 * run + 10 * 1.609 * run);
+  const ex2a = round1(25 * ride), ex2total = Math.round(25 * ride + climb + yoga);
+  const tokens = {
+    KM_SPORTS_SENTENCE: kmSentence, RUN_RATE: run, RIDE_RATE: ride,
+    CLIMB_RATE: climb, YOGA_RATE: yoga,
+    EX1_A: ex1a, EX1_B: ex1b, EX1_C: ex1c, EX1_RAW: ex1raw, EX1_TOTAL: ex1total,
+    EX2_A: ex2a, EX2_TOTAL: ex2total
+  };
+  let html = fs.readFileSync(path.join(HTML, 'arenas-how-points-work.html'), 'utf8')
+    .replace('<!--SPORT_ROWS-->', rows);
+  Object.keys(tokens).forEach((k) => { html = html.replace(new RegExp(`{{${k}}}`, 'g'), String(tokens[k])); });
+  res.type('html').send(html);
+});
 // Club dashboard requires authentication. Inject the coach's real club, member
 // count, and recent members so the page shows live data instead of the
 // hardcoded "Hackney Running Club" / "Rachel" placeholders.
