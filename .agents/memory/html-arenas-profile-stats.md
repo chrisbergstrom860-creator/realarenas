@@ -26,6 +26,24 @@ panel `#tab-stats` (pills `.sp-period` + `#sp-stats-body`), client IIFE renders 
   2nd/4th week (aligned backward from the always-labeled current week) at
   24w and on narrow viewports.
 
+## By-sport pie (shared builder)
+- `html/arenas-pie.js` → `window.buildSportPie(breakdown, colors, narrow)`;
+  dual-path served like arenas-time.js. Hand-rolled SVG arcs, no chart lib.
+- **Basis is SESSIONS** — same as the bars' pct, so the two visuals in one card
+  can never disagree. **Why:** a time-basis pie next to session-basis bars
+  would silently contradict; hours already live in the Weekly chart.
+- Printed percentages use largest-remainder rounding (always sum to 100);
+  geometry uses exact fractions. Server `pct` is independently rounded — fine,
+  because bars display no percent text.
+- Labels: emoji+% inline when pct ≥ 10, else legend row under the pie. Single
+  sport = `<circle>` (arc path can't sweep 360°). Empty breakdown → `''` (card
+  already hidden; never render an empty gray circle). Narrow (≤480) stacks the
+  pie BELOW the bars via border-top variant.
+- Visual verification of authed widgets: temp unauthed harness route (also
+  alias `/html/landing/pie-harness`-style path — screenshot tool prepends
+  `/html/landing`), then delete route+file. `scripts/verify-pie.js` re-runs the
+  LR/e2e checks.
+
 ## Bucketing gotcha (same as reports tab)
 - Biggest-week / biggest-month keys are built from **local** date parts
   (`getFullYear`/`getMonth`/`getDate`), NOT `toISOString().slice()`. Round-tripping

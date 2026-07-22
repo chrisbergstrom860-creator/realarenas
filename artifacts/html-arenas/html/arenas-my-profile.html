@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/html/arenas.css">
 <script src="/html/arenas-stat-tiles.js"></script>
+<script src="/html/arenas-pie.js"></script>
 <script src="/html/arenas-time.js"></script>
 <style>:root{--green-light:#ECFDF5;--blue-light:#EFF6FF;--orange-light:#FFF7ED;--purple-light:#F5F3FF;--teal:#14B8A6;--teal-light:#F0FDFA;--radius-xl:16px;--shadow-lg:0 10px 40px rgba(0,0,0,0.12)}
 
@@ -1722,6 +1723,15 @@ if (logHashMatch) {
           '</div>';
       }).join('');
 
+      // Share-of-training pie beside the bars (shared builder: arenas-pie.js).
+      // Sessions basis — identical to the bars' pct — and the same registry
+      // colors, so the two visuals always agree. Recomputed on every period
+      // switch because this whole renderer re-runs. Empty breakdown → '' (the
+      // card itself is already hidden in that case).
+      var sportPie = typeof buildSportPie === 'function'
+        ? buildSportPie(r.sportBreakdown, sportColors, narrow)
+        : '';
+
       var prCards = r.prs.map(function (pr) {
         return '' +
           '<div style="border:' + (pr.isNew ? '0.5px solid #E6B800' : 'var(--border)') + ';border-radius:10px;padding:12px;position:relative;overflow:hidden;' + (pr.isNew ? 'background:linear-gradient(135deg,#FFFDF0,#FFF9E0)' : 'background:white') + '">' +
@@ -1752,7 +1762,13 @@ if (logHashMatch) {
         (r.sportBreakdown.length > 0 ?
           '<div style="margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
             '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between"><div style="font-size:12px;font-weight:600">🏅 By sport</div><div style="font-size:11px;color:var(--gray-400)">sessions · distance · time</div></div>' +
-            sportRows +
+            // Desktop: bars left, pie right (stretch keeps the pie panel the
+            // card's height). Narrow: pie stacks BELOW the bars — the ranked
+            // list is the primary detail, the pie is the summary glance.
+            '<div style="display:flex;' + (narrow ? 'flex-direction:column' : 'align-items:stretch') + '">' +
+              '<div style="flex:1;min-width:0">' + sportRows + '</div>' +
+              sportPie +
+            '</div>' +
           '</div>' : '') +
         (r.prs.length > 0 ?
           '<div style="margin:0 12px 14px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +

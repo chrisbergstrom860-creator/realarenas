@@ -256,6 +256,12 @@ app.get(['/html/arenas-stat-tiles.js', '/arenas-stat-tiles.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-stat-tiles.js'));
 });
 
+// Shared "By sport" pie builder (Stats & PRs tab + visual harness). Dual-path
+// as above.
+app.get(['/html/arenas-pie.js', '/arenas-pie.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-pie.js'));
+});
+
 // Shared relative-time helper ("X ago" buckets). One implementation for the
 // feed, my-profile, club-member, and club-dashboard pages. Dual-path as above.
 app.get(['/html/arenas-time.js', '/arenas-time.js'], (req, res) => {
