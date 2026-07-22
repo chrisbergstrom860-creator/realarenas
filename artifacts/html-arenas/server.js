@@ -262,6 +262,12 @@ app.get(['/html/arenas-pie.js', '/arenas-pie.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-pie.js'));
 });
 
+// Shared "Weekly activity" stacked-column builder (Stats & PRs tab + visual
+// harness). Dual-path as above.
+app.get(['/html/arenas-stack.js', '/arenas-stack.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-stack.js'));
+});
+
 // Shared relative-time helper ("X ago" buckets). One implementation for the
 // feed, my-profile, club-member, and club-dashboard pages. Dual-path as above.
 app.get(['/html/arenas-time.js', '/arenas-time.js'], (req, res) => {
@@ -5335,9 +5341,28 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
       const wStartK = weekStartKey(now, statsTz, i);
       const wEndK = addDaysToKey(wStartK, 7);
       const wActs = acts.filter((a) => { const k = dayKey(a.date, statsTz); return k >= wStartK && k < wEndK; });
+      // Per-sport hours for the stacked columns. Tenths are handed out by
+      // largest remainder so the segments always sum EXACTLY to the labeled
+      // weekly total (independent per-sport rounding could drift by 0.1h).
+      const wTotalTenths = Math.round(wActs.reduce((s, a) => s + parseDurationHours(a.duration), 0) * 10);
+      const wSportHours = {};
+      wActs.forEach((a) => {
+        const sp = a.sport || 'other';
+        wSportHours[sp] = (wSportHours[sp] || 0) + parseDurationHours(a.duration);
+      });
+      const wEntries = Object.entries(wSportHours).map(([sport, h]) => ({ sport, exact: h * 10, tenths: Math.floor(h * 10) }));
+      const wUsed = wEntries.reduce((s, e) => s + e.tenths, 0);
+      wEntries.slice()
+        .sort((a, b) => (b.exact - Math.floor(b.exact)) - (a.exact - Math.floor(a.exact)))
+        .slice(0, Math.max(0, wTotalTenths - wUsed))
+        .forEach((e) => { e.tenths += 1; });
       weeklyChart.push({
         label: keyToUtcDate(wStartK).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).replace(' ', ''),
-        hours: Math.round(wActs.reduce((s, a) => s + parseDurationHours(a.duration), 0) * 10) / 10
+        hours: wTotalTenths / 10,
+        // Dominant sport first; zero-tenth slivers dropped (they'd render as
+        // 0.0h segments — dishonest noise).
+        bySport: wEntries.filter((e) => e.tenths > 0).sort((a, b) => b.tenths - a.tenths)
+          .map((e) => ({ sport: e.sport, hours: e.tenths / 10 }))
       });
     }
 

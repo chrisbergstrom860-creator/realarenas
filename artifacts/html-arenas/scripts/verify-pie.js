@@ -64,7 +64,23 @@ function fixedCases() {
   check('weightlifting slice uses registry color #854D0E', html.includes('fill="#854D0E"'));
   check('golf slice uses registry color #3F6212', html.includes('fill="#3F6212"'));
   check('67% and 25% labeled inline (svg text)', /<text[^>]*>🚴 67%/.test(html) && /<text[^>]*>🏋️ 25%/.test(html));
-  check('8% slice pushed to legend (no inline text)', !/<text[^>]*>⛳/.test(html) && html.includes('⛳ Golf · 8%'));
+  check('8% slice inline on desktop (>= 7% threshold at 300px)', /<text[^>]*>⛳ 8%/.test(html) && !html.includes('⛳ Golf · 8%'));
+  check('desktop pie renders at 300px', html.includes('width:300px'));
+
+  // Narrow: smaller render keeps the historic 10% threshold → 8% → legend.
+  html = buildSportPie([
+    { sport: 'cycling', sessions: 8 },
+    { sport: 'weightlifting', sessions: 3 },
+    { sport: 'golf', sessions: 1 }
+  ], COLORS, true);
+  check('8% slice pushed to legend on narrow (10% threshold)', !/<text[^>]*>⛳/.test(html) && html.includes('⛳ Golf · 8%'));
+  check('narrow pie capped at 180px', html.includes('width:180px'));
+
+  // Desktop threshold boundary: 7% inline, 6% legend.
+  html = buildSportPie([{ sport: 'running', sessions: 13 }, { sport: 'golf', sessions: 1 }], COLORS, false);
+  check('7% slice inline on desktop (93/7)', /<text[^>]*>⛳ 7%/.test(html));
+  html = buildSportPie([{ sport: 'running', sessions: 15 }, { sport: 'golf', sessions: 1 }], COLORS, false);
+  check('6% slice still legend on desktop (94/6)', !/<text[^>]*>⛳/.test(html) && html.includes('⛳ Golf · 6%'));
 
   // A 1/3-each split: 33.33×3 → floors 99 → one +1 → 34/33/33.
   html = buildSportPie([

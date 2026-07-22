@@ -19,6 +19,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <link rel="stylesheet" href="/html/arenas.css">
 <script src="/html/arenas-stat-tiles.js"></script>
 <script src="/html/arenas-pie.js"></script>
+<script src="/html/arenas-stack.js"></script>
 <script src="/html/arenas-time.js"></script>
 <style>:root{--green-light:#ECFDF5;--blue-light:#EFF6FF;--orange-light:#FFF7ED;--purple-light:#F5F3FF;--teal:#14B8A6;--teal-light:#F0FDFA;--radius-xl:16px;--shadow-lg:0 10px 40px rgba(0,0,0,0.12)}
 
@@ -1675,31 +1676,14 @@ if (logHashMatch) {
         sportColors[s.id] = { bg: s.colors.bg, bar: s.colors.text, icon: s.emoji, name: s.label };
       });
 
-      var maxWeekH = Math.max.apply(null, r.weeklyChart.map(function (w) { return w.hours; }).concat([0.5]));
       var nWeeks = r.weeklyChart.length;
       var narrow = window.innerWidth <= 480;
-      // Label thinning when bars get thin: value + axis labels drop to every
-      // 2nd/4th week (aligned backward from the current week, which is always
-      // labeled). 6w always shows everything.
-      var labelEvery = nWeeks === 24 ? (narrow ? 4 : 2) : nWeeks === 12 ? (narrow ? 2 : 1) : 1;
-      // Bars widen to fill the available width for shorter ranges.
-      var barMaxW = nWeeks === 6 ? '64px' : nWeeks === 12 ? '40px' : '26px';
-      var chartBars = r.weeklyChart.map(function (w, i) {
-        var isLast = i === r.weeklyChart.length - 1;
-        var stepsBack = nWeeks - 1 - i;
-        var onGrid = isLast || stepsBack % labelEvery === 0;
-        // Zero weeks get no value label (honest gap) but keep a flat baseline
-        // tick so the timeline reads continuously.
-        var bar = w.hours > 0
-          ? '<div style="width:100%;max-width:' + barMaxW + ';height:' + Math.max(4, Math.round((w.hours / maxWeekH) * 78)) + '%;border-radius:3px 3px 0 0;background:' + (isLast ? '#E6B800' : '#FFD21E') + '"></div>'
-          : '<div style="width:100%;max-width:' + barMaxW + ';height:3px;border-radius:1px;background:var(--gray-200)"></div>';
-        return '' +
-          '<div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;height:100%;justify-content:flex-end">' +
-            (w.hours > 0 && onGrid ? '<div style="font-size:9px;font-family:var(--mono);font-weight:600;white-space:nowrap;color:' + (isLast ? 'var(--gray-900)' : 'var(--gray-500)') + '">' + w.hours + 'h</div>' : '') +
-            bar +
-            '<div style="font-size:8px;height:10px;line-height:10px;white-space:nowrap;color:' + (isLast ? 'var(--gray-600)' : 'var(--gray-400)') + ';font-weight:' + (isLast ? '600' : '400') + '">' + (onGrid ? (isLast ? 'Now' : esc(w.label)) : '') + '</div>' +
-          '</div>';
-      }).join('');
+      // Stacked columns by sport (shared builder: arenas-stack.js) — same
+      // registry colors as the By-sport bars + pie, legend of present sports,
+      // honest zero-week ticks, total label unchanged.
+      var weeklyStack = typeof buildWeeklyStack === 'function'
+        ? buildWeeklyStack(r.weeklyChart, sportColors, nWeeks, narrow)
+        : '';
 
       // Range switcher pills — same chip language as the period pills above.
       var weekPill = function (n) {
@@ -1755,10 +1739,9 @@ if (logHashMatch) {
           '<div style="padding:12px 14px;border-right:var(--border);display:flex;align-items:center;gap:10px"><div style="font-size:18px">🏆</div><div><div style="font-size:15px;font-weight:700;font-family:var(--mono);line-height:1">' + r.streaks.longest + ' day' + (r.streaks.longest !== 1 ? 's' : '') + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px">Longest streak</div></div></div>' +
           '<div style="padding:12px 14px;display:flex;align-items:center;gap:10px"><div style="font-size:18px">📅</div><div><div style="font-size:15px;font-weight:700;font-family:var(--mono);line-height:1">' + r.streaks.avgPerWeek + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px">Avg sessions / week</div></div></div>' +
         '</div>' +
-        '<div style="margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
-          '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div style="font-size:12px;font-weight:600">📊 Weekly activity · last ' + nWeeks + ' weeks</div><div style="display:flex;align-items:center;gap:6px">' + weekPill(6) + weekPill(12) + weekPill(24) + '<div style="font-size:11px;color:var(--gray-400);margin-left:4px">hours per week</div></div></div>' +
-          '<div style="display:flex;align-items:flex-end;gap:' + (nWeeks === 24 ? '3px' : '5px') + ';height:170px;padding:12px 14px 8px">' + chartBars + '</div>' +
-        '</div>' +
+        // Card order: By sport → Personal records → Weekly activity (chart
+        // moved to the bottom of the tab). Last card carries the 14px bottom
+        // margin to keep the spacing rhythm.
         (r.sportBreakdown.length > 0 ?
           '<div style="margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
             '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between"><div style="font-size:12px;font-weight:600">🏅 By sport</div><div style="font-size:11px;color:var(--gray-400)">sessions · distance · time</div></div>' +
@@ -1771,10 +1754,14 @@ if (logHashMatch) {
             '</div>' +
           '</div>' : '') +
         (r.prs.length > 0 ?
-          '<div style="margin:0 12px 14px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
+          '<div style="margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
             '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between"><div style="font-size:12px;font-weight:600">🏆 Personal records</div><div style="font-size:11px;color:var(--gray-400)">from logged activities · all time</div></div>' +
             '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px 14px">' + prCards + '</div>' +
-          '</div>' : '');
+          '</div>' : '') +
+        '<div style="margin:0 12px 14px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
+          '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div style="font-size:12px;font-weight:600">📊 Weekly activity · last ' + nWeeks + ' weeks</div><div style="display:flex;align-items:center;gap:6px">' + weekPill(6) + weekPill(12) + weekPill(24) + '<div style="font-size:11px;color:var(--gray-400);margin-left:4px">hours per week</div></div></div>' +
+          weeklyStack +
+        '</div>';
     } catch (err) {
       body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Could not load stats.</div>';
     }

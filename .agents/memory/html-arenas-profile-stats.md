@@ -25,6 +25,31 @@ panel `#tab-stats` (pills `.sp-period` + `#sp-stats-body`), client IIFE renders 
   flat gray baseline tick with no value label; value/axis labels thin to every
   2nd/4th week (aligned backward from the always-labeled current week) at
   24w and on narrow viewports.
+- Tab card order (product decision): stat cards/streaks → By sport (bars+pie)
+  → Personal records → Weekly activity. Last card carries the 14px bottom
+  margin, the others 12px.
+
+## Weekly stacked columns (shared builder)
+- Server weeklyChart weeks carry `bySport: [{sport, hours}]` — tenths handed
+  out by **largest remainder** so segments sum EXACTLY to the labeled total
+  (`hours = totalTenths/10`); dominant sport first; zero-tenth slivers dropped.
+  **Why:** independent per-sport rounding drifts 0.1h from the label; the
+  verify script asserts exact equality, keep it that way.
+- `html/arenas-stack.js` → `window.buildWeeklyStack(weekly, colors, nWeeks,
+  narrow)`; dual-path served like arenas-pie.js. Stacked flex columns:
+  `flex-basis %` = true share (no min-height inflation — honest-gap rule
+  applies to segments), builder REVERSES server order so dominant sits at the
+  base; registry colors (same hexes as By-sport bars/pie); native `title`
+  tooltips "Sport · Xh"; compact legend of ONLY present sports, hours desc.
+- `scripts/verify-stack.js` re-runs builder/order/e2e checks (needs dev
+  server up + SUPABASE_SERVICE_ROLE_KEY).
+
+## Pie sizing (2026-07 doubling)
+- Desktop pie 300px (panel 340px), inline-label font 9 viewBox units → inline
+  threshold **7%**; narrow (≤480) capped at 180px, font 12, threshold 10.
+  **Why:** label size is fixed in viewBox units, so a bigger render only fits
+  smaller slices if the font shrinks relatively; 2× on mobile (~264px+) would
+  dominate a 380px viewport.
 
 ## By-sport pie (shared builder)
 - `html/arenas-pie.js` → `window.buildSportPie(breakdown, colors, narrow)`;
