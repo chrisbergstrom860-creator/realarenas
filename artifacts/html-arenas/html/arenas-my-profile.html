@@ -1696,14 +1696,32 @@ if (logHashMatch) {
         var sc = sportColors[s.sport] || { bg:'var(--gray-100)', bar:'#6B7280', icon:'🏅', name:s.sport };
         var barW = Math.round((s.pct / maxSportPct) * 100);
         var distStr = s.km > 0 ? s.km + ' km' : '—';
+        var iconTile = '<div style="width:32px;height:32px;border-radius:8px;background:' + sc.bg + ';display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">' + sc.icon + '</div>';
+        var track =
+          '<div style="flex:1;height:10px;background:var(--gray-100);border-radius:5px;overflow:hidden">' +
+            '<div style="width:' + barW + '%;height:100%;background:' + sc.bar + ';border-radius:5px"></div>' +
+          '</div>';
+        var statLine = s.sessions + ' sessions · ' + distStr + ' · ' + s.hours + 'h';
+        // Narrow: the 12px mono stat line + 13px name no longer leave room
+        // for a readable bar on one line, so the row goes two-line — header
+        // (icon · name · stats) on top, full-width bar underneath.
+        if (narrow) {
+          return '' +
+            '<div style="padding:12px 14px;border-bottom:var(--border)">' +
+              '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
+                iconTile +
+                '<div style="font-size:13px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(sc.name) + '</div>' +
+                '<div style="font-size:12px;font-family:var(--mono);color:var(--gray-500);flex-shrink:0;text-align:right">' + statLine + '</div>' +
+              '</div>' +
+              '<div style="display:flex">' + track + '</div>' +
+            '</div>';
+        }
         return '' +
-          '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:var(--border)">' +
-            '<div style="width:32px;height:32px;border-radius:8px;background:' + sc.bg + ';display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">' + sc.icon + '</div>' +
-            '<div style="font-size:12px;font-weight:600;width:84px;flex-shrink:0">' + esc(sc.name) + '</div>' +
-            '<div style="flex:1;height:5px;background:var(--gray-100);border-radius:3px;overflow:hidden">' +
-              '<div style="width:' + barW + '%;height:100%;background:' + sc.bar + ';border-radius:3px"></div>' +
-            '</div>' +
-            '<div style="font-size:11px;font-family:var(--mono);color:var(--gray-500);flex-shrink:0;text-align:right;min-width:130px">' + s.sessions + ' sessions · ' + distStr + ' · ' + s.hours + 'h</div>' +
+          '<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:var(--border)">' +
+            iconTile +
+            '<div style="font-size:13px;font-weight:600;width:92px;flex-shrink:0">' + esc(sc.name) + '</div>' +
+            track +
+            '<div style="font-size:12px;font-family:var(--mono);color:var(--gray-500);flex-shrink:0;text-align:right;min-width:142px">' + statLine + '</div>' +
           '</div>';
       }).join('');
 

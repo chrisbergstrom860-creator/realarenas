@@ -47,6 +47,14 @@ panel `#tab-stats` (pills `.sp-period` + `#sp-stats-body`), client IIFE renders 
 - `scripts/verify-stack.js` re-runs builder/order/e2e checks (needs dev
   server up + SUPABASE_SERVICE_ROLE_KEY).
 
+## By-sport bar rows (readability scale)
+- Row scale: 10px bar+track (radius 5), 13px name, 12px mono stat, 16px emoji,
+  12px vertical padding. **Why:** the original 5px/12px/11px read as thin
+  lines with small text; 13px matches the app's standard body scale.
+- Narrow (≤480) rows are TWO-LINE (icon · name · stat header, full-width bar
+  below). **Why:** the one-line layout overflows at 380px with the 12px mono
+  stat — bar squeezes to 0 and text clips. Don't revert to one-line on mobile.
+
 ## Pie sizing (2026-07 doubling)
 - Desktop pie 300px (panel 340px), inline-label font 9 viewBox units → inline
   threshold **7%**; narrow (≤480) capped at 180px, font 12, threshold 10.
