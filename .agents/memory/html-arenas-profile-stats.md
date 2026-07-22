@@ -41,6 +41,9 @@ panel `#tab-stats` (pills `.sp-period` + `#sp-stats-body`), client IIFE renders 
   applies to segments), builder REVERSES server order so dominant sits at the
   base; registry colors (same hexes as By-sport bars/pie); native `title`
   tooltips "Sport · Xh"; compact legend of ONLY present sports, hours desc.
+- Legend scale (both stack + pie legends — separate code, ONE language, keep
+  in sync): 14px swatch / 12px label / 7px inner gap. **Why:** the original
+  8px/10px was too small to match colors to segments.
 - `scripts/verify-stack.js` re-runs builder/order/e2e checks (needs dev
   server up + SUPABASE_SERVICE_ROLE_KEY).
 

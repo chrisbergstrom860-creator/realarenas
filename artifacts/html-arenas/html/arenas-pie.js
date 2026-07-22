@@ -80,8 +80,10 @@
           parts.push('<text x="' + lx.toFixed(2) + '" y="' + (ly + 4).toFixed(2) + '" text-anchor="middle" font-size="' + labelFont + '" font-weight="700" fill="white">' + sc.icon + ' ' + d.pct + '%</text>');
         } else {
           legend.push(
-            '<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--gray-600)">' +
-            '<span style="width:8px;height:8px;border-radius:2px;background:' + sc.bar + ';flex-shrink:0"></span>' +
+            // Same legend scale as the weekly-stack legend — one legend
+            // language across the tab (14px swatch / 12px label).
+            '<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--gray-600)">' +
+            '<span style="width:14px;height:14px;border-radius:3px;background:' + sc.bar + ';flex-shrink:0"></span>' +
             sc.icon + ' ' + esc(name) + ' · ' + d.pct + '%</div>'
           );
         }
@@ -96,7 +98,7 @@
         ? 'border-top:var(--border);padding:14px;display:flex;flex-direction:column;align-items:center;gap:8px'
         : 'width:340px;flex-shrink:0;border-left:var(--border);padding:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px') + '">' +
       '<svg viewBox="0 0 200 200" style="width:' + size + ';height:' + size + ';display:block" role="img" aria-label="Share of sessions by sport">' + parts.join('') + '</svg>' +
-      (legend.length ? '<div style="display:flex;flex-direction:column;gap:3px">' + legend.join('') + '</div>' : '') +
+      (legend.length ? '<div style="display:flex;flex-direction:column;gap:6px">' + legend.join('') + '</div>' : '') +
       '<div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em">Share of sessions</div>' +
       '</div>'
     );

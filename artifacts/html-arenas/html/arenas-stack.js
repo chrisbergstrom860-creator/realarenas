@@ -70,12 +70,15 @@
     order.sort(function (a, b) { return totals[b] - totals[a]; });
     var legend = order.map(function (id) {
       var c = colors[id] || fallback;
-      return '<div style="display:flex;align-items:center;gap:5px;font-size:10px;color:var(--gray-600)">' +
-        '<span style="width:8px;height:8px;border-radius:2px;background:' + c.bar + ';flex-shrink:0"></span>' +
+      // Readable legend scale (matches the pie legend): 14px swatch, 12px
+      // label — small enough to stay compact, big enough to match colors to
+      // segments at a glance.
+      return '<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--gray-600)">' +
+        '<span style="width:14px;height:14px;border-radius:3px;background:' + c.bar + ';flex-shrink:0"></span>' +
         c.icon + ' ' + esc(c.name || id) + '</div>';
     }).join('');
 
     return '<div style="display:flex;align-items:flex-end;gap:' + (nWeeks === 24 ? '3px' : '5px') + ';height:170px;padding:12px 14px 8px">' + bars + '</div>' +
-      (legend ? '<div style="display:flex;flex-wrap:wrap;gap:5px 14px;padding:0 14px 10px;border-top:var(--border);padding-top:8px">' + legend + '</div>' : '');
+      (legend ? '<div style="display:flex;flex-wrap:wrap;gap:8px 18px;padding:0 14px 12px;border-top:var(--border);padding-top:10px">' + legend + '</div>' : '');
   };
 })();
