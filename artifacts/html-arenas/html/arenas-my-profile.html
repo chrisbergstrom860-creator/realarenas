@@ -114,6 +114,9 @@ button,select,input,textarea{font-family:var(--font)}
 .htab.active{color:var(--gray-900);border-bottom-color:var(--gray-900)}
 .htab .tab-count{font-size:10px;font-family:var(--mono);background:var(--gray-100);color:var(--gray-500);padding:1px 6px;border-radius:10px}
 .htab.active .tab-count{background:var(--gray-200);color:var(--gray-700)}
+/* Tab badges are "new since last viewed" counts — an empty badge means
+   nothing new and renders as no pill at all (never a "0"). */
+.htab .tab-count:empty{display:none}
 
 /* ── CONTENT LAYOUT ── */
 .content-wrap{max-width:1200px;margin:0 auto;padding:24px 28px}
@@ -423,12 +426,12 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="hero-tab-bar">
     <div class="htb-inner">
       <div class="htab active" id="htab-overview" onclick="setTab('overview')">Overview</div>
-      <div class="htab" id="htab-activities" onclick="setTab('activities')">Activities <span class="tab-count">0</span></div>
+      <div class="htab" id="htab-activities" onclick="setTab('activities')">Activities <span class="tab-count"></span></div>
       <div class="htab" id="htab-stats" onclick="setTab('stats')">Stats & PRs</div>
       <div class="htab" id="htab-goals" onclick="setTab('goals')">Goals</div>
-      <div class="htab" id="htab-achievements" onclick="setTab('achievements')">Achievements <span class="tab-count">0</span></div>
-      <div class="htab" id="htab-clubs" onclick="setTab('clubs')">Clubs <span class="tab-count">0</span></div>
-      <div class="htab" id="htab-following" onclick="setTab('following')">Following <span class="tab-count">0</span></div>
+      <div class="htab" id="htab-achievements" onclick="setTab('achievements')">Achievements <span class="tab-count"></span></div>
+      <div class="htab" id="htab-clubs" onclick="setTab('clubs')">Clubs <span class="tab-count"></span></div>
+      <div class="htab" id="htab-following" onclick="setTab('following')">Following <span class="tab-count"></span></div>
       <div class="htab" id="htab-settings" onclick="setTab('settings')">Settings</div>
     </div>
   </div>
@@ -737,7 +740,29 @@ button,select,input,textarea{font-family:var(--font)}
 
 <script>
 // ── TAB NAVIGATION ──
+// Counted tabs carry "new since last viewed" badges. Opening one fires a
+// lightweight mark-seen (server stamps user_metadata.tab_seen[tab] = now) and
+// clears the badge in place; the empty badge hides via the :empty CSS rule.
+// Deduped per page load so repeated tab clicks don't spam metadata writes.
+var TAB_SEEN_TABS = ['activities', 'achievements', 'clubs', 'following'];
+var tabSeenSent = {};
+function markTabSeen(id) {
+  if (TAB_SEEN_TABS.indexOf(id) === -1) return;
+  var badge = document.querySelector('#htab-' + id + ' .tab-count');
+  if (badge) badge.textContent = '';
+  if (tabSeenSent[id]) return;
+  tabSeenSent[id] = true;
+  // keepalive: a quick reload/navigation right after opening a tab must not
+  // cancel the in-flight mark-seen, or the badge would resurrect on reload.
+  fetch((window.BASE || '') + '/api/profile/tab-seen', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tab: id }),
+    keepalive: true
+  }).catch(function () { /* badge still clears locally; reload recomputes */ });
+}
 function setTab(id) {
+  markTabSeen(id);
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.htab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -1011,11 +1036,17 @@ document.getElementById('htab-overview').classList.add('active');
     else if (/km logged/i.test(label)) valEl.textContent = Number(data.kmLogged || 0).toLocaleString('en-US');
   });
 
-  // Tab counts
-  var actTab = document.querySelector('#htab-activities .tab-count');
-  if (actTab) actTab.textContent = data.activityCount;
-  var folTab = document.querySelector('#htab-following .tab-count');
-  if (folTab) folTab.textContent = data.followingCount;
+  // Tab badges — "new since last viewed" counts, server-computed against the
+  // per-tab last-seen timestamps (data.tabUnseen). Zero/no data = empty badge,
+  // which the :empty CSS rule hides entirely (a "0" pill is never rendered).
+  // These are NOT totals: the totals live in the hero stats and tab bodies.
+  (function () {
+    var unseen = data.tabUnseen || {};
+    TAB_SEEN_TABS.forEach(function (t) {
+      var el = document.querySelector('#htab-' + t + ' .tab-count');
+      if (el) el.textContent = unseen[t] > 0 ? String(unseen[t]) : '';
+    });
+  })();
 
   // Sports tags derived from the union of the user's real posts AND logged
   // activities (server sends activitySports = per-sport {count, lastDate}).
@@ -1161,8 +1192,8 @@ document.getElementById('htab-overview').classList.add('active');
         dirLink.style.cssText = 'color:inherit;text-decoration:underline';
         sub.appendChild(dirLink);
       }
-      var tc = document.querySelector('#htab-clubs .tab-count');
-      if (tc) tc.textContent = String(clubs.length);
+      // (Tab badge is NOT the club total — it's the "new since last viewed"
+      // count, rendered by the tabUnseen hydration above.)
     }
   })();
 
@@ -1381,8 +1412,8 @@ document.getElementById('htab-overview').classList.add('active');
     if (summary) summary.textContent = counts.following + ' following · ' + counts.followers + ' follower' + (counts.followers === 1 ? '' : 's');
     if (btnFollowing) btnFollowing.textContent = 'Following (' + counts.following + ')';
     if (btnFollowers) btnFollowers.textContent = 'Followers (' + counts.followers + ')';
-    var folTab = document.querySelector('#htab-following .tab-count');
-    if (folTab) folTab.textContent = counts.following;
+    // (The Following tab badge is the "new followers since last viewed"
+    // count, not this total — never write totals into .tab-count.)
     document.querySelectorAll('.hero-stat').forEach(function(stat){
       var label = (stat.querySelector('.hero-stat-label') || {}).textContent || '';
       var v = stat.querySelector('.hero-stat-val');
@@ -1854,8 +1885,10 @@ if (logHashMatch) {
       if (fill) fill.style.width = Math.round((r.earnedCount / r.totalCount) * 100) + '%';
       var countEl = document.getElementById('ach-count');
       if (countEl) countEl.textContent = r.earnedCount + ' / ' + r.totalCount + ' earned';
-      var navCount = document.querySelector('#htab-achievements .tab-count');
-      if (navCount) navCount.textContent = r.earnedCount;
+      // (This lazy loader used to be the ONLY writer of the Achievements tab
+      // badge — hence the old bug where it read "0" until the tab was opened.
+      // The badge is now the "new since last viewed" count from tabUnseen;
+      // totals belong to the in-tab "X / Y earned" header, not the badge.)
 
       var cats = [
         { id: 'starter', title: '🚀 Getting started' },

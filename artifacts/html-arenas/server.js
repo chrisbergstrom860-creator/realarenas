@@ -838,6 +838,12 @@ const PREF_KEYS = [
   'notify_challenges',     // gates type 'challenge' (invites + reminders)
   'notify_events'          // gates type 'event' (invites, RSVPs, friend-going)
 ];
+
+// Profile tabs whose header badges show "new since last viewed" counts.
+// Per-tab last-seen timestamps live server-side in user_metadata.tab_seen
+// (same account-level home as prefs — survives devices/browsers, unlike
+// localStorage which would silo the cleared state per browser).
+const TAB_SEEN_KEYS = ['activities', 'achievements', 'clubs', 'following'];
 function prefsFromMeta(meta) {
   const stored = (meta && meta.prefs) || {};
   const out = {};
@@ -5317,6 +5323,46 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
     }
     const activitySports = Object.values(activitySportMap);
 
+    // ── "New since last viewed" tab badges ──
+    // Each counted tab's badge shows only items whose timestamp postdates the
+    // stored per-tab last-seen (user_metadata.tab_seen). First run (or a tab
+    // added later): everything predating the feature counts as seen — missing
+    // keys are initialized to NOW and contribute zero, so an existing user
+    // never logs in to a wall of old-news badges. Any error degrades to no
+    // badge, never a fake count.
+    const tabUnseen = { activities: 0, achievements: 0, clubs: 0, following: 0 };
+    try {
+      const storedSeen = (meta.tab_seen && typeof meta.tab_seen === 'object' && !Array.isArray(meta.tab_seen)) ? meta.tab_seen : {};
+      const isTs = (v) => typeof v === 'string' && !isNaN(Date.parse(v));
+      const missingSeen = TAB_SEEN_KEYS.filter((k) => !isTs(storedSeen[k]));
+      if (missingSeen.length) {
+        const nowIso = new Date().toISOString();
+        const seeded = Object.assign({}, storedSeen);
+        missingSeen.forEach((k) => { seeded[k] = nowIso; });
+        // updateUserById merges top-level metadata keys, so this only touches
+        // tab_seen. If the write fails the next page load simply re-seeds.
+        await supabaseAdmin.auth.admin.updateUserById(req.user.id, { user_metadata: { tab_seen: seeded } });
+      }
+      // Unseen = rows newer than last-seen. Activities/achievements/clubs are
+      // the viewer's own additions (activities.created_at, achievements
+      // .earned_at, memberships.created_at); Following counts NEW FOLLOWERS
+      // (follows where the viewer is the target) — the notable external event,
+      // not people the viewer followed themselves.
+      const unseenQueries = {
+        activities: () => supabaseAdmin.from('activities').select('*', { count: 'exact', head: true }).eq('user_id', req.user.id).gt('created_at', storedSeen.activities),
+        achievements: () => supabaseAdmin.from('achievements').select('*', { count: 'exact', head: true }).eq('user_id', req.user.id).gt('earned_at', storedSeen.achievements),
+        clubs: () => supabaseAdmin.from('memberships').select('*', { count: 'exact', head: true }).eq('user_id', req.user.id).gt('created_at', storedSeen.clubs),
+        following: () => supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', req.user.id).gt('created_at', storedSeen.following)
+      };
+      await Promise.all(TAB_SEEN_KEYS.filter((k) => isTs(storedSeen[k])).map(async (k) => {
+        const { count, error } = await unseenQueries[k]();
+        // Missing user-provisioned table (achievements) or any error → 0.
+        if (!error && count) tabUnseen[k] = count;
+      }));
+    } catch (err) {
+      console.log('Tab unseen error:', err.message);
+    }
+
     const profileData = {
       profile: {
         name: display.name,
@@ -5360,6 +5406,9 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
       clubs: userClubs,
       followingList,
       followerList,
+      // Per-tab "new since last viewed" counts for the header tab badges.
+      // Zero = no badge rendered (never a "0" pill).
+      tabUnseen,
       gating: { proLocked: await computeProLocked(req.user.id) }
     };
 
@@ -6297,6 +6346,27 @@ app.post(BASE + '/api/profile/prefs', requireAuth, async (req, res) => {
   } catch (err) {
     console.log('Prefs update error:', err.message);
     res.status(500).json({ error: 'Could not save your setting' });
+  }
+});
+
+// Lightweight mark-seen for the profile tab badges: opening a counted tab
+// stamps that tab's last-seen to NOW in user_metadata.tab_seen (read-merge-
+// write, same pattern as prefs), which clears its "new since last viewed"
+// badge across reloads AND other devices — the state is account-level, not
+// per-browser.
+app.post(BASE + '/api/profile/tab-seen', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  const tab = req.body && req.body.tab;
+  if (!TAB_SEEN_KEYS.includes(tab)) return res.status(400).json({ error: 'Invalid tab' });
+  try {
+    const current = (req.user.user_metadata && typeof req.user.user_metadata.tab_seen === 'object' && !Array.isArray(req.user.user_metadata.tab_seen)) ? req.user.user_metadata.tab_seen : {};
+    const tab_seen = Object.assign({}, current, { [tab]: new Date().toISOString() });
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.user.id, { user_metadata: { tab_seen } });
+    if (error) return res.status(500).json({ error: 'Could not update' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.log('Tab seen error:', err.message);
+    res.status(500).json({ error: 'Could not update' });
   }
 });
 

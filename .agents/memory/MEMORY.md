@@ -46,6 +46,7 @@
 - [html-arenas country/state + tz](html-arenas-tz-country-audit.md) — country/state + /log date SHIPPED (countries.js SSOT; updateUserById MERGES metadata → clear with null not delete); single-user tz day-math now shipped, see timezones topic.
 - [html-arenas handle hiding](html-arenas-handle-hiding.md) — handles display-hidden but preserved in data; Session-1 surfaces done, sidebar chrome = Session 2; disambiguation via location+sports sublines.
 - [html-arenas kudos on activities](html-arenas-kudos.md) — activity_likes mirrors post_likes (PK pair, user-run DDL, degrade to []); self-kudos allowed/unnotified; profile tab count-only; club feed deferred.
+- [html-arenas profile tab badges](html-arenas-tab-badges.md) — badges = "new since last viewed" via user_metadata.tab_seen, never totals; Following counts new FOLLOWERS; mark-seen fetch needs keepalive; no "0" pill.
 - [Session cleanup practice](session-cleanup.md) — MANDATORY when seeding: manifest of ids at creation time + end-of-session scripts/test-data-sweep.js run; baselines must include auth/storage/subs.
 - [html-arenas time-ago rule](html-arenas-timeago.md) — "ago" lines use created_at via shared arenas-time.js, never the noon-anchored `date`; day-bucket widgets stay on `date` with calendar-day math.
 - [html-arenas bio limit](html-arenas-bio-limit.md) — 220-word rule (trim + /\s+/ split, exact client/server parity), 2000-char backstop, 400 not silent truncate; hero clamps 4 lines w/ sibling Show-more.
