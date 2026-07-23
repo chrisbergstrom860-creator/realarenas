@@ -38,6 +38,9 @@ opened that tab; opening the tab clears it.
 - The athlete sidebar's static "Challenges 3" mock badge was REMOVED (house
   rule: real or gone; a live joined-count is a low-signal total). Sidebar nav
   items carry no badges now — don't reintroduce one without a seen-system.
-- Club-dashboard nav badges (coach chrome) are a separate system: training
-  badge is script-driven, its Challenges/Events numbers are still static —
-  scope-fenced, untouched.
+- Club-dashboard nav badges (coach chrome): only two REAL badges remain —
+  Members (live .member-count writer) and Training load (hidden .alert shown
+  by script = the legitimate attention-count pattern). Static Challenges/
+  Events numbers were removed under the same house rule. Candidate if a
+  badge is ever wanted for Events: "upcoming events needing attention"
+  (e.g. unanswered RSVPs) — an attention count, never a total.
