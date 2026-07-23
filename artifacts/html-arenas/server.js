@@ -8747,9 +8747,49 @@ app.get(BASE + '/api/notifications', requireAuth, async (req, res) => {
     .limit(50);
   if (error) return res.json({ error: error.message });
   const notifications = await enrichNotifications(data);
+  await attachInviteState(notifications, req.user.id);
   const unreadCount = notifications.filter(n => !n.read).length;
   res.json({ notifications, unreadCount });
 });
+
+// Club-invite notifications (link '/join/<token>') get a live inviteState so
+// the panel can render an honest action: 'pending' → Join Club button,
+// 'joined' (accepted OR already a member via any path) → muted ✓ Joined,
+// 'expired' → dead label, 'gone' (invite revoked = row deleted) → plain row.
+// Two batched lookups, only when invite notifications are present; any
+// failure degrades to no inviteState (rows fall back to plain link behavior).
+async function attachInviteState(notifications, userId) {
+  try {
+    const inviteNotifs = notifications.filter(n => typeof n.link === 'string' && /^\/join\/[A-Za-z0-9_-]+$/.test(n.link));
+    if (!inviteNotifs.length) return;
+    const tokens = [...new Set(inviteNotifs.map(n => n.link.slice('/join/'.length)))];
+    const { data: invites, error: invErr } = await supabaseAdmin
+      .from('club_invites')
+      .select('token, status, expires_at, club_id')
+      .in('token', tokens);
+    // A failed lookup must degrade to "no state" (plain rows), never to 'gone'
+    // — 'gone' is an honest claim that the invite row was deleted (revoked).
+    if (invErr) return;
+    const byToken = {};
+    (invites || []).forEach(i => { byToken[i.token] = i; });
+    const clubIds = [...new Set((invites || []).map(i => i.club_id).filter(Boolean))];
+    const memberOf = new Set();
+    if (clubIds.length) {
+      const { data: mems } = await supabaseAdmin
+        .from('memberships').select('club_id').eq('user_id', userId).in('club_id', clubIds);
+      (mems || []).forEach(m => memberOf.add(m.club_id));
+    }
+    inviteNotifs.forEach(n => {
+      const inv = byToken[n.link.slice('/join/'.length)];
+      if (!inv) { n.inviteState = 'gone'; return; }
+      if (memberOf.has(inv.club_id) || inv.status === 'accepted') { n.inviteState = 'joined'; return; }
+      if (inv.expires_at && new Date(inv.expires_at).getTime() < Date.now()) { n.inviteState = 'expired'; return; }
+      n.inviteState = 'pending';
+    });
+  } catch (err) {
+    console.log('Invite-state enrich error:', err.message);
+  }
+}
 
 // Mark a single notification as read (scoped to the owner).
 app.post(BASE + '/api/notifications/:id/read', requireAuth, async (req, res) => {

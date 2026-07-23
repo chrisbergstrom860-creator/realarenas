@@ -81,12 +81,71 @@
             '<div style="font-size:12px;color:var(--gray-900);line-height:1.5;margin-bottom:2px">' + esc(n.body) + '</div>' +
             '<div style="font-size:10px;color:var(--gray-400)">' + esc(timeAgo(n.created_at)) + '</div>' +
           '</div>' +
+          inviteActionHtml(n) +
           (!n.read ? '<div style="width:7px;height:7px;border-radius:50%;background:#FFD21E;flex-shrink:0;margin-top:5px"></div>' : '') +
         '</div>';
     }).join('');
     // "See all" only matters when the collapsed view hides some notifications.
     if (seeAll) seeAll.style.display = (!showAll && allNotifs.length > COLLAPSED) ? 'inline' : 'none';
   }
+
+  // ── CLUB-INVITE ACTION PILL ──
+  // Club-invite notifications carry link '/join/<token>' and a server-computed
+  // inviteState (live invite status + membership). Render the honest action:
+  //   pending → live green "Join Club" pill (same green language as the events
+  //             ✓ Going pill), accepts inline via POST /auth/join/:token/existing
+  //   joined  → muted "✓ Joined" pill (inert)
+  //   expired → muted "Invite expired" label, no button
+  //   gone    → (invite revoked = row deleted) plain row, no action
+  // Notifications without inviteState (other types, or enrich failure) render
+  // exactly as before. The token is validated against the strict /join/<hex>
+  // shape before it is ever placed in an onclick attribute.
+  var joinedPill = '<span onclick="event.stopPropagation()" style="align-self:center;flex-shrink:0;padding:5px 11px;border-radius:8px;font-size:11px;font-weight:600;background:var(--gray-100);color:var(--gray-500);border:1px solid var(--gray-200);cursor:default;white-space:nowrap">✓ Joined</span>';
+  function inviteActionHtml(n) {
+    if (!n || !n.inviteState) return '';
+    if (n.inviteState === 'joined') return joinedPill;
+    if (n.inviteState === 'expired') return '<span onclick="event.stopPropagation()" style="align-self:center;flex-shrink:0;font-size:10px;color:var(--gray-400);white-space:nowrap;cursor:default">Invite expired</span>';
+    if (n.inviteState !== 'pending') return '';
+    var m = typeof n.link === 'string' && n.link.match(/^\/join\/([A-Za-z0-9_-]+)$/);
+    if (!m) return '';
+    return '<button onclick="acceptClubInvite(event,\'' + esc(n.id) + '\',\'' + esc(m[1]) + '\')"' +
+      ' style="align-self:center;flex-shrink:0;padding:5px 11px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;background:#ECFDF5;color:#166534;border:1px solid #86EFAC;white-space:nowrap">Join Club</button>';
+  }
+
+  // Inline accept: joins the club without leaving the page. On success the
+  // pill flips to muted "✓ Joined" (sidebar My Clubs picks the club up on the
+  // next page load — it is server-injected). On failure the invite may have
+  // died since render — navigate to the /join page, which renders the
+  // canonical invalid/expired/wrong-email states.
+  window.acceptClubInvite = async function (ev, id, token) {
+    ev.stopPropagation();
+    var btn = ev.currentTarget || ev.target;
+    btn.disabled = true;
+    btn.style.opacity = '.6';
+    btn.textContent = 'Joining…';
+    try {
+      var r = await fetch(B + '/auth/join/' + encodeURIComponent(token) + '/existing', { method: 'POST' });
+      var d = null;
+      try { d = await r.json(); } catch (e) { d = null; }
+      if (r.ok && d && d.success) {
+        for (var i = 0; i < allNotifs.length; i++) {
+          if (String(allNotifs[i].id) === String(id)) { allNotifs[i].inviteState = 'joined'; break; }
+        }
+        btn.outerHTML = joinedPill;
+        window.markNotificationRead(id);
+        if (typeof showToast === 'function') showToast(d.alreadyMember ? 'You are already a member of this club' : 'Welcome to the club 🎉');
+      } else {
+        await window.markNotificationRead(id);
+        var link = '/join/' + token;
+        if (typeof window.nav === 'function') window.nav(link);
+        else window.location.href = (window.BASE || B) + link;
+      }
+    } catch (e) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.textContent = 'Join Club';
+    }
+  };
 
   // Expand the in-place panel to the full list — the user never leaves the
   // page (replaces the old nav to the athlete /notifications page).

@@ -27,6 +27,10 @@ description: Design rules for the club invite/join feature (personal vs open lin
 - The standalone `POST /api/clubs/:clubId/accept-invite` endpoint was **removed** (its only caller was the retired notifications page). Acceptance now flows only through `/join/:token` + `/auth/join/:token[/existing]`, which resolve the invite by token.
 - **Durable rule:** if you ever add another "join this club" path, it MUST verify a real pending invite for `req.user.email` + `clubId` (reject 403 if none, 410 if expired) **before** inserting membership. Deriving role / defaulting to member without that check lets any signed-in user join any club by id — a broken-access-control hole caught in review once already.
 
+## Inline accept from the notifications panel
+- The shared notifications panel renders a "Join Club" pill on pending invite notifs and accepts inline through the SAME `/auth/join/:token/existing` endpoint (all pending/expiry/email-binding checks reused — no new join path was added, per the durable rule above).
+- Server attaches `inviteState` (`pending`/`joined`/`expired`/`gone`) per notif in GET `/api/notifications`; `joined` covers both accepted invites and membership gained via any other path. See html-arenas-notifications.md for the render rules.
+
 ## Other constraints carried from schema reality
 - Revoke = DELETE the row (do not write a `revoked` status — unknown status CHECK risk). Only `pending`/`accepted` are ever written.
 - `isExpired` is computed from `expires_at`, not stored.

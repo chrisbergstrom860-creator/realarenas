@@ -30,6 +30,17 @@ description: How notifications are produced/read in artifacts/html-arenas and wh
 - GET `/api/notifications` returns `{ notifications, unreadCount }`; each notif
   has `read` (bool), `created_at`, `type`, `body`. There is NO numeric badge
   element — unread state is shown only by the `.notif-dot` indicator.
+- Club-invite notifs (link `/join/<token>`, the only notifs with that prefix) get a
+  server-computed `inviteState` in GET `/api/notifications` (`attachInviteState`:
+  batched invite+membership lookups): `pending` → green "Join Club" pill in the
+  shared panel (inline accept via `POST /auth/join/:token/existing`, flips to muted
+  "✓ Joined"), `joined` (member OR accepted) → muted pill, `expired` → gray label,
+  `gone` (row deleted = revoked) → plain row. **Rules:** lookup failure must degrade
+  to NO state (plain rows), never `'gone'`; the token only enters the onclick attr
+  after a strict `/join/<hex>` regex match + `esc()`; pill click needs
+  `stopPropagation` (row click navigates). Accept-failure path navs to the `/join`
+  page (canonical error surface). Shared panel only — the dashboard's inline copy
+  stays action-less on purpose.
 - Every shell bell opens an **inline** `#notifications-panel` dropdown
   (`toggleNotificationsPanel`); the dashboard keeps its own inline copy and other
   pages get one via `injectNotificationsPanel`. The `/notifications` route now just
