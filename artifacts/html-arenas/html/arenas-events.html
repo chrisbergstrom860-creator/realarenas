@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/html/arenas.css">
+<script src="/html/arenas-club-create.js"></script>
 <style>:root{--green-light:#ECFDF5;--blue-light:#EFF6FF;--orange-light:#FFF7ED;--purple-light:#F5F3FF;--teal:#14B8A6;--teal-light:#F0FDFA;--pink-light:#FBEAF0;--pink:#D4537E}
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -691,11 +692,13 @@ function showToast(msg){
     parent.insertBefore(item, anchor);
   });
   // "+ Create club" entry point — always the LAST item in My clubs, including
-  // the zero-clubs case (that's the primary audience). ?create=1 opens the
-  // session-aware /for-clubs wizard directly.
+  // the zero-clubs case (that's the primary audience). Opens the in-app
+  // club-setup modal (arenas-club-create.js, shared submit layer with the
+  // /for-clubs wizard); falls back to the session-aware /for-clubs wizard if
+  // the module failed to load.
   var create = document.createElement('div');
   create.className = 'nav-item';
-  create.onclick = function () { if (typeof nav === 'function') nav('/for-clubs?create=1'); };
+  create.onclick = function () { if (window.ArenasClubCreate) { window.ArenasClubCreate.open(); } else if (typeof nav === 'function') { nav('/for-clubs?create=1'); } };
   var cic = document.createElement('span');
   cic.className = 'nav-icon';
   cic.textContent = '➕';

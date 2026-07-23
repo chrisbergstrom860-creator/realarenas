@@ -274,6 +274,14 @@ app.get(['/html/arenas-time.js', '/arenas-time.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-time.js'));
 });
 
+// Shared club-creation contract layer + in-app club-setup modal. The
+// /for-clubs wizard and the sidebar "+ Create club" modal both submit through
+// this one file so validation and error mapping can't drift. Dual-path as
+// above.
+app.get(['/html/arenas-club-create.js', '/arenas-club-create.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-club-create.js'));
+});
+
 // ── AUTH (Supabase) ──
 const COOKIE_OPTS = {
   httpOnly: true,

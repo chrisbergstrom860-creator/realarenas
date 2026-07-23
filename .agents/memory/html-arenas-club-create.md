@@ -1,9 +1,17 @@
 ---
 name: html-arenas logged-in club creation
-description: Dual-mode /for-clubs wizard, POST /api/clubs/create, email pre-check, login `next` param — invariants and accepted risks.
+description: Shared club-create contract layer + in-app modal, dual-mode /for-clubs wizard, POST /api/clubs/create, email pre-check, login `next` param — invariants and accepted risks.
 ---
 
 # Logged-in club creation path
+
+## Shared contract layer + in-app modal (arenas-club-create.js)
+- TWO surfaces create clubs for logged-in users: the in-app modal (sidebar "+ Create club" on all 9 shell pages) and the /for-clubs wizard. BOTH must go through `window.ArenasClubCreate` (validateClub, deriveHandle, filterInvites, submit). Never fork validation, handle derivation, invite filtering, request body, or error-code→message mapping per surface.
+- **Why:** the surfaces drifted before extraction; single-sourcing is the whole point of the module. If the API contract changes, change `submit()` once.
+- `submit()` returns `{ok,redirect}` or `{ok:false,target:'club'|'review',msg}` — targets are SEMANTIC step names; each surface maps them onto its own step ids (/for-clubs: club→2, review→5). handle_taken/invalid_handle/invalid_name/invalid_sport → 'club'; club_limit (with `d.limit` fallback 3) and everything else → 'review'.
+- The modal only sends fields the API persists (name/handle/sport/city + invites) — desc/country were deliberately dropped in-app. "Creating as" line is /for-clubs-only (in-app you're already in your own shell).
+- Modal invariants: `ccm-` prefix on ALL ids/classes; `<style>` injected on first `open()` only; review step renders user text via `textContent` only; sports from injected `window.ARENAS_SPORTS`; bottom sheet ≤768px; hrefs built at runtime must use `window.BASE + '/...'` (the pages' BASE href-rewrite pass runs before the modal DOM exists).
+- Shell-page entry: `create.onclick` guards `window.ArenasClubCreate` and falls back to `nav('/for-clubs?create=1')` — keep the guard. Asymmetry: arenas-for-clubs.html hard-depends on the script (no guard) — logged-out wizard throws if it 404s; accepted (same-origin, dual-routed like other shared scripts).
 
 ## Rules
 - `/for-clubs` is session-aware: server injects `window.ARENAS_SESSION = {name,email}|null` before `</head>` (escape `<` as `\u003c`). Logged-in visitors get a shortened wizard; logged-out flow is untouched.

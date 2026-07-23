@@ -869,11 +869,16 @@ button,select,input,textarea{font-family:var(--font)}
 
 <div class="toast" id="toast"></div>
 
+<script src="/html/arenas-club-create.js"></script>
 <script>
 // Logged-in visitors (window.ARENAS_SESSION injected server-side) get the
 // shortened wizard: the account step is removed and launch calls the
 // authenticated /api/clubs/create endpoint instead of the signup form-POST.
 // Logged-out visitors get the original 5-step flow unchanged.
+// Club field validation, invite filtering, handle derivation, and the
+// authenticated submit all live in the shared arenas-club-create.js contract
+// layer — the same one the in-app sidebar modal uses — so rules can't drift
+// between the two surfaces.
 const SESSION = window.ARENAS_SESSION || null;
 const WIZARD_STEPS = SESSION ? [2, 3, 5] : [1, 2, 3, 5];
 function stepPos(n) { return WIZARD_STEPS.indexOf(n) + 1; }
@@ -1032,9 +1037,9 @@ function validateStep(n) {
     const name = document.getElementById('club-name').value.trim();
     const handle = document.getElementById('club-handle').value.trim();
     const sport = document.getElementById('club-sport').value;
-    if (!name) { showErr(2,'Please enter your club name.'); return false; }
-    if (!handle) { showErr(2,'Please choose a club handle.'); return false; }
-    if (!sport) { showErr(2,'Please select your primary sport.'); return false; }
+    // Shared field rules (arenas-club-create.js) — same checks as the in-app modal.
+    const v = window.ArenasClubCreate.validateClub({ name, handle, sport });
+    if (!v.ok) { showErr(2, v.msg); return false; }
     window.clubData = { name, handle, sport, city: document.getElementById('club-city').value, desc: document.getElementById('club-desc').value };
   }
   return true;
@@ -1082,7 +1087,8 @@ function matchCheck() {
 
 // ── STEP 2 helpers ──
 function updateHandle(name) {
-  const h = name.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,20);
+  // Shared derivation (arenas-club-create.js) — same charset as the in-app modal.
+  const h = window.ArenasClubCreate.deriveHandle(name);
   document.getElementById('club-handle').value = h;
   document.getElementById('handle-preview').innerHTML = '@<span>' + (h || 'yourclub') + '</span>';
 }
@@ -1142,12 +1148,15 @@ function launchClub() {
   const nextBtn = document.getElementById('next-btn');
   nextBtn.disabled = true;
   nextBtn.textContent = 'Launching…';
-  const invites = [...document.querySelectorAll('#invite-rows tr')].map(tr => {
-    const email = (tr.querySelector('input[type=email]')?.value || '').trim();
-    const name = (tr.querySelector('input[type=text]')?.value || '').trim();
-    const role = (tr.querySelector('select')?.value || 'Member').toLowerCase();
-    return { email, name, role };
-  }).filter(r => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email));
+  // Shared invite normalization/filtering (arenas-club-create.js) — same
+  // rules as the in-app modal.
+  const invites = window.ArenasClubCreate.filterInvites(
+    [...document.querySelectorAll('#invite-rows tr')].map(tr => ({
+      email: tr.querySelector('input[type=email]')?.value,
+      name: tr.querySelector('input[type=text]')?.value,
+      role: tr.querySelector('select')?.value
+    }))
+  );
   // Logged-in: authenticated JSON create against the EXISTING account — no
   // second account is ever created on this path.
   if (SESSION) { authedCreate(c, invites, nextBtn); return; }
@@ -1178,31 +1187,21 @@ function launchClub() {
 }
 
 // Authenticated create for logged-in users — surfaces field errors inline
-// instead of the signup path's redirect-with-query-param convention.
+// instead of the signup path's redirect-with-query-param convention. The
+// request and error-code→message mapping live in the shared submit layer
+// (arenas-club-create.js); this only maps its semantic step targets onto
+// this wizard's step ids ('club' → step 2, 'review' → step 5).
 async function authedCreate(c, invites, nextBtn) {
-  const fail = (step, msg) => {
-    nextBtn.disabled = false;
-    nextBtn.textContent = '🚀 Launch my club';
-    if (step !== 5) showStep(step);
-    showErr(step, msg);
-  };
-  try {
-    const r = await fetch(window.BASE + '/api/clubs/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: c.name, handle: c.handle, sport: c.sport, city: c.city || '', invites: invites })
-    });
-    let d = {};
-    try { d = await r.json(); } catch (e) { d = {}; }
-    if (r.ok && d.redirect) { window.location.href = d.redirect; return; }
-    if (d.error === 'handle_taken') return fail(2, 'That handle is already taken — try another.');
-    if (d.error === 'invalid_handle') return fail(2, 'Handles are 2–20 lowercase letters or numbers.');
-    if (d.error === 'invalid_name' || d.error === 'invalid_sport') return fail(2, 'Please check your club name and sport.');
-    if (d.error === 'club_limit') return fail(5, 'You\'ve reached the limit of ' + (d.limit || 3) + ' clubs per account.');
-    return fail(5, 'Could not create your club right now — please try again.');
-  } catch (err) {
-    return fail(5, 'Could not create your club right now — please try again.');
-  }
+  const res = await window.ArenasClubCreate.submit(
+    { name: c.name, handle: c.handle, sport: c.sport, city: c.city || '' },
+    invites
+  );
+  if (res.ok) { window.location.href = res.redirect; return; }
+  nextBtn.disabled = false;
+  nextBtn.textContent = '🚀 Launch my club';
+  const step = res.target === 'club' ? 2 : 5;
+  if (step !== 5) showStep(step);
+  showErr(step, res.msg);
 }
 
 // ── SESSION-AWARE INIT ──
