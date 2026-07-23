@@ -35,5 +35,9 @@ opened that tab; opening the tab clears it.
   All four total-writers are retired; totals live in hero stats / tab bodies.
 - Opening the Achievements tab awards new badges server-side; genuinely new
   rows earned AFTER the mark-seen stamp legitimately re-badge on next load.
-- Sidebar "Challenges 3" (athlete pages) is STATIC mock chrome; club-dashboard
-  nav badges are live totals/attention counts — different systems, untouched.
+- The athlete sidebar's static "Challenges 3" mock badge was REMOVED (house
+  rule: real or gone; a live joined-count is a low-signal total). Sidebar nav
+  items carry no badges now — don't reintroduce one without a seen-system.
+- Club-dashboard nav badges (coach chrome) are a separate system: training
+  badge is script-driven, its Challenges/Events numbers are still static —
+  scope-fenced, untouched.
