@@ -1746,7 +1746,35 @@ async function buildFeedActivities(limit, currentUserId) {
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error || !data) return [];
-  return enrichActivities(data);
+  const enriched = await enrichActivities(data);
+  const likeRows = await fetchActivityLikes(enriched.map((a) => a.id));
+  return enriched.map((a) => {
+    const likes = likeRows.filter((l) => l.activity_id === a.id);
+    return {
+      ...a,
+      likeCount: likes.length,
+      likedByMe: likes.some((l) => l.user_id === currentUserId)
+    };
+  });
+}
+
+// Kudos rows for a set of activities. `activity_likes` mirrors `post_likes`
+// (keyed by (activity_id, user_id), no `id` column) and — like `activities`
+// and `achievements` — must be created by the USER in the Supabase SQL editor
+// (service role cannot run DDL). Degrade to zero-counts until it exists so
+// every surface keeps rendering.
+async function fetchActivityLikes(activityIds) {
+  if (!supabaseAdmin || !activityIds.length) return [];
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('activity_likes')
+      .select('activity_id, user_id')
+      .in('activity_id', activityIds);
+    if (error) return [];
+    return data || [];
+  } catch (err) {
+    return [];
+  }
 }
 
 // Recent "going" RSVPs from people the viewer follows, surfaced in the feed.
@@ -1940,7 +1968,70 @@ app.get(BASE + '/api/activities/:userId', requireAuth, async (req, res) => {
     .order('date', { ascending: false })
     .limit(50);
   if (error) return res.json({ error: error.message });
-  res.json({ activities: data || [] });
+  // Kudos counts for the profile Activities tab — count-only (no give-button
+  // there): the owner sees appreciation on their own training; giving kudos
+  // happens where OTHERS' activities appear, i.e. the feed.
+  const rows = data || [];
+  const likeRows = await fetchActivityLikes(rows.map((a) => a.id));
+  const activities = rows.map((a) => ({
+    ...a,
+    likeCount: likeRows.filter((l) => l.activity_id === a.id).length
+  }));
+  res.json({ activities });
+});
+
+// Toggle kudos on an activity — exact mirror of POST /api/posts/:id/like.
+// One kudos per user per activity is enforced server-side by the table's
+// (activity_id, user_id) primary key; self-kudos is allowed (same as posts)
+// but never notified.
+app.post(BASE + '/api/activities/:id/like', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured' });
+  const { data: existing, error: selErr } = await supabaseAdmin
+    .from('activity_likes')
+    .select('activity_id')
+    .eq('activity_id', req.params.id)
+    .eq('user_id', req.user.id)
+    .maybeSingle();
+  if (selErr) return res.json({ error: selErr.message });
+  if (existing) {
+    await supabaseAdmin.from('activity_likes').delete()
+      .eq('activity_id', req.params.id)
+      .eq('user_id', req.user.id);
+    return res.json({ liked: false });
+  }
+  const { error } = await supabaseAdmin.from('activity_likes').insert({
+    activity_id: req.params.id,
+    user_id: req.user.id
+  });
+  if (error) return res.json({ error: error.message });
+  // Notify the activity's owner (skip self-kudos). Type 'like' is recipient-
+  // gated by the "Kudos on activities" preference (notify_kudos) inside
+  // createNotification.
+  try {
+    const { data: activity } = await supabaseAdmin
+      .from('activities')
+      .select('user_id, title')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (activity && activity.user_id !== req.user.id) {
+      const liker = displayFromUser(req.user);
+      const title = activity.title || 'a training session';
+      await createNotification({
+        userId: activity.user_id,
+        type: 'like',
+        title: 'New kudos',
+        body: `${liker.name} gave kudos on your activity: "${String(title).slice(0, 60)}${String(title).length > 60 ? '...' : ''}"`,
+        link: '/feed',
+        actorId: req.user.id,
+        entityId: req.params.id
+      });
+    }
+  } catch (err) {
+    console.log('Activity like notification error:', err.message);
+  }
+  // Award any newly earned badges (e.g. "Good Sport") without blocking.
+  checkAchievements(req.user.id, getUserTimezone(req.user)).catch(() => {});
+  res.json({ liked: true });
 });
 
 // Delete one of the viewer's own activities (the user_id filter enforces
@@ -3500,8 +3591,17 @@ async function gatherBadgeStats(userId, tz) {
     .from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', userId);
   const { count: followerCount } = await supabaseAdmin
     .from('follows').select('*', { count: 'exact', head: true }).eq('following_id', userId);
-  const { count: kudosGiven } = await supabaseAdmin
+  // "Good Sport" counts kudos GIVEN on both posts and activities. The
+  // activity_likes count degrades to 0 until the user-created table exists.
+  const { count: postKudosGiven } = await supabaseAdmin
     .from('post_likes').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+  let activityKudosGiven = 0;
+  try {
+    const { count, error: alErr } = await supabaseAdmin
+      .from('activity_likes').select('*', { count: 'exact', head: true }).eq('user_id', userId);
+    if (!alErr) activityKudosGiven = count || 0;
+  } catch (err) { /* table not created yet — degrade */ }
+  const kudosGiven = (postKudosGiven || 0) + activityKudosGiven;
   const { count: clubCount } = await supabaseAdmin
     .from('memberships').select('*', { count: 'exact', head: true }).eq('user_id', userId);
   const { count: eventsAttended } = await supabaseAdmin
