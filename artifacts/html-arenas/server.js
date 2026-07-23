@@ -7613,7 +7613,12 @@ app.get(BASE + '/clubs/invite', requirePageAuth, async (req, res) => {
       baseUrl: publicBaseUrl(req)
     };
 
-    const html = injectNotificationsPanel(injectNamedData(fs.readFileSync(path.join(HTML, 'arenas-club-invite.html'), 'utf8'), 'INVITE_DATA', inviteData));
+    let html = injectNotificationsPanel(injectNamedData(fs.readFileSync(path.join(HTML, 'arenas-club-invite.html'), 'utf8'), 'INVITE_DATA', inviteData));
+    // Sidebar-footer club-identity badge — same rule as the dashboard route:
+    // real subscription via getClubPlan (never the CLUB_PLAN_GATES_ENABLED
+    // flag); free clubs get '' so their pages contain zero badge markup.
+    html = html.replace('<!--CLUB_PRO_BADGE_SLOT-->',
+      (await getClubPlan(clubId)) === 'club_pro' ? CLUB_PRO_BADGE_HTML : '');
     res.type('html').send(html);
   } catch (err) {
     console.log('Invite page data error:', err.message);

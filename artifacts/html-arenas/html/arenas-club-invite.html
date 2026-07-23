@@ -70,10 +70,13 @@ button,select,input,textarea{font-family:var(--font)}
 .nav-item.active .nav-badge{background:rgba(255,216,30,0.3);color:#7a5c00}
 .nav-badge.alert{background:var(--red-light);color:var(--red)}
 .sidebar-footer{margin-top:auto;padding:12px 16px;border-top:var(--border)}
-.sf-row{display:flex;align-items:center;gap:8px}
-.sf-av{width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)}
-.sf-name{font-size:12px;font-weight:600;color:var(--gray-900)}
-.sf-role{font-size:10px;color:var(--gray-500)}
+/* Club-identity footer — mirrors the dashboard's sidebar footer (arenas-club-dashboard.html) */
+.sidebar-footer .club-info{display:flex;align-items:center;gap:8px}
+.club-icon{width:30px;height:30px;border-radius:7px;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;overflow:hidden}
+.club-icon img{width:100%;height:100%;object-fit:cover;display:block}
+.club-name-small{font-size:12px;font-weight:600;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.club-plan{font-size:10px;color:var(--gray-500)}
+.pro-badge{display:inline-flex;align-items:center;padding:1px 7px;border-radius:20px;font-size:9px;font-weight:800;letter-spacing:.08em;font-family:var(--mono);background:var(--yellow);color:var(--gray-900);line-height:1.7;flex-shrink:0;vertical-align:middle}
 .main{padding:0;overflow-y:auto}
 .tab-content{display:none;padding:24px;animation:fade-in 0.18s ease}
 .tab-content.active{display:block}
@@ -343,10 +346,11 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="nav-section-label">Analytics</div>
   <div class="nav-item" onclick="navClub('/clubs/dashboard#feed')"><span class="nav-icon">🏃</span> Club feed</div>
   <div class="nav-item" onclick="navClub('/clubs/dashboard#reports')"><span class="nav-icon">📋</span> Reports</div>
+  <div class="nav-item" onclick="navClub('/billing')"><span class="nav-icon">💳</span> Billing</div>
   <div class="sidebar-footer">
-    <div class="sf-row">
-      <div class="sf-av"></div>
-      <div><div class="sf-name">Club manager</div><div class="sf-role"></div></div>
+    <div class="club-info">
+      <div class="club-icon">🏃</div>
+      <div style="min-width:0"><div style="display:flex;align-items:center;gap:6px;min-width:0"><div class="club-name-small club-name">Hackney RC</div><!--CLUB_PRO_BADGE_SLOT--></div><div class="club-plan"><span class="member-count">48</span> members</div></div>
     </div>
   </div>
 </aside>
@@ -517,7 +521,7 @@ button,select,input,textarea{font-family:var(--font)}
         <div>✓ You can resend or revoke any invite from the pending table below</div>
       </div>
     </div>
-    <div class="modal-footer"><button class="btn btn-yellow" style="flex:1;justify-content:center" onclick="closeModals()">View pending invites →</button><button class="btn btn-ghost" onclick="closeModals()">Done</button></div>
+    <div class="modal-footer"><button class="btn btn-yellow" style="flex:1;justify-content:center" onclick="viewPendingInvites()">View pending invites →</button><button class="btn btn-ghost" onclick="closeModals()">Done</button></div>
   </div>
 </div>
 
@@ -566,6 +570,21 @@ function sendInvites(){
   document.getElementById('modal-success').classList.add('open');
 }
 function closeModals(e){if(!e||e.target.classList.contains('modal-overlay'))document.querySelectorAll('.modal-overlay').forEach(m=>m.classList.remove('open'));}
+// Post-send CTA: stay on this console and surface the freshly-refreshed
+// "Pending invitations" panel (same tab as the form; it sits below the fold on
+// stacked/mobile layouts, hence the scroll + brief highlight).
+function viewPendingInvites(){
+  closeModals();
+  setTab('invites');
+  var body = document.getElementById('pending-body');
+  var card = body ? body.closest('.card') : null;
+  if (card){
+    card.scrollIntoView({behavior:'smooth', block:'start'});
+    card.style.transition = 'box-shadow .3s ease';
+    card.style.boxShadow = '0 0 0 3px var(--yellow)';
+    setTimeout(function(){ card.style.boxShadow = ''; }, 1600);
+  }
+}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800);}
 updateCounts();
 </script>
@@ -612,10 +631,29 @@ updateCounts();
       else if (c.nodeType===1 && c.tagName!=='SCRIPT' && c.tagName!=='STYLE'){ walk(c); }
     }
   })(document.body);
-  if (D.profile){
-    document.querySelectorAll('.sf-name').forEach(function(el){ el.textContent = D.profile.name; });
-    // Topbar/sidebar avatars are rendered by the shared identity script.
-  }
+  // ── Sidebar-footer club identity (mirrors the dashboard footer) ──
+  // Name is also covered by the walk() swap above; set it explicitly anyway so
+  // the footer never depends on the mock text matching the swap list. The badge
+  // is server-injected as a sibling of .club-name, so textContent stays safe.
+  (function(){
+    var nameEl = document.querySelector('.sidebar-footer .club-name');
+    if (nameEl) nameEl.textContent = D.club.name;
+    var countEl = document.querySelector('.sidebar-footer .member-count');
+    if (countEl) countEl.textContent = String(D.memberCount || 0);
+    var tile = document.querySelector('.sidebar-footer .club-icon');
+    if (tile){
+      if (D.club.logo_url){
+        tile.textContent = '';
+        var img = document.createElement('img');
+        img.src = D.club.logo_url;
+        img.alt = '';
+        tile.appendChild(img);
+      } else {
+        var icons = window.ARENAS_SPORT_ICONS || {};
+        tile.textContent = icons[(D.club.sport || '').toLowerCase()] || '🏟';
+      }
+    }
+  })();
 
   function setStat(label, value){
     document.querySelectorAll('.stat-card').forEach(function(card){
