@@ -35,6 +35,7 @@ const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVIC
 // [table, column] pairs referencing auth user ids. Keep in sync with schema.
 const USER_REFS = [
   ['activities', 'user_id'], ['posts', 'user_id'], ['post_likes', 'user_id'],
+  ['activity_likes', 'user_id'],
   ['post_comments', 'user_id'], ['follows', 'follower_id'], ['follows', 'following_id'],
   ['memberships', 'user_id'], ['event_rsvps', 'user_id'],
   ['challenge_participants', 'user_id'], ['notifications', 'user_id'], ['notifications', 'actor_id'],
@@ -44,7 +45,7 @@ const USER_REFS = [
 ];
 // Tables without an `id` PK — deletions match on their composite ref columns only
 // (never on full rows: null-valued columns would become eq.null and match nothing).
-const COMPOSITE_KEYS = { follows: ['follower_id', 'following_id'], post_likes: ['post_id', 'user_id'] };
+const COMPOSITE_KEYS = { follows: ['follower_id', 'following_id'], post_likes: ['post_id', 'user_id'], activity_likes: ['activity_id', 'user_id'] };
 
 let failures = 0;
 function checkErr(label, error) {
