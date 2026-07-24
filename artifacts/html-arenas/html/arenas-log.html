@@ -61,7 +61,12 @@ button{font-family:var(--font)}
     <img class="logo-icon" src="/html/arenas-icon.svg" alt="">
     <span class="logo-text">Arenas</span>
   </div>
-  <div class="topbar-center"></div>
+  <div class="topbar-center">
+    <div class="topbar-search">
+      <span style="color:var(--gray-400);font-size:13px">🔍</span>
+      <input type="text" placeholder="Search athletes…" onkeydown="if(event.key==='Enter'&&!event.isComposing&&this.value.trim())nav('/athletes?q='+encodeURIComponent(this.value.trim()))">
+    </div>
+  </div>
   <div class="topbar-actions">
     <div class="notif-btn" onclick="nav('/notifications')">🔔<div class="notif-dot"></div></div>
     <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">

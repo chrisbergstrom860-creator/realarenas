@@ -405,3 +405,52 @@ body {
 .act-sport-chip.selected{background:var(--yellow-light);border-color:#fde68a;color:#7a5c00}
 .act-feeling-chip{padding:5px 12px;border-radius:20px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer;transition:all .12s}
 .act-feeling-chip.selected{background:var(--yellow-light);border-color:#fde68a;color:#7a5c00}
+
+/* ── TOPBAR SEARCH (canonical base) ──
+   The athlete search box every shell page renders; submitting navigates to
+   /athletes?q= (the Athletes page itself uses it as a live filter). Pages may
+   carry intentional divergences in their inline styles — those load after
+   this file, so they win on ties. Mobile width overrides live in the
+   bottom-nav gate above. */
+.topbar-search{display:flex;align-items:center;gap:8px;background:var(--gray-50);border:var(--border);border-radius:7px;padding:6px 12px;width:300px;transition:border-color .15s,box-shadow .15s}
+.topbar-search:focus-within{border-color:var(--gray-400);box-shadow:0 0 0 3px rgba(107,114,128,.08)}
+.topbar-search input{background:none;border:none;outline:none;font-size:13px;color:var(--gray-700);width:100%}
+.topbar-search input::placeholder{color:var(--gray-400)}
+
+/* ── ATHLETE DIRECTORY CARDS (adc-) ──
+   Shared component: /athletes page + my-profile "Athletes" tab, rendered by
+   arenas-athlete-cards.js. One card template, one stylesheet — the two
+   surfaces cannot drift. List-view layout is /athletes-page-specific and
+   lives in that page's inline styles. */
+@keyframes adc-fade-up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.adc-grid{display:grid;gap:0}
+.adc-grid.adc-grid-2{grid-template-columns:1fr 1fr}
+.adc-grid.adc-list{grid-template-columns:1fr}
+.adc-card{background:white;border-bottom:var(--border);border-right:var(--border);padding:16px;display:flex;flex-direction:column;gap:10px;animation:adc-fade-up .2s ease both;min-width:0}
+.adc-card[data-clickable="1"]{cursor:pointer;transition:background .12s}
+.adc-card[data-clickable="1"]:hover{background:var(--gray-50)}
+.adc-grid-2 .adc-card:nth-child(even){border-right:none}
+.adc-list .adc-card{border-right:none}
+.adc-head{display:flex;align-items:center;gap:10px}
+.adc-head>div{flex:1;min-width:0}
+.adc-av{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;flex-shrink:0}
+.adc-name{font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.adc-location{font-size:11px;color:var(--gray-400);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.adc-tags{display:flex;gap:4px;flex-wrap:wrap}
+.adc-pill{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid transparent;white-space:nowrap;display:inline-block}
+.adc-pill-muted{background:var(--gray-100);color:var(--gray-600);border-color:var(--gray-200)}
+.adc-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.adc-stat{background:var(--gray-50);border:var(--border);border-radius:6px;padding:6px 8px;text-align:center;min-width:0}
+.adc-stat-val{font-size:14px;font-weight:700;color:var(--gray-900);font-family:var(--mono);line-height:1;display:block}
+.adc-stat-label{font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.adc-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:4px;border-top:var(--border)}
+.adc-mutual{font-size:11px;color:var(--gray-400);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.adc-follow-btn{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;transition:all .13s;border:1px solid var(--yellow-dark);flex-shrink:0;background:var(--yellow);color:var(--gray-900)}
+.adc-follow-btn:hover{background:var(--yellow-dark)}
+.adc-follow-btn.is-following{background:var(--gray-100);border-color:var(--gray-200);color:var(--gray-600)}
+.adc-follow-btn.is-following:hover{background:var(--red-light);border-color:#FECACA;color:#A32D2D}
+@media (max-width:768px){
+  /* Mobile (bottom-nav shells): the directory collapses to one column. */
+  body:has(.bottom-nav) .adc-grid.adc-grid-2{grid-template-columns:1fr}
+  body:has(.bottom-nav) .adc-card{border-right:none}
+}

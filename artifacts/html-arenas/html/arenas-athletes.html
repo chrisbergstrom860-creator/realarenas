@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/html/arenas.css">
 <script src="/html/arenas-club-create.js"></script>
+<script src="/html/arenas-athlete-cards.js"></script>
 <style>:root{--green-light:#ECFDF5;--blue-light:#EFF6FF;--orange-light:#FFF7ED;--purple-light:#F5F3FF;--teal:#14B8A6;--teal-light:#F0FDFA;--pink-light:#FBEAF0;--pink-dark:#9D174D}
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -98,68 +99,16 @@ button,select,input,textarea{font-family:var(--font)}
 .sport-tab .tab-count{font-size:10px;font-family:var(--mono);background:var(--gray-100);color:var(--gray-500);padding:1px 6px;border-radius:10px}
 .sport-tab.on .tab-count{background:var(--gray-200);color:var(--gray-700)}
 
-/* ── ATHLETE GRID ── */
-.athlete-grid{display:grid;gap:0}
-.athlete-grid.grid-2{grid-template-columns:1fr 1fr}
-.athlete-grid.grid-3{grid-template-columns:1fr 1fr 1fr}
-.athlete-grid.list-view{grid-template-columns:1fr}
-@media (max-width:768px){.athlete-grid .athlete-card{border-right:none}}
-
-.athlete-card{background:white;border-bottom:var(--border);border-right:var(--border);padding:16px;cursor:pointer;transition:background .12s;display:flex;flex-direction:column;gap:10px;animation:fade-up .2s ease both}
-.athlete-card:hover{background:var(--gray-50)}
-.grid-2 .athlete-card:nth-child(even){border-right:none}
-.grid-3 .athlete-card:nth-child(3n){border-right:none}
-.list-view .athlete-card{border-right:none;flex-direction:row;align-items:center;gap:16px}
-
-.ac-head{display:flex;align-items:center;gap:10px}
-.ac-av{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;flex-shrink:0}
-.ac-name{font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:1px}
-.ac-location{font-size:11px;color:var(--gray-400)}
-.ac-handle{font-size:11px;color:var(--gray-400)}
-
-/* Pills */
-.pill{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid transparent;white-space:nowrap;display:inline-block}
-.p-run{background:var(--orange-light);color:#9A3412;border-color:#FDBA74}
-.p-cyc{background:var(--blue-light);color:#1E40AF;border-color:#93C5FD}
-.p-clm{background:var(--purple-light);color:#5B21B6;border-color:#C4B5FD}
-.p-swm{background:var(--teal-light);color:#134E4A;border-color:#5EEAD4}
-.p-tri{background:var(--pink-light);color:#72243E;border-color:#F4C0D1}
-.p-adv{background:#FAEEDA;color:#633806;border-color:#EF9F27}
-.p-int{background:var(--gray-100);color:var(--gray-600);border-color:var(--gray-200)}
-.p-club{background:var(--green-light);color:#166534;border-color:#86EFAC}
-.p-near{background:var(--blue-light);color:#1E40AF;border-color:#93C5FD}
-.p-similar{background:var(--yellow-light);color:#7a5c00;border-color:#fde68a}
-
-.ac-tags{display:flex;gap:4px;flex-wrap:wrap}
-
-/* Stats */
-.ac-mini-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
-.ms-item{background:var(--gray-50);border:var(--border);border-radius:6px;padding:6px 8px;text-align:center}
-.ms-val{font-size:14px;font-weight:700;color:var(--gray-900);font-family:var(--mono);line-height:1;display:block}
-.ms-label{font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px;display:block}
-
-/* Sparkline */
-.ac-sparkline-wrap{display:flex;flex-direction:column;gap:3px}
-.sparkline-label{font-size:10px;color:var(--gray-400);display:flex;justify-content:space-between}
-.ac-sparkline{display:flex;align-items:flex-end;gap:2px;height:28px}
-.spark-bar{flex:1;border-radius:2px 2px 0 0;min-height:2px;transition:opacity .15s}
-.spark-bar:hover{opacity:.7}
-
-/* Follow */
-.ac-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:4px;border-top:var(--border)}
-.ac-mutual{font-size:11px;color:var(--gray-400);display:flex;align-items:center;gap:4px}
-.follow-btn{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;transition:all .13s;border:1px solid;flex-shrink:0}
-.follow-btn.default{background:var(--yellow);border-color:var(--yellow-dark);color:var(--gray-900)}
-.follow-btn.default:hover{background:var(--yellow-dark)}
-.follow-btn.following{background:var(--gray-100);border-color:var(--gray-200);color:var(--gray-600)}
-.follow-btn.following:hover{background:var(--red-light);border-color:#FECACA;color:#A32D2D}
-
-/* List view extras */
-.list-view .ac-head{flex:0 0 200px}
-.list-view .ac-tags{flex:0 0 200px}
-.list-view .ac-mini-stats{flex:0 0 200px;grid-template-columns:repeat(3,1fr)}
-.list-view .ac-sparkline-wrap{flex:0 0 120px}
-.list-view .ac-footer{flex:1;justify-content:flex-end;padding-top:0;border-top:none}
+/* ── ATHLETE GRID ──
+   Card + grid styles are shared component CSS in arenas.css (adc- prefix,
+   rendered by arenas-athlete-cards.js — the my-profile "Athletes" tab shows
+   the same cards; one template, no drift). Only the page-specific list-view
+   layout lives here. */
+.adc-list .adc-card{flex-direction:row;align-items:center;gap:16px}
+.adc-list .adc-head{flex:0 0 200px}
+.adc-list .adc-tags{flex:0 0 200px}
+.adc-list .adc-stats{flex:0 0 200px;grid-template-columns:repeat(3,1fr)}
+.adc-list .adc-foot{flex:1;justify-content:flex-end;padding-top:0;border-top:none}
 
 /* ── NEARBY SECTION ── */
 .nearby-section{background:white;border-bottom:var(--border)}
@@ -266,6 +215,18 @@ button,select,input,textarea{font-family:var(--font)}
 .empty-state .ei{font-size:36px;margin-bottom:12px}
 .empty-state h3{font-size:16px;font-weight:600;color:var(--gray-900);margin-bottom:6px}
 .empty-state p{font-size:13px;color:var(--gray-500)}
+
+/* ── MOBILE (bottom-nav shells): narrow-viewport pass ──
+   Grid collapses to one column via the shared adc- rules in arenas.css; here
+   the list view — three fixed 200px flex columns on desktop — wraps into
+   stacked full-width rows so nothing overflows at ~380px. */
+@media (max-width:768px){
+  body:has(.bottom-nav) .adc-list .adc-card{flex-wrap:wrap;gap:8px}
+  body:has(.bottom-nav) .adc-list .adc-head,
+  body:has(.bottom-nav) .adc-list .adc-tags,
+  body:has(.bottom-nav) .adc-list .adc-stats{flex:1 1 100%}
+  body:has(.bottom-nav) .adc-list .adc-foot{flex:1 1 100%;justify-content:space-between;padding-top:4px;border-top:var(--border)}
+}
 </style>
 </head>
 <body>
@@ -347,7 +308,7 @@ button,select,input,textarea{font-family:var(--font)}
     <div class="athletes-col" id="athletes-col">
 
       <!-- ATHLETE GRID -->
-      <div class="athlete-grid grid-2" id="athlete-grid">
+      <div class="adc-grid adc-grid-2" id="athlete-grid">
         <div id="athlete-grid-loading" style="grid-column:1/-1;text-align:center;padding:56px 24px;color:var(--gray-400);font-size:13px">Loading athletes…</div>
       </div>
     </div>
@@ -429,22 +390,10 @@ function showToast(msg) {
   const grid = document.getElementById('athlete-grid');
   if (!grid) return;
 
-  // Tag styles derived from the sports registry (all registry sports — the old
-  // literal only styled 6, and its cycling bg #E0F2FE was drift from the
-  // canonical #EFF6FF). Labels come from arenasSportTag(), which also handles
-  // legacy ids like 'triathlon' (🔱 Triathlon, unstyled).
-  const sportColors = {};
-  (window.ARENAS_SPORTS || []).forEach(function (s) {
-    sportColors[s.id] = 'background:' + s.colors.bg + ';color:' + s.colors.text + ';border-color:' + s.colors.border;
-  });
-  const avColors = [
-    {bg:'#FEF9C3',color:'#854D0E'},{bg:'#FCE7F3',color:'#9D174D'},
-    {bg:'#E0F2FE',color:'#0369A1'},{bg:'#F5F3FF',color:'#5B21B6'},
-    {bg:'#ECFDF5',color:'#065F46'},{bg:'#FFF7ED',color:'#9A3412'},
-    {bg:'#F0FDFA',color:'#134E4A'},{bg:'#FBEAF0',color:'#72243E'}
-  ];
-
   // ── View / filter / sort / search state ──
+  // The cards themselves come from the shared arenas-athlete-cards.js module
+  // (same cards as the my-profile "Athletes" tab); this page owns the state,
+  // the view toggle and the profile modal.
   let view = 'grid';       // 'grid' | 'list'
   let show = 'all';        // 'all' | 'following'
   let sort = 'followers';  // 'followers' | 'name' | 'new'
@@ -461,184 +410,55 @@ function showToast(msg) {
     }
   })();
 
-  function searchText(a){
-    // Country/state fold in as display names + the USPS code so "United
-    // States", "California" and "CA" all match; cards still render city-only.
-    return [a.name, a.location, a.countryName, a.stateName, a.state, (a.sports || []).join(' '), a.level]
-      .join(' ').toLowerCase();
-  }
-
-  // Plain sport label ("Running") for secondary lines — no emoji, unlike the
-  // pill tags from arenasSportTag().
-  function sportName(id){
-    var s = (window.ARENAS_SPORTS_BY_ID || {})[id];
-    if (s) return s.label;
-    var t = String(id == null ? '' : id);
-    return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
-  }
-
-  function visibleList(){
-    let list = athletes.slice();
-    if (show === 'following') list = list.filter(a => a.isFollowing);
-    if (query) list = list.filter(a => searchText(a).includes(query));
-    list.sort(function(a, b){
-      if (sort === 'name') return (a.name || '').localeCompare(b.name || '');
-      if (sort === 'new')  return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-      return (b.followerCount || 0) - (a.followerCount || 0);
-    });
-    return list;
-  }
-
-  function cardHTML(a, i){
-    const av = avColors[athletes.indexOf(a) % avColors.length];
-    const sports = a.sports || [];
-    const primary = sports[0] || null;
-    const sportStyle = primary ? (sportColors[primary] || '') : '';
-    const sportLabel = primary ? window.arenasSportTag(primary) : null;
-    const levelLabel = a.level ? (a.level.charAt(0).toUpperCase() + a.level.slice(1)) : null;
-    const followers = a.followerCount || 0;
-    return '' +
-      '<div class="athlete-card" data-sport="' + esc(primary || 'all') + '" data-name="' + esc(a.name || 'Athlete') + '"' +
-        ' data-user-id="' + esc(a.id) + '" style="animation-delay:' + (i * 0.03) + 's" onclick="openAthleteModal(\'' + esc(a.id) + '\')">' +
-        '<div class="ac-head">' +
-          window.avatarHtml(a.avatar_url || null, a.name || 'Athlete', 'ac-av', 'background:' + av.bg + ';color:' + av.color) +
-          '<div>' +
-            '<div class="ac-name">' + esc(a.name || 'Athlete') + '</div>' +
-            '<div class="ac-location">' + (a.location ? '📍 ' + esc(a.location) : '📍 Location not set') + (sports.length ? ' · ' + esc(sports.map(sportName).join(', ')) : '') + '</div>' +
-          '</div>' +
-        '</div>' +
-        '<div class="ac-tags">' +
-          (sportLabel ? '<span class="pill" style="' + sportStyle + '">' + esc(sportLabel) + '</span>' : '') +
-          (levelLabel ? '<span class="pill p-int">' + esc(levelLabel) + '</span>' : '') +
-        '</div>' +
-        '<div class="ac-mini-stats">' +
-          '<div class="ms-item"><span class="ms-val">' + followers + '</span><span class="ms-label">followers</span></div>' +
-          '<div class="ms-item"><span class="ms-val">' + (a.postCount || 0) + '</span><span class="ms-label">posts</span></div>' +
-          '<div class="ms-item"><span class="ms-val">' + sports.length + '</span><span class="ms-label">sports</span></div>' +
-        '</div>' +
-        '<div class="ac-footer">' +
-          '<div class="ac-mutual">' + followers + ' follower' + (followers === 1 ? '' : 's') + '</div>' +
-          '<button class="follow-btn ' + (a.isFollowing ? 'following' : 'default') + '" id="follow-btn-' + esc(a.id) + '"' +
-            ' onclick="event.stopPropagation();handleFollow(\'' + esc(a.id) + '\',this)">' +
-            (a.isFollowing ? 'Following' : 'Follow') +
-          '</button>' +
-        '</div>' +
-      '</div>';
-  }
-
-  function emptyState(title, sub){
-    return '<div style="grid-column:1/-1;text-align:center;padding:56px 24px;background:white">' +
-      '<div style="font-size:36px;margin-bottom:12px">👥</div>' +
-      '<h3 style="font-size:16px;font-weight:600;color:var(--gray-900);margin-bottom:6px">' + esc(title) + '</h3>' +
-      '<p style="font-size:13px;color:var(--gray-500);line-height:1.6">' + esc(sub) + '</p>' +
-      '</div>';
-  }
-
-  function render(){
-    const list = visibleList();
-    if (countEl) countEl.textContent = list.length + ' athlete' + (list.length === 1 ? '' : 's');
-    if (!athletes.length){
-      grid.className = 'athlete-grid';
-      grid.innerHTML = emptyState('No athletes yet', 'As more people join Arenas they will appear here.');
-      return;
-    }
-    if (!list.length){
-      grid.className = 'athlete-grid';
-      if (show === 'following') grid.innerHTML = emptyState('Not following anyone yet', 'Follow athletes and they will show up here.');
-      else if (query) grid.innerHTML = emptyState('No matches', 'No athletes match your search.');
-      else grid.innerHTML = emptyState('No athletes', 'Nothing to show right now.');
-      return;
-    }
-    grid.className = 'athlete-grid ' + (view === 'list' ? 'list-view' : 'grid-2');
-    grid.innerHTML = list.map(cardHTML).join('');
-  }
+  const cards = window.ArenasAthleteCards.mount({
+    athletes: athletes,
+    gridEl: grid,
+    countEl: countEl,
+    base: B,
+    source: 'athletes-page',
+    getFilters: function(){ return { show: show, query: query, sort: sort }; },
+    gridClass: function(){ return 'adc-grid ' + (view === 'list' ? 'adc-list' : 'adc-grid-2'); },
+    onCardClick: function(a){ window.openAthleteModal(a.id); },
+    onFollowChange: function(a, isFollowing, followers){
+      // Keep the profile modal (page-specific chrome) in step with the cards.
+      const modalBtn = document.getElementById('modal-follow-btn');
+      if (modalBtn && modalBtn.dataset.userId === a.id) {
+        modalBtn.disabled = false;
+        modalBtn.textContent = isFollowing ? '✓ Following' : 'Follow';
+        modalBtn.classList.toggle('btn-yellow', !isFollowing);
+        const statsEl = document.getElementById('modal-stats');
+        const firstMv = statsEl && statsEl.querySelector('.modal-stat .mv');
+        if (firstMv) firstMv.textContent = followers;
+      }
+    },
+    toast: window.showToast
+  });
 
   // ── Public handlers referenced by inline markup ──
   window.setView = function(type){
     view = (type === 'list') ? 'list' : 'grid';
     ['grid','list'].forEach(v => { const b = document.getElementById('vt-' + v); if (b) b.classList.toggle('on', v === view); });
-    render();
+    cards.render();
   };
   window.setShow = function(el, val){
     show = (val === 'following') ? 'following' : 'all';
     document.querySelectorAll('[data-show]').forEach(p => p.classList.remove('on'));
     if (el) el.classList.add('on');
-    render();
+    cards.render();
   };
   window.setSort = function(val){
     sort = (val === 'name' || val === 'new') ? val : 'followers';
-    render();
+    cards.render();
   };
   window.handleSearch = function(val){
     query = (val || '').toLowerCase().trim();
-    render();
-  };
-
-  function syncFollowUI(id, isFollowing) {
-    // The in-memory athlete model is the source of truth for the follower count;
-    // every visible counter (card footer, card mini-stat, open modal) derives
-    // from it so they never drift apart.
-    const a = athletes.find(x => x.id === id);
-    if (a) {
-      if (isFollowing && !a.isFollowing) a.followerCount = (a.followerCount || 0) + 1;
-      else if (!isFollowing && a.isFollowing) a.followerCount = Math.max(0, (a.followerCount || 0) - 1);
-      a.isFollowing = isFollowing;
-    }
-    const followers = a ? (a.followerCount || 0) : 0;
-    const followerText = followers + ' follower' + (followers === 1 ? '' : 's');
-    const cardBtn = document.getElementById('follow-btn-' + id);
-    if (cardBtn) {
-      cardBtn.classList.toggle('following', isFollowing);
-      cardBtn.classList.toggle('default', !isFollowing);
-      cardBtn.textContent = isFollowing ? 'Following' : 'Follow';
-      cardBtn.disabled = false;
-      const card = cardBtn.closest('.athlete-card');
-      if (card) {
-        const mutual = card.querySelector('.ac-mutual');
-        if (mutual) mutual.textContent = followerText;
-        const firstStat = card.querySelector('.ac-mini-stats .ms-item .ms-val');
-        if (firstStat) firstStat.textContent = followers;
-      }
-    }
-    const modalBtn = document.getElementById('modal-follow-btn');
-    if (modalBtn && modalBtn.dataset.userId === id) {
-      modalBtn.disabled = false;
-      modalBtn.textContent = isFollowing ? '✓ Following' : 'Follow';
-      modalBtn.classList.toggle('btn-yellow', !isFollowing);
-      const statsEl = document.getElementById('modal-stats');
-      const firstMv = statsEl && statsEl.querySelector('.modal-stat .mv');
-      if (firstMv) firstMv.textContent = followers;
-    }
-    // When viewing "Following", a change in membership must drop/keep the card.
-    if (show === 'following') render();
-  }
-
-  window.handleFollow = async function(userId, btn){
-    const wasFollowing = btn.classList.contains('following');
-    btn.disabled = true;
-    btn.textContent = wasFollowing ? 'Unfollowing…' : 'Following…';
-    try {
-      const res = await fetch(B + '/api/follow/' + userId, { method: wasFollowing ? 'DELETE' : 'POST' });
-      const result = await res.json();
-      if (result.error) {
-        showToast('Error: ' + result.error);
-        btn.disabled = false;
-        btn.textContent = wasFollowing ? 'Following' : 'Follow';
-        return;
-      }
-      syncFollowUI(userId, !!result.following);
-      showToast(result.following ? '✓ Following — their posts will appear in your feed' : 'Unfollowed');
-    } catch (err) {
-      showToast('Something went wrong — please try again');
-      btn.disabled = false;
-      btn.textContent = wasFollowing ? 'Following' : 'Follow';
-    }
+    cards.render();
   };
 
   window.openAthleteModal = function(userId){
     const a = athletes.find(x => x.id === userId);
     if (!a) return;
-    const av = avColors[athletes.indexOf(a) % avColors.length];
+    const av = window.ArenasAthleteCards.avColor(athletes.indexOf(a));
     const modal = document.getElementById('modal-profile');
     if (!modal) return;
     const avEl = document.getElementById('modal-av');
@@ -687,7 +507,9 @@ function showToast(msg) {
         if (modalBtn) { modalBtn.disabled = false; modalBtn.textContent = wasFollowing ? '✓ Following' : 'Follow'; }
         return;
       }
-      syncFollowUI(userId, !!result.following);
+      // Updates the card, the modal (via onFollowChange) and broadcasts the
+      // cross-surface arenas:follow-change event.
+      cards.syncFollowUI(userId, !!result.following);
       showToast(result.following ? '✓ Following' : 'Unfollowed');
     } catch (err) {
       showToast('Something went wrong — please try again');
@@ -695,7 +517,7 @@ function showToast(msg) {
     }
   };
 
-  render();
+  cards.render();
 })();
 </script>
 <script>

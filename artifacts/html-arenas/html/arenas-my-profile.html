@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <link rel="stylesheet" href="/html/arenas.css">
 <script src="/html/arenas-club-create.js"></script>
 <script src="/html/arenas-stat-tiles.js"></script>
+<script src="/html/arenas-athlete-cards.js"></script>
 <script src="/html/arenas-pie.js"></script>
 <script src="/html/arenas-stack.js"></script>
 <script src="/html/arenas-time.js"></script>
@@ -116,6 +117,7 @@ button,select,input,textarea{font-family:var(--font)}
   body:has(.bottom-nav) .follow-card{padding:8px 6px;gap:10px;min-width:0}
   body:has(.bottom-nav) .fc-name,
   body:has(.bottom-nav) .fc-sport{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  body:has(.bottom-nav) .ath-tab-search{flex:1 1 100%;width:auto;min-width:0}
   body:has(.bottom-nav) .follow-card .btn{flex-shrink:0}
 }
 .hero-tab-bar{background:white;border-bottom:var(--border);position:sticky;top:56px;z-index:50}
@@ -250,6 +252,10 @@ button,select,input,textarea{font-family:var(--font)}
 .fc-av{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}
 .fc-name{font-size:13px;font-weight:600;color:var(--gray-900)}
 .fc-sport{font-size:11px;color:var(--gray-500)}
+
+/* Athletes tab (directory) search-within — mirrors the topbar search look. */
+.ath-tab-search{display:flex;align-items:center;gap:8px;background:var(--gray-50);border:var(--border);border-radius:7px;padding:6px 12px;width:220px}
+.ath-tab-search input{background:none;border:none;outline:none;font-size:13px;color:var(--gray-700);width:100%;min-width:0}
 .fc-streak{font-size:10px;font-family:var(--mono);color:var(--gray-400);margin-top:1px}
 
 /* ── SETTINGS / EDIT ── */
@@ -443,6 +449,7 @@ button,select,input,textarea{font-family:var(--font)}
       <div class="htab" id="htab-achievements" onclick="setTab('achievements')">Achievements <span class="tab-count"></span></div>
       <div class="htab" id="htab-clubs" onclick="setTab('clubs')">Clubs <span class="tab-count"></span></div>
       <div class="htab" id="htab-following" onclick="setTab('following')">Following <span class="tab-count"></span></div>
+      <div class="htab" id="htab-athletes" onclick="setTab('athletes')">Athletes</div>
       <div class="htab" id="htab-settings" onclick="setTab('settings')">Settings</div>
     </div>
   </div>
@@ -545,6 +552,23 @@ button,select,input,textarea{font-family:var(--font)}
     </div>
     <div class="card">
       <div class="following-grid" id="follow-grid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ ATHLETES TAB (directory — same shared cards as the /athletes page) ═══ -->
+<div class="tab-content" id="tab-athletes">
+  <div class="content-cols-full">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <div><h2 style="font-size:17px;font-weight:700;color:var(--gray-900)">Athletes</h2><p style="font-size:13px;color:var(--gray-500)" id="ath-tab-summary">Browse everyone on Arenas</p></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div class="ath-tab-search"><span style="color:var(--gray-400);font-size:13px">🔍</span><input type="text" id="ath-tab-search-input" placeholder="Search athletes…" oninput="athTabSearch(this.value)"></div>
+        <button class="btn btn-ghost btn-sm" id="ath-show-all" style="background:var(--gray-100)" onclick="athTabShow('all')">All</button>
+        <button class="btn btn-ghost btn-sm" id="ath-show-following" onclick="athTabShow('following')">Following</button>
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="adc-grid adc-grid-2" id="ath-tab-grid"><div style="grid-column:1/-1;padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Loading athletes…</div></div>
     </div>
   </div>
 </div>
@@ -1497,12 +1521,36 @@ document.getElementById('htab-overview').classList.add('active');
         }, 200);
       }
       refreshHeader();
+      // Tell other surfaces (e.g. the Athletes tab cards) about the change.
+      try { document.dispatchEvent(new CustomEvent('arenas:follow-change', { detail: { id: userId, following: false, source: 'profile-following-tab' } })); } catch (e) {}
       showToast('Unfollowed');
     } catch (err){
       showToast('Something went wrong — please try again');
       btn.disabled = false; btn.textContent = 'Following';
     }
   };
+
+  // Cross-surface sync: the Athletes tab renders through
+  // arenas-athlete-cards.js, which broadcasts arenas:follow-change on every
+  // confirmed follow/unfollow — fold those into this tab's list + counts so
+  // it is never stale when the user switches over.
+  document.addEventListener('arenas:follow-change', function(ev){
+    var d = (ev && ev.detail) || {};
+    if (!d.id || d.source === 'profile-following-tab') return;
+    var have = following.some(function(a){ return a.id === d.id; });
+    if (d.following && !have) {
+      var a = d.athlete || {};
+      following.unshift({ id: d.id, name: a.name || 'Athlete', avatar_url: a.avatar_url || null, sports: a.sports || [], location: a.location || null });
+      counts.following += 1;
+    } else if (!d.following && have) {
+      following = following.filter(function(a){ return a.id !== d.id; });
+      counts.following = Math.max(0, counts.following - 1);
+    } else {
+      return;
+    }
+    refreshHeader();
+    if (currentView === 'following') window.showFollowList('following');
+  });
 
   refreshHeader();
   showFollowList('following');
@@ -2724,6 +2772,92 @@ if (logHashMatch) {
 
   // Initial render: show the stored photo (if any) on this page's own surfaces.
   applyAvatar(p.avatar_url || null);
+})();
+</script>
+<script>
+// ── ATHLETES TAB (lazy directory) ──
+// The mobile path to browsing athletes: bottom nav → Profile → Athletes tab.
+// Fetches GET /api/athletes/directory on first open and renders through the
+// SAME shared module as the /athletes page (arenas-athlete-cards.js), so the
+// two surfaces cannot drift. Deliberately NO tab_seen badge (a directory has
+// no "new items for you") and NO profile modal (page-specific chrome — cards
+// here offer Follow/Following only).
+(function () {
+  var B = window.BASE || '';
+  var htab = document.getElementById('htab-athletes');
+  var grid = document.getElementById('ath-tab-grid');
+  if (!htab || !grid) return;
+  var state = { show: 'all', q: '' };
+  var inst = null, loading = false, dirAthletes = [];
+
+  function summaryText() {
+    var el = document.getElementById('ath-tab-summary');
+    if (!el || !inst) return;
+    var followingCount = dirAthletes.filter(function (a) { return a.isFollowing; }).length;
+    el.textContent = dirAthletes.length + ' athlete' + (dirAthletes.length === 1 ? '' : 's') + ' on Arenas · following ' + followingCount;
+  }
+
+  window.athTabSearch = function (v) {
+    state.q = (v || '').toLowerCase().trim();
+    if (inst) inst.render();
+  };
+  window.athTabShow = function (val) {
+    state.show = (val === 'following') ? 'following' : 'all';
+    var all = document.getElementById('ath-show-all');
+    var fol = document.getElementById('ath-show-following');
+    if (all) all.style.background = state.show === 'all' ? 'var(--gray-100)' : '';
+    if (fol) fol.style.background = state.show === 'following' ? 'var(--gray-100)' : '';
+    if (inst) inst.render();
+  };
+  window.athTabRetry = function () {
+    loading = false;
+    loadDirectory();
+  };
+
+  function loadDirectory() {
+    if (inst || loading) return;
+    loading = true;
+    grid.innerHTML = '<div style="grid-column:1/-1;padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Loading athletes…</div>';
+    fetch(B + '/api/athletes/directory')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        loading = false;
+        if (!data || data.error || !Array.isArray(data.athletes)) throw new Error((data && data.error) || 'bad payload');
+        dirAthletes = data.athletes;
+        inst = window.ArenasAthleteCards.mount({
+          athletes: dirAthletes,
+          gridEl: grid,
+          countEl: null,
+          base: B,
+          source: 'profile-athletes-tab',
+          getFilters: function () { return { show: state.show, query: state.q, sort: 'followers' }; },
+          gridClass: function () { return 'adc-grid adc-grid-2'; },
+          emptyStates: {
+            none: { t: 'No other athletes yet', s: 'As more people join Arenas they will appear here.' },
+            noFollowing: { t: 'Not following anyone yet', s: 'Switch to All and follow athletes — they will show up here and in your feed.' },
+            noMatch: { t: 'No matches', s: 'No athletes match your search.' }
+          },
+          onCardClick: null,
+          onFollowChange: function () { summaryText(); },
+          onRender: function () { summaryText(); },
+          toast: window.showToast
+        });
+        inst.render();
+      })
+      .catch(function () {
+        loading = false;
+        grid.innerHTML = '<div style="grid-column:1/-1;padding:40px;text-align:center;font-size:13px;color:var(--gray-500)">Could not load athletes — <span style="color:var(--gray-900);font-weight:600;cursor:pointer;text-decoration:underline" onclick="athTabRetry()">try again</span></div>';
+      });
+  }
+
+  htab.addEventListener('click', loadDirectory);
+  // Deep link: /profile#athletes opens the tab directly. The sidebar
+  // highlight stays on "My profile" (setTab only special-cases settings);
+  // the sidebar "Athletes" item remains the /athletes page link.
+  if (window.location.hash === '#athletes') {
+    if (typeof setTab === 'function') setTab('athletes');
+    loadDirectory();
+  }
 })();
 </script>
 </body>

@@ -274,6 +274,13 @@ app.get(['/html/arenas-time.js', '/arenas-time.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-time.js'));
 });
 
+// Shared athlete-directory card renderer + follow controller — one template
+// for the /athletes page and the my-profile "Athletes" tab (component CSS in
+// arenas.css under the adc- prefix). Dual-path as above.
+app.get(['/html/arenas-athlete-cards.js', '/arenas-athlete-cards.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-athlete-cards.js'));
+});
+
 // Shared club-creation contract layer + in-app club-setup modal. The
 // /for-clubs wizard and the sidebar "+ Create club" modal both submit through
 // this one file so validation and error mapping can't drift. Dual-path as
@@ -4721,6 +4728,80 @@ app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
 // since this project has no usable `profiles` table) with follower/post counts
 // and the viewer's follow status, so the page shows the live community instead
 // of the hardcoded demo athletes.
+// Shared athlete-directory builder: the /athletes page and the my-profile
+// "Athletes" tab (GET /api/athletes/directory) render the same cards through
+// arenas-athlete-cards.js — ONE builder so the two surfaces can never drift
+// on shape or content.
+async function buildAthleteDirectory(viewerId) {
+  if (!supabaseAdmin) return { athletes: [], followingIds: [] };
+  // Pull all users via the admin API and drop the viewer themselves.
+  const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 100 });
+  const others = ((list && list.users) || [])
+    .filter(u => u.id !== viewerId)
+    .slice(0, 50);
+  const athleteIds = others.map(u => u.id);
+
+  // Who the viewer already follows.
+  const { data: following } = await supabaseAdmin
+    .from('follows')
+    .select('following_id')
+    .eq('follower_id', viewerId);
+  const followingIds = (following || []).map(f => f.following_id).filter(Boolean);
+
+  // Post and follower counts for the listed athletes (one query each).
+  let postRows = [];
+  let followerRows = [];
+  if (athleteIds.length) {
+    const [pc, fc] = await Promise.all([
+      supabaseAdmin.from('posts').select('user_id').in('user_id', athleteIds),
+      supabaseAdmin.from('follows').select('following_id').in('following_id', athleteIds)
+    ]);
+    postRows = pc.data || [];
+    followerRows = fc.data || [];
+  }
+
+  const athletes = others.map(u => {
+    const meta = u.user_metadata || {};
+    const disp = displayFromUser(u);
+    const initials = (disp.name || 'A')
+      .split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+    return {
+      id: u.id,
+      name: disp.name,
+      handle: disp.handle,
+      avatar_url: disp.avatar_url || null,
+      bio: meta.bio || null,
+      location: meta.location || null,
+      // Structured place for the client-side search text (country/state
+      // display names + state code all match; cards still render city-only).
+      country: disp.country,
+      countryName: disp.countryName,
+      state: disp.state,
+      stateName: disp.stateName,
+      sports: Array.isArray(meta.sports) ? meta.sports : [],
+      level: meta.level || null,
+      initials,
+      createdAt: u.created_at || null,
+      postCount: postRows.filter(p => p.user_id === u.id).length,
+      followerCount: followerRows.filter(f => f.following_id === u.id).length,
+      isFollowing: followingIds.includes(u.id)
+    };
+  });
+  return { athletes, followingIds };
+}
+
+// Directory feed for the my-profile "Athletes" tab (lazy-loaded on first
+// open). Same builder as the /athletes page above.
+app.get(BASE + '/api/athletes/directory', requireAuth, async (req, res) => {
+  try {
+    const dir = await buildAthleteDirectory(req.user.id);
+    res.json({ athletes: dir.athletes });
+  } catch (err) {
+    console.log('Athlete directory error:', err.message);
+    res.status(500).json({ error: 'Could not load athletes' });
+  }
+});
+
 app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
   let athleteData = {
     athletes: [],
@@ -4731,65 +4812,12 @@ app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
   };
   try {
     if (supabaseAdmin) {
-      // Pull all users via the admin API and drop the viewer themselves.
-      const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 100 });
-      const others = ((list && list.users) || [])
-        .filter(u => u.id !== req.user.id)
-        .slice(0, 50);
-      const athleteIds = others.map(u => u.id);
-
-      // Who the viewer already follows.
-      const { data: following } = await supabaseAdmin
-        .from('follows')
-        .select('following_id')
-        .eq('follower_id', req.user.id);
-      const followingIds = (following || []).map(f => f.following_id).filter(Boolean);
-
-      // Post and follower counts for the listed athletes (one query each).
-      let postRows = [];
-      let followerRows = [];
-      if (athleteIds.length) {
-        const [pc, fc] = await Promise.all([
-          supabaseAdmin.from('posts').select('user_id').in('user_id', athleteIds),
-          supabaseAdmin.from('follows').select('following_id').in('following_id', athleteIds)
-        ]);
-        postRows = pc.data || [];
-        followerRows = fc.data || [];
-      }
-
-      const athletes = others.map(u => {
-        const meta = u.user_metadata || {};
-        const disp = displayFromUser(u);
-        const initials = (disp.name || 'A')
-          .split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-        return {
-          id: u.id,
-          name: disp.name,
-          handle: disp.handle,
-          avatar_url: disp.avatar_url || null,
-          bio: meta.bio || null,
-          location: meta.location || null,
-          // Structured place for the client-side search text (country/state
-          // display names + state code all match; cards still render city-only).
-          country: disp.country,
-          countryName: disp.countryName,
-          state: disp.state,
-          stateName: disp.stateName,
-          sports: Array.isArray(meta.sports) ? meta.sports : [],
-          level: meta.level || null,
-          initials,
-          createdAt: u.created_at || null,
-          postCount: postRows.filter(p => p.user_id === u.id).length,
-          followerCount: followerRows.filter(f => f.following_id === u.id).length,
-          isFollowing: followingIds.includes(u.id)
-        };
-      });
-
+      const dir = await buildAthleteDirectory(req.user.id);
       athleteData = {
-        athletes,
+        athletes: dir.athletes,
         profile: displayFromUser(req.user),
         userId: req.user.id,
-        followingIds,
+        followingIds: dir.followingIds,
         clubs: await getSidebarClubs(req.user.id)
       };
     }
