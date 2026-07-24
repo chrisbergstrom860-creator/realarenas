@@ -320,6 +320,17 @@ app.get(['/html/icons/:file', '/icons/:file'], (req, res) => {
   res.sendFile(path.join(HTML, 'icons', req.params.file));
 });
 
+// Brand mark (vector — doubles as the SVG favicon and the topbar <img>) and
+// the multi-size favicon.ico. Same dual-path convention as the icons above.
+app.get(['/html/arenas-icon.svg', '/arenas-icon.svg'], (req, res) => {
+  if (process.env.NODE_ENV === 'production') res.set('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(HTML, 'arenas-icon.svg'));
+});
+app.get(['/html/favicon.ico', '/favicon.ico'], (req, res) => {
+  if (process.env.NODE_ENV === 'production') res.set('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(HTML, 'favicon.ico'));
+});
+
 // The worker itself. no-cache so browsers re-check it promptly (the byte
 // diff is what triggers the update flow). The Supabase project host is
 // substituted in at serve time so avatar URLs (timestamped filenames) can be

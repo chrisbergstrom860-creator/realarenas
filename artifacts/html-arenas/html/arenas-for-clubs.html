@@ -15,6 +15,8 @@ document.addEventListener('DOMContentLoaded', function(){
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="/html/manifest.webmanifest">
 <meta name="theme-color" content="#FFD21E">
+<link rel="icon" href="/html/favicon.ico" sizes="48x48">
+<link rel="icon" href="/html/arenas-icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/html/icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -51,7 +53,7 @@ button,select,input,textarea{font-family:var(--font)}
 /* ── MARKETING NAV ── */
 .nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-bottom:var(--border);padding:0 40px;height:60px;display:flex;align-items:center;gap:24px}
 .nav-logo{display:flex;align-items:center;gap:8px;cursor:pointer;text-decoration:none}
-.nav-logo-icon{width:30px;height:30px;background:var(--yellow);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.nav-logo-icon{width:30px;height:30px;display:block;flex-shrink:0}
 .nav-logo-text{font-size:16px;font-weight:700;color:var(--gray-900)}
 .nav-links{display:flex;align-items:center;gap:4px;margin-left:auto}
 .nav-link{padding:6px 12px;font-size:13px;font-weight:500;color:var(--gray-600);cursor:pointer;border-radius:6px;transition:all .12s;text-decoration:none;border:none;background:none}
@@ -180,7 +182,7 @@ button,select,input,textarea{font-family:var(--font)}
 /* Modal header */
 .sm-header{padding:24px 28px 0;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .sm-logo{display:flex;align-items:center;gap:7px}
-.sm-logo-icon{width:26px;height:26px;background:var(--yellow);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px}
+.sm-logo-icon{width:26px;height:26px;display:block}
 .sm-logo-text{font-size:14px;font-weight:700;color:var(--gray-900)}
 .sm-close{width:30px;height:30px;border-radius:50%;border:var(--border);background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--gray-500);transition:all .1s}
 .sm-close:hover{background:var(--gray-100)}
@@ -341,7 +343,7 @@ button,select,input,textarea{font-family:var(--font)}
 <!-- NAV -->
 <nav class="nav">
   <a class="nav-logo" href="/html/landing">
-    <div class="nav-logo-icon">🏟</div>
+    <img class="nav-logo-icon" src="/html/arenas-icon.svg" alt="">
     <span class="nav-logo-text">Arenas</span>
   </a>
   <div class="nav-links">
@@ -609,7 +611,7 @@ button,select,input,textarea{font-family:var(--font)}
 <!-- FOOTER -->
 <footer class="footer">
   <a class="nav-logo" href="/html/landing">
-    <div class="nav-logo-icon">🏟</div>
+    <img class="nav-logo-icon" src="/html/arenas-icon.svg" alt="">
     <span class="nav-logo-text">Arenas</span>
   </a>
   <div class="footer-links">
@@ -631,7 +633,7 @@ button,select,input,textarea{font-family:var(--font)}
     <!-- Modal header -->
     <div class="sm-header">
       <div class="sm-logo">
-        <div class="sm-logo-icon">🏟</div>
+        <img class="sm-logo-icon" src="/html/arenas-icon.svg" alt="">
         <span class="sm-logo-text">Arenas · Club setup</span>
       </div>
       <button class="sm-close" onclick="closeSignup()">✕</button>
@@ -853,7 +855,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="signup-modal" style="max-width:480px">
     <div class="sm-header">
       <div class="sm-logo">
-        <div class="sm-logo-icon">🏟</div>
+        <img class="sm-logo-icon" src="/html/arenas-icon.svg" alt="">
         <span class="sm-logo-text">Arenas</span>
       </div>
       <button class="sm-close" onclick="document.getElementById('success-overlay').classList.remove('open')">✕</button>

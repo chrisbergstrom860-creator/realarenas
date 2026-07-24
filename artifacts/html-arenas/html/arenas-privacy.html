@@ -15,6 +15,8 @@ document.addEventListener('DOMContentLoaded', function(){
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="/html/manifest.webmanifest">
 <meta name="theme-color" content="#FFD21E">
+<link rel="icon" href="/html/favicon.ico" sizes="48x48">
+<link rel="icon" href="/html/arenas-icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/html/icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -45,7 +47,7 @@ a{color:inherit}
 /* ── MARKETING NAV ── */
 .nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-bottom:var(--border);padding:0 40px;height:60px;display:flex;align-items:center;gap:24px}
 .nav-logo{display:flex;align-items:center;gap:8px;cursor:pointer;text-decoration:none}
-.nav-logo-icon{width:30px;height:30px;background:var(--yellow);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.nav-logo-icon{width:30px;height:30px;display:block;flex-shrink:0}
 .nav-logo-text{font-size:16px;font-weight:700;color:var(--gray-900)}
 .nav-links{display:flex;align-items:center;gap:4px;margin-left:auto}
 .nav-link{padding:6px 12px;font-size:13px;font-weight:500;color:var(--gray-600);cursor:pointer;border-radius:6px;transition:all .12s;text-decoration:none;border:none;background:none}
@@ -90,7 +92,7 @@ a{color:inherit}
 /* ── FOOTER ── */
 .footer{background:white;border-top:var(--border);padding:32px 40px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
 .footer-brand{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--gray-700);font-weight:500}
-.footer-brand-icon{width:22px;height:22px;background:var(--yellow);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px}
+.footer-brand-icon{width:22px;height:22px;display:block}
 .footer-links{display:flex;gap:20px}
 .footer-links a{font-size:13px;color:var(--gray-500);text-decoration:none;transition:color .1s}
 .footer-links a:hover{color:var(--gray-700)}
@@ -116,7 +118,7 @@ a{color:inherit}
 <!-- NAV -->
 <nav class="nav">
   <a class="nav-logo" href="/html/landing">
-    <div class="nav-logo-icon">🏟</div>
+    <img class="nav-logo-icon" src="/html/arenas-icon.svg" alt="">
     <span class="nav-logo-text">Arenas</span>
   </a>
   <div class="nav-links">
@@ -277,7 +279,7 @@ a{color:inherit}
 <!-- FOOTER -->
 <footer class="footer">
   <div class="footer-brand">
-    <div class="footer-brand-icon">🏟</div>
+    <img class="footer-brand-icon" src="/html/arenas-icon.svg" alt="">
     <span>© 2026 Muscletowel LLC</span>
   </div>
   <div class="footer-links">

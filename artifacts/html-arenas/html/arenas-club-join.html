@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="manifest" href="/html/manifest.webmanifest">
 <meta name="theme-color" content="#FFD21E">
+<link rel="icon" href="/html/favicon.ico" sizes="48x48">
+<link rel="icon" href="/html/arenas-icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/html/icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -30,7 +32,7 @@
 body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);font-size:14px;line-height:1.5;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
 .wrap{width:100%;max-width:460px}
 .brand{display:flex;align-items:center;gap:9px;justify-content:center;margin-bottom:18px}
-.logo-icon{width:30px;height:30px;background:var(--yellow);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:16px}
+.logo-icon{width:30px;height:30px;display:block}
 .logo-text{font-size:17px;font-weight:700;color:var(--gray-900)}
 .card{background:white;border:var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);overflow:hidden}
 .card-top{background:var(--gray-900);color:white;padding:22px 26px}
@@ -67,7 +69,7 @@ body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);fon
 </head>
 <body>
 <div class="wrap">
-  <div class="brand"><div class="logo-icon">🏟</div><span class="logo-text">Arenas</span></div>
+  <div class="brand"><img class="logo-icon" src="/html/arenas-icon.svg" alt=""><span class="logo-text">Arenas</span></div>
   <div class="card" id="card"></div>
 </div>
 <script>
