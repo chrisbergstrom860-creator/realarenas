@@ -72,7 +72,6 @@ button,select,input,textarea{font-family:var(--font)}/* ── LAYOUT ── *//
 .btn-primary:hover{background:var(--gray-700)}
 .btn-yellow{background:var(--yellow);color:var(--gray-900);border-color:var(--yellow-dark);font-weight:600}
 .btn-yellow:hover{background:var(--yellow-dark)}
-.btn-green{background:var(--green-light);color:#166534;border-color:#86EFAC}
 .btn-red{background:var(--red-light);color:#A32D2D;border-color:#FECACA}
 .btn-sm{padding:4px 10px;font-size:12px;border-radius:6px}
 .btn-full{width:100%;justify-content:center}
@@ -98,7 +97,7 @@ button,select,input,textarea{font-family:var(--font)}/* ── LAYOUT ── *//
 .pill-run{background:var(--orange-light);color:#9A3412;border-color:#FDBA74}
 .pill-active{background:var(--green-light);color:#166534;border-color:#86EFAC}
 .pill-member{background:var(--gray-100);color:var(--gray-600);border-color:var(--gray-200)}
-.pill-going{background:var(--green-light);color:#166634;border-color:#86EFAC}
+.pill-going{background:var(--yellow);color:#111827;border-color:var(--yellow-dark)}
 .pill-pending{background:var(--orange-light);color:#9A3412;border-color:#FDBA74}
 .pill-declined{background:var(--red-light);color:#A32D2D;border-color:#FECACA}
 
@@ -439,7 +438,7 @@ function toggleLike(btn) {
 function rsvpGoing(btn) {
   if (btn) {
     btn.textContent = '✓ Going';
-    btn.className = 'btn btn-green btn-sm';
+    btn.className = 'btn btn-yellow btn-sm';
   }
   showToast('✓ RSVP confirmed — Coach Rachel has been notified!');
 }
@@ -641,7 +640,7 @@ function showToast(msg) {
               var when = diff <= 0 ? 'Today' : diff === 1 ? 'Tomorrow' : d.toLocaleDateString('en-GB', { weekday:'short' });
               var time = d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
               var badge = e.myStatus === 'going'
-                ? '<span style="font-size:9px;font-weight:600;padding:2px 8px;border-radius:10px;background:#ECFDF5;color:#166534;border:0.5px solid #86EFAC;flex-shrink:0">Going ✓</span>'
+                ? '<span style="font-size:9px;font-weight:600;padding:2px 8px;border-radius:10px;background:#FFD21E;color:#111827;border:0.5px solid #E6B800;flex-shrink:0">Going ✓</span>'
                 : e.myStatus === 'interested'
                 ? '<span style="font-size:9px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--yellow-light);color:#633806;border:0.5px solid #fde68a;flex-shrink:0">Interested</span>'
                 : '<span style="font-size:9px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--gray-100);color:var(--gray-400);border:var(--border);flex-shrink:0">RSVP</span>';

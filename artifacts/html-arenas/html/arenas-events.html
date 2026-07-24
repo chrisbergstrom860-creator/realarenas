@@ -74,8 +74,8 @@ button,select,input,textarea{font-family:var(--font)}
 .tag{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid transparent;white-space:nowrap;display:inline-block}
 .t-free{background:var(--green-light);color:#166534;border-color:#86EFAC}
 .ev-social-text{font-size:11px;color:var(--gray-500)}
-.going-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0}
-.pend-dot{width:6px;height:6px;border-radius:50%;background:var(--orange);flex-shrink:0}
+.going-dot{width:6px;height:6px;border-radius:50%;background:var(--yellow);flex-shrink:0}
+.pend-dot{width:6px;height:6px;border-radius:50%;background:transparent;border:1.5px solid var(--yellow-dark);flex-shrink:0}
 
 
 /* ── SIDEBAR CARDS ── */
@@ -96,8 +96,8 @@ button,select,input,textarea{font-family:var(--font)}
 .ri-name{flex:1;font-size:12px;font-weight:600;color:var(--gray-900)}
 .ri-sport{font-size:10px;color:var(--gray-400)}
 .ri-status{font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px}
-.ris-going{background:var(--green-light);color:#166534}
-.ris-pend{background:var(--orange-light);color:#9A3412}
+.ris-going{background:var(--yellow);color:#111827}
+.ris-pend{background:var(--yellow-light);color:#7a5c00}
 
 
 
@@ -241,7 +241,7 @@ function showToast(msg){
 .evx-invitee:hover{background:var(--gray-50)}
 .evx-card{border:var(--border);border-radius:12px;padding:16px;margin-bottom:12px;display:flex;gap:14px;background:#fff}
 .evx-rbtn{padding:7px 13px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--gray-200);background:#fff;color:var(--gray-700)}
-.evx-rbtn.on{background:var(--green-light);color:#166534;border-color:#86EFAC}
+.evx-rbtn.on{background:var(--yellow);color:var(--gray-900);border-color:var(--yellow-dark)}
 .evx-rbtn.int.on{background:var(--yellow-light);color:#7a5c00;border-color:var(--yellow-dark)}
 </style>
 <script>
@@ -404,7 +404,7 @@ function showToast(msg){
     stats.className = 'stats-strip';
     stats.style.borderBottom = 'var(--border)';
     stats.innerHTML =
-      '<div class="stat-block"><div class="sb-val" style="color:var(--green)">' + upGoing + '</div><div class="sb-label">Going</div></div>' +
+      '<div class="stat-block"><div class="sb-val" style="color:#7a5c00">' + upGoing + '</div><div class="sb-label">Going</div></div>' +
       '<div class="stat-block"><div class="sb-val">' + upInterested + '</div><div class="sb-label">Interested</div></div>' +
       '<div class="stat-block"><div class="sb-val">' + upcoming.length + '</div><div class="sb-label">Total</div></div>';
     body.appendChild(stats);

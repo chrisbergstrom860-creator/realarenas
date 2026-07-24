@@ -58,3 +58,4 @@
 - [html-arenas feed timeline](html-arenas-feed-timeline.md) — /feed is one merged newest-first list; sort by "entered feed" created_at per type (never subject date); server windows must order by the same key.
 - [html-arenas /how-points-work](html-arenas-how-points-work.md) — public scoring explainer rendered from the sports registry at request time; verify script + the Monday-week/unit-aware honesty fixes it forced.
 - [html-arenas PWA](html-arenas-pwa.md) — deploy-wins SW; never cache authed navs (PUBLIC_PAGES); bump VERSION on sw.js edits; setOffline can't test SW (use 502 path); new pages need PWA head block.
+- [html-arenas RSVP colors](html-arenas-rsvp-colors.md) — two-tier yellow grammar (solid=committed/action, pale+stroke=tentative, ghost=unanswered); #7a5c00 on #FFD21E fails AA; green = completion only.

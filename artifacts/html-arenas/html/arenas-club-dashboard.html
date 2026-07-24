@@ -136,7 +136,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
 .pill-rest { background: var(--gray-100); color: var(--gray-600); border-color: var(--gray-200); }
 .pill-risk { background: var(--red-light); color: #A32D2D; border-color: #FECACA; }
 .pill-new { background: var(--yellow-light); color: #7a5c00; border-color: #fde68a; }
-.pill-going { background: var(--green-light); color: #166534; border-color: #86EFAC; }
+.pill-going { background: var(--yellow); color: #111827; border-color: var(--yellow-dark); }
 .pill-pending { background: var(--orange-light); color: #9A3412; border-color: #FDBA74; }
 .pill-declined { background: var(--red-light); color: #A32D2D; border-color: #FECACA; }
 
@@ -935,7 +935,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
     <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">London Half Marathon — RSVPs</div><div style="font-size:13px;color:var(--gray-500);margin-top:2px">Apr 13, 2026 · Blackheath, London</div></div><button class="modal-close" onclick="closeAllModals()">✕</button></div>
     <div class="modal-body">
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:4px">
-        <div style="background:var(--green-light);border:1px solid #86EFAC;border-radius:var(--radius);padding:12px;text-align:center"><div style="font-size:24px;font-weight:700;color:#166534;font-family:var(--mono)">34</div><div style="font-size:11px;color:#166534">Going</div></div>
+        <div style="background:var(--yellow);border:1px solid var(--yellow-dark);border-radius:var(--radius);padding:12px;text-align:center"><div style="font-size:24px;font-weight:700;color:#111827;font-family:var(--mono)">34</div><div style="font-size:11px;color:#111827">Going</div></div>
         <div style="background:var(--orange-light);border:1px solid #FDBA74;border-radius:var(--radius);padding:12px;text-align:center"><div style="font-size:24px;font-weight:700;color:#9A3412;font-family:var(--mono)">8</div><div style="font-size:11px;color:#9A3412">Pending</div></div>
         <div style="background:var(--gray-100);border:var(--border);border-radius:var(--radius);padding:12px;text-align:center"><div style="font-size:24px;font-weight:700;color:var(--gray-600);font-family:var(--mono)">6</div><div style="font-size:11px;color:var(--gray-500)">Declined</div></div>
       </div>
@@ -1448,15 +1448,15 @@ document.addEventListener('DOMContentLoaded', function () {
         '<div style="padding:0 16px 12px">' +
           '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
             '<div style="flex:1;height:6px;background:var(--gray-100);border-radius:3px;overflow:hidden;display:flex">' +
-              '<div style="width:' + goingPct + '%;height:100%;background:#10B981;border-radius:3px 0 0 3px"></div>' +
-              '<div style="width:' + interestedPct + '%;height:100%;background:#FFD21E"></div>' +
+              '<div style="width:' + goingPct + '%;height:100%;background:var(--yellow);border-radius:3px 0 0 3px"></div>' +
+              '<div style="width:' + interestedPct + '%;height:100%;background:#FDE68A;box-shadow:inset 0 0 0 1px var(--yellow-dark)"></div>' +
               '<div style="width:' + nonePct + '%;height:100%;background:var(--gray-200)"></div>' +
             '</div>' +
             '<span style="font-size:10px;font-family:var(--mono);color:var(--gray-400)">' + totalMembers + ' members</span>' +
           '</div>' +
           '<div style="display:flex;gap:12px">' +
-            '<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--gray-500)"><div style="width:7px;height:7px;border-radius:50%;background:#10B981;flex-shrink:0"></div>' + event.goingCount + ' going</div>' +
-            '<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--gray-500)"><div style="width:7px;height:7px;border-radius:50%;background:#FFD21E;flex-shrink:0"></div>' + event.interestedCount + ' interested</div>' +
+            '<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--gray-500)"><div style="width:7px;height:7px;border-radius:50%;background:var(--yellow);flex-shrink:0"></div>' + event.goingCount + ' going</div>' +
+            '<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--gray-500)"><div style="width:7px;height:7px;border-radius:50%;background:#FDE68A;border:1px solid var(--yellow-dark);flex-shrink:0"></div>' + event.interestedCount + ' interested</div>' +
             '<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--gray-500)"><div style="width:7px;height:7px;border-radius:50%;background:var(--gray-200);flex-shrink:0"></div>' + event.notRespondedCount + ' no response</div>' +
           '</div>' +
         '</div>' +
@@ -1570,7 +1570,7 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       var listHtml = '';
       if (going.length) {
-        listHtml += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#10B981;padding:10px 16px 4px;background:#F0FDF4;border-bottom:var(--border)">✓ Going · ' + going.length + '</div>';
+        listHtml += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#111827;padding:10px 16px 4px;background:var(--yellow);border-bottom:var(--border)">✓ Going · ' + going.length + '</div>';
         listHtml += going.map(memberRow).join('');
       }
       if (interested.length) {

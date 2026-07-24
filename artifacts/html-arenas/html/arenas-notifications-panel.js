@@ -92,8 +92,9 @@
   // ── CLUB-INVITE ACTION PILL ──
   // Club-invite notifications carry link '/join/<token>' and a server-computed
   // inviteState (live invite status + membership). Render the honest action:
-  //   pending → live green "Join Club" pill (same green language as the events
-  //             ✓ Going pill), accepts inline via POST /auth/join/:token/existing
+  //   pending → live brand-yellow "Join Club" pill (same solid-yellow committed/
+  //             action language as the ✓ Going state and the /join page CTA),
+  //             accepts inline via POST /auth/join/:token/existing
   //   joined  → muted "✓ Joined" pill (inert)
   //   expired → muted "Invite expired" label, no button
   //   gone    → (invite revoked = row deleted) plain row, no action
@@ -109,7 +110,7 @@
     var m = typeof n.link === 'string' && n.link.match(/^\/join\/([A-Za-z0-9_-]+)$/);
     if (!m) return '';
     return '<button onclick="acceptClubInvite(event,\'' + esc(n.id) + '\',\'' + esc(m[1]) + '\')"' +
-      ' style="align-self:center;flex-shrink:0;padding:5px 11px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;background:#ECFDF5;color:#166534;border:1px solid #86EFAC;white-space:nowrap">Join Club</button>';
+      ' style="align-self:center;flex-shrink:0;padding:5px 11px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;background:#FFD21E;color:#111827;border:1px solid #E6B800;white-space:nowrap">Join Club</button>';
   }
 
   // Inline accept: joins the club without leaving the page. On success the
