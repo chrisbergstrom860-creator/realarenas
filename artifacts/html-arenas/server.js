@@ -5614,15 +5614,13 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
 
     // ── Personal records (always all-time) ──
     const prs = [];
-    const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000);
-    const isNew = (dateStr) => new Date(dateStr) >= fourteenDaysAgo;
     // PR dates render as the user's-zone calendar day of the activity instant.
     const fmtDate = (d) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: statsTz });
 
     const runs = acts.filter((a) => a.sport === 'running' && km(a) > 0);
     if (runs.length) {
       const best = runs.reduce((m, a) => km(a) > km(m) ? a : m);
-      prs.push({ icon: '🏃', label: 'Longest run', value: Math.round(km(best) * 10) / 10 + ' km', meta: fmtDate(best.date) + (best.title ? ' · ' + best.title : ''), isNew: isNew(best.date) });
+      prs.push({ icon: '🏃', label: 'Longest run', value: Math.round(km(best) * 10) / 10 + ' km', meta: fmtDate(best.date) + (best.title ? ' · ' + best.title : '') });
     }
     const pacedRuns = runs.filter((a) => km(a) >= 3 && parseDurationHours(a.duration) > 0);
     if (pacedRuns.length) {
@@ -5630,12 +5628,12 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
       const best = withPace.reduce((m, x) => x.pace < m.pace ? x : m);
       const mins = Math.floor(best.pace);
       const secs = Math.round((best.pace - mins) * 60);
-      prs.push({ icon: '⚡', label: 'Fastest pace · run', value: `${mins}:${String(secs).padStart(2, '0')} /km`, meta: fmtDate(best.a.date) + (best.a.title ? ' · ' + best.a.title : ''), isNew: isNew(best.a.date) });
+      prs.push({ icon: '⚡', label: 'Fastest pace · run', value: `${mins}:${String(secs).padStart(2, '0')} /km`, meta: fmtDate(best.a.date) + (best.a.title ? ' · ' + best.a.title : '') });
     }
     const rides = acts.filter((a) => a.sport === 'cycling' && km(a) > 0);
     if (rides.length) {
       const best = rides.reduce((m, a) => km(a) > km(m) ? a : m);
-      prs.push({ icon: '🚴', label: 'Longest ride', value: Math.round(km(best) * 10) / 10 + ' km', meta: fmtDate(best.date) + (best.title ? ' · ' + best.title : ''), isNew: isNew(best.date) });
+      prs.push({ icon: '🚴', label: 'Longest ride', value: Math.round(km(best) * 10) / 10 + ' km', meta: fmtDate(best.date) + (best.title ? ' · ' + best.title : '') });
     }
     const timed = acts.filter((a) => parseDurationHours(a.duration) > 0);
     if (timed.length) {
@@ -5643,7 +5641,7 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
       const h = parseDurationHours(best.duration);
       const hh = Math.floor(h), mm = Math.round((h - hh) * 60);
       const sportName = best.sport ? best.sport.charAt(0).toUpperCase() + best.sport.slice(1) : 'Activity';
-      prs.push({ icon: '⏱', label: 'Longest activity', value: `${hh}h ${mm}m`, meta: fmtDate(best.date) + ' · ' + sportName, isNew: isNew(best.date) });
+      prs.push({ icon: '⏱', label: 'Longest activity', value: `${hh}h ${mm}m`, meta: fmtDate(best.date) + ' · ' + sportName });
     }
     if (acts.length) {
       const weekTotals = {};
@@ -5655,7 +5653,7 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
         weekTotals[key].count++;
       });
       const bestWeek = Object.entries(weekTotals).reduce((m, x) => x[1].hours > m[1].hours ? x : m);
-      prs.push({ icon: '📅', label: 'Biggest week', value: Math.round(bestWeek[1].hours * 10) / 10 + 'h', meta: 'Week of ' + keyToUtcDate(bestWeek[0]).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) + ' · ' + bestWeek[1].count + ' activities', isNew: isNew(bestWeek[0]) });
+      prs.push({ icon: '📅', label: 'Biggest week', value: Math.round(bestWeek[1].hours * 10) / 10 + 'h', meta: 'Week of ' + keyToUtcDate(bestWeek[0]).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) + ' · ' + bestWeek[1].count + ' activities' });
 
       const monthTotals = {};
       acts.forEach((a) => {
@@ -5663,7 +5661,7 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
         monthTotals[key] = (monthTotals[key] || 0) + km(a);
       });
       const bestMonth = Object.entries(monthTotals).reduce((m, x) => x[1] > m[1] ? x : m);
-      prs.push({ icon: '📍', label: 'Biggest month', value: Math.round(bestMonth[1] * 10) / 10 + ' km', meta: keyToUtcDate(bestMonth[0]).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) + ' · across all sports', isNew: false });
+      prs.push({ icon: '📍', label: 'Biggest month', value: Math.round(bestMonth[1] * 10) / 10 + ' km', meta: keyToUtcDate(bestMonth[0]).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) + ' · across all sports' });
     }
 
     res.json({
