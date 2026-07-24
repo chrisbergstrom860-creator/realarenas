@@ -134,7 +134,7 @@ button,select,input,textarea{font-family:var(--font)}
    Athletes). On desktop, athlete browsing lives on the /athletes page via
    the sidebar, so the tab button is hidden above the app's 768px breakpoint;
    desktop deep links to #athletes are redirected by the tab's script. */
-@media (min-width:769px){#htab-athletes{display:none}}
+@media (min-width:769px){#htab-athletes,#htab-challenges{display:none}}
 
 /* ── CONTENT LAYOUT ── */
 .content-wrap{max-width:1200px;margin:0 auto;padding:24px 28px}
@@ -455,6 +455,9 @@ button,select,input,textarea{font-family:var(--font)}
       <div class="htab" id="htab-clubs" onclick="setTab('clubs')">Clubs <span class="tab-count"></span></div>
       <div class="htab" id="htab-following" onclick="setTab('following')">Following <span class="tab-count"></span></div>
       <div class="htab" id="htab-athletes" onclick="setTab('athletes')">Athletes</div>
+      <!-- Nav-style item, not a tab: navigates to the full /challenges page (mobile-only,
+           same reachability treatment as Athletes; desktop uses the sidebar link). -->
+      <div class="htab" id="htab-challenges" onclick="nav('/challenges')">Challenges</div>
       <div class="htab" id="htab-settings" onclick="setTab('settings')">Settings</div>
     </div>
   </div>

@@ -35,9 +35,11 @@ ok(mod.includes('adc-head-main'),
 ok(/toLowerCase\(\)\s*===\s*'advanced'/.test(mod),
   "arenas-athlete-cards.js: advanced-pill check must be case-insensitive (String(a.level||'').toLowerCase())");
 ok(/min-width:\s*769px/.test(profile),
-  'arenas-my-profile.html: min-width:769px media rule missing (Athletes tab no longer hidden on desktop)');
-ok(/#htab-athletes\s*\{\s*display:\s*none/.test(profile),
-  'arenas-my-profile.html: #htab-athletes display:none rule missing');
+  'arenas-my-profile.html: min-width:769px media rule missing (mobile-only tab items no longer hidden on desktop)');
+ok(/#htab-athletes\s*,\s*#htab-challenges\s*\{\s*display:\s*none/.test(profile),
+  'arenas-my-profile.html: mobile-only rule must hide BOTH #htab-athletes and #htab-challenges');
+ok(profile.includes('id="htab-challenges"') && /htab-challenges"[^>]*onclick="nav\('\/challenges'\)"/.test(profile),
+  "arenas-my-profile.html: Challenges nav-style tab item missing or no longer navigates via nav('/challenges')");
 ok(profile.includes('location.replace'),
   'arenas-my-profile.html: desktop #athletes deep-link redirect (location.replace) missing');
 ok(!server.includes('dev-avatar-harness'),
