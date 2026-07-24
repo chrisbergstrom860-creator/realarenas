@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Arenas brand mark: yellow rounded square + stadium/track glyph.
+       Clean vector version of the topbar's .logo-icon (yellow square, 6/28
+       corner radius, stadium glyph) — drawn as a top-down arena track so it
+       stays crisp at every raster size (the emoji original is too detailed
+       below 48px). Colors: --yellow #FFD21E, glyph --gray-900 #111827. -->
+  <rect x="0" y="0" width="512" height="512" rx="110" fill="#FFD21E"/>
+  <!-- Outer track ring (pill) -->
+  <rect x="118" y="170" width="276" height="172" rx="86" fill="none" stroke="#111827" stroke-width="30"/>
+  <!-- Infield (inner pill) -->
+  <rect x="182" y="224" width="148" height="64" rx="32" fill="none" stroke="#111827" stroke-width="20"/>
+  <!-- Start line crossing the top lane -->
+  <rect x="248" y="152" width="16" height="58" rx="8" fill="#111827"/>
+</svg>

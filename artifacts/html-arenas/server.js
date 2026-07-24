@@ -282,6 +282,67 @@ app.get(['/html/arenas-club-create.js', '/arenas-club-create.js'], (req, res) =>
   res.sendFile(path.join(HTML, 'arenas-club-create.js'));
 });
 
+// ── PWA: manifest, icons, service worker, offline fallback ──
+// Dual-path (literal /html + root) like the shared assets above: pages
+// reference these with the /html prefix, which the head helper strips on
+// Railway for [href] — and pages without the helper still resolve because
+// both paths are mounted.
+const PWA_THEME_COLOR = '#FFD21E'; // brand yellow (the topbar mark)
+const PWA_BG_COLOR = '#F9FAFB';    // --gray-50, the app's body background —
+                                   // splash matches first paint, no white flash
+
+app.get(['/html/manifest.webmanifest', '/manifest.webmanifest'], (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.type('application/manifest+json').send(JSON.stringify({
+    id: (BASE || '') + '/',
+    name: 'Arenas',
+    short_name: 'Arenas',
+    description: 'Log training, join clubs, and climb the leaderboards with your team.',
+    // Logged-out standalone opens land on /feed and ride requirePageAuth's
+    // redirect to /landing — both inside scope, so the chain stays in-app.
+    start_url: BASE + '/feed',
+    scope: (BASE || '') + '/',
+    display: 'standalone',
+    background_color: PWA_BG_COLOR,
+    theme_color: PWA_THEME_COLOR,
+    icons: [
+      { src: BASE + '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: BASE + '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: BASE + '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+    ]
+  }, null, 2));
+});
+
+const PWA_ICON_FILES = new Set(['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png']);
+app.get(['/html/icons/:file', '/icons/:file'], (req, res) => {
+  if (!PWA_ICON_FILES.has(req.params.file)) return res.status(404).end();
+  if (process.env.NODE_ENV === 'production') res.set('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(HTML, 'icons', req.params.file));
+});
+
+// The worker itself. no-cache so browsers re-check it promptly (the byte
+// diff is what triggers the update flow). The Supabase project host is
+// substituted in at serve time so avatar URLs (timestamped filenames) can be
+// cache-first; the host is public information — it is in every avatar URL.
+app.get(['/html/sw.js', '/sw.js'], (req, res) => {
+  let js = fs.readFileSync(path.join(HTML, 'sw.js'), 'utf8');
+  let supaHost = '';
+  try { supaHost = new URL(process.env.SUPABASE_URL).hostname; } catch (err) { /* placeholder stays; avatars just aren't cached */ }
+  js = js.replace("'__SUPABASE_HOST__'", JSON.stringify(supaHost));
+  res.set('Cache-Control', 'no-cache');
+  res.type('application/javascript').send(js);
+});
+
+app.get(['/html/arenas-pwa.js', '/arenas-pwa.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-pwa.js'));
+});
+
+// Offline fallback page (public; precached by the service worker at install,
+// served by it when a navigation misses both network and cache).
+app.get(BASE + '/offline', (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-offline.html'));
+});
+
 // ── AUTH (Supabase) ──
 const COOKIE_OPTS = {
   httpOnly: true,

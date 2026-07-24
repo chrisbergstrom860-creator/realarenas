@@ -19,6 +19,14 @@ document.addEventListener('DOMContentLoaded', function(){
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/html/manifest.webmanifest">
+<meta name="theme-color" content="#FFD21E">
+<link rel="apple-touch-icon" href="/html/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Arenas">
+<script src="/html/arenas-pwa.js" defer></script>
 <title>Arenas — Sports Community</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,300..800;1,300..800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -626,6 +634,7 @@ html { scroll-behavior: smooth; }
         <button class="btn btn-ghost btn-lg" onclick="showPage('login'); setMode('login')">Log in</button>
       </div>
       <div class="hero-note">No credit card required · Free forever plan available</div>
+      <div class="hero-note" style="margin-top:4px">Works on any device — install it like an app, straight from your browser</div>
       <div class="hero-social-proof">
         <div class="hsp-text"><strong>Be one of the first</strong> — join the founding community</div>
       </div>

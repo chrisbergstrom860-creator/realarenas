@@ -57,3 +57,4 @@
 - [html-arenas club creation](html-arenas-club-create.md) — dual-mode /for-clubs wizard (WIZARD_STEPS), /api/clubs/create w/ 3-club cap, signup fork dead, safe login `next`, email-check enumeration risk.
 - [html-arenas feed timeline](html-arenas-feed-timeline.md) — /feed is one merged newest-first list; sort by "entered feed" created_at per type (never subject date); server windows must order by the same key.
 - [html-arenas /how-points-work](html-arenas-how-points-work.md) — public scoring explainer rendered from the sports registry at request time; verify script + the Monday-week/unit-aware honesty fixes it forced.
+- [html-arenas PWA](html-arenas-pwa.md) — deploy-wins SW; never cache authed navs (PUBLIC_PAGES); bump VERSION on sw.js edits; setOffline can't test SW (use 502 path); new pages need PWA head block.
