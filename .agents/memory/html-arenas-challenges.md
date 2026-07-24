@@ -157,3 +157,4 @@ so its `flex-direction` is inert until the tab is clicked.
   `.not('id','in','(...)')`, applied ONLY when the exclude list is non-empty
   (an empty `.not(...in...)` errors). **Why:** a created challenge was leaking
   into Discover because the public query didn't exclude the user's own.
+- Completed-tab stat squares (7/3,250/57%%) are HARDCODED chrome — no setter, no IDs. "Completed" is wireable (= tab badge, filter(isDone)); "points earned from challenges" is a double-counting trap (points are activity-derived, challenges award nothing); "win rate" has NO backing mechanic (no winner field, no final-rank snapshot; leaderboards recomputed on demand). Verdict: wire / remove / remove.
