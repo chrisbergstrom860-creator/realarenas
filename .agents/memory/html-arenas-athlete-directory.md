@@ -11,3 +11,6 @@ description: Shared athlete-card module + eventing, profile Athletes tab, topbar
 - TRAP: every new shared html/*.js file needs its dual-path serve route in server.js (mirroring arenas-time.js) — script tags 404 silently without it (forgotten this session, caught before testing).
 - Club discovery still does NOT exist (no directory page, no search endpoint; invite links + sidebar only). Banked shape if requested: clubs-table query + member counts + join-request/open-invite flow — a separate feature-sized task.
 - Known minor: /athletes highlights nothing in the mobile bottom nav (`athletes: null` in the nav map).
+- TRAP: never target positional children (`.adc-head>div`) in shared-component CSS — injected helpers (avatarHtml) add their own wrapper divs that catch the rule (this stretched avatars; border-radius was a red herring). Class every structural node. Guard: scripts/verify-athlete-cards.js.
+- Extraction audits must diff old page CSS for VARIANT classes too, not just base ones — the gold advanced-level pill was silently flattened to muted during extraction.
+- Athletes tab is mobile-only BY DESIGN (desktop has /athletes): desktop deep-links to #athletes redirect there; leaving mobile with the tab open snaps to Overview and clears the hash.

@@ -88,14 +88,20 @@
         ' style="animation-delay:' + (listIndex * 0.03) + 's">' +
         '<div class="adc-head">' +
           window.avatarHtml(a.avatar_url || null, a.name || 'Athlete', 'adc-av', 'background:' + av.bg + ';color:' + av.color) +
-          '<div>' +
+          // Text block gets an explicit class: a positional .adc-head>div rule
+          // would also catch the avatar wrapper div and its flex:1 would beat
+          // .adc-av's fixed 42px box (higher specificity) — that exact bug
+          // shipped once as stretched/unrounded avatars.
+          '<div class="adc-head-main">' +
             '<div class="adc-name">' + esc(a.name || 'Athlete') + '</div>' +
             '<div class="adc-location">' + (a.location ? '📍 ' + esc(a.location) : '📍 Location not set') + (sports.length ? ' · ' + esc(sports.map(sportName).join(', ')) : '') + '</div>' +
           '</div>' +
         '</div>' +
         '<div class="adc-tags">' +
           (sportLabel ? '<span class="adc-pill" style="' + sportStyle + '">' + esc(sportLabel) + '</span>' : '') +
-          (levelLabel ? '<span class="adc-pill adc-pill-muted">' + esc(levelLabel) + '</span>' : '') +
+          // Advanced keeps its pre-extraction gold treatment (old .p-adv);
+          // other levels use the muted pill (old .p-int values).
+          (levelLabel ? '<span class="adc-pill ' + (String(a.level || '').toLowerCase() === 'advanced' ? 'adc-pill-adv' : 'adc-pill-muted') + '">' + esc(levelLabel) + '</span>' : '') +
         '</div>' +
         '<div class="adc-stats">' +
           '<div class="adc-stat"><span class="adc-stat-val">' + followers + '</span><span class="adc-stat-label">followers</span></div>' +

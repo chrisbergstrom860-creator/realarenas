@@ -130,6 +130,11 @@ button,select,input,textarea{font-family:var(--font)}
 /* Tab badges are "new since last viewed" counts — an empty badge means
    nothing new and renders as no pill at all (never a "0"). */
 .htab .tab-count:empty{display:none}
+/* The Athletes tab is the MOBILE browse home (bottom nav → Profile →
+   Athletes). On desktop, athlete browsing lives on the /athletes page via
+   the sidebar, so the tab button is hidden above the app's 768px breakpoint;
+   desktop deep links to #athletes are redirected by the tab's script. */
+@media (min-width:769px){#htab-athletes{display:none}}
 
 /* ── CONTENT LAYOUT ── */
 .content-wrap{max-width:1200px;margin:0 auto;padding:24px 28px}
@@ -2851,13 +2856,37 @@ if (logHashMatch) {
   }
 
   htab.addEventListener('click', loadDirectory);
-  // Deep link: /profile#athletes opens the tab directly. The sidebar
+
+  // Mobile-only surface: on desktop the tab button is display:none (athlete
+  // browsing lives on /athletes via the sidebar), so a desktop visit to
+  // /profile#athletes — a shared or bookmarked mobile link — redirects to the
+  // real page instead of opening a hidden tab or dying as a dead hash.
+  var mqMobile = window.matchMedia('(max-width: 768px)');
+
+  // Deep link (mobile): /profile#athletes opens the tab directly. The sidebar
   // highlight stays on "My profile" (setTab only special-cases settings);
   // the sidebar "Athletes" item remains the /athletes page link.
   if (window.location.hash === '#athletes') {
-    if (typeof setTab === 'function') setTab('athletes');
-    loadDirectory();
+    if (mqMobile.matches) {
+      if (typeof setTab === 'function') setTab('athletes');
+      loadDirectory();
+    } else {
+      window.location.replace(B + '/athletes');
+    }
   }
+
+  // Crossing the breakpoint with the tab open (rotation, window resize):
+  // snap back to Overview so the active tab is never a hidden button, and
+  // clear a stale #athletes hash without adding a history entry.
+  function onBreakpointChange(e) {
+    if (e.matches) return; // → mobile: the tab button reappears; nothing else
+    if (htab.classList.contains('active') && typeof setTab === 'function') setTab('overview');
+    if (window.location.hash === '#athletes') {
+      try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch (err) {}
+    }
+  }
+  if (typeof mqMobile.addEventListener === 'function') mqMobile.addEventListener('change', onBreakpointChange);
+  else if (typeof mqMobile.addListener === 'function') mqMobile.addListener(onBreakpointChange);
 })();
 </script>
 </body>

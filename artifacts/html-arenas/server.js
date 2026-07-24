@@ -281,6 +281,8 @@ app.get(['/html/arenas-athlete-cards.js', '/arenas-athlete-cards.js'], (req, res
   res.sendFile(path.join(HTML, 'arenas-athlete-cards.js'));
 });
 
+// for the rounding-regression verification. Remove after that round.
+
 // Shared club-creation contract layer + in-app club-setup modal. The
 // /for-clubs wizard and the sidebar "+ Create club" modal both submit through
 // this one file so validation and error mapping can't drift. Dual-path as
