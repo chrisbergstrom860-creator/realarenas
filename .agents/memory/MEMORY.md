@@ -37,7 +37,7 @@
 - [html-arenas Stripe/plans + gating](html-arenas-stripe.md) — $9 Pro / $29 Club Pro; raw-mount webhook sole subscriptions writer; Pro gating LIVE; Club Pro gating shipped end-to-end, dormant flag.
 - [html-arenas search wiring](html-arenas-search.md) — search is athletes-only via /athletes?q= deep link; dashboard member-filter globals need head-script stubs; Enter handlers need !event.isComposing.
 - [/log standalone page](html-arenas-log-page.md) — activity form lives at /log now; save→/feed or /calendar#month from date INPUT (no toast); profile Activities tab list-only; #log= forwards.
-- [html-arenas calendar](html-arenas-calendar.md) — day panel; local text dates; gate split; insights dual-bucket (trimmed vs wide, rebuild both in load+refresh); ±8d server window; ?_today hook; mobile dots not pills.
+- [html-arenas calendar](html-arenas-calendar.md) — Month/Week/Agenda, insights gone; byDayWide feeds week+panel; Monday-month fetch; #YYYY-MM-DD week hash canonicalised via replaceState; mobile default week.
 - [html-arenas sports registry](html-arenas-sports-registry.md) — sports.js is the SSOT; all sport maps/pickers derive from injected ARENAS_SPORTS; never hand-write a sport map again.
 - [html-arenas Pro badge](html-arenas-pro-badge.md) — PRO badges (user + club) = real subscription, never the gate flags; server-injected/server-decided; exact-match patterns + dual clubs data paths are the fragility.
 - [html-arenas goals](html-arenas-goals-mapping.md) — fully shipped (API, Goals tab, Overview mini-card, live pricing copy); server-truth enrichment, client never recomputes.

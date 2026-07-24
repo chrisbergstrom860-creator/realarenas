@@ -32,12 +32,10 @@ button{font-family:var(--font)}
 .notif-btn{width:34px;height:34px;border-radius:7px;border:var(--border);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;position:relative;transition:background .1s}
 .notif-btn:hover{background:var(--gray-50)}
 .main{display:block;padding:28px 32px 60px}
-/* Centered composition: title/controls/grid/insights share one max-width column.
-   The grid + the insights panel TOGETHER form the centered block. */
-.cal-shell{max-width:1340px;margin:0 auto}
-.cal-layout{display:flex;gap:20px;align-items:flex-start}
-#cal-root{flex:1;min-width:0}
-#cal-insights{width:280px;flex-shrink:0}
+/* Centered composition: title/controls/grid share one max-width column. 1040px
+   keeps the 7-column grid at the exact cell width it had beside the old side
+   panel (1340 − 280 panel − 20 gap), now standing alone and centered. */
+.cal-shell{max-width:1040px;margin:0 auto}
 .page-title{font-size:22px;font-weight:700;color:var(--gray-900);letter-spacing:-.01em;margin-bottom:4px}
 .page-sub{font-size:13px;color:var(--gray-500);margin-bottom:20px}
 
@@ -89,27 +87,10 @@ button{font-family:var(--font)}
 .cd-dot.act{background:#10B981}
 .cd-more{font-size:11px;color:var(--gray-400);font-family:var(--mono)}
 
-/* ── INSIGHTS PANEL (right column desktop, summary block above on mobile).
-     All numbers are computed client-side from the fetched month data. ── */
-.ins-card{background:white;border:var(--border);border-radius:12px;padding:14px 16px}
-.ins-title{font-size:13px;font-weight:700;color:var(--gray-900);margin-bottom:10px}
-.ins-head{display:grid;grid-template-columns:minmax(0,1fr) 72px 72px;gap:6px;font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em;font-family:var(--mono);padding-bottom:6px;border-bottom:1px solid var(--gray-100)}
-.ins-head span:nth-child(n+2){text-align:right}
-.ins-row{display:grid;grid-template-columns:minmax(0,1fr) 72px 72px;gap:6px;align-items:center;padding:9px 0;border-bottom:1px solid var(--gray-100);font-size:12px;color:var(--gray-700)}
-.ins-row:last-of-type{border-bottom:none}
-.ins-label{display:flex;align-items:center;gap:7px;font-weight:600;min-width:0}
-.ins-label .lg-dot{flex-shrink:0}
-.ins-val{font-family:var(--mono);font-size:12.5px;font-weight:600;color:var(--gray-900);text-align:right;white-space:nowrap}
-.ins-sub{display:block;font-size:10px;font-weight:500;color:var(--gray-400);margin-top:1px}
-.ins-val.off{color:var(--gray-300);font-weight:400}
-/* The not-responded line is actionable — same muted/dashed treatment as its pills */
-.ins-row.nr{cursor:pointer;margin:0 -6px;padding-left:6px;padding-right:6px;border-radius:8px}
-.ins-row.nr .ins-label{color:var(--gray-500);font-weight:500}
-.ins-row.nr:hover{background:var(--gray-50)}
-.ins-note{font-size:10.5px;color:var(--gray-400);margin-top:9px;line-height:1.45}
-/* Jump-highlight for the "next not-responded day" (grid cell or agenda card) */
-.cal-flash{animation:calFlash 1.8s ease}
-@keyframes calFlash{0%,55%{box-shadow:0 0 0 3px var(--yellow);border-color:var(--yellow-dark)}100%{box-shadow:0 0 0 0 rgba(0,0,0,0)}}
+/* ── WEEK VIEW (the agenda's card language, always exactly seven days) ── */
+.wk-day{cursor:pointer}
+.wk-day:not(.today):hover{border-color:var(--gray-400)}
+.wk-rest{padding:11px 16px;font-size:12px;color:var(--gray-400);font-style:italic}
 
 /* ── AGENDA VIEW ── */
 .agenda{display:flex;flex-direction:column;gap:10px}
@@ -176,10 +157,6 @@ button{font-family:var(--font)}
 
 @media (max-width:768px){
   .main{padding:20px 14px 90px}
-  /* Insights become a compact summary block ABOVE the calendar/agenda */
-  .cal-layout{flex-direction:column;gap:14px;align-items:stretch}
-  #cal-insights{width:auto;order:-1}
-  .ins-card{padding:12px 14px}
   /* ~2× cells; the grid may exceed the viewport height — vertical scroll is fine.
      Dots (not pills) stay the mobile content markers: a 7-col grid at 380px gives
      ~47px-wide cells where text pills would be pure ellipsis. */
@@ -253,8 +230,9 @@ button{font-family:var(--font)}
       <button class="cal-today-btn" id="cal-today-btn">Today</button>
     </div>
     <div class="view-toggle" role="tablist">
-      <button id="vt-month">Month</button>
-      <button id="vt-agenda">Agenda</button>
+      <button id="vt-month" role="tab">Month</button>
+      <button id="vt-week" role="tab">Week</button>
+      <button id="vt-agenda" role="tab">Agenda</button>
     </div>
   </div>
 
@@ -265,10 +243,7 @@ button{font-family:var(--font)}
     <span><span class="lg-dot lg-act"></span> Logged activity</span>
   </div>
 
-  <div class="cal-layout">
-    <div id="cal-root"><div class="muted-line">Loading…</div></div>
-    <aside id="cal-insights" aria-label="Calendar insights"></aside>
-  </div>
+  <div id="cal-root"><div class="muted-line">Loading…</div></div>
 </div>
 </div>
 
@@ -296,6 +271,9 @@ button{font-family:var(--font)}
   var monthLabel = document.getElementById('cal-month-label');
   var VIEW_KEY = 'arenas_calendar_view'; // notifications-panel key precedent
   var HASH_RE = /^#(\d{4})-(\d{2})$/;
+  // Week view is date-anchored: #YYYY-MM-DD is the displayed week's MONDAY.
+  // Any valid date deep-links to the week containing it (snapped to Monday).
+  var WEEK_HASH_RE = /^#(\d{4})-(\d{2})-(\d{2})$/;
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -314,10 +292,10 @@ button{font-family:var(--font)}
   function pad2(n) { return String(n).padStart(2, '0'); }
   function ymdOf(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
   // TEST HOOK: ?_today=YYYY-MM-DD overrides the client's idea of "today" so the
-  // insights week-boundary math can be exercised deterministically (a Monday-start
+  // week view's boundary math can be exercised deterministically (a Monday-start
   // week that spans two months only exists on certain real dates). Display-only:
   // it never touches writes, and every consumer of "today" (cd-today marker,
-  // remaining counts, jump) shifts consistently.
+  // week anchoring, Today button) shifts consistently.
   var TODAY_OVERRIDE = (function () {
     var m = /[?&]_today=(\d{4}-\d{2}-\d{2})(?:&|$)/.exec(window.location.search);
     return m ? m[1] : null;
@@ -330,6 +308,10 @@ button{font-family:var(--font)}
     var p = String(s).split('-').map(Number);
     return new Date(p[0], (p[1] || 1) - 1, p[2] || 1);
   }
+  // Monday of the local week containing d (Monday-start — the app convention).
+  function mondayOf(d) {
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+  }
 
   // ── State ──
   var state = {
@@ -337,8 +319,10 @@ button{font-family:var(--font)}
     view: 'month',
     data: null,                  // raw API payload
     byDay: {},                   // ymd -> { events:[], plans:[], activities:[] } (month-trimmed)
-    byDayWide: {},               // same shape, UNTRIMMED — insights week counts only
-    openYmd: null                // day panel currently open for this day
+    byDayWide: {},               // same shape, UNTRIMMED — read by the week view and the
+                                 // day panel: both can reach days outside the displayed month
+    openYmd: null,               // day panel currently open for this day
+    weekStart: null              // week view: ymd of the displayed week's Monday
   };
   // Locked = gates on AND viewer on the free plan (server-computed, injected).
   var proLocked = !!(window.ARENAS_DATA && window.ARENAS_DATA.gating && window.ARENAS_DATA.gating.proLocked);
@@ -372,29 +356,75 @@ button{font-family:var(--font)}
 
   function currentYm() { return state.year + '-' + pad2(state.month); }
 
-  function initMonthFromHash() {
-    var m = HASH_RE.exec(window.location.hash || '');
+  // Returns true when the hash was a week deep link (#YYYY-MM-DD) — the caller
+  // then forces week view for this load WITHOUT touching the stored preference
+  // (a shared link should not silently rewrite someone's default view).
+  function initFromHash() {
+    var h = window.location.hash || '';
+    var wm = WEEK_HASH_RE.exec(h);
+    if (wm) {
+      var d = new Date(Number(wm[1]), Number(wm[2]) - 1, Number(wm[3]));
+      if (d.getMonth() + 1 === Number(wm[2])) { // rejects impossible dates (2026-02-31)
+        var ws = mondayOf(d);
+        state.weekStart = ymdOf(ws);
+        state.year = ws.getFullYear(); state.month = ws.getMonth() + 1;
+        return true;
+      }
+    }
+    var m = HASH_RE.exec(h);
     if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12) {
       state.year = Number(m[1]); state.month = Number(m[2]);
     } else {
-      var n = new Date();
+      // nowLocal (not new Date) so ?_today opens on the overridden month.
+      var n = nowLocal();
       state.year = n.getFullYear(); state.month = n.getMonth() + 1;
     }
+    return false;
   }
   function initView() {
     var stored = null;
     try { stored = localStorage.getItem(VIEW_KEY); } catch (e) {}
-    if (stored === 'month' || stored === 'agenda') { state.view = stored; return; }
-    state.view = (window.innerWidth <= 768) ? 'agenda' : 'month';
+    if (stored === 'month' || stored === 'week' || stored === 'agenda') { state.view = stored; return; }
+    // Mobile default is WEEK — the bounded Mon–Sun frame is the daily driver
+    // (the app thinks in Monday weeks everywhere: leaderboards, stats, goals);
+    // Agenda stays one tap away as the long-scroll. Desktop default stays month.
+    state.view = (window.innerWidth <= 768) ? 'week' : 'month';
+  }
+  // Anchor the week view: today's week when the displayed month IS the current
+  // month, otherwise the week containing the 1st of the displayed month. The
+  // fetched month is ALWAYS the month containing the week's Monday — a Monday
+  // in month M puts the week's Sunday at most 6 days past M's end, inside the
+  // server's widened window (7+ days). Returns true when the anchor moved the
+  // month and the caller must refetch.
+  function ensureWeek() {
+    var n = nowLocal();
+    var anchor = currentYm() === (n.getFullYear() + '-' + pad2(n.getMonth() + 1))
+      ? n : parseLocalYmd(currentYm() + '-01');
+    var ws = mondayOf(anchor);
+    state.weekStart = ymdOf(ws);
+    var changed = ws.getFullYear() !== state.year || (ws.getMonth() + 1) !== state.month;
+    state.year = ws.getFullYear(); state.month = ws.getMonth() + 1;
+    return changed;
   }
   function setView(v) {
     state.view = v;
     try { localStorage.setItem(VIEW_KEY, v); } catch (e) {}
-    renderToggle(); render();
+    if (v === 'week' && ensureWeek()) {
+      renderToggle(); syncHash(); load(); // week anchored into a neighbouring month
+      return;
+    }
+    renderToggle(); syncHash(); updateLabel(); render();
   }
   function renderToggle() {
-    document.getElementById('vt-month').className = state.view === 'month' ? 'on' : '';
-    document.getElementById('vt-agenda').className = state.view === 'agenda' ? 'on' : '';
+    [['vt-month', 'month'], ['vt-week', 'week'], ['vt-agenda', 'agenda']].forEach(function (pair) {
+      var btn = document.getElementById(pair[0]);
+      var on = state.view === pair[1];
+      btn.className = on ? 'on' : '';
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    var unit = state.view === 'week' ? 'week' : 'month';
+    document.getElementById('cal-prev').setAttribute('aria-label', 'Previous ' + unit);
+    document.getElementById('cal-next').setAttribute('aria-label', 'Next ' + unit);
   }
 
   // Integer month math only (reports-tab rule) — never Date→ISO for month keys.
@@ -406,33 +436,89 @@ button{font-family:var(--font)}
     state.year = y; state.month = m;
     syncHash(); load();
   }
+  // Week stepping: ±7 local days. The fetched month follows the week's MONDAY
+  // (ensureWeek rule) — crossing a month boundary refetches exactly once, at
+  // the step where the Monday changes month; a week merely ENDING in the next
+  // month renders from the already-fetched widened window without a refetch.
+  function shiftWeek(delta) {
+    var ws = parseLocalYmd(state.weekStart);
+    ws = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + delta * 7);
+    state.weekStart = ymdOf(ws);
+    var y = ws.getFullYear(), m = ws.getMonth() + 1;
+    if (y !== state.year || m !== state.month) {
+      state.year = y; state.month = m;
+      syncHash(); load();
+    } else {
+      syncHash(); updateLabel(); render();
+    }
+  }
   function goToday() {
-    var n = new Date();
-    state.year = n.getFullYear(); state.month = n.getMonth() + 1;
+    // nowLocal (not new Date) so the ?_today test hook shifts this too.
+    var n = nowLocal();
+    if (state.view === 'week') {
+      var ws = mondayOf(n);
+      state.weekStart = ymdOf(ws);
+      state.year = ws.getFullYear(); state.month = ws.getMonth() + 1;
+    } else {
+      state.year = n.getFullYear(); state.month = n.getMonth() + 1;
+    }
     syncHash(); load();
   }
-  function syncHash() {
-    var ym = '#' + currentYm();
-    if (window.location.hash !== ym) {
+  // replace=true canonicalises the CURRENT history entry (deep-link
+  // normalisation, initial load, unrecognised hashes) via replaceState —
+  // assigning location.hash there would PUSH, and Back would then bounce
+  // between the raw and canonical forms forever. In-app navigation
+  // (prev/next/today/toggle) omits it so Back walks the trail as expected.
+  function syncHash(replace) {
+    var want = (state.view === 'week' && state.weekStart)
+      ? '#' + state.weekStart
+      : '#' + currentYm();
+    if (window.location.hash === want) return;
+    if (replace) {
+      // replaceState fires no hashchange — no suppress flag needed.
+      history.replaceState(null, '', window.location.pathname + window.location.search + want);
+    } else {
       suppressHash = true;
-      window.location.hash = ym;
+      window.location.hash = want;
     }
   }
   var suppressHash = false;
   window.addEventListener('hashchange', function () {
     if (suppressHash) { suppressHash = false; return; }
-    var m = HASH_RE.exec(window.location.hash || '');
+    var h = window.location.hash || '';
+    var wm = WEEK_HASH_RE.exec(h);
+    if (wm) {
+      var d = new Date(Number(wm[1]), Number(wm[2]) - 1, Number(wm[3]));
+      if (d.getMonth() + 1 === Number(wm[2])) {
+        state.view = 'week'; // a week address implies the view (not persisted)
+        var ws = mondayOf(d);
+        state.weekStart = ymdOf(ws);
+        state.year = ws.getFullYear(); state.month = ws.getMonth() + 1;
+        renderToggle(); syncHash(true); load(); // normalise to Monday form IN PLACE
+      } else {
+        syncHash(true); // impossible date (2026-02-31): restore canonical hash, keep state
+      }
+      return;
+    }
+    var m = HASH_RE.exec(h);
     if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12) {
       state.year = Number(m[1]); state.month = Number(m[2]);
+      // Month address while in week view: re-anchor the week and canonicalise
+      // this entry to the week form WITHOUT pushing (a push here loops Back
+      // whenever an old #YYYY-MM entry is revisited from week view).
+      if (state.view === 'week') { ensureWeek(); syncHash(true); }
       load();
+      return;
     }
+    syncHash(true); // unrecognised hash — restore canonical form in place
   });
 
   // ── Data ──
   // ymPrefix (e.g. "2026-07-") trims to the displayed local month — that bucket
-  // drives the grid/agenda/day panel. Pass null for the UNTRIMMED bucket: the
-  // server widens its fetch window past the month edges so the insights panel
-  // can count the current week correctly even when it spans two months.
+  // drives the grid and agenda. Pass null for the UNTRIMMED bucket: the server
+  // widens its fetch window past the month edges so the WEEK VIEW (and the day
+  // panel, which can be opened from a week row) still has real data on days
+  // where the week reaches into a neighbouring month.
   function bucket(data, ymPrefix) {
     var byDay = {};
     function push(ymd, kind, item) {
@@ -459,9 +545,28 @@ button{font-family:var(--font)}
     return byDay;
   }
 
-  function load() {
+  // Header label: month name in month/agenda; the week's exact date range in
+  // week view ("20–26 Jul 2026", "29 Jun – 5 Jul 2026", "29 Dec 2026 – 4 Jan 2027").
+  function updateLabel() {
+    if (state.view === 'week' && state.weekStart) {
+      var ws = parseLocalYmd(state.weekStart);
+      var we = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + 6);
+      var md = function (d) { return d.getDate() + ' ' + d.toLocaleDateString('en-GB', { month: 'short' }); };
+      if (ws.getFullYear() !== we.getFullYear()) {
+        monthLabel.textContent = md(ws) + ' ' + ws.getFullYear() + ' – ' + md(we) + ' ' + we.getFullYear();
+      } else if (ws.getMonth() !== we.getMonth()) {
+        monthLabel.textContent = md(ws) + ' – ' + md(we) + ' ' + we.getFullYear();
+      } else {
+        monthLabel.textContent = ws.getDate() + '–' + we.getDate() + ' ' +
+          we.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+      }
+      return;
+    }
     monthLabel.textContent = parseLocalYmd(currentYm() + '-01')
       .toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  }
+  function load() {
+    updateLabel();
     root.innerHTML = '<div class="muted-line">Loading…</div>';
     fetch(window.BASE + '/api/calendar/month?month=' + currentYm())
       .then(function (r) { return r.ok ? r.json() : null; })
@@ -663,116 +768,48 @@ button{font-family:var(--font)}
 
   function render() {
     if (!state.data) return;
-    renderInsights(); // insights live in a sibling column — render for BOTH views
-    if (state.view === 'agenda') renderAgenda(); else renderMonth();
+    if (state.view === 'agenda') renderAgenda();
+    else if (state.view === 'week') renderWeek();
+    else renderMonth();
   }
 
-  // ── INSIGHTS PANEL ──
-  // Every figure is computed client-side from the already-fetched month payload
-  // — honest zeros, nothing fabricated. Month figures come from the trimmed
-  // bucket (exactly what the grid shows); week figures from the untrimmed
-  // bucket because the current week can span two months. Week = Monday-start
-  // LOCAL week containing today, and week figures only render when the
-  // displayed month IS the current month — on other months the column grays
-  // out rather than showing misleading numbers.
-  // "Remaining" semantics: day-granularity, today inclusive (ymd >= today) —
-  // consistent with the app-wide local-date bucketing rule.
-  function computeInsights() {
+  // ── WEEK VIEW ──
+  // Exactly the displayed week's seven days, Monday → Sunday, stacked in the
+  // agenda's card language. Reads the UNTRIMMED bucket: a week can reach into
+  // a neighbouring month and those days must still show their real items (the
+  // server's widened fetch window guarantees they were fetched — see
+  // ensureWeek's Monday-month rule). Empty days render as quiet rest-day rows,
+  // never skipped: a seven-day week always shows seven days.
+  function renderWeek() {
     var today = todayYmd();
-    var n = nowLocal();
-    var weekActive = currentYm() === (n.getFullYear() + '-' + pad2(n.getMonth() + 1));
-    var ws = new Date(n.getFullYear(), n.getMonth(), n.getDate() - ((n.getDay() + 6) % 7));
-    var weekStart = ymdOf(ws);
-    var weekEnd = ymdOf(new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + 6));
-    function tally(byDay, inWindow) {
-      var c = { evLeft: 0, nrLeft: 0, planLeft: 0, planDone: 0, acts: 0 };
-      Object.keys(byDay).forEach(function (ymd) {
-        if (!inWindow(ymd)) return;
-        var day = byDay[ymd];
-        var remaining = ymd >= today;
-        day.events.forEach(function (ev) {
-          if (ev.myStatus === 'going' || ev.myStatus === 'interested') { if (remaining) c.evLeft++; }
-          else if (remaining) c.nrLeft++;
-        });
-        day.plans.forEach(function (p) {
-          if (p.status === 'planned') { if (remaining) c.planLeft++; }
-          else if (p.status === 'done') c.planDone++;
-        });
-        c.acts += day.activities.length;
-      });
-      return c;
+    var ws = parseLocalYmd(state.weekStart);
+    var html = '<div class="agenda">';
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + i);
+      var ymd = ymdOf(d);
+      var day = state.byDayWide[ymd] || { events: [], plans: [], activities: [] };
+      var label = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+      var isToday = ymd === today;
+      html += '<div class="ag-day wk-day' + (isToday ? ' today' : '') + '" data-ymd="' + ymd + '" role="button" tabindex="0" aria-label="' + ymd + '">';
+      html += '<div class="ag-head"><span class="ag-date">' + label + '</span>' +
+        (isToday ? '<span class="ag-today-tag">Today</span>' : '') + '</div>';
+      var items = '';
+      day.events.forEach(function (ev) { items += eventItemHtml(ev, 'ag-item'); });
+      day.plans.forEach(function (p) { items += planItemHtml(p, 'ag-item'); });
+      day.activities.forEach(function (a) { items += activityItemHtml(a, 'ag-item'); });
+      html += items
+        ? '<div class="ag-items">' + items + '</div>'
+        : '<div class="wk-rest">Rest day — nothing scheduled</div>';
+      html += '</div>';
     }
-    var ymPrefix = currentYm() + '-';
-    return {
-      weekActive: weekActive,
-      week: weekActive
-        ? tally(state.byDayWide, function (ymd) { return ymd >= weekStart && ymd <= weekEnd; })
-        : null,
-      month: tally(state.byDay, function (ymd) { return ymd.indexOf(ymPrefix) === 0; })
-    };
-  }
-  function renderInsights() {
-    var el = document.getElementById('cal-insights');
-    if (!el) return;
-    var ins = computeInsights();
-    var OFF = '<span class="ins-val off" title="Week figures appear when viewing the current month">—</span>';
-    function cells(main, sub) {
-      var m = '<span class="ins-val">' + main(ins.month) +
-        (sub ? '<span class="ins-sub">' + sub(ins.month) + '</span>' : '') + '</span>';
-      var w = ins.weekActive
-        ? '<span class="ins-val">' + main(ins.week) +
-          (sub ? '<span class="ins-sub">' + sub(ins.week) + '</span>' : '') + '</span>'
-        : OFF;
-      return w + m;
-    }
-    el.innerHTML = '<div class="ins-card">' +
-      '<div class="ins-title">At a glance</div>' +
-      '<div class="ins-head"><span></span><span>This week</span><span>This month</span></div>' +
-      '<div class="ins-row"><span class="ins-label"><span class="lg-dot lg-ev"></span>My events</span>' +
-        cells(function (c) { return String(c.evLeft); }, function () { return 'left'; }) + '</div>' +
-      '<div class="ins-row nr" id="ins-nr" role="button" tabindex="0" title="Club events you haven\u2019t responded to \u2014 click to jump to the next one">' +
-        '<span class="ins-label"><span class="lg-dot lg-nr"></span>Not responded</span>' +
-        cells(function (c) { return String(c.nrLeft); }, function () { return 'left'; }) + '</div>' +
-      '<div class="ins-row"><span class="ins-label"><span class="lg-dot lg-plan"></span>Planned training</span>' +
-        cells(function (c) { return c.planLeft + ' left'; }, function (c) { return c.planDone + ' done'; }) + '</div>' +
-      '<div class="ins-row"><span class="ins-label"><span class="lg-dot lg-act"></span>Logged</span>' +
-        cells(function (c) { return String(c.acts); }, function () { return 'so far'; }) + '</div>' +
-      '<div class="ins-note">\u201CLeft\u201D counts look ahead from today \u00B7 \u201CLogged\u201D looks back.' +
-      (ins.weekActive ? '' : '<br>Week figures appear when you\u2019re viewing the current month.') +
-      '</div></div>';
-    var nrRow = document.getElementById('ins-nr');
-    if (nrRow) {
-      nrRow.addEventListener('click', jumpToNextNr);
-      nrRow.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); jumpToNextNr(); }
-      });
-    }
-  }
-  // Jump to the next not-responded day IN THE DISPLAYED MONTH (trimmed bucket —
-  // a qualifying day in the neighbor-month part of the week has no cell here).
-  function jumpToNextNr() {
-    var today = todayYmd();
-    var days = Object.keys(state.byDay).sort();
-    var target = null;
-    for (var i = 0; i < days.length; i++) {
-      var d = days[i];
-      if (d >= today && state.byDay[d].events.some(function (ev) { return ev.myStatus === 'none'; })) {
-        target = d; break;
-      }
-    }
-    if (!target) return;
-    var el;
-    if (state.view === 'month') {
-      el = root.querySelector('.cal-day[data-ymd="' + target + '"]');
-    } else {
-      var head = root.querySelector('.ag-head[data-ymd="' + target + '"]');
-      el = head ? head.parentNode : null;
-    }
-    if (!el) return;
-    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    el.classList.remove('cal-flash');
-    void el.offsetWidth; // restart the animation on repeat clicks
-    el.classList.add('cal-flash');
+    html += '</div>';
+    root.innerHTML = html;
+    // The whole day card opens the day panel — rows and items alike (items in
+    // the stacked views are read-only; all actions live in the panel).
+    root.querySelectorAll('.wk-day').forEach(function (sec) {
+      sec.addEventListener('click', function () { openDayPanel(sec.getAttribute('data-ymd')); });
+      sec.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDayPanel(sec.getAttribute('data-ymd')); } });
+    });
   }
 
   // ── DAY PANEL (interactive: plan CRUD, Log-this handoff, RSVP) ──
@@ -784,7 +821,7 @@ button{font-family:var(--font)}
   function planFormHtml() {
     var editing = null;
     if (panelForm && panelForm.mode === 'edit') {
-      var day = state.byDay[state.openYmd] || { plans: [] };
+      var day = state.byDayWide[state.openYmd] || { plans: [] }; // wide: panel can hold neighbour-month days
       day.plans.forEach(function (p) { if (p.id === panelForm.planId) editing = p; });
       if (!editing) return '';
     }
@@ -810,7 +847,9 @@ button{font-family:var(--font)}
   function renderDayPanel() {
     var ymd = state.openYmd;
     if (!ymd) return;
-    var day = state.byDay[ymd] || { events: [], plans: [], activities: [] };
+    // Wide bucket: a week row can open a day that sits outside the displayed
+    // month (identical to the trimmed bucket for in-month days).
+    var day = state.byDayWide[ymd] || { events: [], plans: [], activities: [] };
     document.getElementById('dp-title').textContent =
       parseLocalYmd(ymd).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     var html = '';
@@ -930,16 +969,19 @@ button{font-family:var(--font)}
   });
 
   // ── Wire controls ──
-  document.getElementById('cal-prev').addEventListener('click', function () { shiftMonth(-1); });
-  document.getElementById('cal-next').addEventListener('click', function () { shiftMonth(1); });
+  document.getElementById('cal-prev').addEventListener('click', function () { if (state.view === 'week') shiftWeek(-1); else shiftMonth(-1); });
+  document.getElementById('cal-next').addEventListener('click', function () { if (state.view === 'week') shiftWeek(1); else shiftMonth(1); });
   document.getElementById('cal-today-btn').addEventListener('click', goToday);
   document.getElementById('vt-month').addEventListener('click', function () { setView('month'); });
+  document.getElementById('vt-week').addEventListener('click', function () { setView('week'); });
   document.getElementById('vt-agenda').addEventListener('click', function () { setView('agenda'); });
 
-  initMonthFromHash();
-  initView();
+  var hashForcedWeek = initFromHash();
+  if (hashForcedWeek) { state.view = 'week'; } else { initView(); }
+  // A stored week preference arriving without a week hash still needs an anchor.
+  if (state.view === 'week' && !state.weekStart) ensureWeek();
   renderToggle();
-  syncHash();
+  syncHash(true); // canonicalise the landed-on entry (never push on load)
   load();
 })();
 </script>

@@ -6239,11 +6239,13 @@ app.get(BASE + '/api/calendar/month', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ month: monthParam, ...empty });
   try {
     const userId = req.user.id;
-    // Window widened ±8 days: ±1 was for local-date bucketing of timestamps;
-    // the calendar insights panel also needs the current week's overlap into a
-    // neighbor month (up to 6 days for a Monday-start week) plus tz skew — the
-    // client still trims the grid to the exact local month, so the extra rows
-    // only ever feed week counts.
+    // Window widened ±8 days: ±1 is required by the GRID itself (timestamps
+    // are bucketed by local date parts — a local-evening item near a month
+    // edge lives in the neighbouring UTC month); the WEEK VIEW additionally
+    // needs the current week's overlap into a neighbor month (up to 6 days
+    // for a Monday-start week) plus tz skew. The client still trims the grid
+    // to the exact local month; the extra rows feed only the week view's
+    // neighbour-month days (and the day panel opened from them).
     const winStart = new Date(year, month - 1, 1);
     winStart.setDate(winStart.getDate() - 8);
     const winEnd = new Date(year, month, 1);
