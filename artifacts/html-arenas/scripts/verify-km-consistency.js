@@ -80,8 +80,15 @@ async function realAccountCheck() {
     return s + (isNaN(n) ? 0 : n);
   }, 0));
   console.log('      activities=' + acts.length + '  unit-aware=' + unitAware + '  legacy-unit-blind=' + unitBlind);
-  check('legacy unit-blind math reproduces the reported 47', unitBlind === 47, String(unitBlind));
-  check('unit-aware math reproduces the reported hero 69.5', unitAware === 69.5, String(unitAware));
+  // HISTORICAL FORENSICS — informational only, deliberately non-failing.
+  // At fix time this live account reproduced the original bug report exactly
+  // (unit-blind 47 vs unit-aware hero 69.5), proving the discrepancy WAS the
+  // unit-blind parser. The account keeps logging real activities, so those
+  // snapshots drift and can never match again; pinning them made the guard
+  // fail forever (first seen 2026-07-25: 17 activities, 87.2 vs 58). The
+  // enforcing sections are the static parser pins above and the seeded
+  // mixed-unit e2e below, which assert current behavior on controlled data.
+  console.log('      (historical 47/69.5 fixture retired — values above are informational)');
 }
 
 async function e2eSeededUser() {

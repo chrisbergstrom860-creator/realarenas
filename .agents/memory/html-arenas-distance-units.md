@@ -28,8 +28,11 @@ bug is gone.
 
 **How to apply:** never add a second distance parser or an inline numeral-strip
 on a distance string. Guard: `scripts/verify-km-consistency.js` (static asserts
-+ parser unit tests + real-account recompute + seeded mixed-unit e2e across all
-profile/feed surfaces; seeds only `@arenas-test.dev` emails, self-cleans).
++ parser unit tests + seeded mixed-unit e2e across all profile/feed surfaces;
+seeds only `@arenas-test.dev` emails, self-cleans). Its real-account recompute
+section is INFORMATIONAL only since 2026-07-25 — it pinned live-account
+snapshots (47/69.5) that drift forever as the account logs more activities;
+never re-pin live data in a guard, assert on controlled seeded data instead.
 
 ## Rounding convention
 Sum first, then round to 1dp (`Math.round(x*10)/10`) at each display site.

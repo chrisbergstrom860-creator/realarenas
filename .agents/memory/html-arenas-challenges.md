@@ -11,12 +11,14 @@ helper (mirrors notification enrichment) — there is no usable `profiles` table
 
 ## Policy decisions (be consistent with these)
 
-- **Join is permissive by design.** Any authenticated user can join any
-  challenge id (including private ones). This preserves the spec's invite flow.
-  **Why:** the original spec had no per-challenge join authorization; tightening
-  it would break invites. If private challenges must become truly private later,
-  add owner/invitee/participant/club-member checks to join AND leaderboard.
-- **Leaderboard is readable by any authenticated user** (social semantics).
+- **Join is GATED for private solo challenges (supersedes "join permissive",
+  2026-07).** `/api/challenges/:id/join` requires creator OR a live
+  `challenge_invites` row when `visibility='private' && club_id==null`;
+  strangers get 403 `invite_required`, and an invite-lookup failure DENIES
+  (fail closed). Public and club challenges keep their prior semantics.
+- **Leaderboard for private solo = creator/participant/invitee only**; anyone
+  else gets "Challenge not found" (no existence leak). Public/club unchanged.
+  Mechanism details: [challenge invites](html-arenas-challenge-invites.md).
 - **`duration` goal_type progress is not computed (reports 0)** — spec parity.
   `distance` sums numeric distance, `sessions` counts, `streak` counts distinct
   days; everything else is 0.
@@ -27,9 +29,11 @@ helper (mirrors notification enrichment) — there is no usable `profiles` table
   the client must consume `c.pct`/`c.isComplete`, not recompute from raw values.
   Create route also rejects non-positive/NaN `goal_target`. **Why:** a private
   challenge showed "goal achieved" with no activities due to this exact bug.
-- **Invitees are validated server-side** in `POST /api/challenges/create`:
-  filtered to users the caller actually follows and capped (50). **Why:** without
-  this, the endpoint could spam notifications to arbitrary known user IDs.
+- **Invitees are validated server-side** in `POST /api/challenges/create` AND
+  `POST /api/challenges/:id/invites`: filtered to the creator's FOLLOWERS
+  (opted-in audience — NOT following), capped (50), no self-invite; only
+  private solo creates accept invitees. **Why:** prevents notification spam to
+  arbitrary user IDs, and followers explicitly chose the relationship.
 
 ## Coach dashboard "Club Challenges" tab
 
@@ -60,8 +64,8 @@ helper (mirrors notification enrichment) — there is no usable `profiles` table
   (it rendered on that club's dashboard) — same class as the events club-write bug.
 - **Join has no analogous hole:** `/api/challenges/:id/join` reads the persisted
   challenge's `club_id` from the DB, never from client input, so there is no
-  club-namespace-spoofing vector. (Join is permissive by design — any authed user
-  can join any challenge id — but that only adds the caller as a participant.)
+  club-namespace-spoofing vector. (Join is open for public challenges but gated
+  for private solo — see the invites topic.)
 
 ## Same-route refresh after a write (gotcha)
 
@@ -76,7 +80,10 @@ shows until a manual refresh. The Events tab already uses the hash+reload form.
 ## Tab mapping (client)
 
 - mine → active myChallenges; completed (#completed-list) → finished myChallenges
-- friends (#tab-friends) → clubChallenges; discover (#discover-grid) → publicChallenges
+- friends (#tab-friends) → invitations (pending) + your private challenges
+  (NO LONGER clubChallenges — un-joined club challenges surface on club
+  member-home/coach dashboard instead); discover (#discover-grid) →
+  publicChallenges; hash `#friends` deep-links the tab
 
 ## Live containers must ship EMPTY — no prototype cards (flash bug)
 
@@ -159,4 +166,4 @@ so its `flex-direction` is inert until the tab is clicked.
   into Discover because the public query didn't exclude the user's own.
 - Completed-tab stats: the fiction squares (hardcoded 7/3,250/57%) are DELETED; the one real stat (completed count) renders as a compact header sharing the tab badge's single isDone computation. Rules: any completed-count surface must reuse that one source; "points earned from challenges" is a double-counting trap (points are activity-derived, challenges award nothing); no win/podium stat without a rank-at-completion snapshot (next bullet). Legacy demo-modal blob still holds prototype rank/points fiction — dead code today, neutralize before ever re-enabling that modal.
 - Rank-at-completion SNAPSHOT (freeze final standings when a challenge ends) is the prerequisite for any honest podium/win-rate stat — and would also stabilize ended-challenge leaderboards, which today recompute from live activities and shift under post-hoc edits. The wire path if competition stats are ever wanted; until then, no win-rate UI.
-- Visibility semantics (audited 2026-07): Discover = 20 newest ACTIVE public (ends age out instantly; volume crowd-out, no pagination), Suggested = top 4 of same list; clubChallenges query IGNORES visibility (private club = all-members-only); friendsInChallenges explicitly public-only but not end-date-filtered. PRIVATE = UNLISTED, not access-controlled: join + leaderboard routes have NO visibility/membership gate (UUID obscurity only). Private-solo invite flow DEAD-ENDS: notif names title but has no join action and the challenge renders nowhere for invitees. Solo challenges have NO delete/retract path (all mgmt routes require club manager) — accidental public solo sits in Discover until end_date. Public CLUB challenges are platform-wide joinable (Pro-EXEMPT while solo public needs Pro) and outside joiners flow into club milestones/rollups; coach post-to-feed publishes the title as a regular post beyond the club.
+- Visibility semantics (re-audited 2026-07 after the invite build): Discover = 20 newest ACTIVE public (ends age out instantly; volume crowd-out, no pagination), Suggested = top 4 of same list; clubChallenges query IGNORES visibility (private club = all-members-only); friendsInChallenges explicitly public-only but not end-date-filtered. PRIVATE SOLO is now ACCESS-CONTROLLED (join gate + leaderboard scoping + zero-leak on mgmt routes — see invites topic); the old invite dead-end is FIXED (notification Join pill + With-friends tab). Solo challenges still have NO delete/retract path (all mgmt routes require club manager; applies to public solo too — accidental public solo sits in Discover until end_date). Public CLUB challenges are platform-wide joinable (Pro-EXEMPT while solo public needs Pro) and outside joiners flow into club milestones/rollups; coach post-to-feed publishes the title as a regular post beyond the club.

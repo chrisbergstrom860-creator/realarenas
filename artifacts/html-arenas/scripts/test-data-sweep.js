@@ -42,10 +42,11 @@ const USER_REFS = [
   ['goals', 'user_id'], ['achievements', 'user_id'], ['planned_sessions', 'user_id'],
   ['profiles', 'id'], ['events', 'created_by'], ['challenges', 'created_by'],
   ['club_invites', 'invited_by'],
+  ['challenge_invites', 'invitee_id'], ['challenge_invites', 'inviter_id'],
 ];
 // Tables without an `id` PK — deletions match on their composite ref columns only
 // (never on full rows: null-valued columns would become eq.null and match nothing).
-const COMPOSITE_KEYS = { follows: ['follower_id', 'following_id'], post_likes: ['post_id', 'user_id'], activity_likes: ['activity_id', 'user_id'] };
+const COMPOSITE_KEYS = { follows: ['follower_id', 'following_id'], post_likes: ['post_id', 'user_id'], activity_likes: ['activity_id', 'user_id'], challenge_invites: ['challenge_id', 'invitee_id'] };
 
 let failures = 0;
 function checkErr(label, error) {
