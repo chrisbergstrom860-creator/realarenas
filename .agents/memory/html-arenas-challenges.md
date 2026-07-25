@@ -134,12 +134,16 @@ honest empty/zero states):
 - Your streak → `currentStreak`/`longestStreak` + `weekGrid`; month label is the
   real current month (client `toLocaleString`).
 
-**Dead trap (pre-existing, unreachable — safe to delete someday):** a legacy
-top-level `renderDiscover` + `discoverChallenges` + `modalData` (fabricated
-`pts:150` etc.) + `openDetailModal`/detail-modal still exist, but
-`window.renderDiscover =` overwrites the legacy global binding before any call, so
-the real `buildChallengeCard` renders instead and `modalData` never shows
-(`openDetailModal` with a real UUID bails on `if (!d) return`). Not visible now.
+**Legacy prototype blob DELETED (2026-07-25):** the static `#detail-modal`
+markup, `discoverChallenges`/`joinedDiscover`, legacy `renderDiscover`,
+`joinDiscover`, `modalData`, `openDetailModal`/`openModal`/`closeDetailModal`,
+and the prototype `leaveChallenge(btn)` stub are gone. What REMAINS by design:
+a tiny top-level `renderDiscover()` fallback stub that renders an honest
+"Challenges unavailable" empty state — `setTab`/`setFilter` call bare
+`renderDiscover()`, and on degraded pages (ARENAS_DATA missing) the real
+`window.renderDiscover` is never defined, so deleting the stub reintroduces a
+click-time ReferenceError. The data script's `window.renderDiscover =`
+override replaces the stub at parse time on healthy loads.
 
 ## Tab-panel flex direction + gap (layout gotcha)
 
@@ -164,6 +168,6 @@ so its `flex-direction` is inert until the tab is clicked.
   `.not('id','in','(...)')`, applied ONLY when the exclude list is non-empty
   (an empty `.not(...in...)` errors). **Why:** a created challenge was leaking
   into Discover because the public query didn't exclude the user's own.
-- Completed-tab stats: the fiction squares (hardcoded 7/3,250/57%) are DELETED; the one real stat (completed count) renders as a compact header sharing the tab badge's single isDone computation. Rules: any completed-count surface must reuse that one source; "points earned from challenges" is a double-counting trap (points are activity-derived, challenges award nothing); no win/podium stat without a rank-at-completion snapshot (next bullet). Legacy demo-modal blob still holds prototype rank/points fiction — dead code today, neutralize before ever re-enabling that modal.
+- Completed-tab stats: the fiction squares (hardcoded 7/3,250/57%) are DELETED; the one real stat (completed count) renders as a compact header sharing the tab badge's single isDone computation. Rules: any completed-count surface must reuse that one source; "points earned from challenges" is a double-counting trap (points are activity-derived, challenges award nothing); no win/podium stat without a rank-at-completion snapshot (next bullet). (The legacy demo-modal blob that held prototype rank/points fiction was deleted 2026-07-25.)
 - Rank-at-completion SNAPSHOT (freeze final standings when a challenge ends) is the prerequisite for any honest podium/win-rate stat — and would also stabilize ended-challenge leaderboards, which today recompute from live activities and shift under post-hoc edits. The wire path if competition stats are ever wanted; until then, no win-rate UI.
 - Visibility semantics (re-audited 2026-07 after the invite build): Discover = 20 newest ACTIVE public (ends age out instantly; volume crowd-out, no pagination), Suggested = top 4 of same list; clubChallenges query IGNORES visibility (private club = all-members-only); friendsInChallenges explicitly public-only but not end-date-filtered. PRIVATE SOLO is now ACCESS-CONTROLLED (join gate + leaderboard scoping + zero-leak on mgmt routes — see invites topic); the old invite dead-end is FIXED (notification Join pill + With-friends tab). Solo challenges still have NO delete/retract path (all mgmt routes require club manager; applies to public solo too — accidental public solo sits in Discover until end_date). Public CLUB challenges are platform-wide joinable (Pro-EXEMPT while solo public needs Pro) and outside joiners flow into club milestones/rollups; coach post-to-feed publishes the title as a regular post beyond the club.

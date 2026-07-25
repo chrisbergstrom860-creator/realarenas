@@ -4017,12 +4017,15 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
     let receivedInviteRows = [];
     try {
       const { data: invRows, error: invErr } = await supabaseAdmin
-        .from('challenge_invites').select('challenge_id, inviter_id')
+        .from('challenge_invites').select('challenge_id, invitee_id, inviter_id')
         .eq('invitee_id', userId);
       if (!invErr) receivedInviteRows = invRows || [];
     } catch (e) { /* degrade to none */ }
-    const pendingInviteRows = receivedInviteRows.filter(
-      (r) => !myIds.includes(r.challenge_id) && !createdIds.has(r.challenge_id)
+    // Dropping self-created ids is input sanity (self-invites don't exist);
+    // the pending verdict itself comes from the ONE shared pendingInvites rule.
+    const pendingInviteRows = pendingInvites(
+      receivedInviteRows.filter((r) => !createdIds.has(r.challenge_id)),
+      myIds.map((id) => ({ challenge_id: id, user_id: userId }))
     );
     // Only live private solo challenges — an ended or malformed invite target
     // must not surface as an actionable invitation.
@@ -4074,11 +4077,8 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
           .from('challenge_invites').select('challenge_id, invitee_id')
           .in('challenge_id', ownedPrivateIds);
         if (!sentErr) {
-          const partSet = new Set((allParticipants || []).map((p) => p.challenge_id + ':' + p.user_id));
-          (sentRows || []).forEach((r) => {
-            if (!partSet.has(r.challenge_id + ':' + r.invitee_id)) {
-              pendingCountByChallenge[r.challenge_id] = (pendingCountByChallenge[r.challenge_id] || 0) + 1;
-            }
+          pendingInvites(sentRows, allParticipants || []).forEach((r) => {
+            pendingCountByChallenge[r.challenge_id] = (pendingCountByChallenge[r.challenge_id] || 0) + 1;
           });
         }
       } catch (e) { /* degrade to no counts */ }
@@ -4413,12 +4413,14 @@ app.get(BASE + '/api/challenges/:id/invites', requireAuth, async (req, res) => {
   if (!ch || ch.created_by !== req.user.id) return res.json({ error: 'Challenge not found' });
   try {
     const [invitesResult, partsResult] = await Promise.all([
-      supabaseAdmin.from('challenge_invites').select('invitee_id, created_at').eq('challenge_id', ch.id),
-      supabaseAdmin.from('challenge_participants').select('user_id').eq('challenge_id', ch.id)
+      supabaseAdmin.from('challenge_invites').select('challenge_id, invitee_id, created_at').eq('challenge_id', ch.id),
+      supabaseAdmin.from('challenge_participants').select('challenge_id, user_id').eq('challenge_id', ch.id)
     ]);
     if (invitesResult.error) return res.json({ error: 'invites_unavailable' });
     const joined = new Set((partsResult.data || []).map((p) => p.user_id));
-    const pendingRows = (invitesResult.data || []).filter((r) => !joined.has(r.invitee_id));
+    // Pending verdict comes from the ONE shared pendingInvites rule — never
+    // re-derived inline (this route was the last inline copy).
+    const pendingRows = pendingInvites(invitesResult.data || [], partsResult.data || []);
     const map = await buildUserDisplayMap(pendingRows.map((r) => r.invitee_id));
     res.json({
       pending: pendingRows.map((r) => ({
@@ -4440,7 +4442,10 @@ app.get(BASE + '/api/challenges/:id/invites', requireAuth, async (req, res) => {
 // cap, record + notification rails as create-time invites).
 app.post(BASE + '/api/challenges/:id/invites', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
-  const userIds = Array.isArray((req.body || {}).userIds) ? req.body.userIds : [];
+  // Canonical body key: `invitees` — same key as create-time invites. (Aligned
+  // 2026-07: the old create=`invitees` / invite-more=`userIds` mismatch caused
+  // a batch of false test failures for one concept in one feature.)
+  const invitees = Array.isArray((req.body || {}).invitees) ? req.body.invitees : [];
   const { data: ch } = await supabaseAdmin
     .from('challenges').select('id, title, created_by, club_id, visibility, end_date, goal_target, goal_unit, goal_type')
     .eq('id', req.params.id).maybeSingle();
@@ -4450,7 +4455,7 @@ app.post(BASE + '/api/challenges/:id/invites', requireAuth, async (req, res) => 
   const { data: followRows } = await supabaseAdmin
     .from('follows').select('follower_id').eq('following_id', req.user.id);
   const followerSet = new Set((followRows || []).map((f) => f.follower_id));
-  const valid = [...new Set(userIds)]
+  const valid = [...new Set(invitees)]
     .filter((id) => id && typeof id === 'string' && followerSet.has(id) && id !== req.user.id)
     .slice(0, 50);
   if (!valid.length) return res.json({ error: 'No valid followers to invite' });
@@ -9336,6 +9341,18 @@ async function attachInviteState(notifications, userId) {
 //   'gone'    → muted label          (challenge itself deleted)
 // A failed INVITE lookup attaches no pending/revoked verdict (plain row) —
 // degradation must never claim 'revoked' when it can't prove the row is gone.
+// THE pending rule — single source. Invite rows are RETAINED on accept, so:
+// pending = invite row exists ∧ invitee is NOT a participant of that challenge.
+// Every surface needing pending-ness must call this helper — never re-derive
+// it inline ("identical" inline copies drift; computeStreaks was five copies).
+// inviteRows: [{ challenge_id, invitee_id, ... }]
+// participantPairs: [{ challenge_id, user_id }]
+// Returns the pending subset of inviteRows.
+function pendingInvites(inviteRows, participantPairs) {
+  const partSet = new Set((participantPairs || []).map((p) => p.challenge_id + ':' + p.user_id));
+  return (inviteRows || []).filter((r) => !partSet.has(r.challenge_id + ':' + r.invitee_id));
+}
+
 async function attachChallengeInviteState(notifications, userId) {
   try {
     const chNotifs = notifications.filter(n => n.type === 'challenge_invite' && n.entity_id);
@@ -9351,14 +9368,18 @@ async function attachChallengeInviteState(notifications, userId) {
     (chResult.data || []).forEach(c => { chById[c.id] = c; });
     const joined = new Set((partResult.data || []).map(p => p.challenge_id));
     const inviteLookupOk = !invResult.error;
-    const invitedSet = new Set((invResult.data || []).map(r => r.challenge_id));
+    // Same shared rule as the challenges API: pending = row ∧ not participant.
+    const pendingSet = new Set(pendingInvites(
+      (invResult.data || []).map(r => ({ challenge_id: r.challenge_id, invitee_id: userId })),
+      (partResult.data || []).map(p => ({ challenge_id: p.challenge_id, user_id: userId }))
+    ).map(r => r.challenge_id));
     chNotifs.forEach(n => {
       if (joined.has(n.entity_id)) { n.challengeInviteState = 'joined'; return; }
       const ch = chById[n.entity_id];
       if (!ch) { n.challengeInviteState = 'gone'; return; }
       if (ch.end_date && new Date(ch.end_date).getTime() < Date.now()) { n.challengeInviteState = 'ended'; return; }
       if (!inviteLookupOk) return; // can't prove pending vs revoked — plain row
-      n.challengeInviteState = invitedSet.has(n.entity_id) ? 'pending' : 'revoked';
+      n.challengeInviteState = pendingSet.has(n.entity_id) ? 'pending' : 'revoked';
     });
   } catch (err) {
     console.log('Challenge-invite state enrich error:', err.message);

@@ -12,17 +12,21 @@ with no policies (service-role only). **NO status column — state is DERIVED.**
 
 ## Core rules
 - **Invite basis = FOLLOWERS of the creator** (opted-in audience), validated
-  server-side on BOTH create (`invitees` body key) and invite-more (`userIds`
-  body key — the two routes deliberately use different client contracts; don't
-  "align" one without changing its caller). Cap 50, no self-invite; all three
-  invite routes (GET list / POST send / DELETE revoke) are creator-only.
-  Invitees are only accepted for private solo creates.
-- **Row RETAINED on accept**: pending = row exists ∧ NOT participant, computed
-  identically in the With-friends tab data, owner pending counts, and
-  notification enrich (`attachChallengeInviteState`: joined→gone→ended→pending;
-  lookup failure = NO verdict, plain row). Retention enables leave→rejoin
-  self-heal. **Why:** a status column would need syncing on every join/leave;
-  derivation cannot drift.
+  server-side on BOTH create and invite-more. **Canonical body key = `invitees`
+  on both routes** (aligned 2026-07-25; the old create=`invitees` /
+  invite-more=`userIds` split caused false test failures — never reintroduce a
+  second key for the same concept). Cap 50, no self-invite; all three invite
+  routes (GET list / POST send / DELETE revoke) are creator-only. Invitees are
+  only accepted for private solo creates.
+- **Row RETAINED on accept**: pending = row exists ∧ NOT participant. The
+  verdict comes from ONE shared server helper `pendingInvites(inviteRows,
+  participantPairs)` (rows need challenge_id+invitee_id, pairs
+  challenge_id+user_id) used by all four surfaces: With-friends rails, owner
+  pending counts, notification enrich (`attachChallengeInviteState`:
+  joined→gone→ended→pending; lookup failure = NO verdict, plain row), and the
+  manage-invites list route. **Never re-derive it inline.** Retention enables
+  leave→rejoin self-heal. **Why:** a status column would need syncing on every
+  join/leave; derivation cannot drift — but inline copies of the derivation do.
 - **Revoke = row delete**; old notifications degrade server-side to a muted
   "Invite revoked". Reinvite after revoke = fresh row + fresh notification;
   re-send while still pending = upsert no-op with NO duplicate notification.
@@ -34,11 +38,12 @@ with no policies (service-role only). **NO status column — state is DERIVED.**
   no invite data; create → `inviteWarning:'invites_unavailable'` + ZERO
   notifications (no record ⇒ no notification); enrich → plain rows; account
   danger zone tolerates ONLY table-missing errors.
-- **Account deletion**: no FKs to auth.users anywhere (app-level teardown
-  pattern) — invitee-side rows are deleted explicitly in /api/account/delete;
-  inviter-side rows die via the challenge cascade (inviter is always the
-  creator; both invite routes are creator-gated). Proven by live-deleting a
-  seeded invitee: zero residue both directions.
+- **Account deletion — BOTH sides proven live** (2026-07-25): invitee-side
+  rows are deleted explicitly in /api/account/delete; inviter-side, the
+  creator's challenges are HARD-DELETED (participants explicitly, invite rows
+  via the challenge_id FK cascade, invite notifications via the actor_id
+  sweep) — nothing orphaned or anonymized, invitees see no ghost invitation.
+  No FKs to auth.users anywhere (app-level teardown pattern).
 - Notification pill (arenas-notifications-panel.js): pending → yellow Join
   pill (entity_id passes a strict UUID regex before being embedded in
   onclick), joined → muted "✓ Joined", ended/revoked/gone → muted labels. ONLY

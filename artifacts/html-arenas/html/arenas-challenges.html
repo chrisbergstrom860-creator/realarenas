@@ -484,34 +484,8 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
      has been deleted, per the project rule that mock chrome is removed, not
      hidden. -->
 
-<!-- CHALLENGE DETAIL MODAL -->
-<div class="modal-overlay" id="detail-modal" onclick="closeDetailModal(event)">
-  <div class="modal" id="detail-modal-content">
-    <div class="modal-header">
-      <div>
-        <div id="dm-tags" style="display:flex;gap:6px;margin-bottom:8px"></div>
-        <div id="dm-name" style="font-size:20px;font-weight:700;color:var(--gray-900);letter-spacing:-0.01em"></div>
-        <div id="dm-sub" style="font-size:13px;color:var(--gray-500);margin-top:3px"></div>
-      </div>
-      <button class="modal-close" onclick="closeDetailModal()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div id="dm-progress-section"></div>
-      <div>
-        <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--gray-500);margin-bottom:10px">Challenge details</div>
-        <div class="modal-detail-grid" id="dm-details"></div>
-      </div>
-      <div>
-        <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.07em;color:var(--gray-500);margin-bottom:8px">Description</div>
-        <p id="dm-desc" style="font-size:14px;color:var(--gray-600);line-height:1.65"></p>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-yellow" style="flex:1;justify-content:center" id="dm-join-btn">+ Join challenge</button>
-      <button class="btn btn-ghost" onclick="closeDetailModal()">Close</button>
-    </div>
-  </div>
-</div>
+<!-- Legacy prototype detail modal DELETED (2026-07) — only the deleted
+     prototype discover cards opened it; real cards act inline. -->
 
 <div class="toast" id="toast"></div>
 
@@ -529,70 +503,19 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 
 <script>
 // ── DATA ──
-// Prototype discover data removed — the real public-challenge list comes from
-// GET /api/challenges via window.renderDiscover() in the data script below.
-// Kept as an empty array so the legacy renderer (used only as a fallback if
-// ARENAS_DATA is ever missing) renders an empty state, never fabricated cards.
-const discoverChallenges = [];
-
-let joinedDiscover = new Set();
-
-function renderDiscover(filter='all', typeFilter='all') {
+// Legacy prototype discover renderer + fabricated data DELETED (2026-07).
+// The live renderer is window.renderDiscover in the data script below (real
+// data from GET /api/challenges); it replaces this fallback at parse time.
+// This stub only runs in degraded mode (ARENAS_DATA missing on a server-error
+// page) so Discover/filter clicks never throw ReferenceError — it renders an
+// honest empty state, never fabricated cards.
+function renderDiscover() {
   const grid = document.getElementById('discover-grid');
-  let items = discoverChallenges;
-  if (filter !== 'all') items = items.filter(c => c.sport === filter);
-  if (typeFilter !== 'all') items = items.filter(c => c.type === typeFilter);
-
-  const tagClass = { run:'tag-run', cyc:'tag-cyc', clm:'tag-clm', com:'tag-com', solo:'tag-solo' };
-  grid.innerHTML = items.map(c => `
-    <div class="ch-card fade-in" onclick="openDetailModal('${c.id}')">
-      <div class="ch-head">
-        <div class="ch-sport-icon" style="background:${c.iconBg}">${c.icon}</div>
-        <div class="ch-info">
-          <div class="ch-name">${c.name}</div>
-          <div class="ch-sub">${c.sub}</div>
-          <div class="ch-tags">
-            ${c.tags.map((t,i) => `<span class="tag ${tagClass[t]||'tag-solo'}">${c.tagLabels[i]}</span>`).join('')}
-            <span class="tag tag-pts">+${c.pts} pts</span>
-            ${joinedDiscover.has(c.id)?'<span class="tag tag-com">✓ Joined</span>':'<span class="tag tag-new">New</span>'}
-          </div>
-        </div>
-      </div>
-      <div class="ch-desc-wrap"><div class="ch-desc">${c.desc}</div></div>
-      <div class="ch-footer">
-        <div class="ch-footer-left">
-          <span class="att-count" style="font-size:12px;color:var(--gray-500)">${c.joined.toLocaleString()} joined · ${c.start}</span>
-        </div>
-        <div class="ch-footer-right">
-          <button class="join-btn ${joinedDiscover.has(c.id)?'joined':''}" onclick="event.stopPropagation();joinDiscover(this,'${c.id}')">${joinedDiscover.has(c.id)?'✓ Joined':'+ Join'}</button>
-        </div>
-      </div>
-    </div>
-  `).join('');
-
-  if (items.length === 0) {
-    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
-      <div class="empty-icon">🔍</div>
-      <h3>No challenges found</h3>
-      <p>Try a different sport or type filter, or create your own challenge.</p>
-      <button class="btn btn-primary" onclick="openCreateModal()">+ Create one</button>
-    </div>`;
-  }
-}
-
-function joinDiscover(btn, id) {
-  if (joinedDiscover.has(id)) {
-    joinedDiscover.delete(id);
-    btn.textContent = '+ Join';
-    btn.classList.remove('joined');
-    showToast('Removed from your challenges');
-  } else {
-    joinedDiscover.add(id);
-    btn.textContent = '✓ Joined';
-    btn.classList.add('joined');
-    showToast('🎉 Challenge joined! It\'s now in My Challenges');
-  }
-  renderDiscover(currentSportFilter, currentTypeFilter);
+  if (grid) grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+    <div class="empty-icon">⚠️</div>
+    <h3>Challenges unavailable</h3>
+    <p>We couldn't load challenge data. Refresh the page to try again.</p>
+  </div>`;
 }
 
 // ── TABS ──
@@ -628,48 +551,16 @@ function setFilter(el, kind, val) {
 }
 
 // ── DETAIL MODAL ──
-const modalData = {
-  'run100': { name:'100km May Run', sub:'Running · Distance challenge · Community · May 2026', tags:['Running','Community'], pts:500, details:{ Target:'100 km', Sport:'Running', Type:'Community', Ends:'May 31, 2026', Joined:'44 athletes', Points:'+500 pts' }, desc:'Run 100km in the month of May. All running activities count — road, trail, treadmill. Log your runs to take part. The community celebrates every milestone.', joined:true },
-  'cyc100': { name:'Cycling Century', sub:'Cycling · Distance · Solo · May 2026', tags:['Cycling','Solo'], pts:350, details:{ Target:'100 miles', Sport:'Cycling', Type:'Solo', Ends:'May 31, 2026', Progress:'88 / 100 mi', Points:'+350 pts' }, desc:'Ride 100 miles in a single calendar month. Indoor and outdoor rides both count. One of the most popular solo milestones on Arenas.', joined:true },
-  'clm5': { name:'V6+ send streak', sub:'Climbing · Session streak · Solo · Ongoing', tags:['Climbing','Solo'], pts:200, details:{ Target:'5 sessions', Sport:'Climbing', Type:'Solo', Ends:'Ongoing', Progress:'3 / 5 sessions', Points:'+200 pts' }, desc:'Send at least one V6 or harder problem in 5 separate climbing sessions. Designed to push your grade ceiling progressively.', joined:true },
-  'h2h1': { name:'Jamie vs Tom — weekly km', sub:'Running · Head-to-head · Resets Monday', tags:['Running','Head-to-head'], pts:150, details:{ Format:'Head-to-head', Sport:'Running', Resets:'Every Monday', Status:'You lead +3.5 km', Duration:'Weekly', Points:'+150 pts' }, desc:'Weekly distance head-to-head between you and Tom R. Whoever logs more running kilometres by Sunday midnight wins the week and collects the points.', joined:true },
-  'run100-apr': { name:'100km April Run', sub:'Running · Completed Apr 28, 2026', tags:['Running','Completed'], pts:500, details:{ Result:'✓ Completed', Rank:'#2 of 38', Distance:'106.2 km', Finished:'Apr 28, 2026', Points:'+500 pts earned', Medal:'🥇 Gold' }, desc:'Ran 100km across April. Finished 2nd overall, averaging 3.5km/day. Strongest week was Apr 14–20 with 28km logged.', joined:false },
-};
-
-function openDetailModal(id) {
-  const d = modalData[id];
-  if (!d) return;
-  const tagClass = { Running:'tag-run', Cycling:'tag-cyc', Climbing:'tag-clm', Community:'tag-com', Solo:'tag-solo', 'Head-to-head':'tag-h2h', Completed:'tag-solo' };
-  document.getElementById('dm-tags').innerHTML = d.tags.map(t => `<span class="tag ${tagClass[t]||'tag-solo'}">${t}</span>`).join('') + `<span class="tag tag-pts">+${d.pts} pts</span>`;
-  document.getElementById('dm-name').textContent = d.name;
-  document.getElementById('dm-sub').textContent = d.sub;
-  document.getElementById('dm-details').innerHTML = Object.entries(d.details).map(([k,v]) => `<div class="modal-detail"><div class="lbl">${k}</div><div class="val">${v}</div></div>`).join('');
-  document.getElementById('dm-desc').textContent = d.desc;
-  const jb = document.getElementById('dm-join-btn');
-  jb.textContent = d.joined ? '✓ Already joined' : '+ Join challenge';
-  jb.className = d.joined ? 'btn btn-ghost' : 'btn btn-yellow';
-  jb.style.flex = '1';
-  jb.style.justifyContent = 'center';
-  document.getElementById('detail-modal').classList.add('open');
-}
-
-function openModal(id) { openDetailModal(id); }
-
-function closeDetailModal(e) {
-  if (!e || e.target === document.getElementById('detail-modal')) {
-    document.getElementById('detail-modal').classList.remove('open');
-  }
-}
+// Legacy modalData / openDetailModal / openModal / closeDetailModal DELETED
+// (2026-07) with their static #detail-modal markup — only the deleted
+// prototype discover cards ever referenced them.
 
 // ── CREATE MODAL ──
 // Prototype handlers deleted along with the static create-modal markup; the
 // real openCreateModal/submitCreateChallenge live in the data script below.
 
-function leaveChallenge(btn) {
-  btn.textContent = '+ Join';
-  btn.classList.remove('leave');
-  showToast('Left challenge — you can rejoin anytime');
-}
+// (Prototype leaveChallenge(btn) stub deleted — same dead-chrome rule. The
+// real async window.leaveChallenge(id, btn) is defined in the data script.)
 
 function showToast(msg) {
   const t = document.getElementById('toast');
@@ -1458,15 +1349,15 @@ function showToast(msg) {
   };
 
   window.sendMoreInvites = async function (id) {
-    const userIds = [...document.querySelectorAll('#mi-invite-list .mi-inv-cb:checked')].map(cb => cb.value);
-    if (!userIds.length) { showToast('Select at least one follower to invite'); return; }
+    const invitees = [...document.querySelectorAll('#mi-invite-list .mi-inv-cb:checked')].map(cb => cb.value);
+    if (!invitees.length) { showToast('Select at least one follower to invite'); return; }
     const btn = document.getElementById('mi-send-btn');
     if (btn) { btn.textContent = 'Sending…'; btn.disabled = true; }
     try {
       const res = await fetch(B + '/api/challenges/' + id + '/invites', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userIds })
+        body: JSON.stringify({ invitees })
       });
       const result = await res.json();
       if (result.error) {

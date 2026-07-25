@@ -66,30 +66,9 @@ async function staticChecks() {
   check('null → 0', parseKm(null) === 0);
 }
 
-async function realAccountCheck() {
-  console.log('— real account recompute —');
-  const { data, error } = await admin
-    .from('activities')
-    .select('sport, distance, date')
-    .eq('user_id', '4e3cd18f-2c09-4ce9-ada1-67fbe725fcd4');
-  if (error) { check('fetch real account activities', false, error.message); return; }
-  const acts = data || [];
-  const unitAware = round1(acts.reduce((s, a) => s + parseKm(a.distance), 0));
-  const unitBlind = Math.round(acts.reduce((s, a) => {
-    const n = parseFloat(String(a.distance == null ? '0' : a.distance).replace(/[^0-9.]/g, ''));
-    return s + (isNaN(n) ? 0 : n);
-  }, 0));
-  console.log('      activities=' + acts.length + '  unit-aware=' + unitAware + '  legacy-unit-blind=' + unitBlind);
-  // HISTORICAL FORENSICS — informational only, deliberately non-failing.
-  // At fix time this live account reproduced the original bug report exactly
-  // (unit-blind 47 vs unit-aware hero 69.5), proving the discrepancy WAS the
-  // unit-blind parser. The account keeps logging real activities, so those
-  // snapshots drift and can never match again; pinning them made the guard
-  // fail forever (first seen 2026-07-25: 17 activities, 87.2 vs 58). The
-  // enforcing sections are the static parser pins above and the seeded
-  // mixed-unit e2e below, which assert current behavior on controlled data.
-  console.log('      (historical 47/69.5 fixture retired — values above are informational)');
-}
+// (A "real account recompute" forensic section was deleted 2026-07-25: it
+// pinned live-account snapshots that drift by design and only added noise.
+// Never assert on live data here — the seeded e2e below is the guard.)
 
 async function e2eSeededUser() {
   console.log('— e2e: seeded mixed-unit user —');
@@ -169,7 +148,6 @@ async function e2eSeededUser() {
 
 (async () => {
   await staticChecks();
-  await realAccountCheck();
   await e2eSeededUser();
   console.log(failures === 0 ? '\nAll checks passed.' : '\n' + failures + ' CHECK(S) FAILED');
   process.exit(failures === 0 ? 0 : 1);

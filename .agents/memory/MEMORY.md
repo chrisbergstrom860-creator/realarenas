@@ -11,7 +11,7 @@
 - [html-arenas events](html-arenas-events.md) — events/RSVP feature: club-scoped writes need membership gate; notif fan-out only on transition into "going"; events page is fully real-data-driven (mock chrome DELETED, not hidden; grid/RSVP card start empty).
 - [html-arenas activity logging](html-arenas-activities.md) — manual training log; `activities` table must be user-created via SQL (no DDL via service role); author from auth metadata; GET /api/activities/:userId is self-only (IDOR).
 - [html-arenas challenges](html-arenas-challenges.md) — private solo now GATED (join+leaderboard); coach rollup + requireChallengeManager; same-route writes need hash+reload not nav().
-- [html-arenas challenge invites](html-arenas-challenge-invites.md) — followers basis; row RETAINED on accept (pending = row ∧ ¬participant); revoke=delete w/ notif degrade; account-delete covered.
+- [html-arenas challenge invites](html-arenas-challenge-invites.md) — followers basis; ONE shared pendingInvites() rule (row ∧ ¬participant); canonical `invitees` key both routes; account-delete proven both sides.
 - [html-arenas leaderboards](html-arenas-leaderboards.md) — scoring is a SPORT_POINTS heuristic from raw activities; at-risk/nudge recomputed server-side (anti-spam); names from auth metadata; athlete scope-select = platform/following/club.
 - [html-arenas profile stats](html-arenas-profile-stats.md) — Stats&PRs: PRs/streaks/12wk-chart always all-time, only hero+sport-breakdown honor period; local-date week/month buckets; self-only IDOR rule.
 - [html-arenas reports tab](html-arenas-reports.md) — month + year club report (admin/coach); year mode = on-read YTD/same-period deltas + prevHasData gate; integer YYYY-MM nav math; paged activity fetch.
