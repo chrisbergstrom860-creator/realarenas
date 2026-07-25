@@ -38,7 +38,7 @@
     return typeof link === 'string' && /^\/(?!\/)/.test(link);
   }
   var panelOpen = false;
-  var typeIcons = { like: '👍', follow: '👤', comment: '💬', club: '🏃', challenge: '⚡', event: '🎟️', system: '✦' };
+  var typeIcons = { like: '👍', follow: '👤', comment: '💬', club: '🏃', challenge: '⚡', challenge_invite: '⚡', event: '🎟️', system: '✦' };
   var allNotifs = [];
   var showAll = false;
   var COLLAPSED = 15;
@@ -81,7 +81,7 @@
             '<div style="font-size:12px;color:var(--gray-900);line-height:1.5;margin-bottom:2px">' + esc(n.body) + '</div>' +
             '<div style="font-size:10px;color:var(--gray-400)">' + esc(timeAgo(n.created_at)) + '</div>' +
           '</div>' +
-          inviteActionHtml(n) +
+          inviteActionHtml(n) + challengeInviteActionHtml(n) +
           (!n.read ? '<div style="width:7px;height:7px;border-radius:50%;background:#FFD21E;flex-shrink:0;margin-top:5px"></div>' : '') +
         '</div>';
     }).join('');
@@ -112,6 +112,86 @@
     return '<button onclick="acceptClubInvite(event,\'' + esc(n.id) + '\',\'' + esc(m[1]) + '\')"' +
       ' style="align-self:center;flex-shrink:0;padding:5px 11px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;background:#FFD21E;color:#111827;border:1px solid #E6B800;white-space:nowrap">Join Club</button>';
   }
+
+  // ── CHALLENGE-INVITE ACTION PILL ──
+  // Challenge-invite notifications (type 'challenge_invite') carry a server-
+  // computed challengeInviteState + entity_id (the challenge id). Same honest-
+  // action grammar as club invites:
+  //   pending → solid-yellow "Join" pill (accepts inline via the SAME join
+  //             endpoint the challenges page uses — no parallel accept path)
+  //   joined  → muted "✓ Joined" pill
+  //   ended   → muted "Challenge ended" label
+  //   revoked → muted "Invite revoked" label (record deleted by the creator)
+  //   gone    → muted "No longer available" label (challenge deleted)
+  // No state (legacy type-'challenge' invites, enrich failure) → plain row.
+  // The challenge id is validated against the strict UUID shape before it is
+  // ever placed in an onclick attribute.
+  function mutedLabel(text) {
+    return '<span onclick="event.stopPropagation()" style="align-self:center;flex-shrink:0;font-size:10px;color:var(--gray-400);white-space:nowrap;cursor:default">' + text + '</span>';
+  }
+  function challengeInviteActionHtml(n) {
+    if (!n || !n.challengeInviteState) return '';
+    var st = n.challengeInviteState;
+    if (st === 'joined') return joinedPill;
+    if (st === 'ended') return mutedLabel('Challenge ended');
+    if (st === 'revoked') return mutedLabel('Invite revoked');
+    if (st === 'gone') return mutedLabel('No longer available');
+    if (st !== 'pending') return '';
+    var chId = String(n.entity_id || '');
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chId)) return '';
+    return '<button onclick="acceptChallengeInvite(event,\'' + esc(n.id) + '\',\'' + chId + '\')"' +
+      ' style="align-self:center;flex-shrink:0;padding:5px 11px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;background:#FFD21E;color:#111827;border:1px solid #E6B800;white-space:nowrap">Join</button>';
+  }
+
+  // Inline accept for challenge invites. Success flips the pill to ✓ Joined and
+  // marks the row read. Failure surfaces the server's verdict honestly: a dead
+  // invite becomes a muted "Invite revoked", an ended challenge "Challenge
+  // ended"; a Pro-gated join keeps the pill live (the challenge still exists)
+  // and just explains. Network errors restore the pill for retry.
+  window.acceptChallengeInvite = async function (ev, id, challengeId) {
+    ev.stopPropagation();
+    var btn = ev.currentTarget || ev.target;
+    btn.disabled = true;
+    btn.style.opacity = '.6';
+    btn.textContent = 'Joining…';
+    try {
+      var r = await fetch(B + '/api/challenges/' + encodeURIComponent(challengeId) + '/join', { method: 'POST' });
+      var d = null;
+      try { d = await r.json(); } catch (e) { d = null; }
+      if (r.ok && d && d.success) {
+        for (var i = 0; i < allNotifs.length; i++) {
+          if (String(allNotifs[i].id) === String(id)) { allNotifs[i].challengeInviteState = 'joined'; break; }
+        }
+        btn.outerHTML = joinedPill;
+        window.markNotificationRead(id);
+        if (typeof showToast === 'function') showToast('🎉 Challenge accepted — see it under My challenges');
+      } else {
+        var errCode = (d && d.error) || '';
+        if (errCode === 'pro_required') {
+          if (typeof showToast === 'function') showToast('Joining challenges is an Arenas Pro feature');
+          btn.disabled = false; btn.style.opacity = '1'; btn.textContent = 'Join';
+          return;
+        }
+        var ended = /has ended/i.test(errCode);
+        var msg = errCode === 'invite_required' ? 'This invite is no longer active'
+          : (ended ? 'This challenge has ended'
+            : (errCode ? errCode : 'Could not join this challenge'));
+        if (typeof showToast === 'function') showToast(msg);
+        for (var j = 0; j < allNotifs.length; j++) {
+          if (String(allNotifs[j].id) === String(id)) {
+            allNotifs[j].challengeInviteState = errCode === 'invite_required' ? 'revoked' : (ended ? 'ended' : 'gone');
+            break;
+          }
+        }
+        btn.outerHTML = mutedLabel(errCode === 'invite_required' ? 'Invite revoked' : (ended ? 'Challenge ended' : 'Unavailable'));
+        window.markNotificationRead(id);
+      }
+    } catch (e) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.textContent = 'Join';
+    }
+  };
 
   // Inline accept: joins the club without leaving the page. On success the
   // pill flips to muted "✓ Joined" (sidebar My Clubs picks the club up on the

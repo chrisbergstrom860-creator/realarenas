@@ -947,6 +947,10 @@ const NOTIF_PREF_BY_TYPE = {
   comment: 'notify_comments',
   follow: 'notify_followers',
   challenge: 'notify_challenges',
+  // Challenge invites are their own type so the notifications panel can attach
+  // a live Join-pill state to them (and ONLY them — nudges/reminders stay type
+  // 'challenge'). Same recipient toggle gates both.
+  challenge_invite: 'notify_challenges',
   event: 'notify_events'
 };
 
@@ -3980,7 +3984,7 @@ app.get(BASE + '/api/profile/overview', requireAuth, async (req, res) => {
 // `profiles` table, no FK embeds).
 app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
   if (!supabaseAdmin) {
-    return res.json({ myChallenges: [], clubChallenges: [], publicChallenges: [], myJoinedIds: [], pointsThisMonth: 0, longestStreak: 0, currentStreak: 0, pointsBySport: [], weekGrid: [], friendsInChallenges: [], followsAnyone: false });
+    return res.json({ myChallenges: [], friendsChallenges: [], publicChallenges: [], myJoinedIds: [], pointsThisMonth: 0, longestStreak: 0, currentStreak: 0, pointsBySport: [], weekGrid: [], friendsInChallenges: [], followsAnyone: false });
   }
   const userId = req.user.id;
   const PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
@@ -3988,10 +3992,6 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
     const { data: myParticipations } = await supabaseAdmin
       .from('challenge_participants').select('challenge_id').eq('user_id', userId);
     const myIds = [...new Set((myParticipations || []).map((p) => p.challenge_id).filter(Boolean))];
-
-    const { data: memberships } = await supabaseAdmin
-      .from('memberships').select('club_id').eq('user_id', userId);
-    const clubIds = [...new Set((memberships || []).map((m) => m.club_id).filter(Boolean))];
 
     // My challenges = ones I created + ones I joined. Split into two queries to
     // sidestep Supabase .or() quirks with UUID id.in lists.
@@ -4011,10 +4011,31 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
     }
     const myChallenges = [...(createdChallenges || []), ...joinedChallenges];
 
-    const { data: clubChallenges } = await supabaseAdmin
-      .from('challenges').select('*')
-      .in('club_id', clubIds.length ? clubIds : [PLACEHOLDER])
-      .order('created_at', { ascending: false });
+    // Pending invites RECEIVED by the viewer (the real private-challenge rails).
+    // Any lookup failure (e.g. the challenge_invites table not provisioned yet)
+    // degrades to "no invites" — never a 500, never fabricated state.
+    let receivedInviteRows = [];
+    try {
+      const { data: invRows, error: invErr } = await supabaseAdmin
+        .from('challenge_invites').select('challenge_id, inviter_id')
+        .eq('invitee_id', userId);
+      if (!invErr) receivedInviteRows = invRows || [];
+    } catch (e) { /* degrade to none */ }
+    const pendingInviteRows = receivedInviteRows.filter(
+      (r) => !myIds.includes(r.challenge_id) && !createdIds.has(r.challenge_id)
+    );
+    // Only live private solo challenges — an ended or malformed invite target
+    // must not surface as an actionable invitation.
+    let invitedChallenges = [];
+    if (pendingInviteRows.length) {
+      const { data } = await supabaseAdmin
+        .from('challenges').select('*')
+        .in('id', [...new Set(pendingInviteRows.map((r) => r.challenge_id))])
+        .eq('visibility', 'private').is('club_id', null)
+        .gt('end_date', new Date().toISOString())
+        .order('created_at', { ascending: false });
+      invitedChallenges = data || [];
+    }
 
     // Discover = public, non-expired challenges the user neither created nor
     // joined. Skip the .not() filter entirely when there's nothing to exclude.
@@ -4032,7 +4053,7 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
     // De-duplicate the full set so we only look up each challenge once.
     const allChallenges = [];
     const seen = new Set();
-    [myChallenges || [], clubChallenges || [], publicChallenges || []].forEach((list) => {
+    [myChallenges || [], invitedChallenges || [], publicChallenges || []].forEach((list) => {
       list.forEach((c) => { if (!seen.has(c.id)) { seen.add(c.id); allChallenges.push(c); } });
     });
     const allIds = allChallenges.map((c) => c.id);
@@ -4040,6 +4061,28 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
     const { data: allParticipants } = await supabaseAdmin
       .from('challenge_participants').select('challenge_id, user_id')
       .in('challenge_id', allIds.length ? allIds : [PLACEHOLDER]);
+
+    // Pending-invite counts for private solo challenges the viewer created —
+    // powers the owner's "Invites · N pending" affordance. Error-tolerant:
+    // before the invites table exists this stays empty (chip simply absent).
+    const ownedPrivateIds = (createdChallenges || [])
+      .filter((c) => c.visibility === 'private' && !c.club_id).map((c) => c.id);
+    const pendingCountByChallenge = {};
+    if (ownedPrivateIds.length) {
+      try {
+        const { data: sentRows, error: sentErr } = await supabaseAdmin
+          .from('challenge_invites').select('challenge_id, invitee_id')
+          .in('challenge_id', ownedPrivateIds);
+        if (!sentErr) {
+          const partSet = new Set((allParticipants || []).map((p) => p.challenge_id + ':' + p.user_id));
+          (sentRows || []).forEach((r) => {
+            if (!partSet.has(r.challenge_id + ':' + r.invitee_id)) {
+              pendingCountByChallenge[r.challenge_id] = (pendingCountByChallenge[r.challenge_id] || 0) + 1;
+            }
+          });
+        }
+      } catch (e) { /* degrade to no counts */ }
+    }
 
     // Progress for each challenge the user has joined — the viewer's own
     // activities, cut to their local challenge window (boundary policy).
@@ -4058,7 +4101,10 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
     }
 
     // Creator display names (auth metadata) and club names (clubs table).
-    const creatorMap = await buildUserDisplayMap(allChallenges.map((c) => c.created_by));
+    const creatorMap = await buildUserDisplayMap([
+      ...allChallenges.map((c) => c.created_by),
+      ...pendingInviteRows.map((r) => r.inviter_id)
+    ]);
     const challengeClubIds = [...new Set(allChallenges.map((c) => c.club_id).filter(Boolean))];
     const clubNameMap = {};
     if (challengeClubIds.length) {
@@ -4086,9 +4132,27 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
         isComplete: goalTarget > 0 && progress >= goalTarget,
         isOwner: c.created_by === userId,
         creator: creatorMap[c.created_by] || null,
-        clubName: c.club_id ? (clubNameMap[c.club_id] || null) : null
+        clubName: c.club_id ? (clubNameMap[c.club_id] || null) : null,
+        // Owner-only affordance data; 0/absent for everyone else.
+        pendingInvites: c.created_by === userId ? (pendingCountByChallenge[c.id] || 0) : 0
       };
     });
+
+    // "With friends" = the viewer's private social scope: challenges they were
+    // invited to (pending, actionable) + every ACTIVE private solo challenge
+    // they created or joined. Ended ones live in Completed via myChallenges.
+    const inviterByChallenge = {};
+    pendingInviteRows.forEach((r) => { inviterByChallenge[r.challenge_id] = r.inviter_id; });
+    const friendsChallenges = [
+      ...enrich(invitedChallenges).map((c) => ({
+        ...c,
+        myInviteState: 'invited',
+        inviterName: ((creatorMap[inviterByChallenge[c.id]] || creatorMap[c.created_by] || {}).name) || null
+      })),
+      ...enrich(myChallenges.filter(
+        (c) => c.visibility === 'private' && !c.club_id && new Date(c.end_date).getTime() > now
+      ))
+    ];
 
     // ── Header + sidebar stats for the signed-in user (real data, same load) ──
     // Best-effort: a failure here must never break the challenges payload, so it
@@ -4171,7 +4235,7 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
 
     res.json({
       myChallenges: enrich(myChallenges),
-      clubChallenges: enrich(clubChallenges),
+      friendsChallenges,
       publicChallenges: enrich(publicChallenges),
       myJoinedIds: myIds,
       pointsThisMonth,
@@ -4240,43 +4304,82 @@ app.post(BASE + '/api/challenges/create', requireAuth, async (req, res) => {
   if (error) return res.json({ error: error.message });
   // Auto-join the creator (best-effort).
   await supabaseAdmin.from('challenge_participants').insert({ challenge_id: challenge.id, user_id: req.user.id });
-  // Restrict invites to users the caller actually follows (the modal only offers
-  // those) and cap the count, so the endpoint can't be used to spam arbitrary
-  // user IDs with notifications.
-  let validInvitees = [];
-  if (Array.isArray(invitees) && invitees.length) {
-    const { data: follows } = await supabaseAdmin
-      .from('follows').select('following_id').eq('follower_id', req.user.id);
-    const followingSet = new Set((follows || []).map((f) => f.following_id));
-    validInvitees = [...new Set(invitees)].filter((id) => followingSet.has(id)).slice(0, 50);
+  // Invite rails (private solo only). Validate against the creator's FOLLOWERS —
+  // the picker offers exactly those, and followers opted in to hearing from the
+  // creator (you can't follow someone in order to invite them; THEY follow YOU).
+  // Cap 50. Each invitee gets a RECORD (which authorizes joining and drives all
+  // invite UI state) plus an actionable notification. No record ⇒ no
+  // notification: if the insert fails (e.g. challenge_invites not provisioned
+  // yet) we return an honest warning instead of recreating the old dead-end.
+  let invitedCount = 0;
+  let inviteWarning = null;
+  const isPrivateSolo = challenge.visibility === 'private' && !challenge.club_id;
+  if (isPrivateSolo && Array.isArray(invitees) && invitees.length) {
+    const { data: followRows } = await supabaseAdmin
+      .from('follows').select('follower_id').eq('following_id', req.user.id);
+    const followerSet = new Set((followRows || []).map((f) => f.follower_id));
+    const validInvitees = [...new Set(invitees)]
+      .filter((id) => id && typeof id === 'string' && followerSet.has(id) && id !== req.user.id)
+      .slice(0, 50);
+    if (validInvitees.length) {
+      const { error: invErr } = await supabaseAdmin.from('challenge_invites').insert(
+        validInvitees.map((id) => ({ challenge_id: challenge.id, invitee_id: id, inviter_id: req.user.id }))
+      );
+      if (invErr) {
+        console.log('Challenge invite insert failed (degrading):', invErr.message);
+        inviteWarning = 'invites_unavailable';
+      } else {
+        invitedCount = validInvitees.length;
+        // Actor name from auth metadata (no profiles table).
+        const actor = displayFromUser(req.user);
+        for (const inviteeId of validInvitees) {
+          await createNotification({
+            userId: inviteeId,
+            type: 'challenge_invite',
+            title: 'Challenge invite',
+            body: `${actor.name} invited you to a challenge: "${challenge.title}" — ${goal_target} ${goal_unit || ''} ${goal_type}`.replace(/\s+/g, ' ').trim(),
+            link: '/challenges#friends',
+            actorId: req.user.id,
+            entityId: challenge.id
+          });
+        }
+      }
+    }
   }
-  // Invite selected followers. Actor name from auth metadata (no profiles table).
-  const actor = displayFromUser(req.user);
-  for (const inviteeId of validInvitees) {
-    await createNotification({
-      userId: inviteeId,
-      type: 'challenge',
-      title: 'Challenge invite',
-      body: `${actor.name} invited you to join "${challenge.title}" — ${goal_target} ${goal_unit || ''} ${goal_type} challenge`.replace(/\s+/g, ' ').trim(),
-      link: '/challenges',
-      actorId: req.user.id,
-      entityId: challenge.id
-    });
-  }
-  res.json({ success: true, challenge });
+  res.json({ success: true, challenge, invitedCount, inviteWarning });
 });
 
 // Join a challenge (adds the viewer as a participant).
 app.post(BASE + '/api/challenges/:id/join', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
+  const { data: ch } = await supabaseAdmin
+    .from('challenges').select('club_id, visibility, created_by, end_date')
+    .eq('id', req.params.id).maybeSingle();
+  if (!ch) return res.json({ error: 'Challenge not found' });
+  // Private solo challenges are ACCESS-CONTROLLED, not merely unlisted: only
+  // the creator or someone holding a live invite record may join. Club and
+  // public challenges keep their existing semantics. An invite-lookup failure
+  // (e.g. table not provisioned) DENIES — obscurity is not authorization.
+  if (ch.visibility === 'private' && !ch.club_id && ch.created_by !== req.user.id) {
+    let invited = false;
+    try {
+      const { data: inv, error: invErr } = await supabaseAdmin
+        .from('challenge_invites').select('challenge_id')
+        .eq('challenge_id', req.params.id).eq('invitee_id', req.user.id).maybeSingle();
+      invited = !invErr && !!inv;
+    } catch (e) { invited = false; }
+    if (!invited) return res.status(403).json({ error: 'invite_required' });
+  }
+  // Ended challenges can't be joined — the invite pill/card degrade honestly
+  // instead of inserting a participant into a finished contest.
+  if (ch.end_date && new Date(ch.end_date).getTime() < Date.now()) {
+    return res.json({ error: 'This challenge has ended' });
+  }
   // Individual Pro gate (dormant unless PLAN_GATES_ENABLED). Joining a club's own
   // challenge is a club-scoped feature, so club challenges are exempt; only
   // individual/public challenges require Pro. Flag off => skipped entirely.
   if (PLAN_GATES_ENABLED) {
-    const { data: ch } = await supabaseAdmin
-      .from('challenges').select('club_id').eq('id', req.params.id).maybeSingle();
-    const isClubChallenge = !!(ch && ch.club_id);
-    if (!isClubChallenge && (await getUserPlan(req.user.id)) === 'free') {
+    if (!ch.club_id && (await getUserPlan(req.user.id)) === 'free') {
       return res.status(403).json({ error: 'pro_required', feature: 'challenge_join', upgrade: '/billing' });
     }
   }
@@ -4298,6 +4401,118 @@ app.delete(BASE + '/api/challenges/:id/leave', requireAuth, async (req, res) => 
   res.json({ success: true });
 });
 
+// ── Challenge invites (private solo challenges; creator-managed) ────────────
+// List invites for a challenge (creator only): who is still pending. Powers the
+// owner's Manage-invites modal. invitedIds includes joined-via-invite users so
+// the invite-more picker can exclude them.
+app.get(BASE + '/api/challenges/:id/invites', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
+  const { data: ch } = await supabaseAdmin
+    .from('challenges').select('id, created_by').eq('id', req.params.id).maybeSingle();
+  // Non-creators (including strangers probing ids) get the same "not found".
+  if (!ch || ch.created_by !== req.user.id) return res.json({ error: 'Challenge not found' });
+  try {
+    const [invitesResult, partsResult] = await Promise.all([
+      supabaseAdmin.from('challenge_invites').select('invitee_id, created_at').eq('challenge_id', ch.id),
+      supabaseAdmin.from('challenge_participants').select('user_id').eq('challenge_id', ch.id)
+    ]);
+    if (invitesResult.error) return res.json({ error: 'invites_unavailable' });
+    const joined = new Set((partsResult.data || []).map((p) => p.user_id));
+    const pendingRows = (invitesResult.data || []).filter((r) => !joined.has(r.invitee_id));
+    const map = await buildUserDisplayMap(pendingRows.map((r) => r.invitee_id));
+    res.json({
+      pending: pendingRows.map((r) => ({
+        id: r.invitee_id,
+        name: (map[r.invitee_id] || {}).name || 'Athlete',
+        avatar_url: (map[r.invitee_id] || {}).avatar_url || null,
+        location: (map[r.invitee_id] || {}).location || null,
+        invitedAt: r.created_at
+      })),
+      participantIds: [...joined],
+      invitedIds: (invitesResult.data || []).map((r) => r.invitee_id)
+    });
+  } catch (err) {
+    res.json({ error: 'invites_unavailable' });
+  }
+});
+
+// Invite more followers after creation (creator only; same follower validation,
+// cap, record + notification rails as create-time invites).
+app.post(BASE + '/api/challenges/:id/invites', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
+  const userIds = Array.isArray((req.body || {}).userIds) ? req.body.userIds : [];
+  const { data: ch } = await supabaseAdmin
+    .from('challenges').select('id, title, created_by, club_id, visibility, end_date, goal_target, goal_unit, goal_type')
+    .eq('id', req.params.id).maybeSingle();
+  if (!ch || ch.created_by !== req.user.id) return res.json({ error: 'Challenge not found' });
+  if (!(ch.visibility === 'private' && !ch.club_id)) return res.json({ error: 'Only private challenges use invites' });
+  if (ch.end_date && new Date(ch.end_date).getTime() < Date.now()) return res.json({ error: 'This challenge has ended' });
+  const { data: followRows } = await supabaseAdmin
+    .from('follows').select('follower_id').eq('following_id', req.user.id);
+  const followerSet = new Set((followRows || []).map((f) => f.follower_id));
+  const valid = [...new Set(userIds)]
+    .filter((id) => id && typeof id === 'string' && followerSet.has(id) && id !== req.user.id)
+    .slice(0, 50);
+  if (!valid.length) return res.json({ error: 'No valid followers to invite' });
+  try {
+    const { data: parts } = await supabaseAdmin
+      .from('challenge_participants').select('user_id').eq('challenge_id', ch.id);
+    const joined = new Set((parts || []).map((p) => p.user_id));
+    const toInvite = valid.filter((id) => !joined.has(id));
+    if (!toInvite.length) return res.json({ success: true, invitedCount: 0 });
+    // ignoreDuplicates makes re-sends a no-op for still-pending invitees (no
+    // duplicate row, no re-notification), while a revoked-then-reinvited
+    // follower gets a fresh row + fresh notification. .select() returns ONLY
+    // the genuinely inserted rows, which is exactly the notify set.
+    const { data: inserted, error: insErr } = await supabaseAdmin
+      .from('challenge_invites')
+      .upsert(
+        toInvite.map((id) => ({ challenge_id: ch.id, invitee_id: id, inviter_id: req.user.id })),
+        { onConflict: 'challenge_id,invitee_id', ignoreDuplicates: true }
+      )
+      .select('invitee_id');
+    if (insErr) return res.json({ error: 'invites_unavailable' });
+    const actor = displayFromUser(req.user);
+    for (const row of (inserted || [])) {
+      await createNotification({
+        userId: row.invitee_id,
+        type: 'challenge_invite',
+        title: 'Challenge invite',
+        body: `${actor.name} invited you to a challenge: "${ch.title}" — ${ch.goal_target} ${ch.goal_unit || ''} ${ch.goal_type}`.replace(/\s+/g, ' ').trim(),
+        link: '/challenges#friends',
+        actorId: req.user.id,
+        entityId: ch.id
+      });
+    }
+    res.json({ success: true, invitedCount: (inserted || []).length });
+  } catch (err) {
+    res.json({ error: 'invites_unavailable' });
+  }
+});
+
+// Revoke a PENDING invite (creator only). Never ejects a participant — if the
+// invitee already joined, revoke refuses (member removal is a different, out-
+// of-scope action). The old notification row is left in place: its pill state
+// recomputes to 'revoked' server-side, which is the honest degradation.
+app.delete(BASE + '/api/challenges/:id/invites/:userId', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
+  const { data: ch } = await supabaseAdmin
+    .from('challenges').select('id, created_by').eq('id', req.params.id).maybeSingle();
+  if (!ch || ch.created_by !== req.user.id) return res.json({ error: 'Challenge not found' });
+  const { data: part } = await supabaseAdmin
+    .from('challenge_participants').select('user_id')
+    .eq('challenge_id', ch.id).eq('user_id', req.params.userId).maybeSingle();
+  if (part) return res.json({ error: 'already_joined' });
+  try {
+    const { error } = await supabaseAdmin.from('challenge_invites').delete()
+      .eq('challenge_id', ch.id).eq('invitee_id', req.params.userId);
+    if (error) return res.json({ error: 'invites_unavailable' });
+    res.json({ success: true });
+  } catch (err) {
+    res.json({ error: 'invites_unavailable' });
+  }
+});
+
 // Leaderboard for a challenge: each participant's progress, ranked. Participant
 // names come from auth metadata (no profiles join).
 app.get(BASE + '/api/challenges/:id/leaderboard', requireAuth, async (req, res) => {
@@ -4308,6 +4523,24 @@ app.get(BASE + '/api/challenges/:id/leaderboard', requireAuth, async (req, res) 
     if (!challenge) return res.json({ error: 'Challenge not found' });
     const { data: participants } = await supabaseAdmin
       .from('challenge_participants').select('user_id').eq('challenge_id', req.params.id);
+    // Private solo challenges: only the creator, a participant, or a live
+    // invitee may read the roster — a ranked list of names/avatars is exactly
+    // what "private" must protect. Strangers get the same "not found" as a
+    // nonexistent id (no existence leak). Invite-lookup failure ⇒ not allowed.
+    if (challenge.visibility === 'private' && !challenge.club_id) {
+      const uid = req.user.id;
+      let allowed = challenge.created_by === uid
+        || (participants || []).some((p) => p.user_id === uid);
+      if (!allowed) {
+        try {
+          const { data: inv, error: invErr } = await supabaseAdmin
+            .from('challenge_invites').select('challenge_id')
+            .eq('challenge_id', req.params.id).eq('invitee_id', uid).maybeSingle();
+          allowed = !invErr && !!inv;
+        } catch (e) { allowed = false; }
+      }
+      if (!allowed) return res.json({ error: 'Challenge not found' });
+    }
     // Profile map (not display map): also carries each participant's zone so
     // progress windows/streak days follow the PARTICIPANT (boundary policy).
     const nameMap = await buildUserProfileMap((participants || []).map((p) => p.user_id));
@@ -5307,25 +5540,30 @@ app.get(BASE + '/leaderboards', requirePageAuth, async (req, res) => {
 app.get(BASE + '/challenges', requirePageAuth, async (req, res) => {
   try {
     const userId = req.user.id;
-    let following = [];
+    // Invite picker source = the creator's FOLLOWERS (people who chose to
+    // follow them — they opted in, so an invite is welcome, and the form label
+    // "challenge the followers you pick" is literally true). The old injection
+    // fed people the creator FOLLOWS, which contradicted every label and let a
+    // follow-spammer invite strangers.
+    let followers = [];
     if (supabaseAdmin) {
-      const { data: follows } = await supabaseAdmin
-        .from('follows').select('following_id').eq('follower_id', userId);
-      const ids = [...new Set((follows || []).map((f) => f.following_id).filter(Boolean))];
+      const { data: followRows } = await supabaseAdmin
+        .from('follows').select('follower_id').eq('following_id', userId);
+      const ids = [...new Set((followRows || []).map((f) => f.follower_id).filter(Boolean))];
       const map = await buildUserDisplayMap(ids);
-      following = ids.map((id) => ({
+      followers = ids.map((id) => ({
         id,
         name: (map[id] && map[id].name) || 'Athlete',
         handle: (map[id] && map[id].handle) || 'athlete',
         avatar_url: (map[id] && map[id].avatar_url) || null,
         location: (map[id] && map[id].location) || null
-      }));
+      })).sort((a, b) => a.name.localeCompare(b.name));
     }
     const clubs = await getSidebarClubs(userId);
     const gating = { proLocked: await computeProLocked(userId) };
     const meta = req.user.user_metadata || {};
     const sports = Array.isArray(meta.sports) ? meta.sports.filter(Boolean) : [];
-    const challengeData = { userId, profile: displayFromUser(req.user), following, clubs, gating, sports };
+    const challengeData = { userId, profile: displayFromUser(req.user), followers, clubs, gating, sports };
     const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-challenges.html'), 'utf8'), challengeData), 'challenges'), (await getUserPlan(userId)) === 'pro');
     res.send(html);
   } catch (err) {
@@ -6880,6 +7118,17 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
     if (idsOf(userChallenges).length) {
       await del('challenge_participants', q => q.in('challenge_id', idsOf(userChallenges)));
       await del('challenges', q => q.in('id', idsOf(userChallenges)));
+    }
+    // Received challenge invites (invitee side). Creator-side rows die with
+    // their challenges via the table's ON DELETE CASCADE FK. Tolerate ONLY the
+    // table-not-provisioned case (nothing can linger in a table that doesn't
+    // exist); any other failure still aborts — zero-residue rule.
+    try {
+      await del('challenge_invites', q => q.eq('invitee_id', uid));
+    } catch (err) {
+      const tableMissing = /challenge_invites/i.test(err.message)
+        && /find the table|schema cache|does not exist/i.test(err.message);
+      if (!tableMissing) throw err;
     }
     await del('notifications', q => q.eq('user_id', uid));
     await del('notifications', q => q.eq('actor_id', uid));
@@ -9033,6 +9282,7 @@ app.get(BASE + '/api/notifications', requireAuth, async (req, res) => {
   if (error) return res.json({ error: error.message });
   const notifications = await enrichNotifications(data);
   await attachInviteState(notifications, req.user.id);
+  await attachChallengeInviteState(notifications, req.user.id);
   const unreadCount = notifications.filter(n => !n.read).length;
   res.json({ notifications, unreadCount });
 });
@@ -9073,6 +9323,45 @@ async function attachInviteState(notifications, userId) {
     });
   } catch (err) {
     console.log('Invite-state enrich error:', err.message);
+  }
+}
+
+// Challenge-invite notifications (type 'challenge_invite', entity_id = the
+// challenge) get a live server-computed state so the panel renders an honest
+// inline action, mirroring the club-invite pill exactly:
+//   'pending' → brand-yellow Join pill (accepts via the existing join endpoint)
+//   'joined'  → muted ✓ Joined      (participant via any path)
+//   'ended'   → muted label          (challenge end date passed)
+//   'revoked' → muted label          (invite record deleted by the creator)
+//   'gone'    → muted label          (challenge itself deleted)
+// A failed INVITE lookup attaches no pending/revoked verdict (plain row) —
+// degradation must never claim 'revoked' when it can't prove the row is gone.
+async function attachChallengeInviteState(notifications, userId) {
+  try {
+    const chNotifs = notifications.filter(n => n.type === 'challenge_invite' && n.entity_id);
+    if (!chNotifs.length) return;
+    const ids = [...new Set(chNotifs.map(n => n.entity_id))];
+    const [chResult, partResult, invResult] = await Promise.all([
+      supabaseAdmin.from('challenges').select('id, end_date').in('id', ids),
+      supabaseAdmin.from('challenge_participants').select('challenge_id').in('challenge_id', ids).eq('user_id', userId),
+      supabaseAdmin.from('challenge_invites').select('challenge_id').in('challenge_id', ids).eq('invitee_id', userId)
+    ]);
+    if (chResult.error || partResult.error) return;
+    const chById = {};
+    (chResult.data || []).forEach(c => { chById[c.id] = c; });
+    const joined = new Set((partResult.data || []).map(p => p.challenge_id));
+    const inviteLookupOk = !invResult.error;
+    const invitedSet = new Set((invResult.data || []).map(r => r.challenge_id));
+    chNotifs.forEach(n => {
+      if (joined.has(n.entity_id)) { n.challengeInviteState = 'joined'; return; }
+      const ch = chById[n.entity_id];
+      if (!ch) { n.challengeInviteState = 'gone'; return; }
+      if (ch.end_date && new Date(ch.end_date).getTime() < Date.now()) { n.challengeInviteState = 'ended'; return; }
+      if (!inviteLookupOk) return; // can't prove pending vs revoked — plain row
+      n.challengeInviteState = invitedSet.has(n.entity_id) ? 'pending' : 'revoked';
+    });
+  } catch (err) {
+    console.log('Challenge-invite state enrich error:', err.message);
   }
 }
 

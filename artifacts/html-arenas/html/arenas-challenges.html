@@ -411,9 +411,9 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
       </div>
     </div>
 
-    <!-- ═══ FRIENDS TAB ═══ -->
+    <!-- ═══ WITH FRIENDS TAB (private challenges: invitations + yours) ═══ -->
     <div id="tab-friends" style="display:none;flex-direction:column;gap:14px">
-      <div class="challenges-loading" style="text-align:center;padding:48px 24px;color:var(--gray-400);font-size:13px">Loading club challenges…</div>
+      <div class="challenges-loading" style="text-align:center;padding:48px 24px;color:var(--gray-400);font-size:13px">Loading private challenges…</div>
     </div>
 
     <!-- ═══ COMPLETED TAB ═══ -->
@@ -477,92 +477,12 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
   </div>
 </main>
 
-<!-- CREATE CHALLENGE MODAL -->
-<div class="modal-overlay" id="create-modal" onclick="closeCreateModal(event)">
-  <div class="modal">
-    <div class="modal-header">
-      <div>
-        <div style="font-size:18px;font-weight:700;color:var(--gray-900)">Create a challenge</div>
-        <div style="font-size:13px;color:var(--gray-500);margin-top:3px">Set the rules — invite friends or open to the community</div>
-      </div>
-      <button class="modal-close" onclick="closeCreateModal()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div>
-        <div style="font-size:13px;font-weight:600;color:var(--gray-700);margin-bottom:8px">Sport</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap" id="create-sport-chips"></div>
-        <script>
-        // Create-challenge sport picker rendered from the sports registry —
-        // every registry sport (the old markup only offered 3), first one pre-selected.
-        (function () {
-          var wrap = document.getElementById('create-sport-chips');
-          if (!wrap) return;
-          wrap.innerHTML = (window.ARENAS_SPORTS || []).map(function (s, i) {
-            return '<button class="sport-filter' + (i === 0 ? ' active' : '') + '" onclick="selectCreateSport(this,\'' + s.id + '\')">' + s.emoji + ' ' + s.label + '</button>';
-          }).join('');
-        })();
-        </script>
-      </div>
-      <div>
-        <div style="font-size:13px;font-weight:600;color:var(--gray-700);margin-bottom:8px">Challenge type</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div id="type-dist" onclick="selectType('dist')" style="padding:12px;border:2px solid var(--gray-900);border-radius:var(--radius);cursor:pointer;background:var(--gray-50)">
-            <div style="font-size:15px;margin-bottom:4px">📏</div>
-            <div style="font-size:13px;font-weight:600;color:var(--gray-900)">Distance</div>
-            <div style="font-size:11px;color:var(--gray-500)">Total km or miles</div>
-          </div>
-          <div id="type-streak" onclick="selectType('streak')" style="padding:12px;border:var(--border);border-radius:var(--radius);cursor:pointer">
-            <div style="font-size:15px;margin-bottom:4px">🔥</div>
-            <div style="font-size:13px;font-weight:600;color:var(--gray-800)">Streak</div>
-            <div style="font-size:11px;color:var(--gray-500)">Consecutive days</div>
-          </div>
-          <div id="type-perf" onclick="selectType('perf')" style="padding:12px;border:var(--border);border-radius:var(--radius);cursor:pointer">
-            <div style="font-size:15px;margin-bottom:4px">⚡</div>
-            <div style="font-size:13px;font-weight:600;color:var(--gray-800)">Performance</div>
-            <div style="font-size:11px;color:var(--gray-500)">Hit a target pace or grade</div>
-          </div>
-          <div id="type-h2h" onclick="selectType('h2h')" style="padding:12px;border:var(--border);border-radius:var(--radius);cursor:pointer">
-            <div style="font-size:15px;margin-bottom:4px">⚔️</div>
-            <div style="font-size:13px;font-weight:600;color:var(--gray-800)">Head-to-head</div>
-            <div style="font-size:11px;color:var(--gray-500)">1v1 with a friend</div>
-          </div>
-        </div>
-      </div>
-      <div>
-        <label style="display:block;font-size:13px;font-weight:600;color:var(--gray-700);margin-bottom:6px">Challenge name</label>
-        <input type="text" placeholder="e.g. May 100km Running Challenge" style="width:100%;padding:9px 12px;border:var(--border);border-radius:var(--radius);font-size:14px;font-family:var(--font);outline:none;color:var(--gray-800)">
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div>
-          <label style="display:block;font-size:13px;font-weight:600;color:var(--gray-700);margin-bottom:6px">Target</label>
-          <input type="text" placeholder="e.g. 100 km" style="width:100%;padding:9px 12px;border:var(--border);border-radius:var(--radius);font-size:14px;font-family:var(--font);outline:none;color:var(--gray-800)">
-        </div>
-        <div>
-          <label style="display:block;font-size:13px;font-weight:600;color:var(--gray-700);margin-bottom:6px">Duration</label>
-          <select style="width:100%;padding:9px 12px;border:var(--border);border-radius:var(--radius);font-size:14px;font-family:var(--font);outline:none;color:var(--gray-700);background:white">
-            <option>1 week</option>
-            <option>2 weeks</option>
-            <option selected>1 month</option>
-            <option>3 months</option>
-            <option>Ongoing</option>
-          </select>
-        </div>
-      </div>
-      <div>
-        <div style="font-size:13px;font-weight:600;color:var(--gray-700);margin-bottom:8px">Visibility</div>
-        <div style="display:flex;gap:8px">
-          <button class="difficulty-filter active">Community (public)</button>
-          <button class="difficulty-filter" onclick="showToast('Friends-only mode selected')">Friends only</button>
-          <button class="difficulty-filter" onclick="showToast('Solo mode selected')">Solo (private)</button>
-        </div>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="createChallenge()">Create challenge</button>
-      <button class="btn btn-ghost" onclick="closeCreateModal()">Cancel</button>
-    </div>
-  </div>
-</div>
+<!-- The static prototype create-modal that used to live here (fake sport
+     chips, fake "Community (public) / Friends only / Solo (private)" pills
+     that only fired toasts) was DEAD CHROME — window.openCreateModal is
+     overridden by the real data-driven modal in the live script below — and
+     has been deleted, per the project rule that mock chrome is removed, not
+     hidden. -->
 
 <!-- CHALLENGE DETAIL MODAL -->
 <div class="modal-overlay" id="detail-modal" onclick="closeDetailModal(event)">
@@ -742,28 +662,8 @@ function closeDetailModal(e) {
 }
 
 // ── CREATE MODAL ──
-function openCreateModal() { document.getElementById('create-modal').classList.add('open'); }
-function closeCreateModal(e) {
-  if (!e || e.target === document.getElementById('create-modal')) {
-    document.getElementById('create-modal').classList.remove('open');
-  }
-}
-function createChallenge() {
-  closeCreateModal();
-  showToast('🎉 Challenge created and published to the community!');
-}
-function selectCreateSport(el, sport) {
-  el.closest('.modal-body').querySelectorAll('.sport-filter').forEach(f => f.classList.remove('active'));
-  el.classList.add('active');
-}
-function selectType(id) {
-  ['type-dist','type-streak','type-perf','type-h2h'].forEach(t => {
-    const el = document.getElementById(t);
-    if (el) { el.style.border = 'var(--border)'; el.style.background = 'white'; el.querySelector('div:nth-child(2)').style.color = 'var(--gray-800)'; }
-  });
-  const sel = document.getElementById(id);
-  if (sel) { sel.style.border = '2px solid var(--gray-900)'; sel.style.background = 'var(--gray-50)'; sel.querySelector('div:nth-child(2)').style.color = 'var(--gray-900)'; }
-}
+// Prototype handlers deleted along with the static create-modal markup; the
+// real openCreateModal/submitCreateChallenge live in the data script below.
 
 function leaveChallenge(btn) {
   btn.textContent = '+ Join';
@@ -860,7 +760,7 @@ function showToast(msg) {
     return days + ' days left';
   }
 
-  let lastResult = { myChallenges: [], clubChallenges: [], publicChallenges: [], myJoinedIds: [] };
+  let lastResult = { myChallenges: [], friendsChallenges: [], publicChallenges: [], myJoinedIds: [] };
 
   function buildChallengeCard(c) {
     // Server computes a safe pct (never divides by a zero/null target) and a
@@ -871,9 +771,17 @@ function showToast(msg) {
     const icon = sportIcon(c.sport);
     const isCompleted = c.isExpired || c.isComplete;
     const sportLabel = c.sport === 'any' ? 'Any sport' : cap(c.sport);
-    const byLine = c.isOwner
-      ? '<span>· You created this</span>'
-      : (c.creator && c.creator.name ? '<span>· by ' + esc(c.creator.name) + '</span>' : '');
+    const isInvited = c.myInviteState === 'invited';
+    const byLine = isInvited
+      ? '<span>· ' + esc(c.inviterName || (c.creator && c.creator.name) || 'Someone') + ' invited you</span>'
+      : (c.isOwner
+        ? '<span>· You created this</span>'
+        : (c.creator && c.creator.name ? '<span>· by ' + esc(c.creator.name) + '</span>' : ''));
+    // Private solo challenges carry a 🔒 tag in EVERY tab so the same card
+    // reads coherently when it appears in both Mine and With-friends.
+    const privateTag = (c.visibility === 'private' && !c.club_id)
+      ? '<span style="padding:1px 7px;border-radius:10px;font-size:10px;font-weight:500;background:var(--gray-100);color:var(--gray-600)">🔒 Private</span>'
+      : '';
     const unit = esc(c.goal_unit || '');
     return `
       <div class="challenge-card" id="challenge-${esc(c.id)}" style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:10px;${isCompleted ? 'opacity:.75' : ''}">
@@ -883,6 +791,7 @@ function showToast(msg) {
             <div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:3px">${esc(c.title)}</div>
             <div style="font-size:11px;color:var(--gray-500);display:flex;align-items:center;gap:6px;flex-wrap:wrap">
               <span style="padding:1px 7px;border-radius:10px;font-size:10px;font-weight:500;${sColor}">${icon} ${esc(sportLabel)}</span>
+              ${privateTag}
               <span>·</span>
               <span>${esc(cap(c.goal_type))} · ${esc(c.goal_target)} ${unit}</span>
               ${byLine}
@@ -909,18 +818,19 @@ function showToast(msg) {
         </div>` : `
         <div style="padding:0 16px 14px">
           <div style="background:var(--gray-50);border:var(--border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--gray-500);text-align:center">
-            Join this challenge to track your progress alongside ${c.participantCount} participant${c.participantCount !== 1 ? 's' : ''}
+            ${isInvited ? 'Accept the invite to compete' : 'Join this challenge to track your progress'} alongside ${c.participantCount} participant${c.participantCount !== 1 ? 's' : ''}
           </div>
         </div>`}
         <div style="padding:10px 16px;border-top:var(--border);display:flex;align-items:center;gap:6px">
           ${c.isJoined ? `
             <button onclick="viewLeaderboard('${esc(c.id)}')" style="padding:5px 12px;border-radius:7px;font-size:12px;font-weight:500;border:none;background:var(--gray-900);color:white;cursor:pointer">View leaderboard</button>
             <button onclick="window.location.href=window.BASE + '/log'" style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Log activity →</button>
+            ${(c.isOwner && c.visibility === 'private' && !c.club_id && !isCompleted) ? `<button onclick="openInviteManager('${esc(c.id)}')" style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Invites${c.pendingInvites ? ' · ' + c.pendingInvites + ' pending' : ''}</button>` : ''}
             ${!c.isOwner ? `<button onclick="leaveChallenge('${esc(c.id)}',this)" style="padding:5px 12px;border-radius:7px;font-size:12px;border:1px solid #FECACA;background:var(--red-light);color:#A32D2D;cursor:pointer;margin-left:auto">Leave</button>` : ''}
           ` : `
             ${(proLocked && !c.club_id)
               ? `<button onclick="goPro()" title="Joining challenges is an Arenas Pro feature" style="padding:5px 14px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow-light);color:#7a5c00;cursor:pointer">🔒 Join · Pro feature</button>`
-              : `<button onclick="joinChallenge('${esc(c.id)}',this)" style="padding:5px 14px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">Join challenge →</button>`}
+              : `<button onclick="joinChallenge('${esc(c.id)}',this)" style="padding:5px 14px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">${isInvited ? 'Accept invite →' : 'Join challenge →'}</button>`}
             <button onclick="viewLeaderboard('${esc(c.id)}')" style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">View leaderboard</button>
           `}
         </div>
@@ -961,12 +871,28 @@ function showToast(msg) {
       : emptyState('🏁', 'No completed challenges yet', 'Finished challenges will appear here with your final standing.');
   }
 
+  function sectionHead(text) {
+    return `<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-400);padding:6px 2px 8px">${text}</div>`;
+  }
+
+  // With friends = the viewer's private social scope: pending invitations
+  // (accept in place) + every active private challenge they created or joined.
+  // Joined/created privates ALSO appear in Mine — deliberate double-listing;
+  // the section headers + 🔒 tag keep the two views coherent.
   function renderFriends(challenges) {
     const container = document.getElementById('tab-friends');
     if (!container) return;
-    container.innerHTML = challenges.length
-      ? challenges.map(buildChallengeCard).join('')
-      : emptyState('🤝', 'No club challenges yet', 'Challenges from clubs you belong to will appear here.');
+    const list = challenges || [];
+    const invites = list.filter(c => c.myInviteState === 'invited');
+    const mine = list.filter(c => c.myInviteState !== 'invited');
+    if (!invites.length && !mine.length) {
+      container.innerHTML = emptyState('🔒', 'No private challenges yet', 'Create a challenge, set it to Private, and pick the followers you want to challenge. Invitations you receive appear here too.');
+      return;
+    }
+    let html = '';
+    if (invites.length) html += '<div>' + sectionHead('Invitations · ' + invites.length) + invites.map(buildChallengeCard).join('') + '</div>';
+    if (mine.length) html += '<div>' + sectionHead('Your private challenges · ' + mine.length) + mine.map(buildChallengeCard).join('') + '</div>';
+    container.innerHTML = html;
   }
 
   // Real discover renderer — replaces the static prototype version while keeping
@@ -1103,7 +1029,7 @@ function showToast(msg) {
     const completed = (result.myChallenges || []).filter(isDone).length;
     setCount('tab-btn-mine', mineActive);
     setCount('tab-btn-discover', (result.publicChallenges || []).length);
-    setCount('tab-btn-friends', (result.clubChallenges || []).length);
+    setCount('tab-btn-friends', (result.friendsChallenges || []).length);
     setCount('tab-btn-completed', completed);
     // Header stats strip — all real, honest-zero on empty, from this same load.
     const setStat = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
@@ -1123,7 +1049,7 @@ function showToast(msg) {
     renderCompleted([]);
     renderFriends([]);
     window.renderDiscover('all');
-    updateCounts({ myChallenges: [], clubChallenges: [], publicChallenges: [] });
+    updateCounts({ myChallenges: [], friendsChallenges: [], publicChallenges: [] });
     renderSidebar({});
   }
 
@@ -1135,7 +1061,7 @@ function showToast(msg) {
       lastResult = result;
       renderMine(result.myChallenges || []);
       renderCompleted(result.myChallenges || []);
-      renderFriends(result.clubChallenges || []);
+      renderFriends(result.friendsChallenges || []);
       window.renderDiscover('all');
       updateCounts(result);
       renderSidebar(result);
@@ -1148,14 +1074,26 @@ function showToast(msg) {
     // No blanket proLocked guard here: buildChallengeCard already renders the
     // upgrade CTA for gated (non-club) challenges, so this only runs for actions
     // the server allows (club challenges, or any challenge when the flag is off).
+    const orig = btn ? btn.textContent : 'Join challenge →';
     if (btn) { btn.textContent = 'Joining…'; btn.disabled = true; }
     try {
       const res = await fetch(B + '/api/challenges/' + id + '/join', { method: 'POST' });
       const result = await res.json();
-      if (result.error) { showToast('Error: ' + result.error); if (btn) { btn.textContent = 'Join challenge →'; btn.disabled = false; } return; }
+      if (result.error) {
+        const msg = result.error === 'invite_required'
+          ? 'This invite is no longer active.'
+          : (result.error === 'pro_required'
+            ? 'Joining challenges is an Arenas Pro feature.'
+            : 'Error: ' + result.error);
+        showToast(msg);
+        if (btn) { btn.textContent = orig; btn.disabled = false; }
+        // A dead invite means this card is stale — refresh so it disappears.
+        if (result.error === 'invite_required') setTimeout(loadChallenges, 400);
+        return;
+      }
       showToast('✓ Joined! Your progress updates as you log activities.');
       setTimeout(loadChallenges, 400);
-    } catch (err) { showToast('Something went wrong — please try again'); if (btn) { btn.textContent = 'Join challenge →'; btn.disabled = false; } }
+    } catch (err) { showToast('Something went wrong — please try again'); if (btn) { btn.textContent = orig; btn.disabled = false; } }
   };
 
   window.leaveChallenge = async function (id, btn) {
@@ -1231,9 +1169,56 @@ function showToast(msg) {
     document.getElementById('ch-end').value = end.toISOString().split('T')[0];
   };
 
+  // ── FOLLOWER INVITE PICKER (shared by create modal + manage-invites modal) ──
+  // Checkbox rows with canonical name-first rendering: name is the primary
+  // line, location is a muted subline (never bolted onto the name — that was
+  // the old <option> formatting inconsistency). 44px touch rows, live selected
+  // count, search box above 8 rows.
+  const INV_AV_STYLE = 'width:30px;height:30px;border-radius:50%;background:#FEF9C3;color:#854D0E;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0';
+  function inviteRowHtml(f, cbClass, onchangeExpr) {
+    return `<label class="ch-inv-row" data-name="${esc(String(f.name || '').toLowerCase())}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--gray-100);min-height:44px">
+      <input type="checkbox" class="${cbClass}" value="${esc(f.id)}" onchange="${onchangeExpr}" style="width:16px;height:16px;accent-color:#E6B800;flex-shrink:0">
+      ${window.avatarHtml(f.avatar_url || null, f.name || 'Athlete', '', INV_AV_STYLE)}
+      <span style="flex:1;min-width:0">
+        <span style="display:block;font-size:13px;font-weight:600;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.name || 'Athlete')}</span>
+        ${f.location ? '<span style="display:block;font-size:11px;color:var(--gray-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(f.location) + '</span>' : ''}
+      </span>
+    </label>`;
+  }
+  window.filterInviteRows = function (input, listId) {
+    const q = String(input.value || '').trim().toLowerCase();
+    document.querySelectorAll('#' + listId + ' .ch-inv-row').forEach(row => {
+      row.style.display = (!q || (row.dataset.name || '').indexOf(q) !== -1) ? 'flex' : 'none';
+    });
+  };
+  // Hidden entirely while Public is selected (a control that can't do anything
+  // must not be visible); selectVis toggles it. Zero followers → honest note.
+  function buildInvitePicker() {
+    const followers = data.followers || [];
+    if (!followers.length) {
+      return `<div id="ch-invite-wrap" style="display:none;margin-bottom:14px">
+        <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Challenge followers</div>
+        <div style="background:var(--gray-50);border:var(--border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--gray-500)">No followers to invite yet — this challenge starts as just you. You can invite followers later from the challenge card.</div>
+      </div>`;
+    }
+    return `<div id="ch-invite-wrap" style="display:none;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Challenge followers <span id="ch-inv-count" style="font-weight:400;color:var(--gray-400)">(0 selected)</span></div>
+      ${followers.length > 8 ? '<input class="form-input" id="ch-inv-search" placeholder="Search followers…" oninput="filterInviteRows(this,\'ch-invite-list\')" style="margin-bottom:8px">' : ''}
+      <div id="ch-invite-list" style="border:var(--border);border-radius:8px;max-height:240px;overflow-y:auto">
+        ${followers.map(f => inviteRowHtml(f, 'ch-inv-cb', 'updateInviteCount()')).join('')}
+      </div>
+      <div id="ch-inv-note" style="font-size:11px;color:var(--gray-500);margin-top:6px">No one selected — it&#39;ll be just you until you invite someone.</div>
+    </div>`;
+  }
+  window.updateInviteCount = function () {
+    const n = document.querySelectorAll('#ch-invite-list .ch-inv-cb:checked').length;
+    const count = document.getElementById('ch-inv-count');
+    if (count) count.textContent = '(' + n + ' selected)';
+    const note = document.getElementById('ch-inv-note');
+    if (note) note.style.display = n ? 'none' : 'block';
+  };
+
   function buildCreateModal() {
-    const followingOptions = (data.following || []).map(f =>
-      `<option value="${esc(f.id)}">${esc(f.name)}${f.location ? ' — ' + esc(f.location) : ''}</option>`).join('');
     return `
       <div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:560px;overflow:hidden;box-shadow:var(--shadow-lg);margin:auto">
         <div style="padding:16px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">
@@ -1307,23 +1292,16 @@ function showToast(msg) {
               <div class="ch-vis-opt selected" data-vis="public" onclick="selectVis(this)" style="border:1px solid var(--yellow-dark);background:var(--yellow-light);border-radius:8px;padding:10px;cursor:pointer;text-align:center">
                 <div style="font-size:16px;margin-bottom:4px">🌍</div>
                 <div style="font-size:12px;font-weight:500;color:#7a5c00">Public</div>
-                <div style="font-size:10px;color:#7a5c00">Anyone can join</div>
+                <div style="font-size:10px;color:#7a5c00">Anyone can find it in Discover</div>
               </div>
               <div class="ch-vis-opt" data-vis="private" onclick="selectVis(this)" style="border:var(--border);border-radius:8px;padding:10px;cursor:pointer;text-align:center">
                 <div style="font-size:16px;margin-bottom:4px">🔒</div>
                 <div style="font-size:12px;font-weight:500;color:var(--gray-900)">Private</div>
-                <div style="font-size:10px;color:var(--gray-400)">Invite only</div>
+                <div style="font-size:10px;color:var(--gray-400)">Challenge the followers you pick</div>
               </div>
             </div>
           </div>
-          ${data.following && data.following.length > 0 ? `
-          <div style="margin-bottom:14px">
-            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Invite followers <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div>
-            <select class="form-select" id="ch-invite-select" multiple style="min-height:80px">
-              ${followingOptions}
-            </select>
-            <div style="font-size:10px;color:var(--gray-400);margin-top:3px">Hold Ctrl/Cmd to select multiple</div>
-          </div>` : ''}
+          ${buildInvitePicker()}
         </div>
         <div style="padding:14px 18px;border-top:var(--border);background:var(--gray-50);display:flex;gap:8px;align-items:center">
           <button onclick="document.getElementById('create-challenge-overlay').remove()" style="padding:8px 14px;border:var(--border);border-radius:7px;font-size:13px;background:white;color:var(--gray-600);cursor:pointer">Cancel</button>
@@ -1356,6 +1334,9 @@ function showToast(msg) {
     el.classList.add('selected');
     el.style.background = 'var(--yellow-light)';
     el.style.borderColor = 'var(--yellow-dark)';
+    // Picker exists only for Private (hidden, not disabled, under Public).
+    const wrap = document.getElementById('ch-invite-wrap');
+    if (wrap) wrap.style.display = el.dataset.vis === 'private' ? 'block' : 'none';
   };
 
   window.submitCreateChallenge = async function () {
@@ -1368,8 +1349,11 @@ function showToast(msg) {
     const startDate = document.getElementById('ch-start')?.value;
     const endDate = document.getElementById('ch-end')?.value;
     const visibility = document.querySelector('.ch-vis-opt.selected')?.dataset?.vis || 'public';
-    const inviteSelect = document.getElementById('ch-invite-select');
-    const invitees = inviteSelect ? [...inviteSelect.selectedOptions].map(o => o.value) : [];
+    // Invitees only exist on the Private path (the picker is hidden under
+    // Public, and the server ignores invitees for public challenges anyway).
+    const invitees = visibility === 'private'
+      ? [...document.querySelectorAll('#ch-invite-list .ch-inv-cb:checked')].map(cb => cb.value)
+      : [];
     const errorEl = document.getElementById('ch-error');
     const fail = (msg) => { if (errorEl) { errorEl.textContent = msg; errorEl.style.display = 'block'; } };
 
@@ -1399,11 +1383,128 @@ function showToast(msg) {
         return;
       }
       document.getElementById('create-challenge-overlay')?.remove();
-      showToast('✓ Challenge created! Invites sent to your followers.');
+      // Honest, differentiated toasts — never claim invites that weren't sent.
+      if (result.inviteWarning === 'invites_unavailable') {
+        showToast('✓ Challenge created — invites are unavailable right now, so it\'s just you for now.');
+      } else if (visibility === 'private' && result.invitedCount > 0) {
+        showToast('✓ Private challenge created — ' + result.invitedCount + ' invite' + (result.invitedCount !== 1 ? 's' : '') + ' sent.');
+      } else if (visibility === 'private') {
+        showToast('✓ Private challenge created — just you until you invite someone.');
+      } else {
+        showToast('✓ Challenge created! It\'s now live in Discover.');
+      }
       setTimeout(loadChallenges, 400);
     } catch (err) {
       fail('Something went wrong — please try again.');
       if (submitBtn) { submitBtn.textContent = 'Create challenge →'; submitBtn.disabled = false; }
+    }
+  };
+
+  // ── MANAGE INVITES (creator-only modal on private solo challenge cards) ──
+  window.openInviteManager = async function (id) {
+    const existing = document.getElementById('invite-manager-overlay');
+    if (existing) existing.remove();
+    let info;
+    try {
+      const res = await fetch(B + '/api/challenges/' + id + '/invites');
+      info = await res.json();
+    } catch (err) { showToast('Could not load invites'); return; }
+    if (!info || info.error) {
+      showToast(info && info.error === 'invites_unavailable' ? 'Invites are unavailable right now' : 'Could not load invites');
+      return;
+    }
+    const excluded = new Set([...(info.invitedIds || []), ...(info.participantIds || [])]);
+    const candidates = (data.followers || []).filter(f => !excluded.has(f.id));
+    const pending = info.pending || [];
+    const pendingRows = pending.map(p => `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--gray-100);min-height:44px">
+        ${window.avatarHtml(p.avatar_url || null, p.name || 'Athlete', '', INV_AV_STYLE)}
+        <span style="flex:1;min-width:0">
+          <span style="display:block;font-size:13px;font-weight:600;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name || 'Athlete')}</span>
+          ${p.location ? '<span style="display:block;font-size:11px;color:var(--gray-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(p.location) + '</span>' : ''}
+        </span>
+        <button onclick="revokeChallengeInvite('${esc(id)}','${esc(p.id)}',this)" style="padding:5px 12px;border-radius:7px;font-size:12px;border:1px solid #FECACA;background:var(--red-light);color:#A32D2D;cursor:pointer;flex-shrink:0">Revoke</button>
+      </div>`).join('');
+    const overlay = document.createElement('div');
+    overlay.id = 'invite-manager-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto';
+    overlay.innerHTML = `
+      <div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:480px;overflow:hidden;box-shadow:var(--shadow-lg);margin:auto">
+        <div style="padding:16px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700;color:var(--gray-900)">Challenge invites</div>
+          <button onclick="document.getElementById('invite-manager-overlay').remove()" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>
+        </div>
+        <div style="padding:18px;max-height:70vh;overflow-y:auto">
+          <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:6px">Pending invites${pending.length ? ' · ' + pending.length : ''}</div>
+          ${pending.length
+            ? `<div style="border:var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px" id="mi-pending-list">${pendingRows}</div>`
+            : '<div style="font-size:12px;color:var(--gray-400);margin-bottom:16px">No pending invites.</div>'}
+          <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:6px">Invite more followers <span id="mi-inv-count" style="font-weight:400;color:var(--gray-400)">(0 selected)</span></div>
+          ${candidates.length ? `
+            ${candidates.length > 8 ? '<input class="form-input" id="mi-inv-search" placeholder="Search followers…" oninput="filterInviteRows(this,\'mi-invite-list\')" style="margin-bottom:8px">' : ''}
+            <div id="mi-invite-list" style="border:var(--border);border-radius:8px;max-height:240px;overflow-y:auto">${candidates.map(f => inviteRowHtml(f, 'mi-inv-cb', 'updateMiInviteCount()')).join('')}</div>
+            <button id="mi-send-btn" onclick="sendMoreInvites('${esc(id)}')" style="margin-top:10px;padding:8px 16px;border-radius:7px;font-size:13px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">Send invites</button>`
+            : '<div style="font-size:12px;color:var(--gray-400)">Everyone who follows you is already invited or participating.</div>'}
+        </div>
+      </div>`;
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+  };
+
+  window.updateMiInviteCount = function () {
+    const n = document.querySelectorAll('#mi-invite-list .mi-inv-cb:checked').length;
+    const count = document.getElementById('mi-inv-count');
+    if (count) count.textContent = '(' + n + ' selected)';
+  };
+
+  window.sendMoreInvites = async function (id) {
+    const userIds = [...document.querySelectorAll('#mi-invite-list .mi-inv-cb:checked')].map(cb => cb.value);
+    if (!userIds.length) { showToast('Select at least one follower to invite'); return; }
+    const btn = document.getElementById('mi-send-btn');
+    if (btn) { btn.textContent = 'Sending…'; btn.disabled = true; }
+    try {
+      const res = await fetch(B + '/api/challenges/' + id + '/invites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userIds })
+      });
+      const result = await res.json();
+      if (result.error) {
+        showToast(result.error === 'invites_unavailable' ? 'Invites are unavailable right now' : 'Error: ' + result.error);
+        if (btn) { btn.textContent = 'Send invites'; btn.disabled = false; }
+        return;
+      }
+      showToast(result.invitedCount > 0
+        ? '✓ ' + result.invitedCount + ' invite' + (result.invitedCount !== 1 ? 's' : '') + ' sent.'
+        : 'Everyone selected was already invited or has joined.');
+      document.getElementById('invite-manager-overlay')?.remove();
+      setTimeout(loadChallenges, 400);
+    } catch (err) {
+      showToast('Something went wrong — please try again');
+      if (btn) { btn.textContent = 'Send invites'; btn.disabled = false; }
+    }
+  };
+
+  window.revokeChallengeInvite = async function (challengeId, userId, btn) {
+    if (!confirm('Revoke this invite? They won\'t be able to join unless you re-invite them.')) return;
+    const row = btn ? btn.closest('div') : null;
+    if (btn) { btn.textContent = 'Revoking…'; btn.disabled = true; }
+    try {
+      const res = await fetch(B + '/api/challenges/' + challengeId + '/invites/' + encodeURIComponent(userId), { method: 'DELETE' });
+      const result = await res.json();
+      if (result.error) {
+        showToast(result.error === 'already_joined'
+          ? 'They already joined — revoke only works on pending invites.'
+          : (result.error === 'invites_unavailable' ? 'Invites are unavailable right now' : 'Error: ' + result.error));
+        if (btn) { btn.textContent = 'Revoke'; btn.disabled = false; }
+        return;
+      }
+      showToast('Invite revoked');
+      if (row) row.remove();
+      setTimeout(loadChallenges, 400); // refresh the card's pending count
+    } catch (err) {
+      showToast('Something went wrong — please try again');
+      if (btn) { btn.textContent = 'Revoke'; btn.disabled = false; }
     }
   };
 
@@ -1424,6 +1525,15 @@ function showToast(msg) {
   })();
 
   loadChallenges();
+
+  // Deep-link tabs: invite notifications link to /challenges#friends; also
+  // honors #mine/#discover/#completed and in-page hash changes.
+  function applyTabHash() {
+    const t = (location.hash || '').replace('#', '');
+    if (['mine', 'discover', 'friends', 'completed'].indexOf(t) !== -1) setTab(t);
+  }
+  window.addEventListener('hashchange', applyTabHash);
+  applyTabHash();
 })();
 </script>
 <script>
