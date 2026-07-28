@@ -249,6 +249,12 @@ app.get(['/html/arenas.css', '/arenas.css'], (req, res) => {
 app.get(['/html/arenas-notifications-panel.js', '/arenas-notifications-panel.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-notifications-panel.js'));
 });
+// Shared in-app "How points work" modal (loaded by app-shell pages with
+// scoring links). Dual route like the panel JS so a static /html-prefixed
+// src works in both environments.
+app.get(['/html/arenas-hpw-modal.js', '/arenas-hpw-modal.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-hpw-modal.js'));
+});
 
 // Shared activity stat-tile builder (feed + my-profile Activities tab render
 // the same boxed tiles from this one file). Dual-path like the panel above.
@@ -7455,7 +7461,10 @@ app.get(BASE + '/privacy', (req, res) => res.sendFile(path.join(HTML, 'arenas-pr
 // personal. The sport table AND every worked-example number are rendered from
 // the sports registry (sports.js) at request time — never hand-written — so
 // the page can never drift from the scoring the leaderboards actually use.
-app.get(BASE + '/how-points-work', (req, res) => {
+// ONE renderer feeds BOTH surfaces: the full page and the in-app modal
+// (?fragment=1 slices the marked content + CSS out of the same rendered HTML),
+// so a registry change propagates everywhere with no second edit.
+function renderHowPointsHtml() {
   const rows = SPORTS.map((s) => {
     const perKm = s.scoring.per === 'km';
     return `<tr><td class="pt-sport"><span class="pt-emoji">${s.emoji}</span>${s.label}</td>` +
@@ -7486,7 +7495,49 @@ app.get(BASE + '/how-points-work', (req, res) => {
   let html = fs.readFileSync(path.join(HTML, 'arenas-how-points-work.html'), 'utf8')
     .replace('<!--SPORT_ROWS-->', rows);
   Object.keys(tokens).forEach((k) => { html = html.replace(new RegExp(`{{${k}}}`, 'g'), String(tokens[k])); });
-  res.type('html').send(html);
+  return html;
+}
+// Everything between two markers, or null if either is missing.
+function sliceBetween(str, a, b) {
+  const i = str.indexOf(a);
+  const j = str.indexOf(b);
+  return i !== -1 && j > i ? str.slice(i + a.length, j) : null;
+}
+// App-linking nav for authenticated visitors to the standalone page. Same
+// .nav classes so the page's own CSS styles it; the page's head BASE-strip
+// script rewrites the /html hrefs when the app is served from the root.
+const HPW_APP_NAV = `<nav class="nav">
+  <a class="nav-logo" href="/html/feed">
+    <img class="nav-logo-icon" src="/html/arenas-icon.svg" alt="">
+    <span class="nav-logo-text">Arenas</span>
+  </a>
+  <div class="nav-links">
+    <a class="nav-link" href="/html/feed">Feed</a>
+    <a class="nav-link" href="/html/leaderboards">Leaderboards</a>
+    <a class="nav-link" href="/html/challenges">Challenges</a>
+    <a class="nav-link" href="/html/profile">My profile</a>
+    <a class="nav-cta yellow" href="/html/feed">Back to app</a>
+  </div>
+</nav>`;
+app.get(BASE + '/how-points-work', async (req, res) => {
+  const html = renderHowPointsHtml();
+  if (req.query.fragment === '1') {
+    // Modal fragment: the marked CSS slice + the marked content region of the
+    // SAME rendered document. No chrome, no duplicated scoring content.
+    const css = sliceBetween(html, '/*HPW_CSS_START*/', '/*HPW_CSS_END*/');
+    const body = sliceBetween(html, '<!--HPW_CONTENT_START-->', '<!--HPW_CONTENT_END-->');
+    if (css === null || body === null) {
+      return res.status(500).type('html').send('<p>Content unavailable.</p>');
+    }
+    return res.type('html').send('<style>' + css + '</style>' + body);
+  }
+  // Chrome per requester: app nav for a valid session, marketing nav for
+  // anonymous visitors. Page stays public either way (never blocks/redirects).
+  const user = await getOptionalUser(req);
+  const out = user
+    ? html.replace(/<!--HPW_NAV_START-->[\s\S]*?<!--HPW_NAV_END-->/, HPW_APP_NAV)
+    : html;
+  res.type('html').send(out);
 });
 // Club dashboard requires authentication. Inject the coach's real club, member
 // count, and recent members so the page shows live data instead of the

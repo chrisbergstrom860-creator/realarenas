@@ -65,6 +65,7 @@ a{color:inherit}
 .hero-title span{color:var(--yellow)}
 .hero-sub{font-size:18px;color:var(--gray-400);line-height:1.65;max-width:560px;margin:0 auto}
 
+/*HPW_CSS_START*/
 /* ── PROSE CONTENT ── */
 .content{background:#fff}
 .prose{max-width:720px;margin:0 auto;padding:60px 40px 84px}
@@ -109,6 +110,7 @@ a{color:inherit}
 .ex-math .ex-total{color:var(--gray-900);font-weight:600;border-top:var(--border);display:block;margin-top:8px;padding-top:8px}
 .ex-note{font-size:13px;color:var(--gray-500);line-height:1.6;margin:0}
 
+/*HPW_CSS_END*/
 /* ── FOOTER ── */
 .footer{background:white;border-top:var(--border);padding:32px 40px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
 .footer-brand{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--gray-700);font-weight:500}
@@ -139,7 +141,9 @@ a{color:inherit}
 </head>
 <body>
 
-<!-- NAV -->
+<!-- NAV — anonymous (marketing) chrome. The server swaps this whole marked
+     block for an app-linking nav when the requester is authenticated. -->
+<!--HPW_NAV_START-->
 <nav class="nav">
   <a class="nav-logo" href="/html/landing">
     <img class="nav-logo-icon" src="/html/arenas-icon.svg" alt="">
@@ -153,6 +157,7 @@ a{color:inherit}
     <a class="nav-cta yellow" href="/html/landing#login">Sign up free</a>
   </div>
 </nav>
+<!--HPW_NAV_END-->
 
 <!-- HERO -->
 <header class="hero">
@@ -163,7 +168,9 @@ a{color:inherit}
   </div>
 </header>
 
-<!-- CONTENT -->
+<!-- CONTENT — the marked region (plus the marked CSS slice above) is exactly
+     what /how-points-work?fragment=1 serves to the in-app modal. -->
+<!--HPW_CONTENT_START-->
 <main class="content">
   <div class="prose">
 
@@ -242,6 +249,7 @@ a{color:inherit}
 
   </div>
 </main>
+<!--HPW_CONTENT_END-->
 
 <!-- FOOTER -->
 <footer class="footer">

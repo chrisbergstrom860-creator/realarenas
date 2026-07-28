@@ -57,7 +57,7 @@
 - [html-arenas settings prefs](html-arenas-settings-prefs.md) — 7 real toggles in user_metadata.prefs (absent=true, read-merge-write only); enforcement map + deliberate non-gates; only /api/profile/prefs may write prefs.
 - [html-arenas club creation](html-arenas-club-create.md) — dual-mode /for-clubs wizard (WIZARD_STEPS), /api/clubs/create w/ 3-club cap, signup fork dead, safe login `next`, email-check enumeration risk.
 - [html-arenas feed timeline](html-arenas-feed-timeline.md) — /feed is one merged newest-first list; sort by "entered feed" created_at per type (never subject date); server windows must order by the same key.
-- [html-arenas /how-points-work](html-arenas-how-points-work.md) — public scoring explainer rendered from the sports registry at request time; verify script + the Monday-week/unit-aware honesty fixes it forced.
+- [html-arenas /how-points-work](html-arenas-how-points-work.md) — ONE registry renderer feeds page + in-app modal fragment; per-requester chrome (so NOT SW-cached); modal = shared JS, no history push.
 - [html-arenas PWA](html-arenas-pwa.md) — deploy-wins SW; never cache authed navs (PUBLIC_PAGES); bump VERSION on sw.js edits; setOffline can't test SW (use 502 path); new pages need PWA head block.
 - [html-arenas RSVP colors](html-arenas-rsvp-colors.md) — two-tier yellow grammar (solid=committed/action, pale+stroke=tentative, ghost=unanswered); #7a5c00 on #FFD21E fails AA; green = completion only.
 - [html-arenas brand mark](html-arenas-brand-mark.md) — arenas-icon.svg is THE mark (topbar imgs, favicons, PWA icons all derive); no "--" in SVG comments (librsvg rejects); content 🏟 fallbacks stay emoji.

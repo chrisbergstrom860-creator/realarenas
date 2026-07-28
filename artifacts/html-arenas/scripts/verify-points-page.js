@@ -74,7 +74,33 @@ function check(label, ok, detail) {
     check(`${file} footer links to How points work`, src.includes('>How points work</a>'));
   });
 
-  // ── 6. Authed pages still gate (regression: the new route must not have
+  // ── 6. Modal fragment (?fragment=1) serves the SAME rendered content ──
+  const fres = await fetch(`${BASE_URL}/how-points-work?fragment=1`, { redirect: 'manual' });
+  check('GET /how-points-work?fragment=1 returns 200', fres.status === 200, `got ${fres.status}`);
+  const frag = await fres.text();
+  const tableOf = (s) => { const m = s.match(/<table class="points-table"[\s\S]*?<\/table>/); return m ? m[0] : null; };
+  check('fragment sport table is byte-identical to the page table',
+    tableOf(frag) !== null && tableOf(frag) === tableOf(page));
+  check('fragment carries the worked-example totals',
+    frag.includes(`→&nbsp; ${ex1total} pts`) && frag.includes(`= ${ex2total} pts`));
+  check('fragment has no page chrome (nav/footer/title)',
+    !frag.includes('<nav') && !frag.includes('<footer') && !frag.includes('<title'));
+  check('no unreplaced {{tokens}} left in fragment', !/{{[A-Z0-9_]+}}/.test(frag));
+
+  // 6b. Fragment/nav markers must survive template edits — a missing marker
+  //     turns ?fragment=1 into a 500 and breaks the authed nav swap.
+  const tpl = fs.readFileSync(path.join(HTML_DIR, 'arenas-how-points-work.html'), 'utf8');
+  ['/*HPW_CSS_START*/', '/*HPW_CSS_END*/', '<!--HPW_CONTENT_START-->', '<!--HPW_CONTENT_END-->',
+    '<!--HPW_NAV_START-->', '<!--HPW_NAV_END-->'].forEach((m) => {
+    check(`template still carries marker ${m}`, tpl.includes(m));
+  });
+
+  // ── 7. Chrome per requester on the standalone page ──
+  // (Authed chrome swap is exercised by session tests, not this anonymous guard.)
+  check('logged-out page shows marketing chrome (Sign up free)', page.includes('Sign up free'));
+  check('logged-out page does NOT show the app nav (Back to app)', !page.includes('Back to app'));
+
+  // ── 8. Authed pages still gate (regression: the new route must not have
   //       loosened anything) ──
   const lb = await fetch(`${BASE_URL}/leaderboards`, { redirect: 'manual' });
   check('/leaderboards still redirects logged-out users', lb.status === 302, `got ${lb.status}`);

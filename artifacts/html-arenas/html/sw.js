@@ -25,7 +25,7 @@
  */
 'use strict';
 
-const VERSION = 'v2';
+const VERSION = 'v3';
 const RUNTIME_CACHE = 'arenas-runtime-' + VERSION;
 const AVATAR_CACHE = 'arenas-avatars-' + VERSION;
 const FONT_CACHE = 'arenas-fonts-' + VERSION;
@@ -48,9 +48,12 @@ const SUPABASE_HOST = '__SUPABASE_HOST__';
 // caching them would let a later user of the same browser (after logout or
 // account switch) be served someone else's page during an outage. App pages
 // therefore fall back to the branded offline page instead of a cached copy.
+// /how-points-work is NOT listed: since 2026-07 it renders per-requester
+// chrome (app nav for authed users), so caching it could replay one user's
+// variant to another after logout/account switch on a shared browser.
 const PUBLIC_PAGES = [
   '/landing', '/about', '/terms', '/privacy', '/for-clubs',
-  '/how-points-work', '/offline'
+  '/offline'
 ];
 function isPublicPage(pathname) {
   const rel = BASE && pathname.indexOf(BASE) === 0 ? pathname.slice(BASE.length) : pathname;
