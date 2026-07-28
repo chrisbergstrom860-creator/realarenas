@@ -27,3 +27,9 @@ Endpoints live in server.js (`/api/account/export`, `/api/account/delete`), UI i
 
 - No DB transaction: sweep can partially fail → honest 500 ("sub already canceled, retry"). TOCTOU between read-phase and sweep accepted at this scale.
 - Stripe customer objects (PII) are never deleted, only subs canceled. deleteAvatarObject is best-effort.
+
+## Export: challenge invites (2026-07-28)
+- Export includes `challenge_invites: { sent, received }` — the FIFTH pendingInvites() caller (state pending/accepted derived, never stored/inline).
+- Counterparty = `{ name, handle }` only via buildUserProfileMap ('Athlete'/'athlete' fallback for a deleted non-creator inviter — the one reachable dangling case; deleted challenges cascade, deleted invitees are swept).
+- Precedent set: export sections naming other people stay at UI-visibility level — no raw user ids or emails for counterparties.
+- Guard: scripts/verify-export-invites.js (--seed on old code captures a before-export, --check diffs; also asserts no ids/emails in the section).
