@@ -7108,6 +7108,55 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
     const clubSubs = ownedClubIds.length
       ? await fetchAllRows('subscriptions', q => q.eq('owner_type', 'club').in('owner_id', ownedClubIds))
       : [];
+    // Challenge invites, both directions. Pending is DERIVED (row exists ∧
+    // invitee not a participant) via the shared pendingInvites() helper — the
+    // export is its fifth caller; never reimplement the rule inline.
+    // Counterparties render as the app-wide person shape (name + handle via
+    // buildUserProfileMap), never raw user ids or emails: an invite is partly
+    // the other person's data, so the export stays at UI-visibility level.
+    // Rows for deleted challenges cannot exist (ON DELETE CASCADE FK); a
+    // deleted non-creator inviter can leave a dangling id → 'Athlete' fallback.
+    let chInvitesSentRaw = [];
+    let chInvitesReceivedRaw = [];
+    try {
+      [chInvitesSentRaw, chInvitesReceivedRaw] = await Promise.all([
+        fetchAllRows('challenge_invites', q => q.eq('inviter_id', uid)),
+        fetchAllRows('challenge_invites', q => q.eq('invitee_id', uid))
+      ]);
+    } catch (err) {
+      // Same tolerance as account-delete: ONLY the table-not-provisioned case
+      // degrades (to honest empty arrays); any other failure aborts the export.
+      const tableMissing = /challenge_invites/i.test(err.message)
+        && /find the table|schema cache|does not exist/i.test(err.message);
+      if (!tableMissing) throw err;
+    }
+    const allInviteRows = chInvitesSentRaw.concat(chInvitesReceivedRaw);
+    const inviteTitleById = {};
+    let invitePendingSet = new Set();
+    let invitePeople = {};
+    if (allInviteRows.length) {
+      const inviteChIds = [...new Set(allInviteRows.map(r => r.challenge_id))];
+      const [inviteChRows, invitePartRows, peopleMap] = await Promise.all([
+        fetchAllRows('challenges', q => q.in('id', inviteChIds)),
+        fetchAllRows('challenge_participants', q => q.in('challenge_id', inviteChIds)),
+        buildUserProfileMap(allInviteRows.map(r => r.inviter_id).concat(allInviteRows.map(r => r.invitee_id)))
+      ]);
+      inviteChRows.forEach(c => { inviteTitleById[c.id] = c.title || null; });
+      invitePendingSet = new Set(pendingInvites(allInviteRows, invitePartRows)
+        .map(r => r.challenge_id + ':' + r.invitee_id));
+      invitePeople = peopleMap;
+    }
+    const invitePerson = (id) => {
+      const p = invitePeople[id];
+      return { name: (p && p.name) || 'Athlete', handle: (p && p.handle) || 'athlete' };
+    };
+    const inviteRowOut = (r, counterpartyId) => ({
+      challenge_id: r.challenge_id,
+      challenge_title: inviteTitleById[r.challenge_id] || null,
+      counterparty: invitePerson(counterpartyId),
+      created_at: r.created_at,
+      state: invitePendingSet.has(r.challenge_id + ':' + r.invitee_id) ? 'pending' : 'accepted'
+    });
     const exportDoc = {
       export_version: 1,
       generated_at: new Date().toISOString(),
@@ -7130,6 +7179,10 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
       notifications: { received: notificationsReceived, triggered: notificationsTriggered },
       events: { created: eventsCreated, rsvps: eventRsvps },
       challenges: { created: challengesCreated, participations: challengeParticipations },
+      challenge_invites: {
+        sent: chInvitesSentRaw.map(r => inviteRowOut(r, r.invitee_id)),
+        received: chInvitesReceivedRaw.map(r => inviteRowOut(r, r.inviter_id))
+      },
       clubs: { owned: ownedClubs, memberships },
       club_invites: { sent: clubInvitesSent, received: clubInvitesReceived },
       subscriptions: { user: userSubs, owned_clubs: clubSubs }
