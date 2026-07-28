@@ -33,3 +33,9 @@ Endpoints live in server.js (`/api/account/export`, `/api/account/delete`), UI i
 - Counterparty = `{ name, handle }` only via buildUserProfileMap ('Athlete'/'athlete' fallback for a deleted non-creator inviter — the one reachable dangling case; deleted challenges cascade, deleted invitees are swept).
 - Precedent set: export sections naming other people stay at UI-visibility level — no raw user ids or emails for counterparties.
 - Guard: scripts/verify-export-invites.js (--seed on old code captures a before-export, --check diffs; also asserts no ids/emails in the section).
+
+## Export v2 privacy rules (2026-07-28)
+- export_version 2: PROVENANCE (emails only if the requester supplied them — own email + club-invite emails they typed; open-link sentinel → open_link:true); people as {name,handle} only; NO raw UUIDs except account.id (row/entity ids dropped, refs rendered as club name+handle / challenge+event titles / post_author); club-invite tokens (capability secrets) never exported; notification `link` dropped (embeds entity UUIDs).
+- All export fetches use explicit column lists (fetchAllRows grew an optional columns arg) so a new column can't silently widen the export.
+- person() lookup miss → {name:null,handle:null,unavailable:true}; NEVER a synthetic 'Athlete' fallback (plausible-but-wrong identity).
+- Guard: scripts/verify-export-invites.js (23 assertions; --seed on pre-change code captures before-exports for the owner + zero-data diff, --check after restart).

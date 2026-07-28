@@ -7115,10 +7115,12 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
       fetchAllRows('planned_sessions', q => q.eq('user_id', uid),
         'date, sport, title, planned_duration, notes, status, created_at, updated_at'),
       fetchAllRows('achievements', q => q.eq('user_id', uid), 'badge_id, earned_at'),
+      // Notification `link` is deliberately NOT selected: links embed entity
+      // UUIDs (e.g. ?club=<id>), which would leak internal ids into the export.
       fetchAllRows('notifications', q => q.eq('user_id', uid),
-        'type, title, body, link, read, actor_id, created_at'),
+        'type, title, body, read, actor_id, created_at'),
       fetchAllRows('notifications', q => q.eq('actor_id', uid),
-        'type, title, body, link, user_id, created_at'),
+        'type, title, body, user_id, created_at'),
       fetchAllRows('event_rsvps', q => q.eq('user_id', uid), 'event_id, status, created_at'),
       fetchAllRows('events', q => q.eq('created_by', uid),
         'club_id, title, sport, event_type, date, location, distance, max_participants, entry_fee, level, description, visibility, created_at'),
@@ -7232,7 +7234,10 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
       if (!id) return null;
       if (id === uid) return { name: meta.name || 'You', handle: meta.handle || null, self: true };
       const p = peopleMap[id];
-      return { name: (p && p.name) || 'Athlete', handle: (p && p.handle) || 'athlete' };
+      // A failed lookup (deleted account, transient auth error) must be an
+      // honest unknown — never a plausible-but-wrong synthetic identity.
+      if (!p) return { name: null, handle: null, unavailable: true };
+      return { name: p.name, handle: p.handle || null };
     };
 
     const chInviteOut = (r, counterpartyId) => ({
@@ -7280,12 +7285,12 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
       achievements,
       notifications: {
         received: notificationsReceived.map(r => ({
-          type: r.type, title: r.title, body: r.body, link: r.link,
+          type: r.type, title: r.title, body: r.body,
           read: r.read, actor: person(r.actor_id), created_at: r.created_at
         })),
         // Recipient read-state is THEIR activity, not the requester's — omitted.
         triggered: notificationsTriggered.map(r => ({
-          type: r.type, title: r.title, body: r.body, link: r.link,
+          type: r.type, title: r.title, body: r.body,
           recipient: person(r.user_id), created_at: r.created_at
         }))
       },

@@ -99,8 +99,10 @@ if (process.argv.includes('--seed')) {
   const mp = await ins('posts', { user_id: M, content: 'EXP2 member post', sport: 'running' });
   await ins('post_comments', { post_id: mp.id, user_id: O, content: 'EXP2 own comment' });
   await ins('post_likes', { post_id: mp.id, user_id: O });
-  await ins('notifications', { user_id: O, actor_id: M, type: 'like', title: 'New kudos', body: 'Exp Member liked your post' });
-  await ins('notifications', { user_id: M, actor_id: O, type: 'follow', title: 'New follower', body: 'Exp Owner followed you' });
+  // The received notification carries an ID-bearing link on purpose: the
+  // check phase proves no UUID from it survives into the export.
+  await ins('notifications', { user_id: O, actor_id: M, type: 'like', title: 'New kudos', body: 'Exp Member liked your post', link: '/clubs/dashboard?club=' + club.id });
+  await ins('notifications', { user_id: M, actor_id: O, type: 'follow', title: 'New follower', body: 'Exp Owner followed you', link: '/athletes/' + O });
   await ins('activities', { user_id: O, sport: 'running', title: 'EXP2 morning run', date: iso(-1).slice(0, 10), duration: '00:40:00', distance: '8 km' });
   await ins('goals', { user_id: O, type: 'distance', sport: 'running', target_value: 50, unit: 'km', period: 'weekly', status: 'active' });
   const ev = await ins('events', { created_by: M, club_id: club.id, title: 'EXP2 club run', sport: 'running', event_type: 'training', date: iso(3), location: 'Testville Track', visibility: 'club' });
@@ -177,6 +179,9 @@ check('notifications.received: actor as person', ex.notifications.received.some(
 check('notifications.triggered: recipient as person, read-state omitted',
   ex.notifications.triggered.some(n => n.recipient && n.recipient.handle === 'exp_member')
   && ex.notifications.triggered.every(n => !('read' in n)), ex.notifications.triggered);
+check('notifications: ID-bearing link fields dropped (both directions)',
+  [...ex.notifications.received, ...ex.notifications.triggered].every(n => !('link' in n))
+  && ex.notifications.received.length >= 1 && ex.notifications.triggered.length >= 1, ex.notifications);
 check('post_comments/post_likes: post_author as person',
   ex.post_comments.length === 1 && ex.post_comments[0].post_author.handle === 'exp_member'
   && ex.post_likes.length === 1 && ex.post_likes[0].post_author.handle === 'exp_member', { c: ex.post_comments, l: ex.post_likes });
@@ -199,9 +204,8 @@ check('own data intact: activity/post/comment/goal/club content unchanged',
   && JSON.stringify(ex.account.profile) === JSON.stringify(beforeOwner.account.profile), null);
 check('section keys unchanged vs pre-change export',
   JSON.stringify(Object.keys(beforeOwner)) === JSON.stringify(Object.keys(ex)), { before: Object.keys(beforeOwner), after: Object.keys(ex) });
-check('leaked fields actually gone (present before, absent now)',
-  JSON.stringify(beforeOwner).includes(users.m.id) && JSON.stringify(beforeOwner).includes('exp2-token')
-  && !JSON.stringify(ex).includes(users.m.id), null);
+check('leaked fields gone: no counterparty UUID or token in the after-export',
+  !JSON.stringify(ex).includes(users.m.id) && !JSON.stringify(ex).includes('exp2-token'), null);
 
 // 9. Zero-data user: empty arrays, and the ONLY diff vs pre-change is the
 // version bump (all reshaping is a no-op on empty sections).
@@ -212,8 +216,8 @@ check('zero-data user: invite sections are honest empty arrays',
 const bz = JSON.parse(fs.readFileSync(BEFORE_ZERO, 'utf8'));
 const az = JSON.parse(JSON.stringify(exZ));
 delete bz.generated_at; delete az.generated_at;
-check('zero-data diff: only export_version changed (1 → 2)',
-  bz.export_version === 1 && az.export_version === 2
+check('zero-data diff: nothing changed except (at most) the version marker',
+  az.export_version === 2
   && (delete bz.export_version, delete az.export_version, JSON.stringify(bz) === JSON.stringify(az)),
   null);
 
