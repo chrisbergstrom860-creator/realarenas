@@ -97,6 +97,16 @@ for (const [m, p] of [['PATCH', ''], ['DELETE', ''], ['POST', '/end-early'], ['P
   r = await api('stranger', m, `/challenges/${V.id}${p}`, m === 'PATCH' ? { title: 'x' } : undefined);
   check(`stranger ${m}${p || ''} private solo V → "Challenge not found"`, r.body?.error === 'Challenge not found', r);
 }
+// 3b. ZERO-LEAK: stranger responses for a real private-solo id must be
+// byte-identical (status + body) to those for a nonexistent id on all four
+// routes — a future refactor must not reintroduce an existence oracle.
+const ghost = '00000000-0000-4000-8000-000000000000';
+for (const [m, p] of [['PATCH', ''], ['DELETE', ''], ['POST', '/end-early'], ['POST', '/remove-from-discover']]) {
+  const real = await api('stranger', m, `/challenges/${V.id}${p}`, m === 'PATCH' ? { title: 'x' } : undefined);
+  const fake = await api('stranger', m, `/challenges/${ghost}${p}`, m === 'PATCH' ? { title: 'x' } : undefined);
+  check(`zero-leak ${m}${p || ''}: private-solo response identical to nonexistent-id response`,
+    real.status === fake.status && JSON.stringify(real.body) === JSON.stringify(fake.body), { real, fake });
+}
 // 14. non-creator participant is not an editor
 r = await api('p1', 'PATCH', `/challenges/${X.id}`, { title: 'nope' });
 check('participant p1 PATCH X → 403 not_authorized', r.status === 403 && r.body?.error === 'not_authorized', r);

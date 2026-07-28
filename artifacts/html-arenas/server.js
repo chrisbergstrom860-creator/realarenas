@@ -7654,11 +7654,37 @@ app.get(BASE + '/for-clubs', async (req, res) => {
   res.type('html').send(html);
 });
 // About is a public marketing/content page (no auth), served raw like /for-clubs.
-app.get(BASE + '/about', (req, res) => res.sendFile(path.join(HTML, 'arenas-about.html')));
+// Marketing/legal pages: static files, but the nav must be session-aware —
+// signed-in users were seeing "Log in / Sign up free" chrome. A cheap cookie
+// check swaps the auth CTAs for app links; logged-out output is byte-identical
+// to the file. Because the response is now per-requester, these pages are
+// excluded from SW runtime caching (isNeverCached in sw.js), same precedent
+// as /how-points-work.
+async function sendMarketingPage(req, res, file) {
+  let authed = false;
+  const token = req.signedCookies && req.signedCookies.sb_access_token;
+  if (token) {
+    try {
+      const { data, error } = await supabase.auth.getUser(token);
+      authed = !error && !!(data && data.user);
+    } catch (e) { authed = false; }
+  }
+  if (!authed) return res.sendFile(path.join(HTML, file));
+  let page = fs.readFileSync(path.join(HTML, file), 'utf8');
+  page = page
+    .replace('<a class="nav-link" href="/html/landing#login">Log in</a>',
+      '<a class="nav-link" href="/html/feed">Back to app</a>')
+    .replace('<a class="nav-cta yellow" href="/html/landing#login">Sign up free</a>',
+      '<a class="nav-cta yellow" href="/html/feed">Open the app →</a>')
+    .replace('<a class="btn-primary" href="/html/landing#login">Get started free →</a>',
+      '<a class="btn-primary" href="/html/feed">Open the app →</a>');
+  res.type('html').send(page);
+}
+app.get(BASE + '/about', (req, res) => sendMarketingPage(req, res, 'arenas-about.html'));
 // Terms of Service is a public content page (no auth), served raw like /about.
-app.get(BASE + '/terms', (req, res) => res.sendFile(path.join(HTML, 'arenas-terms.html')));
+app.get(BASE + '/terms', (req, res) => sendMarketingPage(req, res, 'arenas-terms.html'));
 // Privacy Policy is a public content page (no auth), served raw like /terms.
-app.get(BASE + '/privacy', (req, res) => res.sendFile(path.join(HTML, 'arenas-privacy.html')));
+app.get(BASE + '/privacy', (req, res) => sendMarketingPage(req, res, 'arenas-privacy.html'));
 // How points work is a PUBLIC content page (no auth), like /terms and /privacy:
 // scoring transparency is a marketing asset and the page contains nothing
 // personal. The sport table AND every worked-example number are rendered from

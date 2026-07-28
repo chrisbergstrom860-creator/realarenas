@@ -25,7 +25,7 @@
  */
 'use strict';
 
-const VERSION = 'v4';
+const VERSION = 'v5';
 const RUNTIME_CACHE = 'arenas-runtime-' + VERSION;
 const AVATAR_CACHE = 'arenas-avatars-' + VERSION;
 const FONT_CACHE = 'arenas-fonts-' + VERSION;
@@ -52,17 +52,20 @@ const SUPABASE_HOST = '__SUPABASE_HOST__';
 // chrome (app nav for authed users), so caching it could replay one user's
 // variant to another after logout/account switch on a shared browser.
 const PUBLIC_PAGES = [
-  '/landing', '/about', '/terms', '/privacy', '/for-clubs',
+  '/landing', '/for-clubs',
   '/offline'
 ];
-// /how-points-work must never be cached in ANY variant: the page renders
-// per-requester chrome, and the ?fragment=1 modal fetch must always show the
-// live registry — a cached fragment could replay stale scoring during a
-// gateway failure. (Query strings don't reach this check; the pathname is
-// identical for both, which is exactly why the whole path is excluded.)
+// Pages that render PER-REQUESTER chrome must never be cached in ANY variant:
+// - /how-points-work: per-requester chrome + the ?fragment=1 modal fetch must
+//   always show the live registry (query strings don't reach this check; the
+//   pathname is identical for both, which is why the whole path is excluded).
+// - /about, /terms, /privacy: the server swaps the nav auth CTAs for app
+//   links when a session cookie is present, so a cached copy could show
+//   logged-out chrome to a signed-in user or vice versa.
+const NEVER_CACHED = ['/how-points-work', '/about', '/terms', '/privacy'];
 function isNeverCached(pathname) {
   const rel = BASE && pathname.indexOf(BASE) === 0 ? pathname.slice(BASE.length) : pathname;
-  return (rel || '/') === '/how-points-work';
+  return NEVER_CACHED.indexOf(rel || '/') !== -1;
 }
 function isPublicPage(pathname) {
   const rel = BASE && pathname.indexOf(BASE) === 0 ? pathname.slice(BASE.length) : pathname;
