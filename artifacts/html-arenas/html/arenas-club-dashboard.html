@@ -2043,10 +2043,23 @@ document.addEventListener('DOMContentLoaded', function () {
   };
 
   window.cancelClubChallenge = async function (challengeId, btn) {
-    if (!confirm('Cancel this challenge? All participants will lose their progress.')) return;
+    if (!confirm('Delete this challenge? This only works while no one else has joined.')) return;
     try {
       var r = await fetch(B + '/api/challenges/' + challengeId, { method: 'DELETE' });
       var result = await r.json();
+      if (result.error === 'not_alone') {
+        // Hard delete is refused once athletes are involved — offer the
+        // honest alternative. (No frozen standings exist: they stay
+        // live-recomputed from activities as of the end date.)
+        if (confirm('Athletes have joined, so this challenge can\'t be deleted. End it early instead? Standings will be as of the end date, recomputed from activities.')) {
+          var r2 = await fetch(B + '/api/challenges/' + challengeId + '/end-early', { method: 'POST' });
+          var res2 = await r2.json();
+          if (res2.error) { showToast('Error: ' + res2.error); return; }
+          showToast('Challenge ended early — participants notified');
+          setTimeout(function () { window.location.reload(); }, 600);
+        }
+        return;
+      }
       if (result.error) { showToast('Error: ' + result.error); return; }
       var card = document.getElementById('club-challenge-' + challengeId);
       if (card) { card.style.transition = 'opacity .25s'; card.style.opacity = '0'; setTimeout(function () { card.remove(); }, 250); }

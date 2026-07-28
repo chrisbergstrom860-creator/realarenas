@@ -653,7 +653,12 @@ function showToast(msg) {
 
   let lastResult = { myChallenges: [], friendsChallenges: [], publicChallenges: [], myJoinedIds: [] };
 
+  // Card-level lookup for the edit/delete affordances (buildChallengeCard is
+  // called for every rendered card, so this is always fresh after a reload).
+  const chalIndex = {};
+
   function buildChallengeCard(c) {
+    chalIndex[c.id] = c;
     // Server computes a safe pct (never divides by a zero/null target) and a
     // guarded isComplete flag — use those instead of recalculating here.
     const pct = c.pct || 0;
@@ -717,6 +722,8 @@ function showToast(msg) {
             <button onclick="viewLeaderboard('${esc(c.id)}')" style="padding:5px 12px;border-radius:7px;font-size:12px;font-weight:500;border:none;background:var(--gray-900);color:white;cursor:pointer">View leaderboard</button>
             <button onclick="window.location.href=window.BASE + '/log'" style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Log activity →</button>
             ${(c.isOwner && c.visibility === 'private' && !c.club_id && !isCompleted) ? `<button onclick="openInviteManager('${esc(c.id)}')" style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Invites${c.pendingInvites ? ' · ' + c.pendingInvites + ' pending' : ''}</button>` : ''}
+            ${(c.isOwner && !isCompleted) ? `<button onclick="openEditChallenge('${esc(c.id)}')" style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Edit</button>` : ''}
+            ${c.isOwner ? `<button onclick="openDeleteChallenge('${esc(c.id)}')" style="padding:5px 12px;border-radius:7px;font-size:12px;border:1px solid #FECACA;background:var(--red-light);color:#A32D2D;cursor:pointer;margin-left:auto">Delete…</button>` : ''}
             ${!c.isOwner ? `<button onclick="leaveChallenge('${esc(c.id)}',this)" style="padding:5px 12px;border-radius:7px;font-size:12px;border:1px solid #FECACA;background:var(--red-light);color:#A32D2D;cursor:pointer;margin-left:auto">Leave</button>` : ''}
           ` : `
             ${(proLocked && !c.club_id)
@@ -1042,13 +1049,231 @@ function showToast(msg) {
 
   // ── CREATE CHALLENGE MODAL (replaces the static prototype modal) ──
   window.openCreateModal = function () { if (proLocked) return goPro(); openCreateChallenge(); };
+  // Dirty-check shared by the create AND edit overlays: Escape or backdrop
+  // with modified fields must confirm before discarding (the edit form is
+  // pre-filled, so an accidental Escape would silently lose a correction).
+  // Explicit Cancel/✕ buttons still close immediately — pressing a button is
+  // deliberate.
+  let chFormBaseline = null;
+  function chFormSnapshot() {
+    const v = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+    const sel = (q, key) => { const el = document.querySelector(q); return (el && el.dataset[key]) || ''; };
+    return [
+      v('ch-title'), v('ch-desc'), v('ch-target'), v('ch-unit'), v('ch-start'), v('ch-end'),
+      sel('.ch-sport-chip.selected', 'sport'), sel('.ch-goal-type.selected', 'type'), sel('.ch-vis-opt.selected', 'vis'),
+      [...document.querySelectorAll('.ch-inv-cb:checked')].map(cb => cb.value).join(',')
+    ].join('|');
+  }
+  const chDirtyGuard = () => chFormSnapshot() === chFormBaseline || confirm('Discard your changes?');
+
   window.openCreateChallenge = function () {
     if (!window.arenasOverlay) { showToast('Please refresh the page'); return; }
-    window.arenasOverlay.open({ id: 'create-challenge-overlay', label: 'Create challenge', align: 'top', html: buildCreateModal() });
+    window.arenasOverlay.open({ id: 'create-challenge-overlay', label: 'Create challenge', align: 'top', html: buildCreateModal(), beforeClose: chDirtyGuard });
     const today = new Date().toISOString().split('T')[0];
     const end = new Date(); end.setDate(end.getDate() + 30);
     document.getElementById('ch-start').value = today;
     document.getElementById('ch-end').value = end.toISOString().split('T')[0];
+    chFormBaseline = chFormSnapshot();
+  };
+
+  // ── CREATOR EDIT (reuses the create modal, pre-filled) ──
+  window.openEditChallenge = function (id) {
+    if (!window.arenasOverlay) { showToast('Please refresh the page'); return; }
+    const c = chalIndex[id];
+    if (!c) return;
+    window.arenasOverlay.open({ id: 'create-challenge-overlay', label: 'Edit challenge', align: 'top', html: buildCreateModal(), beforeClose: chDirtyGuard });
+    const started = new Date(c.start_date).getTime() <= Date.now();
+    document.getElementById('ch-modal-title').textContent = 'Edit challenge';
+    document.getElementById('ch-title').value = c.title || '';
+    document.getElementById('ch-desc').value = c.description || '';
+    document.getElementById('ch-target').value = c.goal_target || '';
+    if (c.goal_unit) document.getElementById('ch-unit').value = c.goal_unit;
+    document.getElementById('ch-start').value = String(c.start_date).slice(0, 10);
+    document.getElementById('ch-end').value = String(c.end_date).slice(0, 10);
+    const sportChip = document.querySelector('.ch-sport-chip[data-sport="' + c.sport + '"]');
+    if (sportChip) selectChSport(sportChip);
+    const goalEl = document.querySelector('.ch-goal-type[data-type="' + c.goal_type + '"]');
+    if (goalEl) selectGoalType(goalEl);
+    const visEl = document.querySelector('.ch-vis-opt[data-vis="' + c.visibility + '"]');
+    if (visEl) selectVis(visEl);
+    // Invitees are managed via the Invites modal, never here.
+    const invWrap = document.getElementById('ch-invite-wrap');
+    if (invWrap) invWrap.style.display = 'none';
+    const btn = document.getElementById('ch-submit');
+    btn.textContent = 'Save changes';
+    btn.onclick = function () { submitEditChallenge(id); };
+    if (started) {
+      // Mirrors the server's post-start whitelist (which is the real gate):
+      // only title/description stay editable once the challenge has started.
+      ['ch-target', 'ch-unit', 'ch-start', 'ch-end'].forEach((i) => { const el = document.getElementById(i); if (el) el.disabled = true; });
+      ['#ch-sport-chips', '#ch-goal-types', '#ch-visibility'].forEach((s) => { const el = document.querySelector(s); if (el) { el.style.pointerEvents = 'none'; el.style.opacity = '.55'; } });
+      const err = document.getElementById('ch-error');
+      const note = document.createElement('div');
+      note.style.cssText = 'background:var(--gray-50);border:var(--border);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--gray-600);margin-bottom:12px';
+      note.textContent = 'This challenge has started — only the title and description can be edited.';
+      err.parentNode.insertBefore(note, err.nextSibling);
+    }
+    chFormBaseline = chFormSnapshot();
+  };
+
+  window.submitEditChallenge = async function (id) {
+    const c = chalIndex[id];
+    if (!c) return;
+    const started = new Date(c.start_date).getTime() <= Date.now();
+    const errorEl = document.getElementById('ch-error');
+    const fail = (msg) => { if (errorEl) { errorEl.textContent = msg; errorEl.style.display = 'block'; } };
+    const title = (document.getElementById('ch-title')?.value || '').trim();
+    if (!title) return fail('Please enter a challenge title.');
+    const body = { title, description: (document.getElementById('ch-desc')?.value || '').trim() };
+    if (!started) {
+      const goalTarget = document.getElementById('ch-target')?.value;
+      const startDate = document.getElementById('ch-start')?.value;
+      const endDate = document.getElementById('ch-end')?.value;
+      if (!goalTarget || parseFloat(goalTarget) < 1) return fail('Please enter a valid target.');
+      if (!startDate || !endDate) return fail('Please set a start and end date.');
+      if (new Date(endDate) <= new Date(startDate)) return fail('End date must be after start date.');
+      Object.assign(body, {
+        sport: document.querySelector('.ch-sport-chip.selected')?.dataset?.sport || 'any',
+        goal_type: document.querySelector('.ch-goal-type.selected')?.dataset?.type || 'distance',
+        goal_target: parseFloat(goalTarget),
+        goal_unit: document.getElementById('ch-unit')?.value,
+        start_date: new Date(startDate).toISOString(),
+        end_date: new Date(endDate).toISOString(),
+        visibility: document.querySelector('.ch-vis-opt.selected')?.dataset?.vis || c.visibility
+      });
+    }
+    const btn = document.getElementById('ch-submit');
+    if (btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
+    try {
+      const res = await fetch(B + '/api/challenges/' + id, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+      });
+      const result = await res.json();
+      if (result.error) {
+        fail(result.error === 'field_locked'
+          ? 'This challenge has started — only the title and description can be edited.'
+          : result.error === 'challenge_ended'
+            ? 'This challenge has ended and can no longer be edited.'
+            : 'Error: ' + result.error);
+        if (btn) { btn.textContent = 'Save changes'; btn.disabled = false; }
+        return;
+      }
+      chFormBaseline = chFormSnapshot(); // saved — nothing left to discard
+      arenasOverlay.close('create-challenge-overlay');
+      showToast('✓ Challenge updated.');
+      setTimeout(loadChallenges, 400);
+    } catch (err) {
+      fail('Something went wrong — please try again.');
+      if (btn) { btn.textContent = 'Save changes'; btn.disabled = false; }
+    }
+  };
+
+  // ── CREATOR DELETE / END EARLY / REMOVE FROM DISCOVER ──
+  // Branches on ALONENESS (server is the real gate — 'not_alone' is enforced
+  // there): alone → hard delete with a confirmation naming what's removed;
+  // others involved → End early / Remove from Discover instead.
+  window.openDeleteChallenge = function (id) {
+    if (!window.arenasOverlay) { showToast('Please refresh the page'); return; }
+    const c = chalIndex[id];
+    if (!c) return;
+    const others = Math.max(0, (c.participantCount || 1) - 1);
+    const pend = c.pendingInvites || 0;
+    const btnBase = 'padding:8px 14px;border-radius:7px;font-size:13px;cursor:pointer';
+    if (!others && !pend) {
+      window.arenasOverlay.open({ id: 'challenge-delete-overlay', label: 'Delete challenge', html: `
+        <div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:420px;overflow:hidden;box-shadow:var(--shadow-lg)">
+          <div style="padding:16px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">
+            <div style="font-size:15px;font-weight:700;color:var(--gray-900)">Delete challenge?</div>
+            <button onclick="arenasOverlay.close('challenge-delete-overlay')" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>
+          </div>
+          <div style="padding:18px;font-size:13px;color:var(--gray-600);line-height:1.6">
+            This permanently removes <strong>“${esc(c.title)}”</strong>, your participation record, any pending invites, and any club-feed milestones it produced. Your logged activities are never affected.
+          </div>
+          <div style="padding:14px 18px;border-top:var(--border);background:var(--gray-50);display:flex;gap:8px;justify-content:flex-end">
+            <button onclick="arenasOverlay.close('challenge-delete-overlay')" style="${btnBase};border:var(--border);background:white;color:var(--gray-600)">Cancel</button>
+            <button onclick="confirmDeleteChallenge('${esc(id)}',this)" style="${btnBase};border:none;background:#A32D2D;color:white;font-weight:600">Delete challenge</button>
+          </div>
+        </div>` });
+      return;
+    }
+    window.arenasOverlay.open({ id: 'challenge-delete-overlay', label: 'Manage challenge', html: `
+      <div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:440px;overflow:hidden;box-shadow:var(--shadow-lg)">
+        <div style="padding:16px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:15px;font-weight:700;color:var(--gray-900)">Others have joined</div>
+          <button onclick="arenasOverlay.close('challenge-delete-overlay')" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>
+        </div>
+        <div style="padding:18px">
+          <div style="font-size:13px;color:var(--gray-600);line-height:1.6;margin-bottom:14px">
+            ${others} other participant${others !== 1 ? 's' : ''}${pend ? ' and ' + pend + ' pending invite' + (pend !== 1 ? 's' : '') : ''} ${others + (pend ? 1 : 0) !== 1 || pend ? 'are' : 'is'} involved, so “${esc(c.title)}” can’t be deleted.
+          </div>
+          <button onclick="endChallengeEarly('${esc(id)}',this)" style="${btnBase};width:100%;border:var(--border);background:white;color:var(--gray-900);font-weight:600;text-align:left">End early</button>
+          <div style="font-size:11px;color:var(--gray-400);margin:6px 2px 14px">Moves it to Completed for everyone and notifies participants. Standings are as of the end date, recomputed from activities.</div>
+          ${c.visibility === 'public' ? `
+          <button onclick="removeFromDiscover('${esc(id)}',this)" style="${btnBase};width:100%;border:var(--border);background:white;color:var(--gray-900);font-weight:600;text-align:left">Remove from Discover</button>
+          <div style="font-size:11px;color:var(--gray-400);margin:6px 2px 0">Makes it private so no one new can join. Current participants keep going, and can rejoin if they leave.</div>` : ''}
+        </div>
+        <div style="padding:14px 18px;border-top:var(--border);background:var(--gray-50);display:flex;justify-content:flex-end">
+          <button onclick="arenasOverlay.close('challenge-delete-overlay')" style="${btnBase};border:var(--border);background:white;color:var(--gray-600)">Cancel</button>
+        </div>
+      </div>` });
+  };
+
+  window.confirmDeleteChallenge = async function (id, btn) {
+    if (btn) { btn.textContent = 'Deleting…'; btn.disabled = true; }
+    try {
+      const res = await fetch(B + '/api/challenges/' + id, { method: 'DELETE' });
+      const result = await res.json();
+      arenasOverlay.close('challenge-delete-overlay');
+      if (result.error) {
+        showToast(result.error === 'not_alone'
+          ? 'Someone has joined since — it can no longer be deleted. Try “End early” instead.'
+          : 'Error: ' + result.error);
+      } else {
+        showToast('Challenge deleted');
+      }
+      setTimeout(loadChallenges, 400);
+    } catch (err) {
+      showToast('Something went wrong — please try again');
+      if (btn) { btn.textContent = 'Delete challenge'; btn.disabled = false; }
+    }
+  };
+
+  window.endChallengeEarly = async function (id, btn) {
+    if (btn) { btn.textContent = 'Ending…'; btn.disabled = true; }
+    try {
+      const res = await fetch(B + '/api/challenges/' + id + '/end-early', { method: 'POST' });
+      const result = await res.json();
+      if (result.error) {
+        showToast('Error: ' + result.error);
+        if (btn) { btn.textContent = 'End early'; btn.disabled = false; }
+        return;
+      }
+      arenasOverlay.close('challenge-delete-overlay');
+      showToast('Challenge ended — standings are as of the end date, recomputed from activities.');
+      setTimeout(loadChallenges, 400);
+    } catch (err) {
+      showToast('Something went wrong — please try again');
+      if (btn) { btn.textContent = 'End early'; btn.disabled = false; }
+    }
+  };
+
+  window.removeFromDiscover = async function (id, btn) {
+    if (btn) { btn.textContent = 'Removing…'; btn.disabled = true; }
+    try {
+      const res = await fetch(B + '/api/challenges/' + id + '/remove-from-discover', { method: 'POST' });
+      const result = await res.json();
+      if (result.error) {
+        showToast('Error: ' + result.error);
+        if (btn) { btn.textContent = 'Remove from Discover'; btn.disabled = false; }
+        return;
+      }
+      arenasOverlay.close('challenge-delete-overlay');
+      showToast('Removed from Discover — it’s private now; current participants keep going.');
+      setTimeout(loadChallenges, 400);
+    } catch (err) {
+      showToast('Something went wrong — please try again');
+      if (btn) { btn.textContent = 'Remove from Discover'; btn.disabled = false; }
+    }
   };
 
   // ── FOLLOWER INVITE PICKER (shared by create modal + manage-invites modal) ──
@@ -1104,7 +1329,7 @@ function showToast(msg) {
     return `
       <div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:560px;overflow:hidden;box-shadow:var(--shadow-lg);margin:auto">
         <div style="padding:16px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">
-          <div style="font-size:15px;font-weight:700;color:var(--gray-900)">Create a challenge</div>
+          <div id="ch-modal-title" style="font-size:15px;font-weight:700;color:var(--gray-900)">Create a challenge</div>
           <button onclick="arenasOverlay.close('create-challenge-overlay')" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>
         </div>
         <div style="padding:18px;max-height:70vh;overflow-y:auto">
@@ -1188,7 +1413,7 @@ function showToast(msg) {
         <div style="padding:14px 18px;border-top:var(--border);background:var(--gray-50);display:flex;gap:8px;align-items:center">
           <button onclick="arenasOverlay.close('create-challenge-overlay')" style="padding:8px 14px;border:var(--border);border-radius:7px;font-size:13px;background:white;color:var(--gray-600);cursor:pointer">Cancel</button>
           <div style="font-size:11px;color:var(--gray-400);margin-left:4px">Progress auto-tracks from logged activities</div>
-          <button onclick="submitCreateChallenge()" style="padding:8px 18px;border:none;border-radius:7px;font-size:13px;font-weight:600;background:var(--gray-900);color:white;cursor:pointer;margin-left:auto">Create challenge →</button>
+          <button id="ch-submit" onclick="submitCreateChallenge()" style="padding:8px 18px;border:none;border-radius:7px;font-size:13px;font-weight:600;background:var(--gray-900);color:white;cursor:pointer;margin-left:auto">Create challenge →</button>
         </div>
       </div>`;
   }

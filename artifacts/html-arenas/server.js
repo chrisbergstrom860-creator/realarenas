@@ -4685,16 +4685,218 @@ app.post(BASE + '/api/challenges/:id/duplicate', requireAuth, async (req, res) =
   res.json({ success: true, challenge: newChallenge });
 });
 
-// Cancel/delete a challenge and its participants (coach/admin only). The
-// Challenges tab exposes this via each active card's "Cancel" button. There is
-// no separate DELETE route in the original spec, but the client UI depends on
-// it, so it's added here with the same admin/coach authorization.
+// ── CHALLENGE CREATOR EDIT/DELETE (2026-07-28) ──────────────────────────────
+// Authorization for challenge management: creator OR (club-scoped challenge +
+// club admin/coach). Pure authorization — deliberately NEVER consults
+// PLAN_GATES_ENABLED: exit and correction actions are not plan-gated (same
+// precedent as /leave). Zero-leak rule: unauthorized callers on a PRIVATE SOLO
+// challenge get the same "Challenge not found" as a missing id.
+async function requireChallengeEditor(challengeId, userId) {
+  if (!supabaseAdmin) return { fail: { error: 'Server is not configured for challenges' } };
+  const { data: ch } = await supabaseAdmin
+    .from('challenges').select('*').eq('id', challengeId).maybeSingle();
+  if (!ch) return { fail: { error: 'Challenge not found' } };
+  if (ch.created_by === userId) return { challenge: ch };
+  if (ch.club_id) {
+    const { data: mgr } = await supabaseAdmin
+      .from('memberships').select('role')
+      .eq('club_id', ch.club_id).eq('user_id', userId)
+      .in('role', ['admin', 'coach']).maybeSingle();
+    if (mgr) return { challenge: ch };
+  }
+  if (ch.visibility === 'private' && !ch.club_id) return { fail: { error: 'Challenge not found' } };
+  return { fail: { status: 403, error: 'not_authorized' } };
+}
+
+const challengeStarted = (ch) => new Date(ch.start_date).getTime() <= Date.now();
+const challengeExpired = (ch) => new Date(ch.end_date).getTime() < Date.now();
+
+// Derived-done edit lock. Matches the list route's derivation (isExpired ||
+// isComplete) from the REQUESTER's perspective — progress is per-viewer
+// everywhere in this app (see GET /api/challenges), so the lock agrees with
+// what the editing user's own UI shows.
+async function challengeDoneFor(ch, user) {
+  if (challengeExpired(ch)) return true;
+  const goalTarget = parseFloat(ch.goal_target) || 0;
+  if (!(goalTarget > 0)) return false;
+  const range = challengeFetchRange(ch);
+  const { data: acts } = await supabaseAdmin
+    .from('activities').select('distance, duration, sport, date')
+    .eq('user_id', user.id).gte('date', range.gteIso).lte('date', range.lteIso);
+  const tz = getUserTimezone(user);
+  const progress = parseFloat(
+    computeChallengeProgress(ch, actsInChallengeWindow(acts || [], ch, tz), tz)) || 0;
+  return progress >= goalTarget;
+}
+
+// Grandfather existing non-creator participants when a solo challenge goes
+// public→private: mint invite rows so the private join gate recognizes them —
+// they stay in, AND can leave and rejoin later. Rows are retained-on-accept by
+// design, so upsert-ignore is idempotent. No notifications: participants are
+// already in (pending = row ∧ ¬participant stays false — no dead pills).
+async function mintGrandfatherInvites(ch) {
+  if (ch.club_id) return; // club visibility is governed by membership, not invites
+  const { data: parts } = await supabaseAdmin
+    .from('challenge_participants').select('user_id').eq('challenge_id', ch.id);
+  const rows = (parts || [])
+    .filter((p) => p.user_id !== ch.created_by)
+    .map((p) => ({ challenge_id: ch.id, invitee_id: p.user_id, inviter_id: ch.created_by }));
+  if (!rows.length) return;
+  await supabaseAdmin.from('challenge_invites')
+    .upsert(rows, { onConflict: 'challenge_id,invitee_id', ignoreDuplicates: true });
+}
+
+// Fan-out to every participant except the actor. Type 'challenge' — the
+// notifications panel already renders it, and createNotification enforces the
+// recipient's notify_challenges pref at creation time.
+async function notifyChallengeParticipants(ch, actorUser, title, body) {
+  const { data: parts } = await supabaseAdmin
+    .from('challenge_participants').select('user_id').eq('challenge_id', ch.id);
+  const targets = [...new Set((parts || []).map((p) => p.user_id))]
+    .filter((id) => id !== actorUser.id);
+  for (const userId of targets) {
+    await createNotification({
+      userId, type: 'challenge', title, body,
+      link: '/challenges', actorId: actorUser.id, entityId: ch.id
+    });
+  }
+}
+
+// Edit a challenge. Field whitelist keyed on start_date, enforced HERE (never
+// just hidden in the UI): before start every field is editable; after start
+// ONLY title/description — any material key in the body is rejected outright.
+// Fully locked once derived-done (extending end_date would resurrect a
+// Completed challenge and corrupt the honest Completed count).
+// Visibility here is pre-start only; the post-start accidental-public escape
+// hatch is the separate one-directional /remove-from-discover route below.
+app.patch(BASE + '/api/challenges/:id', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
+  const { challenge, fail } = await requireChallengeEditor(req.params.id, req.user.id);
+  if (fail) return res.status(fail.status || 200).json({ error: fail.error });
+  if (await challengeDoneFor(challenge, req.user)) return res.json({ error: 'challenge_ended' });
+
+  const b = req.body || {};
+  const MATERIAL = ['sport', 'goal_type', 'goal_target', 'goal_unit', 'start_date', 'end_date', 'visibility'];
+  const started = challengeStarted(challenge);
+  if (started) {
+    const locked = MATERIAL.filter((k) => k in b);
+    if (locked.length) return res.json({ error: 'field_locked', fields: locked });
+  }
+
+  const updates = {};
+  if ('title' in b) {
+    const t = String(b.title || '').trim();
+    if (!t) return res.json({ error: 'Title is required' });
+    updates.title = t;
+  }
+  if ('description' in b) updates.description = b.description ? String(b.description) : null;
+  if (!started) {
+    if ('sport' in b) updates.sport = b.sport || 'any';
+    if ('goal_type' in b) {
+      if (!['distance', 'streak', 'sessions', 'duration'].includes(b.goal_type)) {
+        return res.json({ error: 'Invalid goal type' });
+      }
+      updates.goal_type = b.goal_type;
+    }
+    if ('goal_target' in b) {
+      const n = Number(b.goal_target);
+      if (!(n > 0)) return res.json({ error: 'Goal target must be a positive number' });
+      updates.goal_target = n;
+    }
+    if ('goal_unit' in b) updates.goal_unit = b.goal_unit || null;
+    if ('start_date' in b || 'end_date' in b) {
+      const s = new Date('start_date' in b ? b.start_date : challenge.start_date);
+      const e = new Date('end_date' in b ? b.end_date : challenge.end_date);
+      if (isNaN(s.getTime()) || isNaN(e.getTime())) return res.json({ error: 'Invalid dates' });
+      if (e <= s) return res.json({ error: 'End date must be after start date' });
+      if ('start_date' in b) updates.start_date = s.toISOString();
+      if ('end_date' in b) updates.end_date = e.toISOString();
+    }
+    if ('visibility' in b) {
+      if (!['public', 'private'].includes(b.visibility)) return res.json({ error: 'Invalid visibility' });
+      updates.visibility = b.visibility;
+    }
+  }
+  if (!Object.keys(updates).length) return res.json({ error: 'Nothing to update' });
+
+  const materialChanged = MATERIAL.filter(
+    (k) => k in updates && String(updates[k]) !== String(challenge[k] ?? ''));
+  const { data: updated, error } = await supabaseAdmin
+    .from('challenges').update(updates).eq('id', challenge.id).select().single();
+  if (error) return res.json({ error: error.message });
+
+  if (challenge.visibility === 'public' && updated.visibility === 'private') {
+    await mintGrandfatherInvites(updated);
+  }
+  // Material pre-start edits notify OTHER participants (if any exist);
+  // title/description edits notify nobody. That is the complete fan-out set.
+  if (materialChanged.length) {
+    await notifyChallengeParticipants(updated, req.user, 'Challenge updated',
+      `${displayFromUser(req.user).name} changed the details of “${updated.title}”.`);
+  }
+  res.json({ success: true, challenge: updated });
+});
+
+// End a challenge early: set end_date to 24h ago so the derived Completed
+// state (isExpired) flips everywhere at once — no status column exists.
+// Standings are NOT frozen: they remain live-recomputed from activities as of
+// the new end date (no rank snapshot exists; UI copy must never claim
+// "final" or "preserved" standings).
+app.post(BASE + '/api/challenges/:id/end-early', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
+  const { challenge, fail } = await requireChallengeEditor(req.params.id, req.user.id);
+  if (fail) return res.status(fail.status || 200).json({ error: fail.error });
+  if (challengeExpired(challenge)) return res.json({ error: 'already_ended' });
+  if (!challengeStarted(challenge)) return res.json({ error: 'not_started' }); // pre-start: edit dates or delete instead — an end<start row would be nonsense
+  const newEnd = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: updated, error } = await supabaseAdmin
+    .from('challenges').update({ end_date: newEnd }).eq('id', challenge.id).select().single();
+  if (error) return res.json({ error: error.message });
+  await notifyChallengeParticipants(updated, req.user, 'Challenge ended early',
+    `${displayFromUser(req.user).name} ended “${updated.title}” early. Standings are as of the end date, recomputed from activities.`);
+  res.json({ success: true, challenge: updated });
+});
+
+// One-directional public→private escape hatch — THE accidental-public fix.
+// Deliberately a distinct route, NOT general visibility editing: it works at
+// any time (including after start, where PATCH locks visibility), only ever
+// goes public→private, and grandfathers current participants via minted
+// invite rows. private→public after start stays impossible.
+app.post(BASE + '/api/challenges/:id/remove-from-discover', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
+  const { challenge, fail } = await requireChallengeEditor(req.params.id, req.user.id);
+  if (fail) return res.status(fail.status || 200).json({ error: fail.error });
+  if (challenge.visibility !== 'public') return res.json({ error: 'already_private' });
+  const { data: updated, error } = await supabaseAdmin
+    .from('challenges').update({ visibility: 'private' }).eq('id', challenge.id).select().single();
+  if (error) return res.json({ error: error.message });
+  await mintGrandfatherInvites(updated);
+  res.json({ success: true, challenge: updated });
+});
+
+// Delete a challenge — branches on ALONENESS, not doneness: hard delete only
+// when the creator is alone (no other participants AND no derived-pending
+// invites), regardless of expired/complete state. Anyone else involved →
+// refused server-side ('not_alone'); the UI then offers End early / Remove
+// from Discover. Authorization: creator OR club manager (this route used to
+// be club-manager-only, which left solo creators with no delete path).
+// Cascade: participants deleted in code, invites via DB FK cascade,
+// notifications orphan into the existing muted 'gone' degradation.
 app.delete(BASE + '/api/challenges/:id', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
-  const challenge = await requireChallengeManager(req.params.id, req.user.id, 'id, club_id');
-  if (!challenge) return res.json({ error: 'Challenge not found' });
-  await supabaseAdmin.from('challenge_participants').delete().eq('challenge_id', req.params.id);
-  const { error } = await supabaseAdmin.from('challenges').delete().eq('id', req.params.id);
+  const { challenge, fail } = await requireChallengeEditor(req.params.id, req.user.id);
+  if (fail) return res.status(fail.status || 200).json({ error: fail.error });
+  const { data: parts } = await supabaseAdmin
+    .from('challenge_participants').select('user_id, challenge_id').eq('challenge_id', challenge.id);
+  const others = (parts || []).filter((p) => p.user_id !== challenge.created_by);
+  const { data: inviteRows } = await supabaseAdmin
+    .from('challenge_invites').select('challenge_id, invitee_id').eq('challenge_id', challenge.id);
+  const pending = pendingInvites(inviteRows || [], parts || []);
+  if (others.length || pending.length) {
+    return res.json({ error: 'not_alone', participants: others.length, pendingInvites: pending.length });
+  }
+  await supabaseAdmin.from('challenge_participants').delete().eq('challenge_id', challenge.id);
+  const { error } = await supabaseAdmin.from('challenges').delete().eq('id', challenge.id);
   if (error) return res.json({ error: error.message });
   res.json({ success: true });
 });

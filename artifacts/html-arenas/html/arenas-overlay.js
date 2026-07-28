@@ -13,7 +13,19 @@
   var prevOverflow = '';
 
   function onKey(e) {
-    if (e.key === 'Escape' && stack.length) close(stack[stack.length - 1].id);
+    if (e.key === 'Escape' && stack.length) requestClose(stack[stack.length - 1]);
+  }
+
+  // Escape/backdrop go through the overlay's beforeClose guard (dirty checks);
+  // returning false aborts the close. Explicit close() calls (✕/Cancel
+  // buttons, programmatic) bypass it — pressing a button is deliberate.
+  function requestClose(entry) {
+    if (entry.beforeClose) {
+      var ok;
+      try { ok = entry.beforeClose(); } catch (err) { ok = true; }
+      if (ok === false) return;
+    }
+    close(entry.id);
   }
 
   function focusFirst(el) {
@@ -40,7 +52,8 @@
       el: ov,
       id: opts.id || ('arenas-overlay-' + Math.random().toString(36).slice(2)),
       trigger: opts.trigger || document.activeElement,
-      onClose: opts.onClose || null
+      onClose: opts.onClose || null,
+      beforeClose: opts.beforeClose || null
     };
     ov.id = entry.id;
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:' +
@@ -57,7 +70,7 @@
         panel.setAttribute('aria-label', opts.label);
       }
     }
-    ov.addEventListener('click', function (e) { if (e.target === ov) close(entry.id); });
+    ov.addEventListener('click', function (e) { if (e.target === ov) requestClose(entry); });
     stack.push(entry);
     document.body.appendChild(ov);
     focusFirst(ov);
