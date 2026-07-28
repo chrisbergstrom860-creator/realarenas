@@ -7049,11 +7049,14 @@ app.post(BASE + '/api/profile/update', requireAuth, async (req, res) => {
 
 // Paged fetch so exports/deletes never silently truncate at PostgREST's
 // default 1000-row page. Returns ALL matching rows.
-async function fetchAllRows(table, applyFilters) {
+async function fetchAllRows(table, applyFilters, columns) {
   const PAGE = 1000;
   const out = [];
   for (let from = 0; ; from += PAGE) {
-    let q = supabaseAdmin.from(table).select('*').range(from, from + PAGE - 1);
+    // Explicit column lists on export reads: a future column addition must
+    // never silently widen the export (third-party-data rule). '*' remains
+    // only for internal (non-emitted) uses.
+    let q = supabaseAdmin.from(table).select(columns || '*').range(from, from + PAGE - 1);
     q = applyFilters(q);
     const { data, error } = await q;
     if (error) throw new Error(table + ': ' + error.message);
@@ -7074,7 +7077,24 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
   const email = req.user.email || null;
   try {
     const meta = req.user.user_metadata || {};
-    const ownedClubs = await fetchAllRows('clubs', q => q.eq('owner_id', uid));
+    // ── EXPORT PRIVACY RULES (export_version 2) ──
+    // 1. PROVENANCE: an email or identifier appears only if the requesting
+    //    user supplied it. Their own email/account id stay; club-invite
+    //    emails THEY typed stay (their own input). Anything the system would
+    //    be revealing (another account's email, any address the user never
+    //    typed) must never be emitted.
+    // 2. PEOPLE: other people render as { name, handle } via
+    //    buildUserProfileMap — never raw user ids, never emails.
+    // 3. NO RAW UUIDs: internal row/entity ids are not the user's data and
+    //    could be (or point at) other people — none are emitted. References
+    //    render human-readable instead (club name+handle, challenge title,
+    //    event title, post author). account.id is the single exception: it is
+    //    the requester's own identifier.
+    // 4. NO CAPABILITY SECRETS: club-invite tokens are live redemption
+    //    secrets and are never exported.
+    // Guard: scripts/verify-export-invites.js asserts all of this.
+    const ownedClubs = await fetchAllRows('clubs', q => q.eq('owner_id', uid),
+      'id, name, handle, sport, city, created_at, logo_url');
     const ownedClubIds = ownedClubs.map(c => c.id);
     const [
       activities, posts, postComments, postLikes,
@@ -7083,45 +7103,53 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
       eventRsvps, eventsCreated, challengesCreated, challengeParticipations,
       memberships, clubInvitesSent, userSubs
     ] = await Promise.all([
-      fetchAllRows('activities', q => q.eq('user_id', uid)),
-      fetchAllRows('posts', q => q.eq('user_id', uid)),
-      fetchAllRows('post_comments', q => q.eq('user_id', uid)),
-      fetchAllRows('post_likes', q => q.eq('user_id', uid)),
-      fetchAllRows('follows', q => q.eq('follower_id', uid)),
-      fetchAllRows('follows', q => q.eq('following_id', uid)),
-      fetchAllRows('goals', q => q.eq('user_id', uid)),
-      fetchAllRows('planned_sessions', q => q.eq('user_id', uid)),
-      fetchAllRows('achievements', q => q.eq('user_id', uid)),
-      fetchAllRows('notifications', q => q.eq('user_id', uid)),
-      fetchAllRows('notifications', q => q.eq('actor_id', uid)),
-      fetchAllRows('event_rsvps', q => q.eq('user_id', uid)),
-      fetchAllRows('events', q => q.eq('created_by', uid)),
-      fetchAllRows('challenges', q => q.eq('created_by', uid)),
-      fetchAllRows('challenge_participants', q => q.eq('user_id', uid)),
-      fetchAllRows('memberships', q => q.eq('user_id', uid)),
-      fetchAllRows('club_invites', q => q.eq('invited_by', uid)),
-      fetchAllRows('subscriptions', q => q.eq('owner_type', 'user').eq('owner_id', uid))
+      fetchAllRows('activities', q => q.eq('user_id', uid),
+        'sport, title, date, duration, notes, feeling, distance, pace, avg_hr, elevation, cadence, run_type, avg_power, avg_speed, ride_type, top_grade, project_grade, problems_count, climbing_style, climb_location, swim_pace, pool_type, stroke, session_type, position, session_focus, total_volume, top_lift, sets_completed, rpe, trail, terrain, pack_weight, yoga_style, yoga_format, focus_area, instructor, ai_insight, created_at, golf_strokes, golf_course'),
+      fetchAllRows('posts', q => q.eq('user_id', uid), 'content, sport, feeling, created_at'),
+      fetchAllRows('post_comments', q => q.eq('user_id', uid), 'post_id, content, created_at'),
+      fetchAllRows('post_likes', q => q.eq('user_id', uid), 'post_id, created_at'),
+      fetchAllRows('follows', q => q.eq('follower_id', uid), 'following_id, created_at'),
+      fetchAllRows('follows', q => q.eq('following_id', uid), 'follower_id, created_at'),
+      fetchAllRows('goals', q => q.eq('user_id', uid),
+        'type, sport, target_value, unit, period, start_date, end_date, status, created_at, updated_at'),
+      fetchAllRows('planned_sessions', q => q.eq('user_id', uid),
+        'date, sport, title, planned_duration, notes, status, created_at, updated_at'),
+      fetchAllRows('achievements', q => q.eq('user_id', uid), 'badge_id, earned_at'),
+      fetchAllRows('notifications', q => q.eq('user_id', uid),
+        'type, title, body, link, read, actor_id, created_at'),
+      fetchAllRows('notifications', q => q.eq('actor_id', uid),
+        'type, title, body, link, user_id, created_at'),
+      fetchAllRows('event_rsvps', q => q.eq('user_id', uid), 'event_id, status, created_at'),
+      fetchAllRows('events', q => q.eq('created_by', uid),
+        'club_id, title, sport, event_type, date, location, distance, max_participants, entry_fee, level, description, visibility, created_at'),
+      fetchAllRows('challenges', q => q.eq('created_by', uid),
+        'club_id, title, description, sport, goal_type, goal_target, goal_unit, start_date, end_date, visibility, created_at'),
+      fetchAllRows('challenge_participants', q => q.eq('user_id', uid), 'challenge_id, joined_at'),
+      fetchAllRows('memberships', q => q.eq('user_id', uid), 'club_id, role, created_at'),
+      fetchAllRows('club_invites', q => q.eq('invited_by', uid),
+        'club_id, email, role, status, expires_at, accepted_at, created_at'),
+      fetchAllRows('subscriptions', q => q.eq('owner_type', 'user').eq('owner_id', uid),
+        'plan, stripe_customer_id, stripe_subscription_id, status, current_period_end, cancel_at_period_end, created_at, updated_at')
     ]);
     const clubInvitesReceived = email
-      ? await fetchAllRows('club_invites', q => q.eq('email', email))
+      ? await fetchAllRows('club_invites', q => q.eq('email', email),
+        'club_id, invited_by, role, status, expires_at, accepted_at, created_at')
       : [];
     const clubSubs = ownedClubIds.length
-      ? await fetchAllRows('subscriptions', q => q.eq('owner_type', 'club').in('owner_id', ownedClubIds))
+      ? await fetchAllRows('subscriptions', q => q.eq('owner_type', 'club').in('owner_id', ownedClubIds),
+        'owner_id, plan, stripe_customer_id, stripe_subscription_id, status, current_period_end, cancel_at_period_end, created_at, updated_at')
       : [];
     // Challenge invites, both directions. Pending is DERIVED (row exists ∧
     // invitee not a participant) via the shared pendingInvites() helper — the
     // export is its fifth caller; never reimplement the rule inline.
-    // Counterparties render as the app-wide person shape (name + handle via
-    // buildUserProfileMap), never raw user ids or emails: an invite is partly
-    // the other person's data, so the export stays at UI-visibility level.
-    // Rows for deleted challenges cannot exist (ON DELETE CASCADE FK); a
-    // deleted non-creator inviter can leave a dangling id → 'Athlete' fallback.
     let chInvitesSentRaw = [];
     let chInvitesReceivedRaw = [];
     try {
       [chInvitesSentRaw, chInvitesReceivedRaw] = await Promise.all([
-        fetchAllRows('challenge_invites', q => q.eq('inviter_id', uid)),
-        fetchAllRows('challenge_invites', q => q.eq('invitee_id', uid))
+        fetchAllRows('challenge_invites', q => q.eq('inviter_id', uid),
+          'challenge_id, invitee_id, created_at'),
+        fetchAllRows('challenge_invites', q => q.eq('invitee_id', uid),
+          'challenge_id, invitee_id, inviter_id, created_at')
       ]);
     } catch (err) {
       // Same tolerance as account-delete: ONLY the table-not-provisioned case
@@ -7131,34 +7159,99 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
       if (!tableMissing) throw err;
     }
     const allInviteRows = chInvitesSentRaw.concat(chInvitesReceivedRaw);
-    const inviteTitleById = {};
+
+    // ── Reference lookups (internal only — ids never reach the output) ──
+    const clubIds = [...new Set([
+      ...eventsCreated.map(r => r.club_id),
+      ...challengesCreated.map(r => r.club_id),
+      ...memberships.map(r => r.club_id),
+      ...clubInvitesSent.map(r => r.club_id),
+      ...clubInvitesReceived.map(r => r.club_id)
+    ].filter(Boolean))];
+    const clubById = {};
+    ownedClubs.forEach(c => { clubById[c.id] = c; });
+    const missingClubIds = clubIds.filter(id => !clubById[id]);
+    if (missingClubIds.length) {
+      const rows = await fetchAllRows('clubs', q => q.in('id', missingClubIds), 'id, name, handle');
+      rows.forEach(c => { clubById[c.id] = c; });
+    }
+    const clubRef = (id) => {
+      const c = id && clubById[id];
+      return c ? { name: c.name, handle: c.handle || null } : null;
+    };
+
+    const challengeIds = [...new Set([
+      ...challengeParticipations.map(r => r.challenge_id),
+      ...allInviteRows.map(r => r.challenge_id)
+    ].filter(Boolean))];
+    const challengeTitleById = {};
+    if (challengeIds.length) {
+      const rows = await fetchAllRows('challenges', q => q.in('id', challengeIds), 'id, title');
+      rows.forEach(c => { challengeTitleById[c.id] = c.title || null; });
+    }
+
+    const eventIds = [...new Set(eventRsvps.map(r => r.event_id).filter(Boolean))];
+    const eventById = {};
+    if (eventIds.length) {
+      const rows = await fetchAllRows('events', q => q.in('id', eventIds), 'id, title, date');
+      rows.forEach(e => { eventById[e.id] = e; });
+    }
+
+    const likedCommentedPostIds = [...new Set(
+      postComments.map(r => r.post_id).concat(postLikes.map(r => r.post_id)).filter(Boolean)
+    )];
+    const postAuthorIdByPostId = {};
+    if (likedCommentedPostIds.length) {
+      const rows = await fetchAllRows('posts', q => q.in('id', likedCommentedPostIds), 'id, user_id');
+      rows.forEach(p => { postAuthorIdByPostId[p.id] = p.user_id; });
+    }
+
+    // Pending derivation for challenge invites (shared helper — fifth caller).
     let invitePendingSet = new Set();
-    let invitePeople = {};
     if (allInviteRows.length) {
-      const inviteChIds = [...new Set(allInviteRows.map(r => r.challenge_id))];
-      const [inviteChRows, invitePartRows, peopleMap] = await Promise.all([
-        fetchAllRows('challenges', q => q.in('id', inviteChIds)),
-        fetchAllRows('challenge_participants', q => q.in('challenge_id', inviteChIds)),
-        buildUserProfileMap(allInviteRows.map(r => r.inviter_id).concat(allInviteRows.map(r => r.invitee_id)))
-      ]);
-      inviteChRows.forEach(c => { inviteTitleById[c.id] = c.title || null; });
+      const invitePartRows = await fetchAllRows('challenge_participants',
+        q => q.in('challenge_id', [...new Set(allInviteRows.map(r => r.challenge_id))]),
+        'challenge_id, user_id');
       invitePendingSet = new Set(pendingInvites(allInviteRows, invitePartRows)
         .map(r => r.challenge_id + ':' + r.invitee_id));
-      invitePeople = peopleMap;
     }
-    const invitePerson = (id) => {
-      const p = invitePeople[id];
+
+    // One person map for every counterparty in the export.
+    const personIds = [
+      ...following.map(r => r.following_id),
+      ...followers.map(r => r.follower_id),
+      ...notificationsReceived.map(r => r.actor_id),
+      ...notificationsTriggered.map(r => r.user_id),
+      ...clubInvitesReceived.map(r => r.invited_by),
+      ...chInvitesSentRaw.map(r => r.invitee_id),
+      ...chInvitesReceivedRaw.map(r => r.inviter_id),
+      ...Object.values(postAuthorIdByPostId)
+    ].filter(id => id && id !== uid);
+    const peopleMap = await buildUserProfileMap(personIds);
+    const person = (id) => {
+      if (!id) return null;
+      if (id === uid) return { name: meta.name || 'You', handle: meta.handle || null, self: true };
+      const p = peopleMap[id];
       return { name: (p && p.name) || 'Athlete', handle: (p && p.handle) || 'athlete' };
     };
-    const inviteRowOut = (r, counterpartyId) => ({
-      challenge_id: r.challenge_id,
-      challenge_title: inviteTitleById[r.challenge_id] || null,
-      counterparty: invitePerson(counterpartyId),
+
+    const chInviteOut = (r, counterpartyId) => ({
+      challenge_title: challengeTitleById[r.challenge_id] || null,
+      counterparty: person(counterpartyId),
       created_at: r.created_at,
       state: invitePendingSet.has(r.challenge_id + ':' + r.invitee_id) ? 'pending' : 'accepted'
     });
+    const clubInviteBase = (r) => ({
+      club: clubRef(r.club_id),
+      role: r.role,
+      status: r.status,
+      expires_at: r.expires_at,
+      accepted_at: r.accepted_at,
+      created_at: r.created_at
+    });
+
     const exportDoc = {
-      export_version: 1,
+      export_version: 2,
       generated_at: new Date().toISOString(),
       account: {
         id: uid,
@@ -7170,22 +7263,70 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
       },
       activities,
       posts,
-      post_comments: postComments,
-      post_likes: postLikes,
-      follows: { following, followers },
+      post_comments: postComments.map(r => ({
+        content: r.content, created_at: r.created_at,
+        post_author: person(postAuthorIdByPostId[r.post_id])
+      })),
+      post_likes: postLikes.map(r => ({
+        created_at: r.created_at,
+        post_author: person(postAuthorIdByPostId[r.post_id])
+      })),
+      follows: {
+        following: following.map(r => ({ user: person(r.following_id), created_at: r.created_at })),
+        followers: followers.map(r => ({ user: person(r.follower_id), created_at: r.created_at }))
+      },
       goals,
       planned_sessions: plannedSessions,
       achievements,
-      notifications: { received: notificationsReceived, triggered: notificationsTriggered },
-      events: { created: eventsCreated, rsvps: eventRsvps },
-      challenges: { created: challengesCreated, participations: challengeParticipations },
-      challenge_invites: {
-        sent: chInvitesSentRaw.map(r => inviteRowOut(r, r.invitee_id)),
-        received: chInvitesReceivedRaw.map(r => inviteRowOut(r, r.inviter_id))
+      notifications: {
+        received: notificationsReceived.map(r => ({
+          type: r.type, title: r.title, body: r.body, link: r.link,
+          read: r.read, actor: person(r.actor_id), created_at: r.created_at
+        })),
+        // Recipient read-state is THEIR activity, not the requester's — omitted.
+        triggered: notificationsTriggered.map(r => ({
+          type: r.type, title: r.title, body: r.body, link: r.link,
+          recipient: person(r.user_id), created_at: r.created_at
+        }))
       },
-      clubs: { owned: ownedClubs, memberships },
-      club_invites: { sent: clubInvitesSent, received: clubInvitesReceived },
-      subscriptions: { user: userSubs, owned_clubs: clubSubs }
+      events: {
+        created: eventsCreated.map(({ club_id, ...rest }) => ({ ...rest, club: clubRef(club_id) })),
+        rsvps: eventRsvps.map(r => ({
+          event_title: (eventById[r.event_id] && eventById[r.event_id].title) || null,
+          event_date: (eventById[r.event_id] && eventById[r.event_id].date) || null,
+          status: r.status, created_at: r.created_at
+        }))
+      },
+      challenges: {
+        created: challengesCreated.map(({ club_id, ...rest }) => ({ ...rest, club: clubRef(club_id) })),
+        participations: challengeParticipations.map(r => ({
+          challenge_title: challengeTitleById[r.challenge_id] || null,
+          joined_at: r.joined_at
+        }))
+      },
+      challenge_invites: {
+        sent: chInvitesSentRaw.map(r => chInviteOut(r, r.invitee_id)),
+        received: chInvitesReceivedRaw.map(r => chInviteOut(r, r.inviter_id))
+      },
+      clubs: {
+        owned: ownedClubs.map(({ id, ...rest }) => rest),
+        memberships: memberships.map(r => ({ club: clubRef(r.club_id), role: r.role, created_at: r.created_at }))
+      },
+      club_invites: {
+        // Sent: the email stays because the REQUESTER typed it (provenance
+        // rule — their own input). Open-link invites carry the sentinel
+        // address, which is system-internal, so they render as a flag instead.
+        sent: clubInvitesSent.map(r => (r.email === OPEN_INVITE_EMAIL
+          ? { open_link: true, ...clubInviteBase(r) }
+          : { invited_email: r.email, ...clubInviteBase(r) })),
+        // Received: matched by the requester's own address; the inviter is
+        // another person → name + handle only.
+        received: clubInvitesReceived.map(r => ({ inviter: person(r.invited_by), ...clubInviteBase(r) }))
+      },
+      subscriptions: {
+        user: userSubs,
+        owned_clubs: clubSubs.map(({ owner_id, ...rest }) => ({ club: clubRef(owner_id), ...rest }))
+      }
     };
     const fname = 'arenas-export-' + new Date().toISOString().slice(0, 10) + '.json';
     res.setHeader('Content-Disposition', 'attachment; filename="' + fname + '"');
