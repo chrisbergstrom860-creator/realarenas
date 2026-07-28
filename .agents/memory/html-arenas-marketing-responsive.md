@@ -41,3 +41,8 @@ The marketing/auth pages (`arenas-landing-login.html`, `arenas-for-clubs.html`) 
 **Two cross-cutting gotchas (cost real time):**
 - The html-arenas artifact `previewPath` is **`/html/landing`** (the landing page), NOT `/html`. So `app_preview` screenshots of for-clubs must use `path:'/../for-clubs'` (resolves `/html/landing/../for-clubs` → `/html/for-clubs`). A bare `path:'/for-clubs'` 404s as `/html/landing/for-clubs`.
 - `runTest` (Playwright) DEFAULTS TO THE WRONG APP: it went to the React `arenas` artifact's `/login?mode=signup` (`artifacts/arenas/src/pages/Login.tsx`) instead of the static `/html/for-clubs`. Must give strict guardrails: pin `path:/html/for-clubs`, state the modal is an in-page overlay (URL never changes), and forbid `/login`/`?mode=signup`/React routes.
+
+## Session-aware nav (2026-07-28)
+- /about, /terms, /privacy served via `sendMarketingPage()` in server.js: valid `sb_access_token` cookie swaps the exact nav/CTA anchor strings (Log in / Sign up free / Get started free) for Back to app / Open the app → /html/feed; logged-out output stays byte-identical to the file.
+- Per-requester output ⇒ these paths live in sw.js `NEVER_CACHED` (with /how-points-work) and are OUT of PUBLIC_PAGES — keep both lists in sync when adding pages.
+- The exact-string replaces break silently if those anchors are reworded in the HTML; update server.js alongside.
