@@ -255,6 +255,12 @@ app.get(['/html/arenas-notifications-panel.js', '/arenas-notifications-panel.js'
 app.get(['/html/arenas-hpw-modal.js', '/arenas-hpw-modal.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-hpw-modal.js'));
 });
+// Shared overlay/modal primitive (backdrop, Escape, scroll lock, focus
+// restore). Must load BEFORE arenas-hpw-modal.js and the challenges page's
+// modal code — both build on window.arenasOverlay.
+app.get(['/html/arenas-overlay.js', '/arenas-overlay.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-overlay.js'));
+});
 
 // Shared activity stat-tile builder (feed + my-profile Activities tab render
 // the same boxed tiles from this one file). Dual-path like the panel above.

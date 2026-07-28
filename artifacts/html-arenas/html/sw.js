@@ -25,7 +25,7 @@
  */
 'use strict';
 
-const VERSION = 'v3';
+const VERSION = 'v4';
 const RUNTIME_CACHE = 'arenas-runtime-' + VERSION;
 const AVATAR_CACHE = 'arenas-avatars-' + VERSION;
 const FONT_CACHE = 'arenas-fonts-' + VERSION;
@@ -55,6 +55,15 @@ const PUBLIC_PAGES = [
   '/landing', '/about', '/terms', '/privacy', '/for-clubs',
   '/offline'
 ];
+// /how-points-work must never be cached in ANY variant: the page renders
+// per-requester chrome, and the ?fragment=1 modal fetch must always show the
+// live registry — a cached fragment could replay stale scoring during a
+// gateway failure. (Query strings don't reach this check; the pathname is
+// identical for both, which is exactly why the whole path is excluded.)
+function isNeverCached(pathname) {
+  const rel = BASE && pathname.indexOf(BASE) === 0 ? pathname.slice(BASE.length) : pathname;
+  return (rel || '/') === '/how-points-work';
+}
 function isPublicPage(pathname) {
   const rel = BASE && pathname.indexOf(BASE) === 0 ? pathname.slice(BASE.length) : pathname;
   return PUBLIC_PAGES.indexOf(rel || '/') !== -1;
@@ -116,7 +125,9 @@ async function networkFirst(request, isNavigation) {
     // surface here as opaqueredirect (status 0) and pass through uncached —
     // the browser follows them itself.
     if (response.ok && response.type === 'basic') {
-      const cacheable = !isNavigation || isPublicPage(new URL(request.url).pathname);
+      const pathname = new URL(request.url).pathname;
+      const cacheable = !isNeverCached(pathname) &&
+        (!isNavigation || isPublicPage(pathname));
       if (cacheable) cache.put(request, response.clone()).catch(() => {});
       return response;
     }

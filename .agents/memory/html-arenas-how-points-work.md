@@ -20,6 +20,19 @@ must propagate by themselves.
 - **Because the page is now per-requester, it was REMOVED from sw.js
   PUBLIC_PAGES** (VERSION v2→v3). Never re-add it while chrome varies by session.
 
+## Shared overlay primitive (`html/arenas-overlay.js`) — use for ALL modals
+`window.arenasOverlay.open({id,label,html,align,zIndex,trigger,onClose})` /
+`.close(id)` is THE canonical full-screen overlay: stack, backdrop + Escape
+(topmost) close, body scroll lock (refcounted via stack), focus to
+`[data-autofocus]`/first control + restore to trigger, aria dialog attrs,
+`align:'top'` = overlay scrolls (long forms) vs `'center'` = panel scrolls.
+Consumers: HPW modal + challenges create-challenge / manage-invites /
+challenge-leaderboard overlays. **Never re-inline overlay chrome and never
+close these overlays with direct `.remove()`** — that strands the scroll lock;
+always `arenasOverlay.close(id)`. Dual serve route; load before consumers.
+sw.js: /how-points-work excluded from runtime cache entirely via
+`isNeverCached()` (fragment must never replay stale scoring); VERSION v4.
+
 ## In-app modal (`html/arenas-hpw-modal.js`, shared, dual serve route)
 Loaded via static `<script src="/html/arenas-hpw-modal.js" defer>` on
 leaderboards/challenges/my-profile — works on Railway root because the serve

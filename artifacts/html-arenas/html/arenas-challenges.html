@@ -1000,6 +1000,7 @@ function showToast(msg) {
   };
 
   window.viewLeaderboard = async function (id) {
+    if (!window.arenasOverlay) { showToast('Please refresh the page'); return; }
     try {
       const res = await fetch(B + '/api/challenges/' + id + '/leaderboard');
       const result = await res.json();
@@ -1026,34 +1027,24 @@ function showToast(msg) {
           </div>`;
       }).join('');
       const days = Math.max(0, Math.ceil((new Date(challenge.end_date) - new Date()) / (1000 * 60 * 60 * 24)));
-      const overlay = document.createElement('div');
-      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px';
-      overlay.innerHTML = `<div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:480px;max-height:80vh;overflow-y:auto;box-shadow:var(--shadow-lg)">
+      window.arenasOverlay.open({ id: 'challenge-leaderboard-overlay', label: 'Challenge leaderboard', html: `<div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:480px;max-height:80vh;overflow-y:auto;box-shadow:var(--shadow-lg)">
           <div style="padding:16px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">
             <div>
               <div style="font-size:15px;font-weight:700;color:var(--gray-900)">${esc(challenge.title)}</div>
               <div style="font-size:12px;color:var(--gray-500);margin-top:2px">${leaderboard.length} participant${leaderboard.length !== 1 ? 's' : ''} · ${days} days left</div>
             </div>
-            <button onclick="this.closest('[style*=fixed]').remove()" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>
+            <button onclick="arenasOverlay.close('challenge-leaderboard-overlay')" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>
           </div>
           ${rows || '<div style="padding:24px;text-align:center;color:var(--gray-500)">No participants yet</div>'}
-        </div>`;
-      overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-      document.body.appendChild(overlay);
+        </div>` });
     } catch (err) { showToast('Could not load leaderboard'); }
   };
 
   // ── CREATE CHALLENGE MODAL (replaces the static prototype modal) ──
   window.openCreateModal = function () { if (proLocked) return goPro(); openCreateChallenge(); };
   window.openCreateChallenge = function () {
-    const existing = document.getElementById('create-challenge-overlay');
-    if (existing) existing.remove();
-    const overlay = document.createElement('div');
-    overlay.id = 'create-challenge-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto';
-    overlay.innerHTML = buildCreateModal();
-    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-    document.body.appendChild(overlay);
+    if (!window.arenasOverlay) { showToast('Please refresh the page'); return; }
+    window.arenasOverlay.open({ id: 'create-challenge-overlay', label: 'Create challenge', align: 'top', html: buildCreateModal() });
     const today = new Date().toISOString().split('T')[0];
     const end = new Date(); end.setDate(end.getDate() + 30);
     document.getElementById('ch-start').value = today;
@@ -1114,7 +1105,7 @@ function showToast(msg) {
       <div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:560px;overflow:hidden;box-shadow:var(--shadow-lg);margin:auto">
         <div style="padding:16px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">
           <div style="font-size:15px;font-weight:700;color:var(--gray-900)">Create a challenge</div>
-          <button onclick="document.getElementById('create-challenge-overlay').remove()" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>
+          <button onclick="arenasOverlay.close('create-challenge-overlay')" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>
         </div>
         <div style="padding:18px;max-height:70vh;overflow-y:auto">
           <div id="ch-error" style="display:none;background:var(--red-light);border:1px solid #FECACA;border-radius:8px;padding:10px 14px;font-size:13px;color:#A32D2D;margin-bottom:12px"></div>
@@ -1195,7 +1186,7 @@ function showToast(msg) {
           ${buildInvitePicker()}
         </div>
         <div style="padding:14px 18px;border-top:var(--border);background:var(--gray-50);display:flex;gap:8px;align-items:center">
-          <button onclick="document.getElementById('create-challenge-overlay').remove()" style="padding:8px 14px;border:var(--border);border-radius:7px;font-size:13px;background:white;color:var(--gray-600);cursor:pointer">Cancel</button>
+          <button onclick="arenasOverlay.close('create-challenge-overlay')" style="padding:8px 14px;border:var(--border);border-radius:7px;font-size:13px;background:white;color:var(--gray-600);cursor:pointer">Cancel</button>
           <div style="font-size:11px;color:var(--gray-400);margin-left:4px">Progress auto-tracks from logged activities</div>
           <button onclick="submitCreateChallenge()" style="padding:8px 18px;border:none;border-radius:7px;font-size:13px;font-weight:600;background:var(--gray-900);color:white;cursor:pointer;margin-left:auto">Create challenge →</button>
         </div>
@@ -1273,7 +1264,7 @@ function showToast(msg) {
         if (submitBtn) { submitBtn.textContent = 'Create challenge →'; submitBtn.disabled = false; }
         return;
       }
-      document.getElementById('create-challenge-overlay')?.remove();
+      arenasOverlay.close('create-challenge-overlay');
       // Honest, differentiated toasts — never claim invites that weren't sent.
       if (result.inviteWarning === 'invites_unavailable') {
         showToast('✓ Challenge created — invites are unavailable right now, so it\'s just you for now.');
@@ -1293,8 +1284,8 @@ function showToast(msg) {
 
   // ── MANAGE INVITES (creator-only modal on private solo challenge cards) ──
   window.openInviteManager = async function (id) {
-    const existing = document.getElementById('invite-manager-overlay');
-    if (existing) existing.remove();
+    if (!window.arenasOverlay) { showToast('Please refresh the page'); return; }
+    // (arenasOverlay.open replaces an existing same-id overlay itself.)
     let info;
     try {
       const res = await fetch(B + '/api/challenges/' + id + '/invites');
@@ -1316,14 +1307,11 @@ function showToast(msg) {
         </span>
         <button onclick="revokeChallengeInvite('${esc(id)}','${esc(p.id)}',this)" style="padding:5px 12px;border-radius:7px;font-size:12px;border:1px solid #FECACA;background:var(--red-light);color:#A32D2D;cursor:pointer;flex-shrink:0">Revoke</button>
       </div>`).join('');
-    const overlay = document.createElement('div');
-    overlay.id = 'invite-manager-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto';
-    overlay.innerHTML = `
+    window.arenasOverlay.open({ id: 'invite-manager-overlay', label: 'Challenge invites', align: 'top', html: `
       <div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:480px;overflow:hidden;box-shadow:var(--shadow-lg);margin:auto">
         <div style="padding:16px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">
           <div style="font-size:15px;font-weight:700;color:var(--gray-900)">Challenge invites</div>
-          <button onclick="document.getElementById('invite-manager-overlay').remove()" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>
+          <button onclick="arenasOverlay.close('invite-manager-overlay')" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>
         </div>
         <div style="padding:18px;max-height:70vh;overflow-y:auto">
           <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:6px">Pending invites${pending.length ? ' · ' + pending.length : ''}</div>
@@ -1337,9 +1325,7 @@ function showToast(msg) {
             <button id="mi-send-btn" onclick="sendMoreInvites('${esc(id)}')" style="margin-top:10px;padding:8px 16px;border-radius:7px;font-size:13px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">Send invites</button>`
             : '<div style="font-size:12px;color:var(--gray-400)">Everyone who follows you is already invited or participating.</div>'}
         </div>
-      </div>`;
-    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
-    document.body.appendChild(overlay);
+      </div>` });
   };
 
   window.updateMiInviteCount = function () {
@@ -1368,7 +1354,7 @@ function showToast(msg) {
       showToast(result.invitedCount > 0
         ? '✓ ' + result.invitedCount + ' invite' + (result.invitedCount !== 1 ? 's' : '') + ' sent.'
         : 'Everyone selected was already invited or has joined.');
-      document.getElementById('invite-manager-overlay')?.remove();
+      arenasOverlay.close('invite-manager-overlay');
       setTimeout(loadChallenges, 400);
     } catch (err) {
       showToast('Something went wrong — please try again');
@@ -1500,6 +1486,7 @@ function showToast(msg) {
   parent.insertBefore(create, anchor);
 })();
 </script>
+<script src="/html/arenas-overlay.js" defer></script>
 <script src="/html/arenas-hpw-modal.js" defer></script>
 </body>
 </html>
