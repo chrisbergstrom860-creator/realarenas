@@ -4708,26 +4708,21 @@ async function requireChallengeEditor(challengeId, userId) {
   return { fail: { status: 403, error: 'not_authorized' } };
 }
 
+// TWO DISTINCT "done" CONCEPTS — never conflate them again:
+//   • challengeHasEnded(ch)  — CHALLENGE-LEVEL: end_date has passed. This is
+//     the ONLY notion authorization may consult (edit lock, end-early
+//     refusal). It is the same for every user.
+//   • per-viewer completion (`isComplete` in GET /api/challenges enrichment,
+//     a.k.a. viewerHasCompleted) — DISPLAY ONLY: derived from the requesting
+//     user's own activities (Completed tab, cards, badges, progress). A
+//     creator who personally hits the goal early must still be able to edit
+//     and end a challenge that is live for everyone else; a creator with no
+//     activities gets no extra edit rights on a genuinely expired one.
+// The edit-lock rationale (extending end_date resurrecting a Completed
+// challenge) is fully served by the challenge-level check, since end_date is
+// the only extendable field.
 const challengeStarted = (ch) => new Date(ch.start_date).getTime() <= Date.now();
-const challengeExpired = (ch) => new Date(ch.end_date).getTime() < Date.now();
-
-// Derived-done edit lock. Matches the list route's derivation (isExpired ||
-// isComplete) from the REQUESTER's perspective — progress is per-viewer
-// everywhere in this app (see GET /api/challenges), so the lock agrees with
-// what the editing user's own UI shows.
-async function challengeDoneFor(ch, user) {
-  if (challengeExpired(ch)) return true;
-  const goalTarget = parseFloat(ch.goal_target) || 0;
-  if (!(goalTarget > 0)) return false;
-  const range = challengeFetchRange(ch);
-  const { data: acts } = await supabaseAdmin
-    .from('activities').select('distance, duration, sport, date')
-    .eq('user_id', user.id).gte('date', range.gteIso).lte('date', range.lteIso);
-  const tz = getUserTimezone(user);
-  const progress = parseFloat(
-    computeChallengeProgress(ch, actsInChallengeWindow(acts || [], ch, tz), tz)) || 0;
-  return progress >= goalTarget;
-}
+const challengeHasEnded = (ch) => new Date(ch.end_date).getTime() < Date.now();
 
 // Grandfather existing non-creator participants when a solo challenge goes
 // public→private: mint invite rows so the private join gate recognizes them —
@@ -4773,7 +4768,7 @@ app.patch(BASE + '/api/challenges/:id', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
   const { challenge, fail } = await requireChallengeEditor(req.params.id, req.user.id);
   if (fail) return res.status(fail.status || 200).json({ error: fail.error });
-  if (await challengeDoneFor(challenge, req.user)) return res.json({ error: 'challenge_ended' });
+  if (challengeHasEnded(challenge)) return res.json({ error: 'challenge_ended' });
 
   const b = req.body || {};
   const MATERIAL = ['sport', 'goal_type', 'goal_target', 'goal_unit', 'start_date', 'end_date', 'visibility'];
@@ -4846,7 +4841,7 @@ app.post(BASE + '/api/challenges/:id/end-early', requireAuth, async (req, res) =
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
   const { challenge, fail } = await requireChallengeEditor(req.params.id, req.user.id);
   if (fail) return res.status(fail.status || 200).json({ error: fail.error });
-  if (challengeExpired(challenge)) return res.json({ error: 'already_ended' });
+  if (challengeHasEnded(challenge)) return res.json({ error: 'already_ended' });
   if (!challengeStarted(challenge)) return res.json({ error: 'not_started' }); // pre-start: edit dates or delete instead — an end<start row would be nonsense
   const newEnd = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { data: updated, error } = await supabaseAdmin

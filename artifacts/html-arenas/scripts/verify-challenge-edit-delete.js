@@ -78,7 +78,12 @@ const Y = await mkChallenge({ created_by: cb, title: 'ED-Y prestart', start_date
 const Z = await mkChallenge({ created_by: cb, title: 'ED-Z solo', start_date: iso(-1), end_date: iso(9), visibility: 'public' }, ['creator']);
 const W = await mkChallenge({ created_by: cb, title: 'ED-W discover', start_date: iso(-1), end_date: iso(9), visibility: 'public' }, ['creator', 'p2']);
 const V = await mkChallenge({ created_by: cb, title: 'ED-V private solo', start_date: iso(-1), end_date: iso(9), visibility: 'private' }, ['creator']);
-console.log('MANIFEST challenges:', JSON.stringify([X.id, Y.id, Z.id, W.id, V.id]));
+// Q: live challenge the CREATOR has personally completed (goal 100km, creator
+// logs 150km) while it remains live for p1 — mutations must gate on
+// challenge-level end_date only, never per-viewer completion.
+const Q = await mkChallenge({ created_by: cb, title: 'ED-Q creator-done live', start_date: iso(-1), end_date: iso(9), visibility: 'public' }, ['creator', 'p1']);
+await admin.from('activities').insert({ user_id: cb, sport: 'running', distance: '150 km', duration: '01:00:00', date: new Date().toISOString(), title: 'ED seed long run' });
+console.log('MANIFEST challenges:', JSON.stringify([X.id, Y.id, Z.id, W.id, V.id, Q.id]));
 
 let r;
 // 1. hard delete refused when others involved
@@ -142,6 +147,18 @@ check('second end-early → already_ended', r.body?.error === 'already_ended', r
 // 11. derived-done locks all edits
 r = await api('creator', 'PATCH', `/challenges/${X.id}`, { title: 'too late' });
 check('PATCH ended X → challenge_ended', r.body?.error === 'challenge_ended', r);
+// 15. PER-VIEWER vs CHALLENGE-LEVEL split: creator personally completed Q
+// (display shows Completed for them) but end_date has NOT passed — edits and
+// end-early MUST still work. Inverse (creator with zero activities in X still
+// locked out of a genuinely expired X) is test 11 above.
+r = await api('creator', 'GET', '/challenges');
+const qView = (r.body?.myChallenges || []).find((c) => c.id === Q.id);
+check('creator view of live Q is isComplete=true, isExpired=false (per-viewer display intact)', !!qView && qView.isComplete === true && qView.isExpired === false, qView);
+r = await api('creator', 'PATCH', `/challenges/${Q.id}`, { title: 'ED-Q renamed by finisher' });
+check('creator who personally completed can still edit live Q', r.body?.success === true, r);
+r = await api('creator', 'POST', `/challenges/${Q.id}/end-early`);
+check('creator who personally completed can still end live Q early', r.body?.success === true, r);
+check('Q end-early notified p1', (await notifCount('p1', 'Challenge ended early')) === 2, {});
 // 12. solo hard delete: allowed, zero residue
 r = await api('creator', 'DELETE', `/challenges/${Z.id}`);
 check('solo delete Z succeeds', r.body?.success === true, r);
