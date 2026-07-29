@@ -309,7 +309,6 @@ body {
   /* Page-specific card grids that must stack / shrink on mobile. */
   body:has(.bottom-nav) .stats-4 { grid-template-columns: 1fr 1fr !important; }   /* profile hero stats */
   body:has(.bottom-nav) .stat-cards { grid-template-columns: 1fr 1fr !important; } /* challenges summary */
-  body:has(.bottom-nav) .cards-grid-3 { grid-template-columns: 1fr !important; }  /* challenge cards stack */
   body:has(.bottom-nav) .events-grid { grid-template-columns: 1fr !important; }   /* event cards stack */
 
   /* Activity stat chips (KM/TIME/PACE/BPM/ELEV/KCAL) wrap to a second row on

@@ -78,19 +78,6 @@ button,select,input,textarea{font-family:var(--font)}
 .sh-link{font-size:12px;color:var(--gray-500);cursor:pointer;transition:color .1s}
 .sh-link:hover{color:var(--gray-700)}
 
-/* ── RECOMMENDED STRIP ── */
-.rec-strip{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:var(--border);background:white}
-.rec-card{padding:14px 16px;display:flex;flex-direction:column;gap:8px;border-right:var(--border);cursor:pointer;transition:background .12s;animation:fade-up .2s ease both}
-.rec-card:last-child{border-right:none}
-.rec-card:hover{background:var(--gray-50)}
-.rc-av{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;flex-shrink:0}
-.rc-name{font-size:13px;font-weight:600;color:var(--gray-900)}
-.rc-handle{font-size:11px;color:var(--gray-400);margin-top:1px}
-.rc-why{font-size:11px;color:var(--gray-600);background:var(--yellow-light);border-left:2px solid var(--yellow-dark);padding:5px 8px;line-height:1.5;margin-top:2px}
-.rc-stats{display:flex;gap:10px;flex-wrap:wrap}
-.rc-stat{font-size:11px;color:var(--gray-500);font-family:var(--mono)}
-.rc-stat strong{color:var(--gray-900);font-weight:600}
-
 /* ── SPORT TABS ── */
 .sport-tabs{display:flex;background:white;border-bottom:var(--border);padding:0 20px}
 .sport-tab{padding:10px 16px;font-size:13px;font-weight:500;color:var(--gray-500);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;transition:color .1s,border-color .1s;display:flex;align-items:center;gap:5px}
@@ -110,20 +97,6 @@ button,select,input,textarea{font-family:var(--font)}
 .adc-list .adc-stats{flex:0 0 200px;grid-template-columns:repeat(3,1fr)}
 .adc-list .adc-foot{flex:1;justify-content:flex-end;padding-top:0;border-top:none}
 
-/* ── NEARBY SECTION ── */
-.nearby-section{background:white;border-bottom:var(--border)}
-.nearby-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:0}
-.nearby-card{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:var(--border);border-right:var(--border);cursor:pointer;transition:background .12s;animation:fade-up .2s ease both}
-.nearby-card:hover{background:var(--gray-50)}
-.nearby-card:nth-child(even){border-right:none}
-.nearby-card:last-child,.nearby-card:nth-last-child(2):nth-child(odd){border-bottom:none}
-.nb-dist{font-size:12px;font-family:var(--mono);font-weight:600;color:var(--gray-500);width:44px;flex-shrink:0;text-align:right}
-.nb-av{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0}
-.nb-info{flex:1;min-width:0}
-.nb-name{font-size:13px;font-weight:600;color:var(--gray-900);margin-bottom:2px}
-.nb-meta{font-size:11px;color:var(--gray-500)}
-.nb-tags{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}
-
 /* ── SIDEBAR CARDS ── */
 .side-card{background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden}
 .sc-header{padding:12px 16px 9px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between}
@@ -138,14 +111,6 @@ button,select,input,textarea{font-family:var(--font)}
 .fi-av{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0}
 .fi-name{flex:1;font-size:13px;font-weight:500;color:var(--gray-900)}
 .fi-meta{font-size:11px;color:var(--gray-400);white-space:nowrap}
-
-/* Network stats */
-.network-stats{display:grid;grid-template-columns:1fr 1fr;gap:0}
-.ns-item{padding:12px 14px;text-align:center;border-right:var(--border)}
-.ns-item:last-child{border-right:none}
-.ns-val{font-size:20px;font-weight:700;font-family:var(--mono);color:var(--gray-900);line-height:1}
-.ns-label{font-size:10px;color:var(--gray-500);margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
-.ns-delta{font-size:10px;font-family:var(--mono);color:var(--green);margin-top:2px}
 
 /* Clubs to join */
 .club-suggest{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:var(--border);cursor:pointer;transition:background .1s}
