@@ -234,6 +234,24 @@ body {
   border: 1.5px solid white;
 }
 
+
+/* ===========================================================================
+   Base chrome (consolidated, Batch 1). Canonical copies moved here from the
+   page <style> blocks — each was byte-identical (mod whitespace) on every
+   linked page that carried it, and proven a no-op on pages that didn't.
+   Page blocks still load after this file and can override.
+   =========================================================================== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+.btn-full{width:100%;justify-content:center}
+.card{background: white; border: var(--border); border-radius: var(--radius-lg); overflow: hidden;}
+.footer{background: white; border-top: var(--border); margin-top: 40px; padding: 20px 24px;}
+.footer-links{display: flex; gap: 16px;}
+.footer-links a{color: var(--gray-500); text-decoration: none;}
+.footer-links a:hover{color: var(--gray-700);}
+.modal-overlay.open{display:flex}
+.modal-close:hover{background:var(--gray-100)}
+.notif-btn{width:34px;height:34px;border-radius:7px;border:var(--border);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;position:relative;transition:background .1s}
+
 /* ===========================================================================
    Activity stat tiles — the shared boxed treatment rendered by
    arenas-stat-tiles.js (feed + my-profile Activities tab). Base rules live

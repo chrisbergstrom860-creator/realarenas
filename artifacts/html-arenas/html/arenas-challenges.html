@@ -29,8 +29,6 @@ document.addEventListener('DOMContentLoaded', function(){
 <link rel="stylesheet" href="/html/arenas.css">
 <script src="/html/arenas-club-create.js"></script>
 <style>:root{--shadow-lg:0 12px 32px rgba(0,0,0,.16)}
-
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: var(--font); background: var(--gray-50); color: var(--gray-800); font-size: 15px; line-height: 1.5; min-height: 100vh; }/* ── TOPBAR ── */
 .topbar-inner { max-width: 1280px; margin: 0 auto; padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 24px; }
 .logo { display: flex; align-items: center; gap: 8px; text-decoration: none; cursor: pointer; flex-shrink: 0; }
@@ -252,12 +250,10 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 
 /* ── MODAL ── */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 500; display: none; align-items: center; justify-content: center; padding: 24px; backdrop-filter: blur(2px); }
-.modal-overlay.open { display: flex; }
 .modal { background: white; border-radius: var(--radius-lg); width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2); animation: modal-in 0.2s ease; }
 @keyframes modal-in { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: none; } }
 .modal-header { padding: 20px 24px 16px; border-bottom: var(--border); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .modal-close { width: 28px; height: 28px; border-radius: 50%; border: var(--border); background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--gray-500); flex-shrink: 0; transition: background 0.1s; }
-.modal-close:hover { background: var(--gray-100); }
 .modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
 .modal-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .modal-detail { background: var(--gray-50); border-radius: var(--radius); padding: 10px 12px; }
@@ -267,18 +263,13 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 
 /* ── TOAST ── */
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--gray-900); color: white; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; z-index: 999; transition: transform 0.3s ease; white-space: nowrap; box-shadow: var(--shadow-md); }
-.toast.show { transform: translateX(-50%) translateY(0); }
 
 /* ── ANIMATIONS ── */
 @keyframes fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .fade-in { animation: fade-in 0.22s ease forwards; }
 
 /* ── FOOTER ── */
-.footer { background: white; border-top: var(--border); margin-top: 40px; padding: 20px 24px; }
-.footer-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--gray-400); }
-.footer-links { display: flex; gap: 16px; }
-.footer-links a { color: var(--gray-500); text-decoration: none; }
-.footer-links a:hover { color: var(--gray-700); }/* ── APP SHELL ── */
+.footer-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--gray-400); }/* ── APP SHELL ── */
 .topbar-search { display: flex; align-items: center; gap: 8px; background: var(--gray-50); border: var(--border); border-radius: 7px; padding: 6px 12px; width: 260px; }
 .topbar-search input { background: none; border: none; outline: none; font-size: 13px; color: var(--gray-700); width: 100%; }
 .topbar-search input::placeholder { color: var(--gray-400); }

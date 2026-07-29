@@ -29,9 +29,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <link rel="stylesheet" href="/html/arenas.css">
 <script src="/html/arenas-club-create.js"></script>
 <style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 button{font-family:var(--font)}
-.notif-btn{width:34px;height:34px;border-radius:7px;border:var(--border);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;position:relative;transition:background .1s}
 .notif-btn:hover{background:var(--gray-50)}
 .main{display:block;padding:28px 32px 60px}
 /* Centered composition: title/controls/grid share one max-width column. 1040px
@@ -123,12 +121,10 @@ button{font-family:var(--font)}
 
 /* ── DAY PANEL (modal on desktop, bottom sheet ≤768px) ── */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;display:none;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(3px)}
-.modal-overlay.open{display:flex}
 .modal{background:white;border-radius:14px;width:100%;max-width:480px;max-height:82vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.18)}
 .modal-header{padding:18px 22px 14px;border-bottom:var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;position:sticky;top:0;background:white}
 .modal-title{font-size:15px;font-weight:700;color:var(--gray-900)}
 .modal-close{width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--gray-500)}
-.modal-close:hover{background:var(--gray-100)}
 .modal-body{padding:16px 22px 22px}
 .dp-section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--gray-400);margin:14px 0 8px}
 .dp-section-label:first-child{margin-top:0}

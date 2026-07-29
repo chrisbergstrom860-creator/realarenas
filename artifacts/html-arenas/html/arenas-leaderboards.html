@@ -29,7 +29,6 @@ document.addEventListener('DOMContentLoaded', function(){
 <link rel="stylesheet" href="/html/arenas.css">
 <script src="/html/arenas-club-create.js"></script>
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: var(--font); background: var(--gray-50); color: var(--gray-800); font-size: 15px; line-height: 1.5; min-height: 100vh; }/* ── TOPBAR ── */
 .topbar-inner { max-width: 1280px; margin: 0 auto; padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 24px; }
 .logo { display: flex; align-items: center; gap: 8px; text-decoration: none; flex-shrink: 0; cursor: pointer; }
@@ -165,18 +164,13 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
 
 /* ── TOAST ── */
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--gray-900); color: white; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; z-index: 999; transition: transform 0.3s ease; white-space: nowrap; box-shadow: var(--shadow-md); }
-.toast.show { transform: translateX(-50%) translateY(0); }
 
 /* ── ANIMATIONS ── */
 @keyframes fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .fade-in { animation: fade-in 0.25s ease forwards; }
 
 /* ── FOOTER ── */
-.footer { background: white; border-top: var(--border); margin-top: 40px; padding: 20px 24px; }
-.footer-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--gray-400); }
-.footer-links { display: flex; gap: 16px; }
-.footer-links a { color: var(--gray-500); text-decoration: none; }
-.footer-links a:hover { color: var(--gray-700); }/* ── APP SHELL ── */
+.footer-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--gray-400); }/* ── APP SHELL ── */
 .topbar-search { display: flex; align-items: center; gap: 8px; background: var(--gray-50); border: var(--border); border-radius: 7px; padding: 6px 12px; width: 260px; }
 .topbar-search input { background: none; border: none; outline: none; font-size: 13px; color: var(--gray-700); width: 100%; }
 .topbar-search input::placeholder { color: var(--gray-400); }
@@ -372,7 +366,6 @@ body { font-family: var(--font); background: var(--gray-50); color: var(--gray-8
         <button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:13px" onclick="nav('/challenges')">Browse all challenges →</button>
       </div>
     </div>
-
 
   </div>
 </main>
