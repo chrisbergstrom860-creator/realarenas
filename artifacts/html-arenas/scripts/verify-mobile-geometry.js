@@ -63,9 +63,15 @@ async function login(key) {
   if (r.status !== 302 || !cookies.length) throw new Error('login failed: ' + key);
   users[key].cookies = cookies;
 }
+// Every created row is tracked the moment it exists, so cleanup (in the
+// finally block below) removes everything even after a partial-seed crash.
+const createdRows = []; // { table, id } in creation order
+const createdUsers = []; // auth user ids
 async function ins(table, row) {
   const { data, error } = await admin.from(table).insert(row).select().maybeSingle();
   if (error) throw new Error(table + ': ' + error.message);
+  if (data && data.id) createdRows.push({ table, id: data.id });
+  else createdRows.push({ table, match: row });
   return data;
 }
 const day = 86400000;
@@ -73,7 +79,9 @@ const iso = (d) => new Date(Date.now() + d * day).toISOString();
 const dt = (d) => iso(d).slice(0, 10);
 
 // ── seed (dense) ──
-for (const k of Object.keys(userDefs)) await mkUser(k);
+let browser = null;
+try {
+for (const k of Object.keys(userDefs)) { await mkUser(k); createdUsers.push(users[k].id); }
 await login('creator'); await login('member');
 const C = users.creator.id, M = users.member.id;
 const F = [...Array(8)].map((_, i) => users['f' + i].id);
@@ -216,7 +224,7 @@ const PAGES = [
 
 // ── measure ──
 const only = process.argv.includes('--page') ? process.argv[process.argv.indexOf('--page') + 1] : null;
-const browser = await launchBrowser();
+browser = await launchBrowser();
 const contexts = {};
 for (const key of ['creator', 'member']) {
   contexts[key] = await browser.newContext({ ignoreHTTPSErrors: true });
@@ -249,30 +257,56 @@ for (const cfg of PAGES) {
   check(`${cfg.name}: zero console/page errors`, out.errors.length === 0, out.errors.slice(0, 4));
   summary.push({ page: cfg.name, failedChecks: pageFails + (out.errors.length ? 1 : 0), surfacesEmpty: out.surfaceReport.filter((s) => !s.ok).length });
 }
-await browser.close();
 console.log('\nPER-PAGE SUMMARY:', JSON.stringify(summary, null, 1));
 
-// ── cleanup ──
-if (!process.argv.includes('--keep')) {
-  for (const id of CHALLENGES) {
-    await admin.from('challenge_invites').delete().eq('challenge_id', id);
-    await admin.from('challenge_participants').delete().eq('challenge_id', id);
-    await admin.from('challenges').delete().eq('id', id);
+} finally {
+  // ── cleanup: runs even after a partial-seed or mid-audit crash. Every
+  // deletion is error-checked; any cleanup failure fails the whole run so
+  // leaked seed accounts (deterministic emails + shared password) can never
+  // pass silently. ──
+  if (browser) await browser.close().catch(() => {});
+  if (process.argv.includes('--keep')) {
+    console.log('cleanup: SKIPPED (--keep) — seeds left in place');
+  } else {
+    let cleanupFails = 0;
+    const del = async (label, q) => {
+      const { error } = await q;
+      if (error) { cleanupFails++; console.log('CLEANUP FAIL', label, '→', error.message); }
+    };
+    // Child rows keyed off tracked parents first, then the rows themselves
+    // (reverse creation order so FK children go before parents).
+    for (const r of [...createdRows].reverse()) {
+      if (r.table === 'challenges') {
+        await del('challenge_invites', admin.from('challenge_invites').delete().eq('challenge_id', r.id));
+        await del('challenge_participants', admin.from('challenge_participants').delete().eq('challenge_id', r.id));
+      }
+      if (r.table === 'events') await del('event_rsvps', admin.from('event_rsvps').delete().eq('event_id', r.id));
+      if (r.table === 'posts') {
+        await del('post_likes', admin.from('post_likes').delete().eq('post_id', r.id));
+        await del('post_comments', admin.from('post_comments').delete().eq('post_id', r.id));
+      }
+      if (r.id) await del(r.table, admin.from(r.table).delete().eq('id', r.id));
+      else {
+        let q = admin.from(r.table).delete();
+        for (const [k, v] of Object.entries(r.match)) if (v !== null && typeof v !== 'object') q = q.eq(k, v);
+        await del(r.table + ' (by match)', q);
+      }
+    }
+    // Belt-and-braces sweep by user id, then the auth users themselves.
+    for (const u of createdUsers) {
+      for (const t of ['activities', 'achievements', 'goals', 'notifications', 'memberships', 'posts']) {
+        await del(t + ' by user', admin.from(t).delete().eq('user_id', u));
+      }
+      await del('follows', admin.from('follows').delete().or(`follower_id.eq.${u},following_id.eq.${u}`));
+      await del('notifications by actor', admin.from('notifications').delete().eq('actor_id', u));
+    }
+    for (const u of createdUsers) {
+      const { error } = await admin.auth.admin.deleteUser(u);
+      if (error) { cleanupFails++; console.log('CLEANUP FAIL auth user', u, '→', error.message); }
+    }
+    if (cleanupFails) { failures += cleanupFails; console.log(`cleanup: ${cleanupFails} FAILURE(S) — residue may remain, run scripts/test-data-sweep.js`); }
+    else console.log(`cleanup: ${createdRows.length} rows + ${createdUsers.length} users removed`);
   }
-  for (const id of EVENTS) { await admin.from('event_rsvps').delete().eq('event_id', id); await admin.from('events').delete().eq('id', id); }
-  for (const id of POSTS) {
-    await admin.from('post_likes').delete().eq('post_id', id);
-    await admin.from('post_comments').delete().eq('post_id', id);
-    await admin.from('posts').delete().eq('id', id);
-  }
-  for (const u of Object.values(users).map((x) => x.id)) {
-    for (const t of ['activities', 'achievements', 'goals', 'notifications', 'memberships', 'posts']) await admin.from(t).delete().eq('user_id', u);
-    await admin.from('follows').delete().or(`follower_id.eq.${u},following_id.eq.${u}`);
-    await admin.from('notifications').delete().eq('actor_id', u);
-  }
-  await admin.from('clubs').delete().eq('id', club.id);
-  for (const u of Object.values(users).map((x) => x.id)) await admin.auth.admin.deleteUser(u);
-  console.log('cleanup: seeds removed');
 }
 console.log(failures ? `\n${failures} FAILURE(S) of ${assertions} assertions` : `\nALL PASS (${assertions} assertions)`);
 process.exit(failures ? 1 : 0);

@@ -47,9 +47,12 @@ export function auditExpr(rootSel, ignoreOverlapSels = []) {
       const s = getComputedStyle(a);
       if (/(hidden|auto|scroll|clip)/.test(s.overflow + s.overflowX)) {
         const ar = a.getBoundingClientRect();
-        const scrollable = /(auto|scroll)/.test(s.overflowX) || /(auto|scroll)/.test(s.overflow);
-        const clipR = scrollable ? ar.left - a.scrollLeft + a.scrollWidth : ar.right;
-        if (r.right > clipR + T || r.left < ar.left - T) out.clipped.push(label(el) + ' ⊄ ' + label(a));
+        const scrollableX = /(auto|scroll)/.test(s.overflowX + s.overflow);
+        const scrollableY = /(auto|scroll)/.test(s.overflowY + s.overflow);
+        const clipR = scrollableX ? ar.left - a.scrollLeft + a.scrollWidth : ar.right;
+        const clipB = scrollableY ? ar.top - a.scrollTop + a.scrollHeight : ar.bottom;
+        if (r.right > clipR + T || r.left < ar.left - T
+          || r.bottom > clipB + T || r.top < ar.top - T) out.clipped.push(label(el) + ' ⊄ ' + label(a));
         break;
       }
       a = a.parentElement;
@@ -121,12 +124,13 @@ export async function auditPage(context, base, cfg) {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push(String(e)));
   const results = [];
-  let surfaceReport = null;
+  const surfaceReport = []; // measured at EVERY viewport — a surface that
+  // renders at 360px but collapses empty at 414px must not pass unnoticed.
   for (const w of VIEWPORTS) {
     await page.setViewportSize({ width: w, height: 840 });
     await page.goto(base + cfg.path, { waitUntil: 'networkidle' });
     if (cfg.waitFor) await page.waitForSelector(cfg.waitFor, { timeout: 20000 });
-    if (cfg.surfaces && !surfaceReport) surfaceReport = await page.evaluate(surfacesExpr(cfg.surfaces));
+    if (cfg.surfaces) surfaceReport.push(...(await page.evaluate(surfacesExpr(cfg.surfaces))).map((s) => ({ ...s, name: s.name + '@' + w + 'px' })));
     results.push({ tag: `${cfg.name}@${w}px`, audit: await page.evaluate(auditExpr(cfg.root || '.main', cfg.ignoreOverlap)),
       hscroll: await page.evaluate('document.documentElement.scrollWidth - window.innerWidth') });
     for (const step of cfg.steps || []) {
@@ -134,13 +138,12 @@ export async function auditPage(context, base, cfg) {
       if (step.waitFor) await page.waitForSelector(step.waitFor, { timeout: 15000 });
       await page.waitForTimeout(250);
       if (step.surfaces) {
-        const rep = await page.evaluate(surfacesExpr(step.surfaces));
-        surfaceReport = (surfaceReport || []).concat(w === VIEWPORTS[0] ? rep : []);
+        surfaceReport.push(...(await page.evaluate(surfacesExpr(step.surfaces))).map((s) => ({ ...s, name: s.name + '@' + w + 'px' })));
       }
       results.push({ tag: `${cfg.name}:${step.name}@${w}px`, audit: await page.evaluate(auditExpr(step.root || cfg.root || '.main', cfg.ignoreOverlap)),
         hscroll: await page.evaluate('document.documentElement.scrollWidth - window.innerWidth') });
     }
   }
   await page.close();
-  return { results, surfaceReport: surfaceReport || [], errors };
+  return { results, surfaceReport, errors };
 }
