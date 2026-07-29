@@ -62,4 +62,5 @@
 - [html-arenas RSVP colors](html-arenas-rsvp-colors.md) — two-tier yellow grammar (solid=committed/action, pale+stroke=tentative, ghost=unanswered); #7a5c00 on #FFD21E fails AA; green = completion only.
 - [html-arenas brand mark](html-arenas-brand-mark.md) — arenas-icon.svg is THE mark (topbar imgs, favicons, PWA icons all derive); no "--" in SVG comments (librsvg rejects); content 🏟 fallbacks stay emoji.
 - [html-arenas challenge edit/delete](html-arenas-challenge-edit-delete.md) — delete branches on aloneness; PATCH whitelist keyed on start_date; end-early = end_date-24h, no snapshot; remove-from-discover separate one-way route; overlay beforeClose dirty-guard.
+- [html-arenas shared-CSS consolidation](html-arenas-css-consolidation.md) — linked = real <link> tag only (grep trap!); partial-coverage rules can't move; check demotion vs sibling `.btn`-style rules.
 - [html-arenas athlete directory](html-arenas-athlete-directory.md) — shared adc- card module + profile Athletes tab; follow-change event contract; /athletes?q= is THE search target; new shared JS needs its serve route.
