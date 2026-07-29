@@ -133,7 +133,6 @@ button,select,input,textarea{font-family:var(--font)}/* ── LAYOUT ── *//
 .lb-rank.r2{color:var(--gray-500)}
 .lb-rank.r3{color:#B45309}
 .lb-athlete{display:flex;align-items:center;gap:9px}
-.lb-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0}
 .lb-name{font-size:13px;font-weight:600;color:var(--gray-900)}
 .lb-detail{font-size:11px;color:var(--gray-500)}
 .lb-score-cell{text-align:right}
@@ -243,11 +242,9 @@ button,select,input,textarea{font-family:var(--font)}/* ── LAYOUT ── *//
 .notif-action{margin-top:8px;display:flex;gap:6px}
 .unread-dot{width:7px;height:7px;border-radius:50%;background:var(--yellow-dark);flex-shrink:0;margin-top:5px}
 
-/* ── MODAL ── */
-/* Modal cluster is canonical in arenas.css (Batch 3); page keeps only its
-   sizing + entrance animation (keyframe must stay local with it). */
-.modal{max-width:560px;animation:modal-in .2s ease}
-@keyframes modal-in{from{opacity:0;transform:translateY(10px) scale(0.98)}to{opacity:1;transform:none}}
+/* ── MODAL ── page has no modals: the prototype comment/event-detail/
+   challenge-browse dialogs were dead (no opener) and were removed; shared
+   modal CSS lives in arenas.css for pages that need it. */
 
 /* ── TOAST ── */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--gray-900);color:white;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:500;z-index:999;transition:transform .3s ease;white-space:nowrap;box-shadow:var(--shadow-md)}
@@ -328,58 +325,6 @@ button,select,input,textarea{font-family:var(--font)}/* ── LAYOUT ── *//
 </main>
 </div>
 
-<!-- MODALS -->
-<div class="modal-overlay" id="modal-comment" onclick="closeModals(event)">
-  <div class="modal">
-    <div class="modal-header"><div><div style="font-size:16px;font-weight:700;color:var(--gray-900)">Comments</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
-    <div class="modal-body">
-      <div style="display:flex;flex-direction:column;gap:12px">
-        <div style="display:flex;gap:9px"><div class="lb-av" style="background:#FCE7F3;color:#9D174D;width:30px;height:30px;font-size:10px;flex-shrink:0">YT</div><div style="background:var(--gray-50);border-radius:0 10px 10px 10px;padding:9px 12px;font-size:13px;color:var(--gray-700)">Amazing effort Sofia! What's your fuelling strategy on long runs?</div></div>
-        <div style="display:flex;gap:9px"><div class="lb-av" style="background:#FEF9C3;color:#854D0E;width:30px;height:30px;font-size:10px;flex-shrink:0">SL</div><div style="background:var(--gray-50);border-radius:0 10px 10px 10px;padding:9px 12px;font-size:13px;color:var(--gray-700)">Thanks Yuki! Gel every 45 min, electrolytes at hour 2. Simple but works for me.</div></div>
-      </div>
-      <div style="display:flex;gap:9px;margin-top:6px">
-        <div class="lb-av" style="background:#FFF7ED;color:#9A3412;width:30px;height:30px;font-size:10px;flex-shrink:0">·</div>
-        <input type="text" placeholder="Add a comment…" style="flex:1;padding:8px 12px;border:var(--border);border-radius:20px;font-size:13px;outline:none">
-      </div>
-    </div>
-    <div class="modal-footer"><button class="btn btn-primary" style="flex:1;justify-content:center" onclick="closeModals();showToast('Comment posted!')">Post comment</button><button class="btn btn-ghost" onclick="closeModals()">Cancel</button></div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="modal-event-detail" onclick="closeModals(event)">
-  <div class="modal">
-    <div class="modal-header"><div><span style="font-size:11px;font-weight:600;background:var(--orange-light);color:#9A3412;border:1px solid #FDBA74;padding:2px 9px;border-radius:20px;display:inline-block;margin-bottom:8px">Running</span><div style="font-size:18px;font-weight:700;color:var(--gray-900)">London Half Marathon</div><div style="font-size:13px;color:var(--gray-500);margin-top:3px">Apr 13, 2026 · Blackheath, London</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
-    <div class="modal-body">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div style="background:var(--gray-50);border-radius:var(--radius);padding:10px 12px"><div style="font-size:11px;color:var(--gray-400);margin-bottom:2px">Distance</div><div style="font-size:15px;font-weight:600;color:var(--gray-900);font-family:var(--mono)">13.1 mi</div></div>
-        <div style="background:var(--gray-50);border-radius:var(--radius);padding:10px 12px"><div style="font-size:11px;color:var(--gray-400);margin-bottom:2px">Start time</div><div style="font-size:15px;font-weight:600;color:var(--gray-900);font-family:var(--mono)">7:00 AM</div></div>
-        <div style="background:var(--gray-50);border-radius:var(--radius);padding:10px 12px"><div style="font-size:11px;color:var(--gray-400);margin-bottom:2px">Entry fee</div><div style="font-size:15px;font-weight:600;color:var(--gray-900);font-family:var(--mono)">£45</div></div>
-        <div style="background:var(--gray-50);border-radius:var(--radius);padding:10px 12px"><div style="font-size:11px;color:var(--gray-400);margin-bottom:2px">Clubmates going</div><div style="font-size:15px;font-weight:600;color:var(--gray-900);font-family:var(--mono)">34</div></div>
-      </div>
-      <div><div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-500);margin-bottom:8px">Coach notes</div><p style="font-size:14px;color:var(--gray-600);line-height:1.65">Great flat course — perfect for a PB attempt. We'll meet at the start village at 6:30 AM. If entering, use club code HRC2026 for group booking. Bring your club vest — we're aiming for a club photo at the finish line.</p></div>
-    </div>
-    <div class="modal-footer"><button class="btn btn-yellow" style="flex:1;justify-content:center" onclick="closeModals();rsvpGoing(null);showToast('✓ RSVP confirmed — Rachel notified!')">✓ I'm going</button><button class="btn btn-ghost" onclick="closeModals()">Close</button></div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="modal-challenge-browse" onclick="closeModals(event)">
-  <div class="modal">
-    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">More club challenges</div><div style="font-size:13px;color:var(--gray-500);margin-top:2px">Hackney Running Club · Private challenges</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
-    <div class="modal-body">
-      <div style="background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer" onclick="closeModals();showToast('Joined June challenge!')">
-        <div style="width:38px;height:38px;background:var(--green-light);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🏃</div>
-        <div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--gray-900)">June 200km club</div><div style="font-size:12px;color:var(--gray-500)">Distance · Starts Jun 1 · 600 pts</div></div>
-        <button class="btn btn-sm btn-primary">+ Join</button>
-      </div>
-      <div style="background:var(--gray-50);border:var(--border);border-radius:var(--radius);padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer" onclick="closeModals();showToast('Joined head-to-head with Tom!')">
-        <div style="width:38px;height:38px;background:var(--red-light);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">⚔️</div>
-        <div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--gray-900)">Jamie vs Tom — weekly km</div><div style="font-size:12px;color:var(--gray-500)">Head-to-head · Tom R. challenged you · 150 pts</div></div>
-        <button class="btn btn-sm btn-yellow">Accept</button>
-      </div>
-    </div>
-    <div class="modal-footer"><button class="btn btn-ghost btn-full" onclick="closeModals()">Close</button></div>
-  </div>
-</div>
 
 <div class="toast" id="toast"></div>
 
@@ -396,12 +341,6 @@ function setTab(id, el) {
   const sec = document.getElementById('cm-sec-' + id);
   if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
   else window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-function openModal(id) { document.getElementById('modal-' + id).classList.add('open'); }
-function closeModals(e) {
-  if (!e || e.target.classList.contains('modal-overlay'))
-    document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
 }
 
 function toggleFollow(btn) {

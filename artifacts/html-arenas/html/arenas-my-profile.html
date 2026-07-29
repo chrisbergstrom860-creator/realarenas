@@ -718,18 +718,6 @@ button,select,input,textarea{font-family:var(--font)}
   </div>
 </div>
 
-<div class="modal-overlay" id="modal-comment" onclick="closeModals(event)">
-  <div class="modal">
-    <div class="modal-header"><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Comments</div><button class="modal-close" onclick="closeModals()">✕</button></div>
-    <div class="modal-body">
-      <div style="display:flex;gap:9px"><div style="width:28px;height:28px;border-radius:50%;background:#FEF9C3;color:#854D0E;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0">SL</div><div style="background:var(--gray-50);border-radius:0 10px 10px 10px;padding:9px 12px;font-size:13px;color:var(--gray-700)">Great effort Jamie! What's your fuelling strategy on long runs?</div></div>
-      <div style="display:flex;gap:9px"><div style="width:28px;height:28px;border-radius:50%;background:#FFF7ED;color:#9A3412;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0">·</div><div style="background:var(--yellow-light);border-radius:10px 10px 10px 0;padding:9px 12px;font-size:13px;color:var(--gray-700)">Thanks Sofia! Gel at km 8 and 16. Trying caffeine this Sunday.</div></div>
-      <div style="display:flex;gap:9px;margin-top:4px"><div style="width:28px;height:28px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;color:var(--gray-900);flex-shrink:0">·</div><input type="text" placeholder="Add a comment…" style="flex:1;padding:8px 12px;border:var(--border);border-radius:20px;font-size:13px;outline:none"></div>
-    </div>
-    <div class="modal-footer"><button class="btn btn-primary" style="flex:1;justify-content:center" onclick="closeModals();showToast('Comment posted!')">Post</button><button class="btn btn-ghost" onclick="closeModals()">Close</button></div>
-  </div>
-</div>
-
 <div class="modal-overlay" id="modal-goal" onclick="closeModals(event)">
   <div class="modal">
     <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)" id="goal-modal-title">New goal</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>

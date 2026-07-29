@@ -66,14 +66,37 @@ export function auditExpr(rootSel, ignoreOverlapSels = []) {
   // otherwise every modal audit would be structurally blind.
   const inFixed = (el) => { for (let a = el; a && a !== document.body && a !== root; a = a.parentElement)
     if (/(fixed|sticky)/.test(getComputedStyle(a).position)) return true; return false; };
+  // Overlap must be judged on the VISIBLE portion of each text box: content
+  // legitimately scrolled out of an inner overflow container (a 70vh modal
+  // body, a max-height invite list) still has raw client rects that overlap
+  // whatever sits below the container — a phantom overlap no user can see.
+  // Intersect each rect with every overflow-clipping ancestor up to the
+  // audit root; fully clipped leaves drop out. Genuinely visible overlaps
+  // are unaffected (their rects are not clipped where they overlap).
+  const clippedRects = (el) => {
+    let rects = [...el.getClientRects()];
+    for (let a = el.parentElement; a && a !== document.body && rects.length; a = a.parentElement) {
+      const s = getComputedStyle(a);
+      if (/(hidden|auto|scroll|clip)/.test(s.overflow + s.overflowX + s.overflowY)) {
+        const ar = a.getBoundingClientRect();
+        rects = rects
+          .map((r) => ({ left: Math.max(r.left, ar.left), right: Math.min(r.right, ar.right),
+            top: Math.max(r.top, ar.top), bottom: Math.min(r.bottom, ar.bottom) }))
+          .filter((r) => r.right - r.left > 3 && r.bottom - r.top > 3);
+      }
+      if (a === root) break;
+    }
+    return rects;
+  };
   const leaves = [...root.querySelectorAll('*')].filter((el) => vis(el) && !ignored(el) && !inFixed(el)
     && [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()));
+  const leafRects = leaves.map(clippedRects);
   for (let i = 0; i < leaves.length; i++) for (let j = i + 1; j < leaves.length; j++) {
     const a = leaves[i], b = leaves[j];
     if (a.contains(b) || b.contains(a)) continue;
     // Wrapped inline elements span multiple line boxes; their union bbox
     // falsely covers the whole paragraph. Compare individual client rects.
-    const rectsA = [...a.getClientRects()], rectsB = [...b.getClientRects()];
+    const rectsA = leafRects[i], rectsB = leafRects[j];
     const real = rectsA.some((ra) => rectsB.some((rb) => {
       const ox = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
       const oy = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
