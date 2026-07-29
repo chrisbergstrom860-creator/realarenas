@@ -252,6 +252,26 @@ body {
 .modal-close:hover{background:var(--gray-100)}
 .notif-btn{width:34px;height:34px;border-radius:7px;border:var(--border);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;position:relative;transition:background .1s}
 
+
+/* ── Base chrome (consolidated, Batch 2): button system ────────────────────
+   .btn canonical = majority values (padding 7px 14px, 13px, transition .13s
+   normalized; no background/color — bare .btn buttons inherit, matching the
+   majority pages). font-family kept so pages without the element font rule
+   (challenges, leaderboards) don't fall back to the system font.
+   ORDER CONTRACT: .btn and .btn:hover come BEFORE the variants so the
+   variants win every shared property at equal specificity; each variant's
+   :hover comes after .btn:hover so variant hovers win too.
+   Athletes, billing and events keep full local .btn cascades (real padding /
+   background divergences) and therefore keep their variant copies local. */
+.btn{padding:7px 14px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;border:var(--border);font-family:var(--font);transition:all 0.13s;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{background:var(--gray-100)}
+.btn-ghost{background:transparent;color:var(--gray-700)}
+.btn-ghost:hover{background:var(--gray-100)}
+.btn-primary{background:var(--gray-900);color:white;border-color:var(--gray-900)}
+.btn-primary:hover{background:var(--gray-700)}
+.btn-yellow{background:var(--yellow);color:var(--gray-900);border-color:var(--yellow-dark);font-weight:600}
+.btn-yellow:hover{background:var(--yellow-dark)}
+
 /* ===========================================================================
    Activity stat tiles — the shared boxed treatment rendered by
    arenas-stat-tiles.js (feed + my-profile Activities tab). Base rules live
