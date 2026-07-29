@@ -1,45 +1,11 @@
 ---
-name: html-arenas mobile responsiveness shell
-description: How the app-shell goes mobile (bottom nav + single media block); the grid-blowout gotcha and the table-scroll plan for rollout.
+name: html-arenas mobile shell
+description: Mobile layout rules for app-shell pages + the permanent geometry guard
 ---
-
-# html-arenas mobile responsiveness
-
-Approach (STEP 2): server-injected mobile **bottom nav** + ONE `@media (max-width:768px)` block in the shared `html/arenas.css`. No per-page CSS.
-
-- `server.js` injects the bottom nav by replacing `</body>` (`injectBottomNav(html, pageKey)`), athlete variant = 5 items (Feed/Events/Log[primary]/Ranks/Profile). Club variants are setTab-based and were deferred to the rollout.
-- All shell-collapse rules are GATED on `body:has(.bottom-nav)` so pages that haven't been rolled out yet keep their desktop sidebar untouched. Rolling a page out = wire its route through `injectBottomNav`.
-
-## Gotcha: grid blowout (the bug that clipped content at 375px)
-Collapsing the shell to one column with `grid-template-columns: 1fr` is WRONG. `1fr` = `minmax(auto,1fr)`, so the track grows to the widest min-content among ALL items in that column (here the topbar's fixed-width search input + feed cards), pushing the column past the viewport. With `body{overflow-x:hidden}` the excess is clipped, so paragraphs/stat strips appear cut off on the right instead of wrapping.
-
-**Fix:** use `grid-template-columns: minmax(0, 1fr)` on BOTH `.app` and `.main`, plus `min-width:0` on the column children (`.feed-col`, `.side-col`, `.right-col`). Also override fixed-width topbar pieces (`.topbar-search{width:260px}` → `width:100%;min-width:0`).
-**Why:** `min-width:0`/`minmax(0,..)` lets flex/grid children shrink below content width so text wraps. This is the canonical CSS blowout fix and applies to every page rolled out.
-
-## Gotcha variant: nested grid→flex trap (my-profile Following list)
-Grid of flex cards + `white-space:nowrap` text: `min-width:0` on the INNER flex
-child is NOT enough — the `1fr` track's auto minimum resolves to the flex CARD's
-intrinsic min-content (full nowrap text width), blowing the row past the viewport
-(~540px card in a 380px viewport, silently clipped by the shell's overflow).
-**Fix:** put `min-width:0` on the grid ITEM itself (the card). The my-profile
-Following/Followers grid stacks to one column in the gated mobile block with
-ellipsized `.fc-name`/`.fc-sport` and `flex-shrink:0` on the button; desktop
-keeps `1fr 1fr`. Sibling tabs (Clubs = flex column; Achievements/Stats tiles)
-measured clean at 380px — don't "fix" them.
-
-## Rails stack for free
-`.side-col` / `.right-col` are the LAST child of `.main`, so once the grid is single-column they flow below the main content automatically — just reset them to `position:static;height:auto;overflow:visible;width:auto`.
-
-## Fixed-column leaderboard tables need a scroll wrapper
-Px-based `grid-template-columns` row/header tables don't collapse and will overflow on mobile. Wrap each in `.table-scroll`/`.table-scroll-inner{min-width:560px}` (util already in arenas.css). Known instances:
-- leaderboards: `.lb-table-header`/`.lb-row` (40px 1fr 110px 80px 60px)
-- club-dashboard: `.lb-table-row` (32px 1fr 80px 70px 60px)
-- club-member: `.lb-header-row`/`.lb-row` (36px 1fr 90px 70px 60px)
-
-## Verification trick
-Feed pages are auth-gated, so a TEMP unauth route was used to screenshot at 375px. The screenshot tool resolves paths against `previewPath` (`/html/landing`), so the temp route must live at `BASE + '/landing/__mobiletest-...'` to be reachable. REMOVE any such temp route before pushing.
-
-## Challenges page mobile geometry (2026-07-29)
-- Card action row (shared buildChallengeCard footer) needs `flex-wrap:wrap` — card `overflow:hidden` silently clips overflowing buttons (Delete was unreachable at ≤414px).
-- `.cards-grid-2` (discover grid) is page-local — NOT covered by the shared `.grid-2` mobile collapse; it needs its own gated one-column rule + `minmax(0,1fr)` tracks.
-- Verification gap closed: presence + page-level scrollWidth checks CANNOT detect clipping inside overflow:hidden containers or overlapping text. Guard: scripts/verify-challenges-mobile.js (playwright-core + nix chromium, 65 assertions: clipping vs overflow ancestor, text bbox overlap, buttons in viewport, Delete hit-test, console errors; 2 users × 2 tabs × 360/380/414px, long+short titles; failed 22/65 pre-fix). Seeds + sweeps its own data.
+- STEP2 mobile: server-injected bottom nav + one shared @media block in arenas.css gated on `body:has(.bottom-nav)`; collapse grids with `minmax(0,1fr)` + `min-width:0` (never bare `1fr` — cells blow out and clip), px-wide tables need `.table-scroll`.
+- **Permanent guard**: `node scripts/verify-mobile-geometry.js` (engine in `scripts/lib/mobile-geometry.js`, playwright-core + nix chromium). Seeds a DENSE dataset (long names/titles, populated club/events/challenges/achievements/posts), audits every app-shell page + tab states at 360/380/414px for: in-container clipping, text bbox overlap, off-viewport/un-hit-testable buttons, page h-scroll, console errors. Reports RENDERED vs EMPTY per surface — empty = unmeasured, not passing. Runs alongside verify-points-page.js / verify-km-consistency.js after shell CSS or card-template changes. New pages get a config entry, never a copied script (old verify-challenges-mobile.js retired).
+- **Why**: presence checks and page-scrollWidth checks are blind to clipping inside overflow:hidden and to overlaps; the first dense-seed audit found real defects on 3 pages (podium 1fr×3 clipping long names, club-event action row no-wrap, roster repeat(2,1fr) blowout, "(you)" swallowed by ellipsis).
+- **Harness false-positive rules learned** (already encoded in the lib): exclude fixed AND sticky ancestors from overlap (content legitimately scrolls beneath); scrollTo(0,0) before measuring (hit-tests scroll the page); buttons in horizontally scrollable bars are reachable by swipe; wrapped inline elements need per-clientRect overlap comparison (union bbox spans the whole paragraph).
+- Dead prototype CSS exists (athletes .rec-strip/.nearby-grid/.network-stats, feed .ch-mini-lb) — never rendered by any code; don't treat as surfaces.
+- Card action rows in JS string templates need explicit `flex-wrap:wrap` (challenges buildChallengeCard, club-dashboard event footer); card `overflow:hidden` otherwise clips buttons.
+- Ellipsized name divs must keep status markers ("(you)", role chips) as flex siblings with `flex-shrink:0`, not inside the truncated span.
