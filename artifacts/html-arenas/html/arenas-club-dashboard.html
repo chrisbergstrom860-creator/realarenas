@@ -1462,10 +1462,10 @@ document.addEventListener('DOMContentLoaded', function () {
             '<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--gray-500)"><div style="width:7px;height:7px;border-radius:50%;background:var(--gray-200);flex-shrink:0"></div>' + event.notRespondedCount + ' no response</div>' +
           '</div>' +
         '</div>' +
-        '<div style="padding:10px 16px;border-top:var(--border);display:flex;align-items:center;gap:6px;background:var(--gray-50)">' +
+        '<div style="padding:10px 16px;border-top:var(--border);display:flex;align-items:center;gap:6px;flex-wrap:wrap;background:var(--gray-50)">' +
           '<button onclick="viewEventRsvps(\'' + id + '\')" style="padding:5px 12px;border-radius:7px;font-size:12px;font-weight:600;border:none;background:var(--gray-900);color:white;cursor:pointer">View RSVPs</button>' +
           (event.notRespondedCount > 0 ? '<button onclick="nudgeNonResponders(\'' + id + '\',this)" style="padding:5px 12px;border-radius:7px;font-size:12px;border:1px solid #fde68a;background:var(--yellow-light);color:#7a5c00;cursor:pointer">⚡ Nudge ' + event.notRespondedCount + ' non-responders</button>' : '') +
-          '<div style="margin-left:auto;display:flex;gap:5px;align-items:center">' +
+          '<div style="margin-left:auto;display:flex;gap:5px;align-items:center;flex-wrap:wrap;min-width:0">' +
             attendeeAvs +
             (extraCount > 0 ? '<div style="width:24px;height:24px;border-radius:50%;background:var(--gray-100);color:var(--gray-500);border:1.5px solid white;margin-left:-6px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600">+' + extraCount + '</div>' : '') +
             '<button onclick="editClubEvent(\'' + id + '\')" style="margin-left:8px;padding:5px 10px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Edit</button>' +

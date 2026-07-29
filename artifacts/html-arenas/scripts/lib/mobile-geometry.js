@@ -1,0 +1,146 @@
+// Shared mobile-geometry audit library.
+//
+// Why this exists: presence checks and page-level scrollWidth checks are
+// structurally blind to (1) content clipped inside an overflow:hidden
+// container and (2) elements drawn on top of each other. This library
+// measures real rendered geometry in headless Chromium and fails on exactly
+// those defect classes. It is the engine behind
+// scripts/verify-mobile-geometry.js (the permanent guard) — new pages get a
+// config entry there, never a copied script.
+import { chromium } from 'playwright-core';
+import { execSync } from 'node:child_process';
+
+export const VIEWPORTS = [360, 380, 414];
+
+export function chromiumPath() {
+  return process.env.CHROMIUM_BIN
+    || execSync('command -v chromium || command -v chromium-browser').toString().trim();
+}
+
+export async function launchBrowser() {
+  return chromium.launch({ executablePath: chromiumPath(), args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+}
+
+// Browser-side geometry audit. rootSel scopes the audit; ignoreOverlapSels is
+// an array of CSS selectors for INTENTIONAL overlays (badges over avatars
+// etc.) excluded from the text-overlap rule only — clipping still applies.
+export function auditExpr(rootSel, ignoreOverlapSels = []) {
+  return `(() => {
+  const T = 1.5; // px tolerance for rounding/antialiasing
+  window.scrollTo(0, 0); // prior hit-tests scroll the page; measure from the top
+  const root = document.querySelector(${JSON.stringify(rootSel)});
+  if (!root) return { missing: true };
+  const IGNORE = ${JSON.stringify(ignoreOverlapSels)};
+  const ignored = (el) => IGNORE.some((s) => el.closest(s));
+  const out = { missing: false, clipped: [], overlaps: [], offscreenButtons: [] };
+  const vis = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none' && s.opacity !== '0'; };
+  const label = (el) => (el.tagName + (el.className && typeof el.className === 'string' ? '.' + el.className.split(' ')[0] : '') + ':' + (el.textContent || '').trim().replace(/\\s+/g, ' ').slice(0, 45));
+  // 1. clipping: element vs nearest overflow-clipping ancestor. Scrollable
+  // (auto/scroll) ancestors clip at their scrollWidth, not their box edge —
+  // deliberate .table-scroll wrappers stay legal.
+  for (const el of root.querySelectorAll('*')) {
+    if (!vis(el)) continue;
+    const r = el.getBoundingClientRect();
+    let a = el.parentElement;
+    while (a && a !== document.body) {
+      const s = getComputedStyle(a);
+      if (/(hidden|auto|scroll|clip)/.test(s.overflow + s.overflowX)) {
+        const ar = a.getBoundingClientRect();
+        const scrollable = /(auto|scroll)/.test(s.overflowX) || /(auto|scroll)/.test(s.overflow);
+        const clipR = scrollable ? ar.left - a.scrollLeft + a.scrollWidth : ar.right;
+        if (r.right > clipR + T || r.left < ar.left - T) out.clipped.push(label(el) + ' ⊄ ' + label(a));
+        break;
+      }
+      a = a.parentElement;
+    }
+  }
+  // 2. text-leaf overlap (ancestor/descendant pairs excluded). Elements inside
+  // position:fixed overlays (bottom nav, toasts) are excluded: page content
+  // legitimately scrolls beneath them — that is not a layout defect.
+  const inFixed = (el) => { for (let a = el; a && a !== document.body; a = a.parentElement)
+    if (/(fixed|sticky)/.test(getComputedStyle(a).position)) return true; return false; };
+  const leaves = [...root.querySelectorAll('*')].filter((el) => vis(el) && !ignored(el) && !inFixed(el)
+    && [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()));
+  for (let i = 0; i < leaves.length; i++) for (let j = i + 1; j < leaves.length; j++) {
+    const a = leaves[i], b = leaves[j];
+    if (a.contains(b) || b.contains(a)) continue;
+    // Wrapped inline elements span multiple line boxes; their union bbox
+    // falsely covers the whole paragraph. Compare individual client rects.
+    const rectsA = [...a.getClientRects()], rectsB = [...b.getClientRects()];
+    const real = rectsA.some((ra) => rectsB.some((rb) => {
+      const ox = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
+      const oy = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+      return ox > 3 && oy > 3;
+    }));
+    if (real) out.overlaps.push(label(a) + ' ⇄ ' + label(b));
+  }
+  // 3. buttons fully inside the viewport width and hit-testable at center
+  for (const b of root.querySelectorAll('button, a.btn, [role="button"]')) {
+    if (!vis(b)) continue;
+    // Buttons inside a horizontally scrollable ancestor (tab bars, pill rows)
+    // are reachable by swiping — exempt from the in-viewport rule.
+    let scrollable = false;
+    for (let a = b.parentElement; a && a !== document.body; a = a.parentElement) {
+      const s = getComputedStyle(a);
+      if (/(auto|scroll)/.test(s.overflowX + s.overflow) && a.scrollWidth > a.clientWidth + T) { scrollable = true; break; }
+    }
+    const r = b.getBoundingClientRect();
+    if (!scrollable && (r.right > window.innerWidth + T || r.left < -T)) { out.offscreenButtons.push(label(b)); continue; }
+    if (inFixed(b)) continue; // fixed/sticky chrome is always reachable
+    if (scrollable) b.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // Center vertically first so fixed overlays (bottom nav) can't shadow the
+    // hit test — a real user scrolls the button into view before tapping.
+    b.scrollIntoView({ block: 'center' });
+    const r2 = b.getBoundingClientRect();
+    const cx = r2.left + r2.width / 2, cy = r2.top + r2.height / 2;
+    const hit = document.elementFromPoint(cx, cy);
+    if (!(hit && (hit === b || b.contains(hit) || hit.contains(b)))) out.offscreenButtons.push('not-hit-testable ' + label(b) + (hit ? ' hit=' + label(hit) : ''));
+  }
+  return out;
+})()`;
+}
+
+// Surface density report: each surface must actually render content or the
+// page counts as UNMEASURED for that surface (empty states cannot overflow).
+export function surfacesExpr(surfaces) {
+  return `(${JSON.stringify(surfaces)}).map((s) => {
+    const el = document.querySelector(s.sel);
+    const n = el ? [...el.children].filter((c) => c.getBoundingClientRect().height > 0).length : -1;
+    return { name: s.name, found: !!el, children: n, ok: !!el && n >= (s.min ?? 1) };
+  })`;
+}
+
+// Runs one page config across all viewports on an authenticated context.
+// cfg: { name, path, waitFor, root, ignoreOverlap?, surfaces?, steps? }
+// steps: [{ name, js, waitFor? }] — extra states (tab clicks) audited after
+// the initial one. Returns { results: [{tag, audit}], surfaceReport, errors }.
+export async function auditPage(context, base, cfg) {
+  const page = await context.newPage();
+  const errors = [];
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('pageerror', (e) => errors.push(String(e)));
+  const results = [];
+  let surfaceReport = null;
+  for (const w of VIEWPORTS) {
+    await page.setViewportSize({ width: w, height: 840 });
+    await page.goto(base + cfg.path, { waitUntil: 'networkidle' });
+    if (cfg.waitFor) await page.waitForSelector(cfg.waitFor, { timeout: 20000 });
+    if (cfg.surfaces && !surfaceReport) surfaceReport = await page.evaluate(surfacesExpr(cfg.surfaces));
+    results.push({ tag: `${cfg.name}@${w}px`, audit: await page.evaluate(auditExpr(cfg.root || '.main', cfg.ignoreOverlap)),
+      hscroll: await page.evaluate('document.documentElement.scrollWidth - window.innerWidth') });
+    for (const step of cfg.steps || []) {
+      await page.evaluate(step.js);
+      if (step.waitFor) await page.waitForSelector(step.waitFor, { timeout: 15000 });
+      await page.waitForTimeout(250);
+      if (step.surfaces) {
+        const rep = await page.evaluate(surfacesExpr(step.surfaces));
+        surfaceReport = (surfaceReport || []).concat(w === VIEWPORTS[0] ? rep : []);
+      }
+      results.push({ tag: `${cfg.name}:${step.name}@${w}px`, audit: await page.evaluate(auditExpr(step.root || cfg.root || '.main', cfg.ignoreOverlap)),
+        hscroll: await page.evaluate('document.documentElement.scrollWidth - window.innerWidth') });
+    }
+  }
+  await page.close();
+  return { results, surfaceReport: surfaceReport || [], errors };
+}
