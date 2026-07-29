@@ -61,7 +61,10 @@ export function auditExpr(rootSel, ignoreOverlapSels = []) {
   // 2. text-leaf overlap (ancestor/descendant pairs excluded). Elements inside
   // position:fixed overlays (bottom nav, toasts) are excluded: page content
   // legitimately scrolls beneath them — that is not a layout defect.
-  const inFixed = (el) => { for (let a = el; a && a !== document.body; a = a.parentElement)
+  // The walk stops at the audit ROOT: when the root itself is a fixed modal
+  // overlay, its contents are real subject matter and must stay measured —
+  // otherwise every modal audit would be structurally blind.
+  const inFixed = (el) => { for (let a = el; a && a !== document.body && a !== root; a = a.parentElement)
     if (/(fixed|sticky)/.test(getComputedStyle(a).position)) return true; return false; };
   const leaves = [...root.querySelectorAll('*')].filter((el) => vis(el) && !ignored(el) && !inFixed(el)
     && [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()));

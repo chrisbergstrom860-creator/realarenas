@@ -240,18 +240,9 @@ document.addEventListener('DOMContentLoaded', function(){
 .empty-state h3 { font-size: 17px; font-weight: 600; color: var(--gray-900); margin-bottom: 6px; }
 .empty-state p { font-size: 14px; color: var(--gray-500); margin-bottom: 20px; max-width: 360px; margin-left: auto; margin-right: auto; }
 
-/* ── MODAL ── */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 500; display: none; align-items: center; justify-content: center; padding: 24px; backdrop-filter: blur(2px); }
-.modal { background: white; border-radius: var(--radius-lg); width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2); animation: modal-in 0.2s ease; }
-@keyframes modal-in { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: none; } }
-.modal-header { padding: 20px 24px 16px; border-bottom: var(--border); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.modal-close { width: 28px; height: 28px; border-radius: 50%; border: var(--border); background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--gray-500); flex-shrink: 0; transition: background 0.1s; }
-.modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
-.modal-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.modal-detail { background: var(--gray-50); border-radius: var(--radius); padding: 10px 12px; }
-.modal-detail .lbl { font-size: 11px; color: var(--gray-400); margin-bottom: 3px; }
-.modal-detail .val { font-size: 15px; font-weight: 600; color: var(--gray-900); font-family: var(--mono); }
-.modal-footer { padding: 16px 24px; border-top: var(--border); display: flex; gap: 10px; }
+/* ── MODAL ── Dead .modal* cluster DELETED (Batch 3): every live overlay on
+   this page is built at runtime by arenasOverlay with inline-styled panels;
+   the static prototype modals that consumed these rules were removed 2026-07. */
 
 /* ── TOAST ── */
 

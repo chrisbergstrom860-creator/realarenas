@@ -311,12 +311,10 @@ button,select,input,textarea{font-family:var(--font)}
 .you-tag{font-size:10px;font-weight:600;padding:1px 7px;border-radius:10px;background:var(--yellow-light);color:#7a5c00;border:1px solid #fde68a}
 
 /* ── MODAL ── */
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;display:none;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(3px)}
-.modal{background:white;border-radius:var(--radius-xl);width:100%;max-width:500px;max-height:88vh;overflow-y:auto;box-shadow:var(--shadow-lg);animation:scale-in .2s ease}
-.modal-header{padding:22px 26px 18px;border-bottom:var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-.modal-close{width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--gray-500);transition:background .1s}
-.modal-body{padding:22px 26px;display:flex;flex-direction:column;gap:14px}
-.modal-footer{padding:16px 26px;border-top:var(--border);display:flex;gap:10px;background:var(--gray-50)}
+/* Modal cluster is canonical in arenas.css (Batch 3); the former radius-xl /
+   shadow-lg / 26px-padding family was drift, normalized to canonical. Page
+   keeps only its sizing + entrance animation (scale-in keyframe is local). */
+.modal{max-width:500px;animation:scale-in .2s ease}
 
 /* ── TOAST ── (promoted to arenas.css) */
 

@@ -161,7 +161,17 @@ for (const [a, ty, ti] of [[M, 'like', 'New kudos'], [users.f0.id, 'follow', 'Ne
 console.log('MANIFEST club:', club.id, 'challenges:', JSON.stringify(CHALLENGES), 'events:', JSON.stringify(EVENTS));
 
 // ── page configs ──
+// MODAL STATES ARE PART OF THIS GUARD: pages at rest never render their
+// modals, so every modal is an unmeasured surface unless it has a step here.
+// Convention for a modal step: { name, js: <open it>, waitFor: <overlay
+// visible>, root: <the overlay id> } — root scopes the geometry audit to the
+// modal (the engine deliberately keeps measuring inside the fixed overlay
+// when it IS the root). New modals get a step entry, never a new script.
+// NOTE the closers: static .modal-overlay modals close via closeModals();
+// arenasOverlay-built overlays close via arenasOverlay.close(id).
 const htab = (id) => `document.getElementById('htab-${id}').click()`;
+const closeModals = `document.querySelectorAll('.modal-overlay').forEach((m) => m.classList.remove('open'));`;
+const closeOverlays = `['create-challenge-overlay','challenge-leaderboard-overlay','invite-manager-overlay','challenge-delete-overlay'].forEach((i) => window.arenasOverlay && arenasOverlay.close(i));`;
 const PAGES = [
   { user: 'creator', name: 'feed', path: '/feed', waitFor: '.feed-item-wrap', root: 'body',
     surfaces: [
@@ -170,18 +180,42 @@ const PAGES = [
     ] },
   { user: 'creator', name: 'challenges', path: '/challenges', waitFor: '#tab-mine .challenge-card', root: 'body',
     surfaces: [{ name: 'mine cards', sel: '#tab-mine', min: 2 }],
-    steps: [{ name: 'discover', js: `document.getElementById('tab-btn-discover').click()`, waitFor: '#discover-grid .challenge-card',
-      surfaces: [{ name: 'discover cards', sel: '#discover-grid', min: 1 }] }] },
+    steps: [
+      { name: 'discover', js: `document.getElementById('tab-btn-discover').click()`, waitFor: '#discover-grid .challenge-card',
+        surfaces: [{ name: 'discover cards', sel: '#discover-grid', min: 1 }] },
+      // arenasOverlay-built modal states (runtime construction — trigger them,
+      // there is no static markup). openCreateChallenge bypasses the Pro-lock
+      // redirect deliberately: the overlay itself is what gets measured.
+      { name: 'modal-create-challenge', js: closeOverlays + `window.openCreateChallenge()`,
+        waitFor: '#create-challenge-overlay', root: '#create-challenge-overlay' },
+      { name: 'modal-challenge-leaderboard', js: closeOverlays + `document.querySelector('[onclick^="viewLeaderboard"]').click()`,
+        waitFor: '#challenge-leaderboard-overlay', root: '#challenge-leaderboard-overlay',
+        surfaces: [{ name: 'challenge lb panel', sel: '#challenge-leaderboard-overlay > div', min: 2 }] },
+      { name: 'modal-invite-manager', js: closeOverlays + `document.querySelector('[onclick^="openInviteManager"]').click()`,
+        waitFor: '#invite-manager-overlay', root: '#invite-manager-overlay' },
+      { name: 'modal-manage-challenge', js: closeOverlays + `document.querySelector('[onclick^="openDeleteChallenge"]').click()`,
+        waitFor: '#challenge-delete-overlay', root: '#challenge-delete-overlay' }
+    ] },
   { user: 'member', name: 'challenges-member', path: '/challenges', waitFor: '#tab-mine .challenge-card', root: 'body',
     surfaces: [{ name: 'mine cards (member)', sel: '#tab-mine', min: 1 }],
     steps: [{ name: 'discover', js: `document.getElementById('tab-btn-discover').click()`, waitFor: '#discover-grid .challenge-card',
       surfaces: [{ name: 'discover cards (member)', sel: '#discover-grid', min: 1 }] }] },
   { user: 'creator', name: 'events', path: '/events', waitFor: '#events-grid > *', root: 'body',
-    surfaces: [{ name: 'events grid', sel: '#events-grid', min: 2 }] },
+    surfaces: [{ name: 'events grid', sel: '#events-grid', min: 2 }],
+    steps: [
+      { name: 'modal-create-event', js: `document.getElementById('create-event-btn').click()`,
+        waitFor: '#evx-modal', root: '#evx-modal' }
+    ] },
   { user: 'creator', name: 'leaderboards', path: '/leaderboards', waitFor: '.lb-row', root: 'body',
     surfaces: [
       { name: 'podium', sel: '.podium-stage', min: 3 },
       { name: 'table rows', sel: '.lb-table-header ~ *', min: 1 }
+    ],
+    steps: [
+      // Shared "How points work" modal (arenas-hpw-modal.js) — one
+      // representative page; identical overlay on challenges/my-profile.
+      { name: 'modal-hpw', js: `document.querySelector('.hpw-link').click()`,
+        waitFor: '#hpw-modal-body', root: '#hpw-modal-overlay' }
     ] },
   { user: 'creator', name: 'profile', path: '/profile', waitFor: '.hero-inner', root: 'body',
     surfaces: [{ name: 'overview', sel: '#tab-overview', min: 1 }],
@@ -190,18 +224,36 @@ const PAGES = [
       { name: 'stats', js: htab('stats'), surfaces: [{ name: 'stats & PRs body', sel: '#sp-stats-body', min: 1 }] },
       { name: 'achievements', js: htab('achievements'), surfaces: [{ name: 'achievements tab', sel: '#tab-achievements .content-cols-full', min: 1 }] },
       { name: 'following', js: htab('following'), surfaces: [{ name: 'following grid', sel: '.following-grid', min: 2 }] },
-      { name: 'goals', js: htab('goals'), surfaces: [{ name: 'goals tab', sel: '#tab-goals', min: 1 }] }
+      { name: 'goals', js: htab('goals'), surfaces: [{ name: 'goals tab', sel: '#tab-goals', min: 1 }] },
+      // Live my-profile modals. (modal-comment is dead prototype markup with
+      // no opener anywhere — not a reachable state, so not measured.)
+      { name: 'modal-avatar-photo', js: closeModals + `openModal('avatar-photo')`,
+        waitFor: '#modal-avatar-photo.open', root: '#modal-avatar-photo' },
+      { name: 'modal-delete-account', js: closeModals + `openModal('delete-account')`,
+        waitFor: '#modal-delete-account.open', root: '#modal-delete-account' },
+      { name: 'modal-goal', js: closeModals + `window.openGoalForm()`,
+        waitFor: '#modal-goal.open', root: '#modal-goal' }
     ] },
   // Mobile defaults to WEEK view (no .cal-grid) — wait on the shell, then
   // audit week (default) plus an explicit switch to month.
   { user: 'creator', name: 'calendar', path: '/calendar', waitFor: '.main', root: 'body',
     surfaces: [{ name: 'calendar body', sel: '.main', min: 1 }],
-    steps: [{ name: 'month', js: `(document.querySelector('[data-view="month"], #view-month') || [...document.querySelectorAll('button')].find((b) => /month/i.test(b.textContent)) || {click(){}}).click()`,
-      surfaces: [{ name: 'month grid', sel: '.cal-grid', min: 7 }] }] },
+    steps: [
+      { name: 'month', js: `(document.querySelector('[data-view="month"], #view-month') || [...document.querySelectorAll('button')].find((b) => /month/i.test(b.textContent)) || {click(){}}).click()`,
+        surfaces: [{ name: 'month grid', sel: '.cal-grid', min: 7 }] },
+      // Day panel on a seeded long-title day (mobile = bottom-sheet layout).
+      { name: 'modal-day-panel', js: `window.openDayPanel('${dt(-4)}')`,
+        waitFor: '#day-panel.open', root: '#day-panel',
+        surfaces: [{ name: 'day panel body', sel: '#day-panel .modal-body', min: 1 }] }
+    ] },
   { user: 'creator', name: 'athletes', path: '/athletes', waitFor: '#athlete-grid > *', root: 'body',
     // NOTE: .rec-strip / .nearby-grid / .network-stats exist only as dead
     // prototype CSS — no DOM ever renders them, so they are not surfaces.
-    surfaces: [{ name: 'directory cards', sel: '#athlete-grid', min: 4 }] },
+    surfaces: [{ name: 'directory cards', sel: '#athlete-grid', min: 4 }],
+    steps: [
+      { name: 'modal-athlete-profile', js: `document.querySelector('#athlete-grid .adc-card[data-clickable]').click()`,
+        waitFor: '#modal-profile.open', root: '#modal-profile' }
+    ] },
   { user: 'creator', name: 'log', path: '/log', waitFor: 'form, #act-form, .main', root: 'body',
     surfaces: [{ name: 'log form', sel: '.main', min: 1 }] },
   { user: 'creator', name: 'billing', path: '/billing', waitFor: '.main', root: 'body',
@@ -213,7 +265,16 @@ const PAGES = [
       { name: 'leaderboard', js: `setTab('leaderboard', document.querySelector('.nav-item'))`, surfaces: [{ name: 'lb tab', sel: '#tab-leaderboard', min: 1 }] },
       { name: 'events', js: `setTab('events', document.querySelector('.nav-item'))`, surfaces: [{ name: 'events tab', sel: '#tab-events', min: 1 }] },
       { name: 'feed', js: `setTab('feed', document.querySelector('.nav-item'))`, surfaces: [{ name: 'club feed tab', sel: '#tab-feed', min: 1 }] },
-      { name: 'reports', js: `setTab('reports', document.querySelector('.nav-item'))`, surfaces: [{ name: 'reports tab', sel: '#tab-reports', min: 1 }] }
+      { name: 'reports', js: `setTab('reports', document.querySelector('.nav-item'))`, surfaces: [{ name: 'reports tab', sel: '#tab-reports', min: 1 }] },
+      // Live dashboard modals. (modal-event / modal-event-rsvp /
+      // modal-challenge are dead prototype markup with no opener — the live
+      // RSVP list is the runtime inline #rsvp-modal-overlay built by
+      // viewEventRsvps.)
+      { name: 'modal-club-logo', js: closeModals + `openModal('club-logo')`,
+        waitFor: '#modal-club-logo.open', root: '#modal-club-logo' },
+      { name: 'modal-event-rsvps', js: closeModals + `window.viewEventRsvps('${EVENTS[0]}')`,
+        waitFor: '#rsvp-modal-overlay', root: '#rsvp-modal-overlay',
+        surfaces: [{ name: 'rsvp list panel', sel: '#rsvp-modal-overlay > div', min: 2 }] }
     ] },
   { user: 'member', name: 'club-member', path: '/clubs/member/' + club.id, waitFor: '.main', root: 'body',
     surfaces: [
