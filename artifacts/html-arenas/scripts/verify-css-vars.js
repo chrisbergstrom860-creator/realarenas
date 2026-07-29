@@ -15,6 +15,13 @@
  *   (not just :root), inline style="--x:.." attrs, and JS setProperty('--x',..).
  * - Also reports any dynamically constructed var(--...) names (template
  *   literals / concatenation), which static checking cannot resolve.
+ *
+ * Scope model (deliberately conservative): a custom-property declaration
+ * ANYWHERE in the page/its scripts counts as a definition, regardless of the
+ * selector it sits under. This can under-report (a var defined only under an
+ * unrelated selector satisfies the check) but never over-reports; modelling
+ * CSS cascade scope statically is out of scope for this guard. Comments are
+ * stripped before parsing so commented-out declarations do NOT count.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,7 +29,13 @@ import { fileURLToPath } from 'node:url';
 
 const HTML_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'html');
 
-const read = (f) => fs.readFileSync(f, 'utf8');
+const read = (f) => stripComments(fs.readFileSync(f, 'utf8'));
+
+// Remove /* */ CSS/JS block comments and // JS line comments (crude but safe:
+// only strips // when preceded by whitespace or line start, so URLs survive).
+function stripComments(text) {
+  return text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|\s)\/\/[^\n]*/g, '$1');
+}
 
 function definedIn(text) {
   const out = new Set();
@@ -34,7 +47,8 @@ function definedIn(text) {
 }
 function consumedIn(text) {
   const out = new Set();
-  for (const m of text.matchAll(/var\(\s*--([a-zA-Z0-9-]+)/g)) out.add(m[1]);
+  // comments were stripped in read(); tolerate any whitespace after var(
+  for (const m of text.matchAll(/var\(\s*--([a-zA-Z0-9-]+)/gi)) out.add(m[1]);
   return out;
 }
 function dynamicRefsIn(text) {
