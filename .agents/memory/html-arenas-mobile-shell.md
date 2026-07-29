@@ -38,3 +38,8 @@ Px-based `grid-template-columns` row/header tables don't collapse and will overf
 
 ## Verification trick
 Feed pages are auth-gated, so a TEMP unauth route was used to screenshot at 375px. The screenshot tool resolves paths against `previewPath` (`/html/landing`), so the temp route must live at `BASE + '/landing/__mobiletest-...'` to be reachable. REMOVE any such temp route before pushing.
+
+## Challenges page mobile geometry (2026-07-29)
+- Card action row (shared buildChallengeCard footer) needs `flex-wrap:wrap` — card `overflow:hidden` silently clips overflowing buttons (Delete was unreachable at ≤414px).
+- `.cards-grid-2` (discover grid) is page-local — NOT covered by the shared `.grid-2` mobile collapse; it needs its own gated one-column rule + `minmax(0,1fr)` tracks.
+- Verification gap closed: presence + page-level scrollWidth checks CANNOT detect clipping inside overflow:hidden containers or overlapping text. Guard: scripts/verify-challenges-mobile.js (playwright-core + nix chromium, 65 assertions: clipping vs overflow ancestor, text bbox overlap, buttons in viewport, Delete hit-test, console errors; 2 users × 2 tabs × 360/380/414px, long+short titles; failed 22/65 pre-fix). Seeds + sweeps its own data.
