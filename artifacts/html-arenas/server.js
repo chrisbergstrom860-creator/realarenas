@@ -1910,8 +1910,15 @@ async function buildFeedRsvps(currentUserId) {
     const eventMap = {};
     if (eventIds.length) {
       const { data: evs } = await supabaseAdmin
-        .from('events').select('id, title, date, location, sport, event_type').in('id', eventIds);
-      (evs || []).forEach(e => { eventMap[e.id] = e; });
+        .from('events')
+        .select('id, title, date, location, sport, event_type, visibility, club_id, created_by')
+        .in('id', eventIds);
+      // Visibility gate: a followed athlete's RSVP to a private/club event the
+      // VIEWER can't see must not surface that event's title in their feed.
+      const visibleEvs = await visibleEventsFilter(currentUserId, evs || []);
+      visibleEvs.forEach(e => {
+        eventMap[e.id] = { id: e.id, title: e.title, date: e.date, location: e.location, sport: e.sport, event_type: e.event_type };
+      });
     }
     const nameMap = await buildUserDisplayMap(rsvpRows.map(r => r.user_id));
     return rsvpRows
@@ -3959,9 +3966,11 @@ app.get(BASE + '/api/profile/overview', requireAuth, async (req, res) => {
     if (eventIds.length) {
       const { data: evRows } = await supabaseAdmin
         .from('events')
-        .select('id, title, date, location')
+        .select('id, title, date, location, visibility, club_id, created_by')
         .in('id', eventIds);
-      upcomingRsvps = (evRows || [])
+      // Same visibility gate as everywhere: own RSVP is not an access grant.
+      const visibleRows = await visibleEventsFilter(userId, evRows || []);
+      upcomingRsvps = visibleRows
         .filter(ev => new Date(ev.date) >= now)
         .sort((a, b) => new Date(a.date) - new Date(b.date))
         .slice(0, 3)
@@ -5285,6 +5294,73 @@ app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
 // Mounted under BASE so the shared proxy routes them here (the separate
 // api-server owns the bare "/api"). Display names come from auth metadata (no
 // `profiles` table); related rows are joined in JS, not via PostgREST embeds.
+
+// ── Event access — THE single rule. ──
+// Every route that reads or returns an event row must decide visibility through
+// canUserSeeEvent / visibleEventsFilter — never through per-route query shapes
+// (that's how the pre-2026-07 RSVP/calendar leak happened).
+//   public                → anyone (club_id or not; a public club event is public)
+//   club_id set (non-public) → members of that club (creator always)
+//   private (no club_id)  → creator ∨ invite row (event_invites)
+//   anything else         → creator only (fail closed)
+// NOTE deliberately NO "RSVP row ⇒ visible" clause: invites are retained on
+// accept and revoke refuses once RSVP'd, so an RSVP without an invite row can
+// only be a pre-gate leak artifact — admitting it would carry the leak forward.
+const EVENT_VISIBILITIES = ['public', 'club', 'private'];
+
+function canUserSeeEvent(userId, event, ctx) {
+  if (!event || !userId) return false;
+  if (event.created_by === userId) return true;
+  if (event.visibility === 'public') return true;
+  if (event.club_id) return ctx.memberClubs.has(event.club_id);
+  if (event.visibility === 'private') return ctx.invitedEvents.has(event.id);
+  return false;
+}
+
+// Batched context: one memberships + one event_invites lookup for a whole list.
+async function buildEventAccessCtx(userId, events) {
+  const ctx = { memberClubs: new Set(), invitedEvents: new Set() };
+  const clubIds = [...new Set(events.map(e => e.club_id).filter(Boolean))];
+  const privateIds = events
+    .filter(e => e.visibility === 'private' && !e.club_id && e.created_by !== userId)
+    .map(e => e.id);
+  const [memRes, invRes] = await Promise.all([
+    clubIds.length
+      ? supabaseAdmin.from('memberships').select('club_id')
+          .eq('user_id', userId).in('club_id', clubIds)
+      : Promise.resolve({ data: [] }),
+    privateIds.length
+      ? supabaseAdmin.from('event_invites').select('event_id')
+          .eq('invitee_id', userId).in('event_id', privateIds)
+      : Promise.resolve({ data: [] })
+  ]);
+  (memRes.data || []).forEach(m => ctx.memberClubs.add(m.club_id));
+  // A failed invite lookup (e.g. table missing) degrades to "not invited" —
+  // fail closed, never open.
+  (invRes.data || []).forEach(r => ctx.invitedEvents.add(r.event_id));
+  return ctx;
+}
+
+// Filter a list of event rows down to what userId may see (batched lookups).
+async function visibleEventsFilter(userId, events) {
+  const list = (events || []).filter(Boolean);
+  if (!list.length) return [];
+  const ctx = await buildEventAccessCtx(userId, list);
+  return list.filter(e => canUserSeeEvent(userId, e, ctx));
+}
+
+// Single-event read gate. Returns the event row when userId may see it, and
+// null BOTH when the id doesn't exist and when access is denied — callers must
+// answer with the identical not-found body in both cases (zero-leak standard,
+// matching private challenges: no existence oracle).
+async function getVisibleEvent(userId, eventId, columns = '*') {
+  const { data: event } = await supabaseAdmin
+    .from('events').select(columns).eq('id', eventId).maybeSingle();
+  if (!event) return null;
+  const visible = await visibleEventsFilter(userId, [event]);
+  return visible.length ? event : null;
+}
+
 app.get(BASE + '/api/events', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ upcomingEvents: [], clubEvents: [], myCreatedEvents: [], myRsvps: [] });
   try {
@@ -5297,7 +5373,7 @@ app.get(BASE + '/api/events', requireAuth, async (req, res) => {
       .from('follows').select('following_id').eq('follower_id', userId);
     const followingIds = (following || []).map(f => f.following_id).filter(Boolean);
 
-    const [upcomingRes, clubRes, createdRes] = await Promise.all([
+    const [upcomingRes, clubRes, createdRes, inviteRes] = await Promise.all([
       supabaseAdmin.from('events').select('*').eq('visibility', 'public')
         .gte('date', nowIso).order('date', { ascending: true }).limit(50),
       clubIds.length
@@ -5305,13 +5381,25 @@ app.get(BASE + '/api/events', requireAuth, async (req, res) => {
             .gte('date', nowIso).order('date', { ascending: true })
         : Promise.resolve({ data: [] }),
       supabaseAdmin.from('events').select('*').eq('created_by', userId)
-        .order('date', { ascending: true })
+        .order('date', { ascending: true }),
+      supabaseAdmin.from('event_invites').select('event_id').eq('invitee_id', userId)
     ]);
     const upcomingEvents = upcomingRes.data || [];
     const clubEvents = clubRes.data || [];
     const myCreatedEvents = createdRes.data || [];
 
-    const allEvents = [...upcomingEvents, ...clubEvents, ...myCreatedEvents];
+    // Private events the viewer is invited to (the invite row IS the access
+    // grant — see canUserSeeEvent). Missing table degrades to none.
+    const invitedIds = [...new Set((inviteRes.data || []).map(r => r.event_id).filter(Boolean))];
+    let invitedEvents = [];
+    if (invitedIds.length) {
+      const { data: invEvs } = await supabaseAdmin
+        .from('events').select('*').in('id', invitedIds)
+        .gte('date', nowIso).order('date', { ascending: true });
+      invitedEvents = invEvs || [];
+    }
+
+    const allEvents = [...upcomingEvents, ...clubEvents, ...myCreatedEvents, ...invitedEvents];
     const allEventIds = [...new Set(allEvents.map(e => e.id))];
 
     let allRsvps = [];
@@ -5327,9 +5415,15 @@ app.get(BASE + '/api/events', requireAuth, async (req, res) => {
     const myRsvpEventIds = [...new Set((myRsvpRows || []).map(r => r.event_id).filter(Boolean))];
     const myRsvpEventMap = {};
     if (myRsvpEventIds.length) {
+      // Access columns fetched so the visibility gate can run; a pre-gate RSVP
+      // to an event the viewer can no longer see must NOT resurface it here.
       const { data: evs } = await supabaseAdmin
-        .from('events').select('id, title, date, location, sport').in('id', myRsvpEventIds);
-      (evs || []).forEach(e => { myRsvpEventMap[e.id] = e; });
+        .from('events').select('id, title, date, location, sport, visibility, club_id, created_by')
+        .in('id', myRsvpEventIds);
+      const visibleEvs = await visibleEventsFilter(userId, evs || []);
+      visibleEvs.forEach(e => {
+        myRsvpEventMap[e.id] = { id: e.id, title: e.title, date: e.date, location: e.location, sport: e.sport };
+      });
     }
     const myRsvps = (myRsvpRows || [])
       .map(r => ({ event_id: r.event_id, status: r.status, events: myRsvpEventMap[r.event_id] || null }))
@@ -5379,6 +5473,7 @@ app.get(BASE + '/api/events', requireAuth, async (req, res) => {
       upcomingEvents: upcomingEvents.map(enrichEvent),
       clubEvents: clubEvents.map(enrichEvent),
       myCreatedEvents: myCreatedEvents.map(enrichEvent),
+      invitedEvents: invitedEvents.map(enrichEvent),
       myRsvps
     });
   } catch (err) {
@@ -5399,6 +5494,14 @@ app.post(BASE + '/api/events/create', requireAuth, async (req, res) => {
   }
   const eventDate = new Date(date);
   if (isNaN(eventDate.getTime())) return res.json({ error: 'Invalid date' });
+  // Visibility is a real access model now — enum-validate it instead of
+  // storing arbitrary strings, and enforce the shape each state requires:
+  // 'club' is meaningless without a club, 'private' implies NO club scope
+  // (club events are member-visible by definition, never invite-gated).
+  const vis = visibility || 'public';
+  if (!EVENT_VISIBILITIES.includes(vis)) return res.json({ error: 'Invalid visibility' });
+  if (vis === 'club' && !club_id) return res.json({ error: 'Club-only events need a club' });
+  if (vis === 'private' && club_id) return res.json({ error: 'Private events cannot be posted to a club' });
   // If posting to a club, the caller must actually be a member of it — otherwise
   // anyone could create events in arbitrary clubs and trigger club-wide notifs.
   if (club_id) {
@@ -5421,7 +5524,7 @@ app.post(BASE + '/api/events/create', requireAuth, async (req, res) => {
       entry_fee: entry_fee || null,
       level: level || null,
       description: description || null,
-      visibility: visibility || 'public'
+      visibility: vis
     }).select().single();
   if (error) return res.json({ error: error.message });
   // Auto-RSVP the creator as going (best-effort).
@@ -5430,14 +5533,36 @@ app.post(BASE + '/api/events/create', requireAuth, async (req, res) => {
   const actor = displayFromUser(req.user);
   const dateLabel = eventDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
-  // Restrict invites to followers (the modal only offers those) and cap the
-  // count, so the endpoint can't spam arbitrary user IDs with notifications.
+  // Restrict invites to people the creator follows (the modal only offers
+  // those), reject self-invite, and cap the count, so the endpoint can't spam
+  // arbitrary user IDs with notifications.
   let validInvitees = [];
   if (Array.isArray(invitees) && invitees.length) {
     const { data: follows } = await supabaseAdmin
       .from('follows').select('following_id').eq('follower_id', req.user.id);
     const followingSet = new Set((follows || []).map(f => f.following_id));
-    validInvitees = [...new Set(invitees)].filter(id => followingSet.has(id)).slice(0, 50);
+    validInvitees = [...new Set(invitees)]
+      .filter(id => id && typeof id === 'string' && followingSet.has(id) && id !== req.user.id)
+      .slice(0, 50);
+  }
+  // On a PRIVATE event the checked list is the ACCESS list: insert the invite
+  // rows FIRST (challenge-invite rails — record before notification), and only
+  // notify the rows that actually inserted. On public/club events the same
+  // list is a heads-up with no access implication (no rows).
+  if (vis === 'private' && validInvitees.length) {
+    const { data: inserted, error: insErr } = await supabaseAdmin
+      .from('event_invites')
+      .upsert(
+        validInvitees.map(id => ({ event_id: event.id, invitee_id: id, inviter_id: req.user.id })),
+        { onConflict: 'event_id,invitee_id', ignoreDuplicates: true }
+      )
+      .select('invitee_id');
+    if (insErr) {
+      console.log('Event invite insert error:', insErr.message);
+      validInvitees = []; // record failed → no access → don't promise it in a notif
+    } else {
+      validInvitees = (inserted || []).map(r => r.invitee_id);
+    }
   }
   for (const inviteeId of validInvitees) {
     await createNotification({
@@ -5468,6 +5593,12 @@ app.post(BASE + '/api/events/:id/rsvp', requireAuth, async (req, res) => {
   if (!['going', 'interested', 'cancelled'].includes(status)) {
     return res.json({ error: 'Invalid status' });
   }
+  // Visibility gate — an RSVP is an acceptance, so it must pass the same rule
+  // as reading the event. Denied and nonexistent get the IDENTICAL body (zero-
+  // leak standard; deliberately no invite_required variant — events have no
+  // discover surface where a non-invitee could legitimately hold an id).
+  const gatedEvent = await getVisibleEvent(req.user.id, req.params.id);
+  if (!gatedEvent) return res.json({ error: 'Event not found' });
   const { data: existing } = await supabaseAdmin
     .from('event_rsvps').select('event_id, status')
     .eq('event_id', req.params.id).eq('user_id', req.user.id).maybeSingle();
@@ -5488,8 +5619,7 @@ app.post(BASE + '/api/events/:id/rsvp', requireAuth, async (req, res) => {
   // clicking "Going" can't spam the organiser or the viewer's followers.
   if (status === 'going' && !wasGoing) {
     try {
-      const { data: event } = await supabaseAdmin
-        .from('events').select('created_by, title').eq('id', req.params.id).maybeSingle();
+      const event = gatedEvent; // already fetched (and access-checked) above
       const actor = displayFromUser(req.user);
       if (event && event.created_by !== req.user.id) {
         await createNotification({
@@ -5500,9 +5630,19 @@ app.post(BASE + '/api/events/:id/rsvp', requireAuth, async (req, res) => {
       }
       const { data: followers } = await supabaseAdmin
         .from('follows').select('follower_id').eq('following_id', req.user.id);
-      for (const f of (followers || [])) {
+      let fanout = (followers || []).map(f => f.follower_id);
+      // Private event: the title must not fan out to followers who can't see
+      // the event — restrict to followers who are themselves invited (or the
+      // creator, notified above).
+      if (event && event.visibility === 'private') {
+        const { data: invRows } = await supabaseAdmin
+          .from('event_invites').select('invitee_id').eq('event_id', req.params.id);
+        const invited = new Set((invRows || []).map(r => r.invitee_id));
+        fanout = fanout.filter(id => invited.has(id));
+      }
+      for (const followerId of fanout) {
         await createNotification({
-          userId: f.follower_id, type: 'event', title: 'Friend going to an event',
+          userId: followerId, type: 'event', title: 'Friend going to an event',
           body: `${actor.name} is going to "${event ? event.title : 'an event'}" — are you in?`,
           link: '/events', actorId: req.user.id, entityId: req.params.id
         });
@@ -5523,8 +5663,10 @@ app.delete(BASE + '/api/events/:id', requireAuth, async (req, res) => {
   // Allow the event creator OR a club admin/coach to delete. Without this, the
   // dashboard "Cancel" button (shown to coaches) would delete 0 rows yet still
   // report success, so the event reappears on reload.
-  const { data: event } = await supabaseAdmin
-    .from('events').select('id, created_by, club_id').eq('id', req.params.id).maybeSingle();
+  // Zero-leak: an event the caller can't SEE answers exactly like a
+  // nonexistent id; only a visible-but-unauthorized caller gets the distinct
+  // permission message.
+  const event = await getVisibleEvent(req.user.id, req.params.id, 'id, created_by, club_id, visibility');
   if (!event) return res.json({ error: 'Event not found' });
   let allowed = event.created_by === req.user.id;
   if (!allowed && event.club_id) {
@@ -5538,6 +5680,65 @@ app.delete(BASE + '/api/events/:id', requireAuth, async (req, res) => {
   const { error } = await supabaseAdmin.from('events').delete().eq('id', req.params.id);
   if (error) return res.json({ error: error.message });
   res.json({ success: true });
+});
+
+// List a private event's invitees with live pending/joined state (creator
+// only). Nonexistent and non-creator answer identically (zero-leak standard).
+app.get(BASE + '/api/events/:id/invites', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for events' });
+  const { data: event } = await supabaseAdmin
+    .from('events').select('id, created_by, visibility').eq('id', req.params.id).maybeSingle();
+  if (!event || event.created_by !== req.user.id) return res.json({ error: 'Event not found' });
+  if (event.visibility !== 'private') return res.json({ error: 'Only private events use invites' });
+  try {
+    const [invRes, rsvpRes] = await Promise.all([
+      supabaseAdmin.from('event_invites').select('event_id, invitee_id, created_at')
+        .eq('event_id', event.id).order('created_at', { ascending: true }),
+      supabaseAdmin.from('event_rsvps').select('event_id, user_id')
+        .eq('event_id', event.id).neq('status', 'cancelled')
+    ]);
+    if (invRes.error) return res.json({ error: 'invites_unavailable' });
+    const inviteRows = invRes.data || [];
+    // THE shared pending rule (see pendingInvites): row ∧ no accepted RSVP.
+    const pendingSet = new Set(
+      pendingInvites(inviteRows, rsvpRes.data || [], 'event_id').map(r => r.invitee_id)
+    );
+    const nameMap = await buildUserDisplayMap(inviteRows.map(r => r.invitee_id));
+    res.json({
+      invitees: inviteRows.map(r => ({
+        id: r.invitee_id,
+        name: (nameMap[r.invitee_id] || {}).name || 'Athlete',
+        avatar_url: (nameMap[r.invitee_id] || {}).avatar_url || null,
+        state: pendingSet.has(r.invitee_id) ? 'pending' : 'joined'
+      }))
+    });
+  } catch (err) {
+    res.json({ error: 'invites_unavailable' });
+  }
+});
+
+// Revoke a PENDING event invite (creator only). Mirrors the challenge-invite
+// rule: never ejects someone who already RSVP'd — revoke refuses with
+// already_joined (a cancelled RSVP returns the invitee to pending, so it does
+// not block revoke). Nonexistent and non-creator answer identically.
+app.delete(BASE + '/api/events/:id/invites/:userId', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for events' });
+  const { data: event } = await supabaseAdmin
+    .from('events').select('id, created_by').eq('id', req.params.id).maybeSingle();
+  if (!event || event.created_by !== req.user.id) return res.json({ error: 'Event not found' });
+  const { data: rsvp } = await supabaseAdmin
+    .from('event_rsvps').select('user_id, status')
+    .eq('event_id', event.id).eq('user_id', req.params.userId)
+    .neq('status', 'cancelled').maybeSingle();
+  if (rsvp) return res.json({ error: 'already_joined' });
+  try {
+    const { error } = await supabaseAdmin.from('event_invites').delete()
+      .eq('event_id', event.id).eq('invitee_id', req.params.userId);
+    if (error) return res.json({ error: 'invites_unavailable' });
+    res.json({ success: true });
+  } catch (err) {
+    res.json({ error: 'invites_unavailable' });
+  }
 });
 
 // Confirm the caller manages (admin/coach) the club an event belongs to. Used by
@@ -5661,8 +5862,8 @@ app.get(BASE + '/api/events/:id/rsvps', requireAuth, async (req, res) => {
 // silently update 0 rows for a managing coach yet still report success.
 app.patch(BASE + '/api/events/:id', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for events' });
-  const { data: event } = await supabaseAdmin
-    .from('events').select('id, created_by, club_id').eq('id', req.params.id).maybeSingle();
+  // Same zero-leak gate as delete: not-visible === nonexistent.
+  const event = await getVisibleEvent(req.user.id, req.params.id, 'id, created_by, club_id, visibility');
   if (!event) return res.json({ error: 'Event not found' });
   let allowed = event.created_by === req.user.id;
   if (!allowed && event.club_id) {
@@ -6782,7 +6983,9 @@ app.get(BASE + '/api/calendar/month', requireAuth, async (req, res) => {
     if (extraIds.length) {
       const { data } = await supabaseAdmin.from('events').select('*')
         .in('id', [...new Set(extraIds)]).gte('date', startIso).lt('date', endIso);
-      extraEvents = data || [];
+      // Visibility gate: a pre-gate RSVP must not keep resurfacing an event
+      // the viewer can no longer see (THE event access rule, not query shape).
+      extraEvents = await visibleEventsFilter(userId, data || []);
     }
 
     // Honesty partition: myStatus is 'going' / 'interested' for real RSVPs,
@@ -7540,6 +7743,16 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
       await del('challenge_invites', q => q.eq('invitee_id', uid));
     } catch (err) {
       const tableMissing = /challenge_invites/i.test(err.message)
+        && /find the table|schema cache|does not exist/i.test(err.message);
+      if (!tableMissing) throw err;
+    }
+    // Received event invites (invitee side) — same rule as challenge_invites:
+    // creator-side rows die with their events via ON DELETE CASCADE; only the
+    // table-not-provisioned case is tolerated.
+    try {
+      await del('event_invites', q => q.eq('invitee_id', uid));
+    } catch (err) {
+      const tableMissing = /event_invites/i.test(err.message)
         && /find the table|schema cache|does not exist/i.test(err.message);
       if (!tableMissing) throw err;
     }
@@ -9820,16 +10033,20 @@ async function attachInviteState(notifications, userId) {
 //   'gone'    → muted label          (challenge itself deleted)
 // A failed INVITE lookup attaches no pending/revoked verdict (plain row) —
 // degradation must never claim 'revoked' when it can't prove the row is gone.
-// THE pending rule — single source. Invite rows are RETAINED on accept, so:
-// pending = invite row exists ∧ invitee is NOT a participant of that challenge.
+// THE pending rule — single source, shared by challenges AND events. Invite
+// rows are RETAINED on accept, so:
+// pending = invite row exists ∧ invitee has NOT accepted (challenge: is not a
+// participant; event: has no non-cancelled RSVP).
 // Every surface needing pending-ness must call this helper — never re-derive
 // it inline ("identical" inline copies drift; computeStreaks was five copies).
-// inviteRows: [{ challenge_id, invitee_id, ... }]
-// participantPairs: [{ challenge_id, user_id }]
+// inviteRows: [{ <idField>, invitee_id, ... }]
+// acceptedPairs: [{ <idField>, user_id }] — the accepted relation, pre-filtered
+//   by the caller (e.g. cancelled RSVPs excluded: cancelling returns to pending)
+// idField: 'challenge_id' (default — original call sites unchanged) or 'event_id'
 // Returns the pending subset of inviteRows.
-function pendingInvites(inviteRows, participantPairs) {
-  const partSet = new Set((participantPairs || []).map((p) => p.challenge_id + ':' + p.user_id));
-  return (inviteRows || []).filter((r) => !partSet.has(r.challenge_id + ':' + r.invitee_id));
+function pendingInvites(inviteRows, acceptedPairs, idField = 'challenge_id') {
+  const partSet = new Set((acceptedPairs || []).map((p) => p[idField] + ':' + p.user_id));
+  return (inviteRows || []).filter((r) => !partSet.has(r[idField] + ':' + r.invitee_id));
 }
 
 async function attachChallengeInviteState(notifications, userId) {

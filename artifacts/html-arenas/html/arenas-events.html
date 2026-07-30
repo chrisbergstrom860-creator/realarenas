@@ -286,6 +286,7 @@ function showToast(msg){
     tags += (ev.entry_fee ? tag(esc(ev.entry_fee)) : '<span class="tag t-free">Free</span>');
     if (ev.level) tags += tag(ev.level);
     if (ev.clubs && ev.clubs.name) tags += tag('🏃 ' + ev.clubs.name);
+    if (ev.visibility === 'private') tags += tag('🔒 Invite only');
 
     var social = '';
     if (ev.followersGoing && ev.followersGoing.length) {
@@ -304,6 +305,9 @@ function showToast(msg){
     if (ev.isOwner) {
       actions =
         '<span style="font-size:11px;font-weight:600;color:#166534;background:var(--green-light);padding:4px 9px;border-radius:20px">Your event</span>' +
+        (ev.visibility === 'private'
+          ? '<button class="evx-rbtn" onclick="ARENAS_EVENTS.manageInvites(\'' + esc(ev.id) + '\')">Invites</button>'
+          : '') +
         '<button class="evx-rbtn" style="color:#b91c1c;border-color:#fecaca" onclick="ARENAS_EVENTS.del(\'' + esc(ev.id) + '\')">Delete</button>';
     } else {
       actions =
@@ -334,7 +338,7 @@ function showToast(msg){
   function renderEvents(payload) {
     // Merge the three lists, dedupe by id, sort by date ascending.
     var byId = {};
-    ['upcomingEvents','clubEvents','myCreatedEvents'].forEach(function (k) {
+    ['upcomingEvents','clubEvents','myCreatedEvents','invitedEvents'].forEach(function (k) {
       (payload[k] || []).forEach(function (ev) { byId[ev.id] = ev; });
     });
     var events = Object.keys(byId).map(function (k) { return byId[k]; })
@@ -542,15 +546,43 @@ function showToast(msg){
           '<div class="evx-field"><label class="evx-label">Description</label><textarea class="evx-textarea" name="description" placeholder="Tell people what to expect…"></textarea></div>' +
           '<div class="evx-row">' +
             '<div class="evx-field"><label class="evx-label">Club</label><select class="evx-select" name="club_id">' + clubOpts + '</select></div>' +
-            '<div class="evx-field"><label class="evx-label">Visibility</label><select class="evx-select" name="visibility"><option value="public">Public</option><option value="club">Club only</option><option value="private">Private (invite only)</option></select></div>' +
+            '<div class="evx-field"><label class="evx-label">Visibility</label><select class="evx-select" name="visibility" id="evx-visibility"><option value="public">Public</option><option value="club">Club only</option><option value="private">Private (invite only)</option></select></div>' +
           '</div>' +
-          '<div class="evx-field"><label class="evx-label">Invite people you follow</label><div id="evx-invitees" style="max-height:140px;overflow-y:auto;border:var(--border);border-radius:8px;padding:4px">' + inviteeRows + '</div></div>' +
+          // Dual-mode list: on public/club events a checked person just gets a
+          // heads-up notification; on a PRIVATE event the same list IS the
+          // access list. The label + helper swap on visibility change so the
+          // meaning is unambiguous; checked selections are preserved.
+          '<div class="evx-field"><label class="evx-label" id="evx-invite-label">Notify people you follow</label>' +
+            '<div id="evx-invitees" style="max-height:140px;overflow-y:auto;border:var(--border);border-radius:8px;padding:4px">' + inviteeRows + '</div>' +
+            '<div id="evx-invite-help" style="font-size:11px;color:var(--gray-500);margin-top:4px"></div>' +
+          '</div>' +
           '<div id="evx-error" style="display:none;color:#b91c1c;font-size:12px;margin-bottom:10px"></div>' +
           '<button type="submit" id="evx-submit" class="btn btn-yellow btn-full" style="justify-content:center">Create event</button>' +
         '</form>' +
       '</div>';
     document.body.appendChild(overlay);
     document.getElementById('evx-form').addEventListener('submit', submitCreate);
+
+    // Relabel the invite list per visibility mode (selections untouched).
+    function syncInviteMode() {
+      var visSel = document.getElementById('evx-visibility');
+      var label = document.getElementById('evx-invite-label');
+      var help = document.getElementById('evx-invite-help');
+      if (!visSel || !label || !help) return;
+      var checked = document.querySelectorAll('#evx-invitees input:checked').length;
+      if (visSel.value === 'private') {
+        label.textContent = 'Invite list — only these people can see this event';
+        help.textContent = checked === 0
+          ? 'No one invited yet — only you will see this event.'
+          : 'Invited athletes get a notification and are the only ones (besides you) who can view or RSVP.';
+      } else {
+        label.textContent = 'Notify people you follow';
+        help.textContent = 'They\u2019ll get a heads-up — anyone who can see this event can join.';
+      }
+    }
+    document.getElementById('evx-visibility').addEventListener('change', syncInviteMode);
+    document.getElementById('evx-invitees').addEventListener('change', syncInviteMode);
+    syncInviteMode();
   }
 
   function submitCreate(e) {
@@ -577,6 +609,17 @@ function showToast(msg){
     };
     if (!body.title || !body.sport || !body.date || !body.location) {
       errBox.textContent = 'Please fill in title, sport, date and location.';
+      errBox.style.display = 'block';
+      return;
+    }
+    // Mirror the server's visibility/club shape rules with friendlier copy.
+    if (body.visibility === 'club' && !body.club_id) {
+      errBox.textContent = 'Club-only events need a club — pick one, or choose Public/Private.';
+      errBox.style.display = 'block';
+      return;
+    }
+    if (body.visibility === 'private' && body.club_id) {
+      errBox.textContent = 'Private events are personal — set Club to “Personal event”, or use Club only.';
       errBox.style.display = 'block';
       return;
     }
@@ -617,6 +660,72 @@ function showToast(msg){
     }).catch(function (e) { console.log('RSVP failed:', e.message); });
   }
 
+  // Invite manager for the creator's own private events: live pending/joined
+  // state per invitee, with revoke for pending ones (server refuses revoke
+  // once someone has RSVP'd — challenge-invite precedent).
+  function manageInvites(eventId) {
+    var existing = document.getElementById('evx-inv-modal');
+    if (existing) existing.remove();
+    var overlay = document.createElement('div');
+    overlay.id = 'evx-inv-modal';
+    overlay.className = 'modal-overlay open';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:500;padding:32px 16px;overflow-y:auto';
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    overlay.innerHTML =
+      '<div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:22px" onclick="event.stopPropagation()">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">' +
+          '<div style="font-size:16px;font-weight:700;color:var(--gray-900)">Invited athletes</div>' +
+          '<div style="cursor:pointer;font-size:20px;color:var(--gray-400)" onclick="document.getElementById(\'evx-inv-modal\').remove()">×</div>' +
+        '</div>' +
+        '<div id="evx-inv-list" style="font-size:12px;color:var(--gray-400)">Loading…</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+
+    function load() {
+      fetch(B + '/api/events/' + encodeURIComponent(eventId) + '/invites', { credentials:'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          var box = document.getElementById('evx-inv-list');
+          if (!box) return;
+          if (data && data.error) { box.textContent = data.error === 'invites_unavailable' ? 'Invites are unavailable right now.' : data.error; return; }
+          var rows = (data && data.invitees) || [];
+          if (!rows.length) { box.textContent = 'No one is invited yet — only you can see this event.'; return; }
+          box.innerHTML = rows.map(function (p) {
+            return '<div style="display:flex;align-items:center;gap:9px;padding:7px 2px;border-bottom:var(--border)">' +
+              window.avatarHtml(p.avatar_url || null, p.name || 'Athlete', '', 'width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;background:var(--gray-200);color:var(--gray-700);flex-shrink:0;overflow:hidden') +
+              '<span style="flex:1;min-width:0;font-size:13px;color:var(--gray-900);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(p.name || 'Athlete') + '</span>' +
+              (p.state === 'joined'
+                ? '<span style="font-size:11px;font-weight:600;color:#166534;background:var(--green-light);padding:3px 8px;border-radius:20px">✓ Going</span>'
+                : '<span style="font-size:11px;color:var(--gray-500)">Pending</span>' +
+                  '<button class="evx-rbtn" style="color:#b91c1c;border-color:#fecaca;padding:4px 9px" data-revoke="' + esc(p.id) + '">Revoke</button>') +
+            '</div>';
+          }).join('');
+          [].slice.call(box.querySelectorAll('[data-revoke]')).forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              btn.disabled = true;
+              fetch(B + '/api/events/' + encodeURIComponent(eventId) + '/invites/' + encodeURIComponent(btn.getAttribute('data-revoke')), {
+                method:'DELETE', credentials:'same-origin'
+              }).then(function (r) { return r.json(); }).then(function (d) {
+                if (d && d.error) {
+                  if (window.showToast) showToast(d.error === 'already_joined' ? 'They already RSVP\u2019d — invites can\u2019t be revoked after joining.' : d.error);
+                  btn.disabled = false;
+                  if (d.error === 'already_joined') load(); // state was stale — refresh
+                  return;
+                }
+                if (window.showToast) showToast('Invite revoked');
+                load();
+              }).catch(function () { btn.disabled = false; });
+            });
+          });
+        })
+        .catch(function () {
+          var box = document.getElementById('evx-inv-list');
+          if (box) box.textContent = 'Could not load invites.';
+        });
+    }
+    load();
+  }
+
   function del(eventId) {
     if (!window.confirm('Delete this event? This cannot be undone.')) return;
     fetch(B + '/api/events/' + encodeURIComponent(eventId), {
@@ -628,7 +737,7 @@ function showToast(msg){
     }).catch(function (e) { console.log('Delete failed:', e.message); });
   }
 
-  window.ARENAS_EVENTS = { rsvp: rsvp, del: del };
+  window.ARENAS_EVENTS = { rsvp: rsvp, del: del, manageInvites: manageInvites };
   window.openCreateEvent = openCreateEvent;
 
   loadEvents();
