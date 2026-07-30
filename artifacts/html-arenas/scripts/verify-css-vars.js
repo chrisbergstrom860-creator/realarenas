@@ -27,7 +27,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const HTML_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'html');
+// CSS_VARS_HTML_DIR override exists for the fixture tests (verify-css-vars.test.js).
+const HTML_DIR = process.env.CSS_VARS_HTML_DIR ||
+  path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'html');
 
 const read = (f) => stripComments(fs.readFileSync(f, 'utf8'));
 
