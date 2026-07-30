@@ -538,12 +538,12 @@ function showToast(msg){
     overlay.id = 'evx-modal';
     overlay.className = 'modal-overlay open';
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:500;padding:32px 16px;overflow-y:auto';
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeCreateModal(); });
     overlay.innerHTML =
       '<div style="background:#fff;border-radius:14px;max-width:520px;width:100%;padding:22px" onclick="event.stopPropagation()">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
           '<div style="font-size:17px;font-weight:700;color:var(--gray-900)">Create an event</div>' +
-          '<div style="cursor:pointer;font-size:20px;color:var(--gray-400)" onclick="document.getElementById(\'evx-modal\').remove()">×</div>' +
+          '<div style="cursor:pointer;font-size:20px;color:var(--gray-400)" id="evx-close">×</div>' +
         '</div>' +
         '<form id="evx-form">' +
           '<div class="evx-field"><label class="evx-label">Title *</label><input class="evx-input" name="title" required placeholder="e.g. Saturday long run"></div>' +
@@ -593,6 +593,7 @@ function showToast(msg){
       '</div>';
     document.body.appendChild(overlay);
     document.getElementById('evx-form').addEventListener('submit', submitCreate);
+    document.getElementById('evx-close').addEventListener('click', closeCreateModal);
 
     // Relabel the invite list per visibility mode (selections untouched).
     function syncInviteMode() {
@@ -652,6 +653,16 @@ function showToast(msg){
     });
   }
   var createCropBlob = null, createCropState = 'none', createCropSeq = 0;
+
+  // Centralized teardown for EVERY create-modal close path (×, backdrop, and
+  // post-submit): invalidates in-flight crop callbacks via the token, resets
+  // crop state, and closes a crop overlay that may still be open (or arrive
+  // late) so it can never outlive its parent modal or leave scroll locked.
+  function closeCreateModal() {
+    createCropSeq++; createCropBlob = null; createCropState = 'none';
+    if (window.arenasOverlay) arenasOverlay.close('arenas-crop-overlay');
+    var m = document.getElementById('evx-modal'); if (m) m.remove();
+  }
 
   function submitCreate(e) {
     e.preventDefault();
@@ -721,7 +732,7 @@ function showToast(msg){
       var file = createCropState === 'ready' ? createCropBlob
         : (createCropState === 'fallback' ? rawFile : null);
       var finish = function () {
-        var m = document.getElementById('evx-modal'); if (m) m.remove();
+        closeCreateModal();
         loadEvents();
       };
       if (file && data.event && data.event.id) {

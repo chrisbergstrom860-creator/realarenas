@@ -8589,8 +8589,11 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
             }));
           const attendancePct = memberCount > 0 ? Math.round((goingCount / memberCount) * 100) : 0;
           const eventTime = new Date(event.date).getTime();
+          // Storage object paths are server-only (payload convention): strip
+          // image_path; the dashboard card is image-free by decision anyway.
+          const { image_path, ...eventPublic } = event;
           return {
-            ...event,
+            ...eventPublic,
             goingCount,
             interestedCount,
             notRespondedCount,

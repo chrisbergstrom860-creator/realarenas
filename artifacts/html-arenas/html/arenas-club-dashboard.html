@@ -47,6 +47,8 @@ document.addEventListener('DOMContentLoaded', function(){
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/html/arenas.css">
 <script src="/html/arenas-time.js"></script>
+<script src="/html/arenas-overlay.js"></script>
+<script src="/html/arenas-crop.js"></script>
 <style>
 button, select, input { font-family: var(--font); }/* ─── LAYOUT ─── *//* ─── TOPBAR ─── */
 .topbar-search { display: flex; align-items: center; gap: 8px; background: var(--gray-50); border: var(--border); border-radius: 7px; padding: 6px 12px; width: 260px; }
@@ -1634,7 +1636,7 @@ document.addEventListener('DOMContentLoaded', function () {
       '<div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:540px;overflow:hidden">' +
         '<div style="padding:14px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">' +
           '<div style="font-size:15px;font-weight:700;color:var(--gray-900)">Create a club event</div>' +
-          '<button onclick="document.getElementById(\'create-club-event-overlay\').remove()" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>' +
+          '<button onclick="closeCreateClubEvent()" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>' +
         '</div>' +
         '<div style="padding:18px;max-height:65vh;overflow-y:auto">' +
           '<div id="cev-error" style="display:none;background:var(--red-light);border:1px solid #FECACA;border-radius:8px;padding:10px 14px;font-size:13px;color:#A32D2D;margin-bottom:12px"></div>' +
@@ -1661,18 +1663,68 @@ document.addEventListener('DOMContentLoaded', function () {
             '<div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Level</div><select class="form-select" style="width:100%" id="cev-level"><option>All abilities</option><option>Beginner friendly</option><option>Intermediate</option><option>Advanced</option><option>Elite / competitive</option></select></div>' +
           '</div>' +
           '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Description <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div><textarea class="form-textarea" style="width:100%" id="cev-desc" placeholder="Route details, pace groups, what to bring, meeting point…"></textarea></div>' +
+          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Cover image <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div>' +
+            '<input type="file" id="cev-image" accept="image/jpeg,image/png,image/webp" style="font-size:12px;width:100%">' +
+            '<div style="font-size:11px;color:var(--gray-500);margin-top:4px">JPG, PNG or WebP up to 5 MB — shown as a wide banner (3:1 crop).</div>' +
+          '</div>' +
           '<div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:8px;padding:10px 14px;display:flex;align-items:flex-start;gap:10px"><span style="font-size:16px">🔔</span><div style="font-size:12px;color:#7a5c00;line-height:1.6"><strong>All ' + memberCount + ' club members will be notified</strong> when this event is created. They can RSVP directly from their notification or the Events page.</div></div>' +
         '</div>' +
         '<div style="padding:13px 18px;border-top:var(--border);background:var(--gray-50);display:flex;gap:8px;align-items:center">' +
-          '<button onclick="document.getElementById(\'create-club-event-overlay\').remove()" style="padding:8px 14px;border:var(--border);border-radius:7px;font-size:13px;background:white;color:var(--gray-600);cursor:pointer">Cancel</button>' +
+          '<button onclick="closeCreateClubEvent()" style="padding:8px 14px;border:var(--border);border-radius:7px;font-size:13px;background:white;color:var(--gray-600);cursor:pointer">Cancel</button>' +
           '<button id="cev-submit-btn" onclick="submitCreateClubEvent()" style="padding:8px 18px;border:none;border-radius:7px;font-size:13px;font-weight:600;background:var(--gray-900);color:white;cursor:pointer;margin-left:auto">Create &amp; notify members →</button>' +
         '</div>' +
       '</div>';
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeCreateClubEvent(); });
     document.body.appendChild(overlay);
     var tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
     var dateEl = document.getElementById('cev-date');
     if (dateEl) dateEl.value = tomorrow.toISOString().split('T')[0];
+
+    // Cover image goes through the shared 3:1 crop step (arenas-crop.js) —
+    // same state machine + selection token as the events page create form:
+    // the raw file is uploaded ONLY on the explicit decode-fallback path,
+    // never because an async crop hadn't resolved yet, and a stale crop from
+    // a superseded selection can never attach to a newer file.
+    cevCropBlob = null; cevCropState = 'none';
+    var imgInput = document.getElementById('cev-image');
+    if (imgInput) imgInput.addEventListener('change', function () {
+      var seq = ++cevCropSeq;            // supersedes all in-flight callbacks
+      cevCropBlob = null;
+      var file = imgInput.files && imgInput.files[0];
+      if (!file) { cevCropState = 'none'; return; }
+      if (!window.arenasCrop) { cevCropState = 'fallback'; return; }
+      cevCropState = 'pending';
+      window.arenasCrop.open({
+        file: file,
+        onDone: function (blob) {
+          if (seq !== cevCropSeq) return;     // stale selection — drop it
+          cevCropBlob = blob; cevCropState = 'ready';
+        },
+        onCancel: function (reason) {
+          if (seq !== cevCropSeq) return;
+          if (reason === 'decode') {
+            cevCropState = 'fallback';
+            showToast('Couldn\u2019t open the crop tool — the photo will be center-cropped');
+          } else {
+            // Dismissed without choosing: keep nothing selected rather than
+            // silently uploading a center-crop the user never saw.
+            cevCropState = 'none';
+            imgInput.value = '';
+          }
+        }
+      });
+    });
+  };
+  var cevCropBlob = null, cevCropState = 'none', cevCropSeq = 0;
+
+  // Centralized teardown for EVERY close path (✕, Cancel, backdrop, and
+  // post-submit): invalidates in-flight crop callbacks via the token, resets
+  // crop state, and closes a crop overlay that may still be open (or arrive
+  // late) so it can never outlive its parent modal or leave scroll locked.
+  window.closeCreateClubEvent = function () {
+    cevCropSeq++; cevCropBlob = null; cevCropState = 'none';
+    if (window.arenasOverlay) arenasOverlay.close('arenas-crop-overlay');
+    var ov = document.getElementById('create-club-event-overlay'); if (ov) ov.remove();
   };
 
   window.submitCreateClubEvent = async function () {
@@ -1696,6 +1748,9 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!title) return fail('Please enter an event title.');
     if (!date) return fail('Please select a date.');
     if (!location) return fail('Please enter a location.');
+    // A crop still resolving is a validation-stage block, same as the events
+    // page create form — never race the create past an unresolved crop.
+    if (cevCropState === 'pending') return fail('Still preparing the image crop — one moment.');
     var submitBtn = document.getElementById('cev-submit-btn');
     if (submitBtn) { submitBtn.textContent = 'Creating…'; submitBtn.disabled = true; }
     try {
@@ -1715,8 +1770,34 @@ document.addEventListener('DOMContentLoaded', function () {
         if (submitBtn) { submitBtn.textContent = 'Create & notify members →'; submitBtn.disabled = false; }
         return;
       }
-      var ov = document.getElementById('create-club-event-overlay'); if (ov) ov.remove();
-      showToast('✓ Event created — all club members notified!');
+      // Optional cover image: the event exists now, so a failed upload never
+      // rolls back the create — it reports honestly and the events page
+      // card's Image action is the retry path (same endpoint). Cropped
+      // export uploads when a crop was accepted; the raw file goes up ONLY
+      // on the explicit decode-fallback path; 'pending'/'none' upload
+      // nothing — never a center-crop the user hasn't seen.
+      var imgEl = document.getElementById('cev-image');
+      var rawFile = imgEl && imgEl.files && imgEl.files[0];
+      var file = cevCropState === 'ready' ? cevCropBlob
+        : (cevCropState === 'fallback' ? rawFile : null);
+      if (file && result.event && result.event.id) {
+        try {
+          var fd = new FormData();
+          if (cevCropState === 'ready') fd.append('image', cevCropBlob, 'crop.png');
+          else fd.append('image', file);
+          var upR = await fetch(B + '/api/events/' + encodeURIComponent(result.event.id) + '/image', {
+            method: 'POST', credentials: 'same-origin', body: fd
+          });
+          var up = await upR.json();
+          if (up && up.error) showToast('Event created — image failed: ' + up.error);
+          else showToast('✓ Event created — all club members notified!');
+        } catch (imgErr) {
+          showToast('Event created — image failed: ' + imgErr.message);
+        }
+      } else {
+        showToast('✓ Event created — all club members notified!');
+      }
+      closeCreateClubEvent();
       setTimeout(function () { window.location.hash = 'events'; window.location.reload(); }, 1500);
     } catch (err) {
       fail('Something went wrong — please try again.');
