@@ -5717,6 +5717,97 @@ app.get(BASE + '/api/events/:id/invites', requireAuth, async (req, res) => {
   }
 });
 
+// Invite MORE people to an existing private event (creator only). Mirrors the
+// challenge invite-more route: canonical `invitees` body key, upsert with
+// ignoreDuplicates (re-sending to a still-pending invitee is a no-op with no
+// duplicate notification; a revoked-then-reinvited person gets a fresh row +
+// fresh notification), notify only the genuinely inserted rows. Differences
+// from challenges, both deliberate: the basis is people the creator FOLLOWS
+// (same set the event create form offers), and the 50 cap is on the event's
+// TOTAL invite count across batches — over-cap is an explicit error with the
+// remaining headroom, never a silent truncation. New invitees gain access via
+// their event_invites row through the same canUserSeeEvent rule as create-time
+// invitees — there is no second access path.
+app.post(BASE + '/api/events/:id/invites', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for events' });
+  const invitees = Array.isArray((req.body || {}).invitees) ? req.body.invitees : [];
+  const { data: event } = await supabaseAdmin
+    .from('events').select('id, title, date, location, created_by, visibility, club_id')
+    .eq('id', req.params.id).maybeSingle();
+  if (!event || event.created_by !== req.user.id) return res.json({ error: 'Event not found' });
+  if (event.visibility !== 'private') return res.json({ error: 'Only private events use invites' });
+  if (event.date && new Date(event.date).getTime() < Date.now()) {
+    return res.json({ error: 'This event has already happened' });
+  }
+  const { data: followRows } = await supabaseAdmin
+    .from('follows').select('following_id').eq('follower_id', req.user.id);
+  const followingSet = new Set((followRows || []).map(f => f.following_id));
+  const valid = [...new Set(invitees)]
+    .filter(id => id && typeof id === 'string' && followingSet.has(id) && id !== req.user.id);
+  if (!valid.length) return res.json({ error: 'No valid people to invite' });
+  try {
+    const [invRes, rsvpRes] = await Promise.all([
+      supabaseAdmin.from('event_invites').select('invitee_id').eq('event_id', event.id),
+      supabaseAdmin.from('event_rsvps').select('user_id')
+        .eq('event_id', event.id).neq('status', 'cancelled')
+    ]);
+    if (invRes.error) return res.json({ error: 'invites_unavailable' });
+    const existing = new Set((invRes.data || []).map(r => r.invitee_id));
+    const rsvpd = new Set((rsvpRes.data || []).map(r => r.user_id));
+    // Already-invited → no-op (also enforced by ignoreDuplicates); already
+    // RSVP'd (shouldn't exist without a row, but pre-gate legacy rows might) →
+    // excluded: they're in, an invite row would only confuse the pending rule.
+    const toInvite = valid.filter(id => !existing.has(id) && !rsvpd.has(id));
+    if (!toInvite.length) return res.json({ success: true, invitedCount: 0 });
+    const remaining = 50 - existing.size;
+    if (toInvite.length > remaining) {
+      return res.json({
+        error: 'invite_limit',
+        message: remaining > 0
+          ? `Events allow 50 invites — you can add ${remaining} more.`
+          : 'Events allow 50 invites — this event is at the limit.'
+      });
+    }
+    const { data: inserted, error: insErr } = await supabaseAdmin
+      .from('event_invites')
+      .upsert(
+        toInvite.map(id => ({ event_id: event.id, invitee_id: id, inviter_id: req.user.id })),
+        { onConflict: 'event_id,invitee_id', ignoreDuplicates: true }
+      )
+      .select('invitee_id');
+    if (insErr) return res.json({ error: 'invites_unavailable' });
+    // Concurrency backstop for the TOTAL cap: the pre-check above is
+    // read-then-write, so two overlapping creator requests could both pass it.
+    // Re-count after insert; on overshoot, compensate by deleting exactly THIS
+    // batch's rows (their PKs are known) before anyone is notified. Worst case
+    // both racers roll back — the cap is never silently exceeded.
+    const insertedIds = (inserted || []).map(r => r.invitee_id);
+    if (insertedIds.length) {
+      const { count } = await supabaseAdmin.from('event_invites')
+        .select('invitee_id', { count: 'exact', head: true }).eq('event_id', event.id);
+      if (typeof count === 'number' && count > 50) {
+        await supabaseAdmin.from('event_invites').delete()
+          .eq('event_id', event.id).in('invitee_id', insertedIds);
+        return res.json({ error: 'invite_limit', message: 'Events allow 50 invites — this event is at the limit.' });
+      }
+    }
+    const actor = displayFromUser(req.user);
+    // Same notification shape as create-time invites (type 'event', location
+    // included) — invitees can't tell which batch they were in, nor should they.
+    const when = new Date(event.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+    for (const row of (inserted || [])) {
+      await createNotification({
+        userId: row.invitee_id, type: 'event', title: 'Event invite',
+        body: `${actor.name} invited you to "${event.title}" on ${when} at ${event.location}`,
+        link: '/events', actorId: req.user.id, entityId: event.id
+      });
+    }
+    res.json({ success: true, invitedCount: (inserted || []).length });
+  } catch (err) {
+    res.json({ error: 'invites_unavailable' });
+  }
+});
+
 // Revoke a PENDING event invite (creator only). Mirrors the challenge-invite
 // rule: never ejects someone who already RSVP'd — revoke refuses with
 // already_joined (a cancelled RSVP returns the invitee to pending, so it does

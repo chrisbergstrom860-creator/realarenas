@@ -678,6 +678,7 @@ function showToast(msg){
           '<div style="cursor:pointer;font-size:20px;color:var(--gray-400)" onclick="document.getElementById(\'evx-inv-modal\').remove()">×</div>' +
         '</div>' +
         '<div id="evx-inv-list" style="font-size:12px;color:var(--gray-400)">Loading…</div>' +
+        '<div id="evx-inv-more" style="margin-top:14px"></div>' +
       '</div>';
     document.body.appendChild(overlay);
 
@@ -689,6 +690,7 @@ function showToast(msg){
           if (!box) return;
           if (data && data.error) { box.textContent = data.error === 'invites_unavailable' ? 'Invites are unavailable right now.' : data.error; return; }
           var rows = (data && data.invitees) || [];
+          renderInviteMore(rows);
           if (!rows.length) { box.textContent = 'No one is invited yet — only you can see this event.'; return; }
           box.innerHTML = rows.map(function (p) {
             return '<div style="display:flex;align-items:center;gap:9px;padding:7px 2px;border-bottom:var(--border)">' +
@@ -722,6 +724,69 @@ function showToast(msg){
           var box = document.getElementById('evx-inv-list');
           if (box) box.textContent = 'Could not load invites.';
         });
+    }
+
+    // "Invite more" picker: same basis as the create form — people the viewer
+    // follows (already injected as ARENAS_DATA.following) minus anyone who
+    // already has an invite row (pending OR joined). Server re-validates.
+    function renderInviteMore(inviteRows) {
+      var host = document.getElementById('evx-inv-more');
+      if (!host) return;
+      var invitedIds = {};
+      (inviteRows || []).forEach(function (r) { invitedIds[r.id] = 1; });
+      var following = (window.ARENAS_DATA && window.ARENAS_DATA.following) || [];
+      var eligible = following.filter(function (p) { return p && p.id && !invitedIds[p.id]; });
+      var head = '<div style="font-size:12px;font-weight:600;color:var(--gray-900);margin-bottom:6px">Invite more</div>';
+      if (!following.length) {
+        host.innerHTML = head + '<div style="font-size:12px;color:var(--gray-400)">Follow athletes to invite them to your events.</div>';
+        return;
+      }
+      if (!eligible.length) {
+        host.innerHTML = head + '<div style="font-size:12px;color:var(--gray-400)">Everyone you follow is already invited.</div>';
+        return;
+      }
+      host.innerHTML = head +
+        '<div id="evx-inv-pick" style="max-height:130px;overflow-y:auto;border:var(--border);border-radius:8px;padding:4px">' +
+        eligible.map(function (p) {
+          return '<label style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--gray-900)">' +
+            '<input type="checkbox" value="' + esc(p.id) + '">' +
+            '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(p.name || 'Athlete') + '</span>' +
+          '</label>';
+        }).join('') +
+        '</div>' +
+        '<div id="evx-inv-more-err" style="display:none;font-size:12px;color:#b91c1c;margin-top:6px"></div>' +
+        '<button id="evx-inv-send" class="evx-rbtn" style="margin-top:8px" disabled>Send invites</button>';
+      var sendBtn = document.getElementById('evx-inv-send');
+      var pick = document.getElementById('evx-inv-pick');
+      pick.addEventListener('change', function () {
+        sendBtn.disabled = pick.querySelectorAll('input:checked').length === 0;
+      });
+      sendBtn.addEventListener('click', function () {
+        var ids = [].slice.call(pick.querySelectorAll('input:checked')).map(function (i) { return i.value; });
+        if (!ids.length) return;
+        sendBtn.disabled = true;
+        var errBox = document.getElementById('evx-inv-more-err');
+        errBox.style.display = 'none';
+        fetch(B + '/api/events/' + encodeURIComponent(eventId) + '/invites', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invitees: ids })
+        }).then(function (r) { return r.json(); }).then(function (d) {
+          if (d && d.error) {
+            errBox.textContent = d.message || (d.error === 'This event has already happened'
+              ? d.error : d.error === 'invites_unavailable' ? 'Invites are unavailable right now.' : d.error);
+            errBox.style.display = 'block';
+            sendBtn.disabled = false;
+            return;
+          }
+          if (window.showToast) showToast(d.invitedCount === 1 ? 'Invite sent' : d.invitedCount + ' invites sent');
+          load(); // refresh both the list and the picker
+        }).catch(function () {
+          errBox.textContent = 'Could not send invites.';
+          errBox.style.display = 'block';
+          sendBtn.disabled = false;
+        });
+      });
     }
     load();
   }

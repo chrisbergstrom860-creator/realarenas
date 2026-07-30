@@ -154,6 +154,14 @@ for (const [i, t] of ['Midnight-Sun Coastal Half-Marathon Preparation Long Run a
   EVENTS.push(ev.id);
   for (const u of [M, ...F.slice(0, 4)]) await ins('event_rsvps', { event_id: ev.id, user_id: u, status: 'going' });
 }
+// private invite-only event by creator → owner card shows the Invites button;
+// invitees (M pending, f0 going) populate the manage overlay's list AND leave
+// eligible followees (f1..f4) so the invite-more picker renders too.
+const evPriv = await ins('events', { created_by: C, title: 'Invitational Fjordline Night Relay — Headlamp Pacing Practice and Team Selection Trial', sport: 'running',
+  event_type: 'training', date: iso(6), location: 'Ytre Snillfjordsbotn Community Athletics Track, North Entrance', visibility: 'private' });
+EVENTS.push(evPriv.id);
+for (const u of [M, users.f0.id]) await ins('event_invites', { event_id: evPriv.id, invitee_id: u, inviter_id: C });
+await ins('event_rsvps', { event_id: evPriv.id, user_id: users.f0.id, status: 'going' });
 // notifications for creator
 for (const [a, ty, ti] of [[M, 'like', 'New kudos'], [users.f0.id, 'follow', 'New follower'], [users.f1.id, 'comment', 'New comment']]) {
   await ins('notifications', { user_id: C, actor_id: a, type: ty, title: ti, body: 'Geo seed notification body text' });
@@ -204,7 +212,13 @@ const PAGES = [
     surfaces: [{ name: 'events grid', sel: '#events-grid', min: 2 }],
     steps: [
       { name: 'modal-create-event', js: `document.getElementById('create-event-btn').click()`,
-        waitFor: '#evx-modal', root: '#evx-modal' }
+        waitFor: '#evx-modal', root: '#evx-modal' },
+      // Invite manager on the owner's private event card: invitee list (going
+      // + pending w/ revoke) plus the invite-more picker and its send button.
+      { name: 'modal-event-invites',
+        js: `document.querySelectorAll('#evx-modal,#evx-inv-modal').forEach((m) => m.remove()); document.querySelector('[onclick*="manageInvites"]').click()`,
+        waitFor: '#evx-inv-pick', root: '#evx-inv-modal',
+        surfaces: [{ name: 'event invite manager', sel: '#evx-inv-modal > div', min: 2 }] }
     ] },
   { user: 'creator', name: 'leaderboards', path: '/leaderboards', waitFor: '.lb-row', root: 'body',
     surfaces: [
