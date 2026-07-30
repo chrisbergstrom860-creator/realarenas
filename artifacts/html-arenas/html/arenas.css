@@ -518,3 +518,25 @@ body {
   body:has(.bottom-nav) .adc-grid.adc-grid-2{grid-template-columns:1fr}
   body:has(.bottom-nav) .adc-card{border-right:none}
 }
+
+/* ── SHARED EVENT FORM (arenas-event-form.js) ──
+   Promoted from the events page's inline evx-* rules per the shared-CSS
+   consolidation rule: the form now renders on the events page AND the club
+   dashboard (create + edit), so the classes must live in the shared sheet.
+   The .evx-rbtn RSVP-state variants (.on/.int.on) stay inline on the events
+   page — partial-coverage rules don't move. */
+.evx-input,.evx-select,.evx-textarea{width:100%;padding:9px 11px;border:1px solid var(--gray-200);border-radius:8px;font-size:13px;font-family:inherit;color:var(--gray-900);background:#fff;box-sizing:border-box}
+.evx-input:focus,.evx-select:focus,.evx-textarea:focus{outline:none;border-color:var(--yellow-dark)}
+.evx-textarea{resize:vertical;min-height:64px}
+.evx-label{display:block;font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em}
+.evx-field{margin-bottom:12px}
+.evx-row{display:flex;gap:10px}.evx-row>.evx-field{flex:1}
+.evx-invitee{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;font-size:13px;cursor:pointer}
+.evx-invitee:hover{background:var(--gray-50)}
+.evx-rbtn{padding:7px 13px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--gray-200);background:#fff;color:var(--gray-700)}
+.evx-error{display:none;color:#b91c1c;font-size:12px;margin-bottom:10px}
+.evx-help{font-size:11px;color:var(--gray-500);margin-top:4px}
+.evx-invitees{max-height:140px;overflow-y:auto;border:var(--border);border-radius:8px;padding:4px}
+.evx-chips{display:flex;gap:5px;flex-wrap:wrap}
+.evx-chip{padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:#fff;color:var(--gray-600);cursor:pointer}
+.evx-chip.selected{border:1px solid #fde68a;background:var(--yellow-light);color:#7a5c00}

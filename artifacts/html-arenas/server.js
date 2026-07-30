@@ -267,6 +267,11 @@ app.get(['/html/arenas-crop.js', '/arenas-crop.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-crop.js'));
 });
 
+// Shared event create/edit form module (events page + club dashboard).
+app.get(['/html/arenas-event-form.js', '/arenas-event-form.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-event-form.js'));
+});
+
 // Shared activity stat-tile builder (feed + my-profile Activities tab render
 // the same boxed tiles from this one file). Dual-path like the panel above.
 app.get(['/html/arenas-stat-tiles.js', '/arenas-stat-tiles.js'], (req, res) => {
@@ -8590,10 +8595,13 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
           const attendancePct = memberCount > 0 ? Math.round((goingCount / memberCount) * 100) : 0;
           const eventTime = new Date(event.date).getTime();
           // Storage object paths are server-only (payload convention): strip
-          // image_path; the dashboard card is image-free by decision anyway.
+          // image_path and carry only the version token — the card stays
+          // image-free, but the Image manage action needs the token for its
+          // authed-proxy preview.
           const { image_path, ...eventPublic } = event;
           return {
             ...eventPublic,
+            image: eventImageVersion(image_path),
             goingCount,
             interestedCount,
             notRespondedCount,

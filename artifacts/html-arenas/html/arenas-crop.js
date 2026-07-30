@@ -118,12 +118,24 @@
     return { allTransparent: allTransparent, allBlack: allBlack };
   }
 
+  // open() returns a handle { cancel } so callers can abort during the async
+  // decode window: without it, a teardown that runs while the image is still
+  // decoding closes nothing, and the overlay then appears AFTER its parent
+  // modal is gone (orphaned overlay + locked scroll).
   function open(opts) {
     opts = opts || {};
-    if (!window.arenasOverlay) { if (opts.onCancel) opts.onCancel(); return; }
+    var cancelled = false;
+    var handle = {
+      cancel: function () {
+        cancelled = true;
+        if (window.arenasOverlay) window.arenasOverlay.close(OVERLAY_ID);
+      }
+    };
+    if (!window.arenasOverlay) { if (opts.onCancel) opts.onCancel(); return handle; }
     var done = false;
 
     decodeAny(opts).then(function (work) {
+      if (cancelled) return;             // torn down mid-decode — never open
       var imgW = work.width, imgH = work.height;
       // Crop rect in source coords: full extent on the constrained axis.
       var vertical = (imgH / imgW) > (1 / 3);          // taller than 3:1 → vertical slice choice

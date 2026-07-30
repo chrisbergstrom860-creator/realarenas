@@ -30,6 +30,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <script src="/html/arenas-club-create.js"></script>
 <script src="/html/arenas-overlay.js"></script>
 <script src="/html/arenas-crop.js"></script>
+<script src="/html/arenas-event-form.js"></script>
 <style>
 button,select,input,textarea{font-family:var(--font)}
 @keyframes fade-up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
@@ -229,14 +230,8 @@ function showToast(msg){
 })();
 </script>
 <style>
-.evx-input,.evx-select,.evx-textarea{width:100%;padding:9px 11px;border:1px solid var(--gray-200);border-radius:8px;font-size:13px;font-family:inherit;color:var(--gray-900);background:#fff;box-sizing:border-box}
-.evx-input:focus,.evx-select:focus,.evx-textarea:focus{outline:none;border-color:var(--yellow-dark)}
-.evx-textarea{resize:vertical;min-height:64px}
-.evx-label{display:block;font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px;text-transform:uppercase;letter-spacing:.03em}
-.evx-field{margin-bottom:12px}
-.evx-row{display:flex;gap:10px}.evx-row>.evx-field{flex:1}
-.evx-invitee{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;font-size:13px;cursor:pointer}
-.evx-invitee:hover{background:var(--gray-50)}
+/* evx-* form classes moved to shared arenas.css (arenas-event-form.js renders
+   the same form on the dashboard). Page-local rules stay below. */
 .evx-card{border:var(--border);border-radius:12px;padding:16px;margin-bottom:12px;display:flex;gap:14px;background:#fff}
 /* Event cover image. Desktop: a capped-height band inside the content column
    between the tags row and the social/RSVP row (the middle slice of the 3:1
@@ -244,7 +239,7 @@ function showToast(msg){
    No image = neither renders — no gradient band, no placeholder. */
 .evx-banner{display:block;width:100%;height:150px;object-fit:cover;object-position:center;border-radius:8px;margin-top:10px}
 .evx-banner-m{display:none}
-.evx-rbtn{padding:7px 13px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--gray-200);background:#fff;color:var(--gray-700)}
+/* .evx-rbtn base moved to shared arenas.css; RSVP-state variants stay local. */
 .evx-rbtn.on{background:var(--yellow);color:var(--gray-900);border-color:var(--yellow-dark)}
 .evx-rbtn.int.on{background:var(--yellow-light);color:#7a5c00;border-color:var(--yellow-dark)}
 </style>
@@ -521,243 +516,56 @@ function showToast(msg){
   }
 
   // ── Create event modal ──
+  // ── Create event modal — shared arenas-event-form.js. The host owns only
+  // chrome (overlay shell, header, submit button copy); the module owns
+  // fields, validation, crop state machine + token, and create-then-upload.
+  // Every close path (×, backdrop, post-submit) routes through
+  // closeCreateModal → module teardown, so the crop can never outlive the
+  // modal or leave scroll locked.
+  var createFormApi = null;
   function openCreateEvent() {
-    var existing = document.getElementById('evx-modal');
-    if (existing) existing.remove();
-    var clubOpts = '<option value="">— Personal event —</option>' +
-      clubs.map(function (c) { return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>'; }).join('');
-    var inviteeRows = following.length
-      ? following.map(function (f) {
-          return '<label class="evx-invitee"><input type="checkbox" value="' + esc(f.id) + '"> ' +
-            window.avatarHtml(f.avatar_url || null, f.name || 'Athlete', '', 'width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;background:var(--gray-200);color:var(--gray-700);flex-shrink:0;overflow:hidden') +
-            ' ' + esc(f.name) + (f.location ? ' <span style="color:var(--gray-400)">' + esc(f.location) + '</span>' : '') + '</label>';
-        }).join('')
-      : '<div style="font-size:12px;color:var(--gray-400);padding:6px 8px">Follow people to invite them.</div>';
-
+    // Replace an existing modal through its teardown — a decode still in
+    // flight from the old instance must not orphan a crop overlay.
+    if (document.getElementById('evx-modal')) closeCreateModal();
     var overlay = document.createElement('div');
     overlay.id = 'evx-modal';
     overlay.className = 'modal-overlay open';
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:500;padding:32px 16px;overflow-y:auto';
     overlay.addEventListener('click', function (e) { if (e.target === overlay) closeCreateModal(); });
-    overlay.innerHTML =
-      '<div style="background:#fff;border-radius:14px;max-width:520px;width:100%;padding:22px" onclick="event.stopPropagation()">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
-          '<div style="font-size:17px;font-weight:700;color:var(--gray-900)">Create an event</div>' +
-          '<div style="cursor:pointer;font-size:20px;color:var(--gray-400)" id="evx-close">×</div>' +
-        '</div>' +
-        '<form id="evx-form">' +
-          '<div class="evx-field"><label class="evx-label">Title *</label><input class="evx-input" name="title" required placeholder="e.g. Saturday long run"></div>' +
-          '<div class="evx-row">' +
-            '<div class="evx-field"><label class="evx-label">Sport *</label><select class="evx-select" name="sport" required>' +
-              // Options from the sports registry (drift cleanup: the legacy
-              // 'Triathlon' picker option is gone — it isn't a registry sport).
-              '<option value="">Select…</option>' +
-              (window.ARENAS_SPORTS || []).map(function (s) {
-                return '<option value="' + s.id + '">' + s.label + '</option>';
-              }).join('') +
-            '</select></div>' +
-            '<div class="evx-field"><label class="evx-label">Type</label><input class="evx-input" name="event_type" placeholder="e.g. 10K, Sportive"></div>' +
-          '</div>' +
-          '<div class="evx-row">' +
-            '<div class="evx-field"><label class="evx-label">Date & time *</label><input class="evx-input" type="datetime-local" name="date" required></div>' +
-            '<div class="evx-field"><label class="evx-label">Location *</label><input class="evx-input" name="location" required placeholder="e.g. Victoria Park, London"></div>' +
-          '</div>' +
-          '<div class="evx-row">' +
-            '<div class="evx-field"><label class="evx-label">Distance</label><input class="evx-input" name="distance" placeholder="e.g. 13.1 mi"></div>' +
-            '<div class="evx-field"><label class="evx-label">Entry fee</label><input class="evx-input" name="entry_fee" placeholder="e.g. £20 (blank = free)"></div>' +
-          '</div>' +
-          '<div class="evx-row">' +
-            '<div class="evx-field"><label class="evx-label">Max participants</label><input class="evx-input" type="number" min="1" name="max_participants" placeholder="Optional"></div>' +
-            '<div class="evx-field"><label class="evx-label">Level</label><input class="evx-input" name="level" placeholder="e.g. All levels"></div>' +
-          '</div>' +
-          '<div class="evx-field"><label class="evx-label">Description</label><textarea class="evx-textarea" name="description" placeholder="Tell people what to expect…"></textarea></div>' +
-          '<div class="evx-field"><label class="evx-label">Cover image (optional)</label>' +
-            '<input type="file" id="evx-image" accept="image/jpeg,image/png,image/webp" style="font-size:12px;width:100%">' +
-            '<div style="font-size:11px;color:var(--gray-500);margin-top:4px">JPG, PNG or WebP up to 5 MB — shown as a wide banner (3:1 crop).</div>' +
-          '</div>' +
-          '<div class="evx-row">' +
-            '<div class="evx-field"><label class="evx-label">Club</label><select class="evx-select" name="club_id">' + clubOpts + '</select></div>' +
-            '<div class="evx-field"><label class="evx-label">Visibility</label><select class="evx-select" name="visibility" id="evx-visibility"><option value="public">Public</option><option value="club">Club only</option><option value="private">Private (invite only)</option></select></div>' +
-          '</div>' +
-          // Dual-mode list: on public/club events a checked person just gets a
-          // heads-up notification; on a PRIVATE event the same list IS the
-          // access list. The label + helper swap on visibility change so the
-          // meaning is unambiguous; checked selections are preserved.
-          '<div class="evx-field"><label class="evx-label" id="evx-invite-label">Notify people you follow</label>' +
-            '<div id="evx-invitees" style="max-height:140px;overflow-y:auto;border:var(--border);border-radius:8px;padding:4px">' + inviteeRows + '</div>' +
-            '<div id="evx-invite-help" style="font-size:11px;color:var(--gray-500);margin-top:4px"></div>' +
-          '</div>' +
-          '<div id="evx-error" style="display:none;color:#b91c1c;font-size:12px;margin-bottom:10px"></div>' +
-          '<button type="submit" id="evx-submit" class="btn btn-yellow btn-full" style="justify-content:center">Create event</button>' +
-        '</form>' +
+    var shell = document.createElement('div');
+    shell.style.cssText = 'background:#fff;border-radius:14px;max-width:520px;width:100%;padding:22px';
+    shell.addEventListener('click', function (e) { e.stopPropagation(); });
+    shell.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
+        '<div style="font-size:17px;font-weight:700;color:var(--gray-900)">Create an event</div>' +
+        '<div style="cursor:pointer;font-size:20px;color:var(--gray-400)" id="evx-close">×</div>' +
       '</div>';
-    document.body.appendChild(overlay);
-    document.getElementById('evx-form').addEventListener('submit', submitCreate);
-    document.getElementById('evx-close').addEventListener('click', closeCreateModal);
-
-    // Relabel the invite list per visibility mode (selections untouched).
-    function syncInviteMode() {
-      var visSel = document.getElementById('evx-visibility');
-      var label = document.getElementById('evx-invite-label');
-      var help = document.getElementById('evx-invite-help');
-      if (!visSel || !label || !help) return;
-      var checked = document.querySelectorAll('#evx-invitees input:checked').length;
-      if (visSel.value === 'private') {
-        label.textContent = 'Invite list — only these people can see this event';
-        help.textContent = checked === 0
-          ? 'No one invited yet — only you will see this event.'
-          : 'Invited athletes get a notification and are the only ones (besides you) who can view or RSVP.';
-      } else {
-        label.textContent = 'Notify people you follow';
-        help.textContent = 'They\u2019ll get a heads-up — anyone who can see this event can join.';
-      }
-    }
-    document.getElementById('evx-visibility').addEventListener('change', syncInviteMode);
-    document.getElementById('evx-invitees').addEventListener('change', syncInviteMode);
-    syncInviteMode();
-
-    // Cover image goes through the shared 3:1 crop step. The cropped blob is
-    // held in memory and uploaded after create (as before). Explicit state
-    // machine + selection token: the raw file is uploaded ONLY on the
-    // explicit decode-fallback path, never because an async crop hadn't
-    // resolved yet, and a stale crop from a superseded selection can never
-    // attach to a newer file (every callback checks its token first).
-    createCropBlob = null; createCropState = 'none';
-    var imgInput = document.getElementById('evx-image');
-    imgInput.addEventListener('change', function () {
-      var seq = ++createCropSeq;         // supersedes all in-flight callbacks
-      createCropBlob = null;
-      var file = imgInput.files && imgInput.files[0];
-      if (!file) { createCropState = 'none'; return; }
-      if (!window.arenasCrop) { createCropState = 'fallback'; return; }
-      createCropState = 'pending';
-      window.arenasCrop.open({
-        file: file,
-        onDone: function (blob) {
-          if (seq !== createCropSeq) return;    // stale selection — drop it
-          createCropBlob = blob; createCropState = 'ready';
-        },
-        onCancel: function (reason) {
-          if (seq !== createCropSeq) return;
-          if (reason === 'decode') {
-            createCropState = 'fallback';
-            if (window.showToast) showToast('Couldn\u2019t open the crop tool — the photo will be center-cropped');
-          } else {
-            // Dismissed without choosing: keep nothing selected rather than
-            // silently uploading a center-crop the user never saw.
-            createCropState = 'none';
-            imgInput.value = '';
-          }
-        }
-      });
+    createFormApi = window.arenasEventForm.build({
+      mode: 'create', context: 'events-page', prefix: 'evx',
+      clubs: clubs, following: following,
+      submitBtn: function () { return document.getElementById('evx-submit'); },
+      submitBusyLabel: 'Creating…', submitIdleLabel: 'Create event',
+      toasts: { created: '✓ Event created!' },
+      onSuccess: function () { closeCreateModal(); loadEvents(); }
     });
+    var btn = document.createElement('button');
+    btn.type = 'submit'; btn.id = 'evx-submit';
+    btn.className = 'btn btn-yellow btn-full';
+    btn.style.justifyContent = 'center';
+    btn.textContent = 'Create event';
+    createFormApi.el.appendChild(btn);
+    shell.appendChild(createFormApi.el);
+    overlay.appendChild(shell);
+    document.body.appendChild(overlay);
+    document.getElementById('evx-close').addEventListener('click', closeCreateModal);
   }
-  var createCropBlob = null, createCropState = 'none', createCropSeq = 0;
 
-  // Centralized teardown for EVERY create-modal close path (×, backdrop, and
-  // post-submit): invalidates in-flight crop callbacks via the token, resets
-  // crop state, and closes a crop overlay that may still be open (or arrive
-  // late) so it can never outlive its parent modal or leave scroll locked.
+  // Centralized teardown for EVERY create-modal close path.
   function closeCreateModal() {
-    createCropSeq++; createCropBlob = null; createCropState = 'none';
-    if (window.arenasOverlay) arenasOverlay.close('arenas-crop-overlay');
+    if (createFormApi) createFormApi.teardown();
     var m = document.getElementById('evx-modal'); if (m) m.remove();
   }
 
-  function submitCreate(e) {
-    e.preventDefault();
-    var form = e.target;
-    var btn = document.getElementById('evx-submit');
-    var errBox = document.getElementById('evx-error');
-    errBox.style.display = 'none';
-    var invitees = [].slice.call(document.querySelectorAll('#evx-invitees input:checked')).map(function (i) { return i.value; });
-    var body = {
-      title: form.title.value.trim(),
-      sport: form.sport.value,
-      event_type: form.event_type.value.trim() || null,
-      date: form.date.value,
-      location: form.location.value.trim(),
-      distance: form.distance.value.trim() || null,
-      entry_fee: form.entry_fee.value.trim() || null,
-      max_participants: form.max_participants.value || null,
-      level: form.level.value.trim() || null,
-      description: form.description.value.trim() || null,
-      club_id: form.club_id.value || null,
-      visibility: form.visibility.value,
-      invitees: invitees
-    };
-    // Decode window guard: 'pending' with no overlay visible means the crop
-    // step is still opening — creating now would have to either drop or
-    // center-crop an image the user never saw. Block honestly instead.
-    if (createCropState === 'pending') {
-      errBox.textContent = 'Still preparing the image crop — one moment.';
-      errBox.style.display = 'block';
-      return;
-    }
-    if (!body.title || !body.sport || !body.date || !body.location) {
-      errBox.textContent = 'Please fill in title, sport, date and location.';
-      errBox.style.display = 'block';
-      return;
-    }
-    // Mirror the server's visibility/club shape rules with friendlier copy.
-    if (body.visibility === 'club' && !body.club_id) {
-      errBox.textContent = 'Club-only events need a club — pick one, or choose Public/Private.';
-      errBox.style.display = 'block';
-      return;
-    }
-    if (body.visibility === 'private' && body.club_id) {
-      errBox.textContent = 'Private events are personal — set Club to “Personal event”, or use Club only.';
-      errBox.style.display = 'block';
-      return;
-    }
-    btn.disabled = true; btn.textContent = 'Creating…';
-    fetch(B + '/api/events/create', {
-      method:'POST', credentials:'same-origin',
-      headers:{ 'Content-Type':'application/json' },
-      body: JSON.stringify(body)
-    }).then(function (r) { return r.json(); }).then(function (data) {
-      if (data && data.error) {
-        errBox.textContent = data.error; errBox.style.display = 'block';
-        btn.disabled = false; btn.textContent = 'Create event';
-        return;
-      }
-      // Optional cover image: the event exists now, so a failed upload never
-      // rolls back the create — it reports honestly and the card's Image
-      // action is the retry path (same endpoint).
-      var fileInput = document.getElementById('evx-image');
-      // Upload the cropped export when a crop was accepted; the raw file goes
-      // up ONLY on the explicit decode-fallback path. 'pending'/'none' upload
-      // nothing — never a center-crop the user hasn't seen.
-      var rawFile = fileInput && fileInput.files && fileInput.files[0];
-      var file = createCropState === 'ready' ? createCropBlob
-        : (createCropState === 'fallback' ? rawFile : null);
-      var finish = function () {
-        closeCreateModal();
-        loadEvents();
-      };
-      if (file && data.event && data.event.id) {
-        var fd = new FormData();
-        if (createCropState === 'ready') fd.append('image', createCropBlob, 'crop.png');
-        else fd.append('image', file);
-        fetch(B + '/api/events/' + encodeURIComponent(data.event.id) + '/image', {
-          method:'POST', credentials:'same-origin', body: fd
-        }).then(function (r) { return r.json(); }).then(function (up) {
-          if (up && up.error) { if (window.showToast) showToast('Event created — image failed: ' + up.error); }
-          else if (window.showToast) showToast('✓ Event created!');
-          finish();
-        }).catch(function () {
-          if (window.showToast) showToast('Event created — the image upload failed');
-          finish();
-        });
-      } else {
-        if (window.showToast) showToast('✓ Event created!');
-        finish();
-      }
-    }).catch(function (err) {
-      errBox.textContent = 'Something went wrong: ' + err.message; errBox.style.display = 'block';
-      btn.disabled = false; btn.textContent = 'Create event';
-    });
-  }
 
   function rsvp(eventId, desired) {
     // Toggle off if the viewer already holds the desired status.
@@ -918,110 +726,15 @@ function showToast(msg){
     }).catch(function (e) { console.log('Delete failed:', e.message); });
   }
 
-  // Image manager for events the viewer can manage — creator, or club
-  // admin/coach for club events (all visibilities): preview, upload/replace,
-  // remove. Same endpoint as the create-form upload.
+
+  // Image manager moved into shared arenas-event-form.js — the same overlay
+  // now serves the events page and the club dashboard. Payloads carry only
+  // the version token (never image_path); the preview uses the authed proxy.
   function manageImage(eventId) {
     var ev = evById[eventId] || {};
-    var existing = document.getElementById('evx-img-modal');
-    if (existing) existing.remove();
-    var overlay = document.createElement('div');
-    overlay.id = 'evx-img-modal';
-    overlay.className = 'modal-overlay open';
-    overlay.style.display = 'flex';
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
-    overlay.innerHTML =
-      '<div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:22px" onclick="event.stopPropagation()">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">' +
-          '<div style="font-size:16px;font-weight:700;color:var(--gray-900)">Event image</div>' +
-          '<div style="cursor:pointer;font-size:20px;color:var(--gray-400)" onclick="document.getElementById(\'evx-img-modal\').remove()">×</div>' +
-        '</div>' +
-        (ev.image
-          ? '<img src="' + esc(eventImageUrl(eventId, ev.image)) + '" alt="" style="display:block;width:100%;height:125px;object-fit:cover;border-radius:8px">'
-          : '<div style="font-size:12px;color:var(--gray-400)">No image yet — upload a wide photo (it\u2019s cropped to a 3:1 banner).</div>') +
-        '<input type="file" id="evx-img-file" accept="image/jpeg,image/png,image/webp" style="font-size:12px;width:100%;margin-top:12px">' +
-        '<div id="evx-img-err" style="display:none;font-size:12px;color:#b91c1c;margin-top:6px"></div>' +
-        '<div style="display:flex;gap:8px;margin-top:12px">' +
-          '<button id="evx-img-up" class="evx-rbtn" disabled>' + (ev.image ? 'Replace image' : 'Upload image') + '</button>' +
-          (ev.image ? '<button id="evx-img-rm" class="evx-rbtn" style="color:#b91c1c;border-color:#fecaca">Remove image</button>' : '') +
-        '</div>' +
-      '</div>';
-    document.body.appendChild(overlay);
-    var fileInput = document.getElementById('evx-img-file');
-    var upBtn = document.getElementById('evx-img-up');
-    var rmBtn = document.getElementById('evx-img-rm');
-    var errBox = document.getElementById('evx-img-err');
-    function fail(msg) { errBox.textContent = msg; errBox.style.display = 'block'; }
-    // File choice goes through the shared 3:1 crop step; the cropped blob is
-    // what gets uploaded. Same state machine + selection token as the create
-    // form: the Upload button stays DISABLED until a crop is accepted (or the
-    // explicit decode-fallback fires), so a slow decode can never race a raw
-    // file up, and stale callbacks from a superseded selection are dropped.
-    var cropBlob = null, cropState = 'none', cropSeq = 0;
-    fileInput.addEventListener('change', function () {
-      var seq = ++cropSeq;
-      cropBlob = null; cropState = 'none';
-      errBox.style.display = 'none';
-      upBtn.disabled = true;
-      var file = fileInput.files && fileInput.files[0];
-      if (!file) return;
-      if (!window.arenasCrop) { cropState = 'fallback'; upBtn.disabled = false; return; }
-      cropState = 'pending';
-      window.arenasCrop.open({
-        file: file,
-        onDone: function (blob) {
-          if (seq !== cropSeq) return;    // stale selection — drop it
-          cropBlob = blob; cropState = 'ready'; upBtn.disabled = false;
-        },
-        onCancel: function (reason) {
-          if (seq !== cropSeq) return;
-          if (reason === 'decode') {
-            cropState = 'fallback'; upBtn.disabled = false;
-            if (window.showToast) showToast('Couldn\u2019t open the crop tool — the photo will be center-cropped');
-          } else {
-            cropState = 'none';
-            fileInput.value = '';
-            upBtn.disabled = true;
-          }
-        }
-      });
-    });
-    upBtn.addEventListener('click', function () {
-      var rawFile = fileInput.files && fileInput.files[0];
-      var file = cropState === 'ready' ? cropBlob : (cropState === 'fallback' ? rawFile : null);
-      if (!file) return;
-      upBtn.disabled = true; upBtn.textContent = 'Uploading…';
-      var fd = new FormData();
-      if (cropState === 'ready') fd.append('image', cropBlob, 'crop.png');
-      else fd.append('image', file);
-      fetch(B + '/api/events/' + encodeURIComponent(eventId) + '/image', {
-        method:'POST', credentials:'same-origin', body: fd
-      }).then(function (r) { return r.json(); }).then(function (data) {
-        if (data && data.error) {
-          fail(data.error);
-          upBtn.disabled = false; upBtn.textContent = ev.image ? 'Replace image' : 'Upload image';
-          return;
-        }
-        if (window.showToast) showToast('✓ Image saved');
-        overlay.remove();
-        loadEvents();
-      }).catch(function (e) {
-        fail('Upload failed: ' + e.message);
-        upBtn.disabled = false; upBtn.textContent = ev.image ? 'Replace image' : 'Upload image';
-      });
-    });
-    if (rmBtn) rmBtn.addEventListener('click', function () {
-      rmBtn.disabled = true;
-      fetch(B + '/api/events/' + encodeURIComponent(eventId) + '/image', {
-        method:'DELETE', credentials:'same-origin'
-      }).then(function (r) { return r.json(); }).then(function (data) {
-        if (data && data.error) { fail(data.error); rmBtn.disabled = false; return; }
-        if (window.showToast) showToast('Image removed');
-        overlay.remove();
-        loadEvents();
-      }).catch(function (e) { fail('Remove failed: ' + e.message); rmBtn.disabled = false; });
-    });
+    window.arenasEventForm.manageImage({ id: eventId, image: ev.image }, { onChanged: loadEvents });
   }
+
 
   window.ARENAS_EVENTS = { rsvp: rsvp, del: del, manageInvites: manageInvites, manageImage: manageImage };
   window.openCreateEvent = openCreateEvent;

@@ -49,6 +49,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <script src="/html/arenas-time.js"></script>
 <script src="/html/arenas-overlay.js"></script>
 <script src="/html/arenas-crop.js"></script>
+<script src="/html/arenas-event-form.js"></script>
 <style>
 button, select, input { font-family: var(--font); }/* ─── LAYOUT ─── *//* ─── TOPBAR ─── */
 .topbar-search { display: flex; align-items: center; gap: 8px; background: var(--gray-50); border: var(--border); border-radius: 7px; padding: 6px 12px; width: 260px; }
@@ -1372,6 +1373,7 @@ document.addEventListener('DOMContentLoaded', function () {
             attendeeAvs +
             (extraCount > 0 ? '<div style="width:24px;height:24px;border-radius:50%;background:var(--gray-100);color:var(--gray-500);border:1.5px solid white;margin-left:-6px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:600">+' + extraCount + '</div>' : '') +
             '<button onclick="editClubEvent(\'' + id + '\')" style="margin-left:8px;padding:5px 10px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Edit</button>' +
+            '<button onclick="manageClubEventImage(\'' + id + '\')" style="padding:5px 10px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Image</button>' +
             '<button onclick="postEventToFeed(\'' + id + '\',this)" style="padding:5px 10px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Post to feed</button>' +
             '<button onclick="cancelClubEvent(\'' + id + '\',this)" style="padding:5px 10px;border-radius:7px;font-size:12px;border:1px solid #FECACA;background:var(--red-light);color:#A32D2D;cursor:pointer">Cancel</button>' +
           '</div>' +
@@ -1506,106 +1508,61 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   };
 
+  // ── Edit event modal — shared arenas-event-form.js (mode 'edit').
+  // Host owns only chrome; module owns fields (incl. the new entry fee +
+  // max participants), prefill, validation, and the PATCH body.
+  var editFormApi = null;
+  window.closeEditEvent = function () {
+    if (editFormApi) editFormApi.teardown();
+    var ov = document.getElementById('edit-event-overlay'); if (ov) ov.remove();
+  };
   window.editClubEvent = function (eventId) {
     var data = window.ARENAS_DATA || {};
     var allEvents = (data.upcomingEvents || []).concat(data.pastEvents || []);
     var event = allEvents.find(function (e) { return e.id === eventId; });
     if (!event) { showToast('Could not load event details'); return; }
-    var eventDate = new Date(event.date);
-    var dateStr = eventDate.toISOString().split('T')[0];
-    var timeStr = eventDate.toTimeString().slice(0, 5);
-    function sel(v, opt) { return v === opt ? ' selected' : ''; }
     var overlay = document.createElement('div');
     overlay.id = 'edit-event-overlay';
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto';
-    overlay.innerHTML =
-      '<div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:540px;overflow:hidden">' +
-        '<div style="padding:14px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">' +
-          '<div style="font-size:15px;font-weight:700;color:var(--gray-900)">Edit event</div>' +
-          '<button onclick="document.getElementById(\'edit-event-overlay\').remove()" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>' +
-        '</div>' +
-        '<div style="padding:18px;max-height:65vh;overflow-y:auto">' +
-          '<div id="edit-ev-error" style="display:none;background:var(--red-light);border:1px solid #FECACA;border-radius:8px;padding:10px 14px;font-size:13px;color:#A32D2D;margin-bottom:12px"></div>' +
-          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Event title *</div><input class="form-input" style="width:100%" type="text" id="edit-ev-title" value="' + esc(event.title || '') + '"></div>' +
-          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Event type</div>' +
-            '<select class="form-select" style="width:100%" id="edit-ev-type">' +
-              '<option' + sel(event.event_type, 'Group training') + '>Group training</option>' +
-              '<option' + sel(event.event_type, 'Track session') + '>Track session</option>' +
-              '<option' + sel(event.event_type, 'Long run / ride') + '>Long run / ride</option>' +
-              '<option' + sel(event.event_type, 'Race') + '>Race</option>' +
-              '<option' + sel(event.event_type, 'Social run / ride') + '>Social run / ride</option>' +
-              '<option' + sel(event.event_type, 'Open water swim') + '>Open water swim</option>' +
-              '<option' + sel(event.event_type, 'Climbing session') + '>Climbing session</option>' +
-              '<option' + sel(event.event_type, 'Other') + '>Other</option>' +
-            '</select></div>' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:13px">' +
-            '<div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Date *</div><input class="form-input" style="width:100%" type="date" id="edit-ev-date" value="' + esc(dateStr) + '"></div>' +
-            '<div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Start time *</div><input class="form-input" style="width:100%" type="time" id="edit-ev-time" value="' + esc(timeStr) + '"></div>' +
-          '</div>' +
-          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Location *</div><input class="form-input" style="width:100%" type="text" id="edit-ev-location" value="' + esc(event.location || '') + '"></div>' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:13px">' +
-            '<div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Distance <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div><input class="form-input" style="width:100%" type="text" id="edit-ev-distance" value="' + esc(event.distance || '') + '"></div>' +
-            '<div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Level</div><select class="form-select" style="width:100%" id="edit-ev-level">' +
-              '<option' + sel(event.level, 'All abilities') + '>All abilities</option>' +
-              '<option' + sel(event.level, 'Beginner friendly') + '>Beginner friendly</option>' +
-              '<option' + sel(event.level, 'Intermediate') + '>Intermediate</option>' +
-              '<option' + sel(event.level, 'Advanced') + '>Advanced</option>' +
-              '<option' + sel(event.level, 'Elite / competitive') + '>Elite / competitive</option>' +
-            '</select></div>' +
-          '</div>' +
-          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Description <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div><textarea class="form-textarea" style="width:100%;min-height:64px" id="edit-ev-desc">' + esc(event.description || '') + '</textarea></div>' +
-          '<div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:12px;color:#7a5c00">🔔 Saving changes will not re-notify members. Use "Post to feed" after saving if you want members to see the update.</div>' +
-        '</div>' +
-        '<div style="padding:13px 18px;border-top:var(--border);background:var(--gray-50);display:flex;gap:8px;align-items:center">' +
-          '<button onclick="document.getElementById(\'edit-event-overlay\').remove()" style="padding:8px 14px;border:var(--border);border-radius:7px;font-size:13px;background:white;color:var(--gray-600);cursor:pointer">Cancel</button>' +
-          '<button id="edit-ev-submit-btn" onclick="submitEditEvent(\'' + esc(eventId) + '\')" style="padding:8px 18px;border:none;border-radius:7px;font-size:13px;font-weight:600;background:var(--gray-900);color:white;cursor:pointer;margin-left:auto">Save changes →</button>' +
-        '</div>' +
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeEditEvent(); });
+    var shell = document.createElement('div');
+    shell.style.cssText = 'background:white;border-radius:var(--radius-lg);width:100%;max-width:540px;overflow:hidden';
+    shell.addEventListener('click', function (e) { e.stopPropagation(); });
+    shell.innerHTML =
+      '<div style="padding:14px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">' +
+        '<div style="font-size:15px;font-weight:700;color:var(--gray-900)">Edit event</div>' +
+        '<button id="edit-ev-x" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>' +
+      '</div>' +
+      '<div id="edit-ev-body" style="padding:18px;max-height:65vh;overflow-y:auto"></div>' +
+      '<div style="padding:13px 18px;border-top:var(--border);background:var(--gray-50);display:flex;gap:8px;align-items:center">' +
+        '<button id="edit-ev-cancel" style="padding:8px 14px;border:var(--border);border-radius:7px;font-size:13px;background:white;color:var(--gray-600);cursor:pointer">Cancel</button>' +
+        '<button id="edit-ev-submit-btn" style="padding:8px 18px;border:none;border-radius:7px;font-size:13px;font-weight:600;background:var(--gray-900);color:white;cursor:pointer;margin-left:auto">Save changes →</button>' +
       '</div>';
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    editFormApi = window.arenasEventForm.build({
+      mode: 'edit', context: 'club-dashboard', prefix: 'edit-ev',
+      event: event,
+      submitBtn: function () { return document.getElementById('edit-ev-submit-btn'); },
+      submitBusyLabel: 'Saving…', submitIdleLabel: 'Save changes →',
+      toasts: { created: '' },
+      onSuccess: function () {
+        closeEditEvent();
+        showToast('✓ Event updated successfully');
+        setTimeout(function () { window.location.reload(); }, 1200);
+      }
+    });
+    overlay.appendChild(shell);
     document.body.appendChild(overlay);
+    var body = shell.querySelector('#edit-ev-body');
+    body.appendChild(editFormApi.el);
+    var note = document.createElement('div');
+    note.style.cssText = 'background:var(--yellow-light);border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:12px;color:#7a5c00';
+    note.innerHTML = '🔔 Saving changes will not re-notify members. Use "Post to feed" after saving if you want members to see the update.';
+    body.appendChild(note);
+    shell.querySelector('#edit-ev-x').addEventListener('click', window.closeEditEvent);
+    shell.querySelector('#edit-ev-cancel').addEventListener('click', window.closeEditEvent);
+    shell.querySelector('#edit-ev-submit-btn').addEventListener('click', editFormApi.submit);
   };
 
-  window.submitEditEvent = async function (eventId) {
-    function g(id) { var el = document.getElementById(id); return el ? el.value : ''; }
-    var title = (g('edit-ev-title') || '').trim();
-    var event_type = g('edit-ev-type');
-    var date = g('edit-ev-date');
-    var time = g('edit-ev-time') || '07:00';
-    var location = (g('edit-ev-location') || '').trim();
-    var distance = (g('edit-ev-distance') || '').trim();
-    var level = g('edit-ev-level');
-    var description = (g('edit-ev-desc') || '').trim();
-    var errorEl = document.getElementById('edit-ev-error');
-    function fail(msg) { if (errorEl) { errorEl.textContent = msg; errorEl.style.display = 'block'; } }
-    if (!title) return fail('Please enter a title.');
-    if (!date) return fail('Please select a date.');
-    if (!location) return fail('Please enter a location.');
-    var submitBtn = document.getElementById('edit-ev-submit-btn');
-    if (submitBtn) { submitBtn.textContent = 'Saving…'; submitBtn.disabled = true; }
-    try {
-      var response = await fetch(B + '/api/events/' + eventId, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: title, event_type: event_type,
-          date: new Date(date + 'T' + time).toISOString(),
-          location: location, distance: distance, level: level, description: description
-        })
-      });
-      var result = await response.json();
-      if (result.error) {
-        fail('Error: ' + result.error);
-        if (submitBtn) { submitBtn.textContent = 'Save changes →'; submitBtn.disabled = false; }
-        return;
-      }
-      var ov = document.getElementById('edit-event-overlay'); if (ov) ov.remove();
-      showToast('✓ Event updated successfully');
-      setTimeout(function () { window.location.reload(); }, 1200);
-    } catch (err) {
-      fail('Something went wrong — please try again.');
-      if (submitBtn) { submitBtn.textContent = 'Save changes →'; submitBtn.disabled = false; }
-    }
-  };
 
   window.filterClubEvents = function (btn, sport) {
     document.querySelectorAll('.ev-filter-pill').forEach(function (p) {
@@ -1617,13 +1574,12 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   };
 
-  window.selectCevSport = function (btn) {
-    document.querySelectorAll('.cev-sport-chip').forEach(function (c) {
-      c.classList.remove('selected'); c.style.background = 'white'; c.style.borderColor = 'var(--gray-200)'; c.style.color = 'var(--gray-600)';
-    });
-    btn.classList.add('selected'); btn.style.background = 'var(--yellow-light)'; btn.style.borderColor = '#fde68a'; btn.style.color = '#7a5c00';
-  };
-
+  // ── Create-event modal — shared arenas-event-form.js. Host owns only
+  // chrome (shell, header, notify banner, footer buttons); module owns
+  // fields (sport chips, type/level selects, NEW entry fee + max
+  // participants), validation, the crop state machine + token, and
+  // create-first-then-upload. visibility:'club' stays hardwired (module).
+  var createClubFormApi = null;
   window.openCreateClubEvent = function () {
     var data = window.ARENAS_DATA || {};
     var clubId = data.club && data.club.id;
@@ -1632,178 +1588,65 @@ document.addEventListener('DOMContentLoaded', function () {
     var overlay = document.createElement('div');
     overlay.id = 'create-club-event-overlay';
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto';
-    overlay.innerHTML =
-      '<div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:540px;overflow:hidden">' +
-        '<div style="padding:14px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">' +
-          '<div style="font-size:15px;font-weight:700;color:var(--gray-900)">Create a club event</div>' +
-          '<button onclick="closeCreateClubEvent()" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>' +
-        '</div>' +
-        '<div style="padding:18px;max-height:65vh;overflow-y:auto">' +
-          '<div id="cev-error" style="display:none;background:var(--red-light);border:1px solid #FECACA;border-radius:8px;padding:10px 14px;font-size:13px;color:#A32D2D;margin-bottom:12px"></div>' +
-          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Event title *</div><input class="form-input" style="width:100%" type="text" id="cev-title" placeholder="e.g. Saturday Long Run, Tuesday Track Session…"></div>' +
-          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:8px">Sport *</div>' +
-            '<div style="display:flex;gap:5px;flex-wrap:wrap" id="cev-sports">' +
-              // Event sport chips rendered from the sports registry (first
-              // sport pre-selected — running, same as the historic markup).
-              (window.ARENAS_SPORTS || []).map(function (s, i) {
-                var sel = i === 0;
-                return '<button type="button" class="cev-sport-chip' + (sel ? ' selected' : '') + '" data-sport="' + s.id + '" onclick="selectCevSport(this)" style="padding:5px 11px;border-radius:20px;font-size:12px;font-weight:500;border:' + (sel ? '1px solid #fde68a' : 'var(--border)') + ';background:' + (sel ? 'var(--yellow-light)' : 'white') + ';color:' + (sel ? '#7a5c00' : 'var(--gray-600)') + ';cursor:pointer">' + s.emoji + ' ' + s.label + '</button>';
-              }).join('') +
-            '</div>' +
-          '</div>' +
-          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Event type</div>' +
-            '<select class="form-select" style="width:100%" id="cev-type"><option>Group training</option><option>Track session</option><option>Long run / ride</option><option>Race</option><option>Social run / ride</option><option>Open water swim</option><option>Climbing session</option><option>Other</option></select></div>' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:13px">' +
-            '<div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Date *</div><input class="form-input" style="width:100%" type="date" id="cev-date"></div>' +
-            '<div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Start time *</div><input class="form-input" style="width:100%" type="time" id="cev-time" value="07:00"></div>' +
-          '</div>' +
-          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Location *</div><input class="form-input" style="width:100%" type="text" id="cev-location" placeholder="e.g. London Fields, Hackney or full address…"></div>' +
-          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:13px">' +
-            '<div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Distance <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div><input class="form-input" style="width:100%" type="text" id="cev-distance" placeholder="e.g. 18–22km"></div>' +
-            '<div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Level</div><select class="form-select" style="width:100%" id="cev-level"><option>All abilities</option><option>Beginner friendly</option><option>Intermediate</option><option>Advanced</option><option>Elite / competitive</option></select></div>' +
-          '</div>' +
-          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Description <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div><textarea class="form-textarea" style="width:100%" id="cev-desc" placeholder="Route details, pace groups, what to bring, meeting point…"></textarea></div>' +
-          '<div style="margin-bottom:13px"><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Cover image <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div>' +
-            '<input type="file" id="cev-image" accept="image/jpeg,image/png,image/webp" style="font-size:12px;width:100%">' +
-            '<div style="font-size:11px;color:var(--gray-500);margin-top:4px">JPG, PNG or WebP up to 5 MB — shown as a wide banner (3:1 crop).</div>' +
-          '</div>' +
-          '<div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:8px;padding:10px 14px;display:flex;align-items:flex-start;gap:10px"><span style="font-size:16px">🔔</span><div style="font-size:12px;color:#7a5c00;line-height:1.6"><strong>All ' + memberCount + ' club members will be notified</strong> when this event is created. They can RSVP directly from their notification or the Events page.</div></div>' +
-        '</div>' +
-        '<div style="padding:13px 18px;border-top:var(--border);background:var(--gray-50);display:flex;gap:8px;align-items:center">' +
-          '<button onclick="closeCreateClubEvent()" style="padding:8px 14px;border:var(--border);border-radius:7px;font-size:13px;background:white;color:var(--gray-600);cursor:pointer">Cancel</button>' +
-          '<button id="cev-submit-btn" onclick="submitCreateClubEvent()" style="padding:8px 18px;border:none;border-radius:7px;font-size:13px;font-weight:600;background:var(--gray-900);color:white;cursor:pointer;margin-left:auto">Create &amp; notify members →</button>' +
-        '</div>' +
-      '</div>';
     overlay.addEventListener('click', function (e) { if (e.target === overlay) closeCreateClubEvent(); });
+    var shell = document.createElement('div');
+    shell.style.cssText = 'background:white;border-radius:var(--radius-lg);width:100%;max-width:540px;overflow:hidden';
+    shell.addEventListener('click', function (e) { e.stopPropagation(); });
+    shell.innerHTML =
+      '<div style="padding:14px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">' +
+        '<div style="font-size:15px;font-weight:700;color:var(--gray-900)">Create a club event</div>' +
+        '<button id="cev-x" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>' +
+      '</div>' +
+      '<div id="cev-body" style="padding:18px;max-height:65vh;overflow-y:auto"></div>' +
+      '<div style="padding:13px 18px;border-top:var(--border);background:var(--gray-50);display:flex;gap:8px;align-items:center">' +
+        '<button id="cev-cancel" style="padding:8px 14px;border:var(--border);border-radius:7px;font-size:13px;background:white;color:var(--gray-600);cursor:pointer">Cancel</button>' +
+        '<button id="cev-submit-btn" style="padding:8px 18px;border:none;border-radius:7px;font-size:13px;font-weight:600;background:var(--gray-900);color:white;cursor:pointer;margin-left:auto">Create &amp; notify members →</button>' +
+      '</div>';
+    createClubFormApi = window.arenasEventForm.build({
+      mode: 'create', context: 'club-dashboard', prefix: 'cev',
+      clubId: clubId,
+      submitBtn: function () { return document.getElementById('cev-submit-btn'); },
+      submitBusyLabel: 'Creating…', submitIdleLabel: 'Create & notify members →',
+      toasts: { created: '✓ Event created — all club members notified!' },
+      onSuccess: function () {
+        closeCreateClubEvent();
+        setTimeout(function () { window.location.hash = 'events'; window.location.reload(); }, 1500);
+      }
+    });
+    overlay.appendChild(shell);
     document.body.appendChild(overlay);
-    var tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-    var dateEl = document.getElementById('cev-date');
-    if (dateEl) dateEl.value = tomorrow.toISOString().split('T')[0];
+    var body = shell.querySelector('#cev-body');
+    body.appendChild(createClubFormApi.el);
+    var banner = document.createElement('div');
+    banner.style.cssText = 'background:var(--yellow-light);border:1px solid #fde68a;border-radius:8px;padding:10px 14px;display:flex;align-items:flex-start;gap:10px';
+    banner.innerHTML = '<span style="font-size:16px">🔔</span><div style="font-size:12px;color:#7a5c00;line-height:1.6"><strong>All ' + memberCount + ' club members will be notified</strong> when this event is created. They can RSVP directly from their notification or the Events page.</div>';
+    body.appendChild(banner);
+    shell.querySelector('#cev-x').addEventListener('click', window.closeCreateClubEvent);
+    shell.querySelector('#cev-cancel').addEventListener('click', window.closeCreateClubEvent);
+    shell.querySelector('#cev-submit-btn').addEventListener('click', createClubFormApi.submit);
+  };
 
-    // Cover image goes through the shared 3:1 crop step (arenas-crop.js) —
-    // same state machine + selection token as the events page create form:
-    // the raw file is uploaded ONLY on the explicit decode-fallback path,
-    // never because an async crop hadn't resolved yet, and a stale crop from
-    // a superseded selection can never attach to a newer file.
-    cevCropBlob = null; cevCropState = 'none';
-    var imgInput = document.getElementById('cev-image');
-    if (imgInput) imgInput.addEventListener('change', function () {
-      var seq = ++cevCropSeq;            // supersedes all in-flight callbacks
-      cevCropBlob = null;
-      var file = imgInput.files && imgInput.files[0];
-      if (!file) { cevCropState = 'none'; return; }
-      if (!window.arenasCrop) { cevCropState = 'fallback'; return; }
-      cevCropState = 'pending';
-      window.arenasCrop.open({
-        file: file,
-        onDone: function (blob) {
-          if (seq !== cevCropSeq) return;     // stale selection — drop it
-          cevCropBlob = blob; cevCropState = 'ready';
-        },
-        onCancel: function (reason) {
-          if (seq !== cevCropSeq) return;
-          if (reason === 'decode') {
-            cevCropState = 'fallback';
-            showToast('Couldn\u2019t open the crop tool — the photo will be center-cropped');
-          } else {
-            // Dismissed without choosing: keep nothing selected rather than
-            // silently uploading a center-crop the user never saw.
-            cevCropState = 'none';
-            imgInput.value = '';
-          }
-        }
-      });
+  // Image manage action on the card row (card itself stays image-free by
+  // decision). Shared overlay from arenas-event-form.js; the rollup payload
+  // carries only the image VERSION TOKEN, never a storage path.
+  window.manageClubEventImage = function (eventId) {
+    var data = window.ARENAS_DATA || {};
+    var allEvents = (data.upcomingEvents || []).concat(data.pastEvents || []);
+    var event = allEvents.find(function (e) { return e.id === eventId; });
+    if (!event) { showToast('Could not load event details'); return; }
+    window.arenasEventForm.manageImage({ id: eventId, image: event.image }, {
+      onChanged: function () { setTimeout(function () { window.location.reload(); }, 600); }
     });
   };
-  var cevCropBlob = null, cevCropState = 'none', cevCropSeq = 0;
 
   // Centralized teardown for EVERY close path (✕, Cancel, backdrop, and
-  // post-submit): invalidates in-flight crop callbacks via the token, resets
-  // crop state, and closes a crop overlay that may still be open (or arrive
-  // late) so it can never outlive its parent modal or leave scroll locked.
+  // post-submit): module teardown invalidates in-flight crop callbacks and
+  // closes a crop overlay that may still be open (or arrive late).
   window.closeCreateClubEvent = function () {
-    cevCropSeq++; cevCropBlob = null; cevCropState = 'none';
-    if (window.arenasOverlay) arenasOverlay.close('arenas-crop-overlay');
+    if (createClubFormApi) createClubFormApi.teardown();
     var ov = document.getElementById('create-club-event-overlay'); if (ov) ov.remove();
   };
 
-  window.submitCreateClubEvent = async function () {
-    var data = window.ARENAS_DATA || {};
-    var clubId = data.club && data.club.id;
-    var title = (document.getElementById('cev-title') || {}).value;
-    title = title ? title.trim() : '';
-    var sport = (document.querySelector('.cev-sport-chip.selected') || {}).dataset ? document.querySelector('.cev-sport-chip.selected').dataset.sport : 'running';
-    var event_type = (document.getElementById('cev-type') || {}).value;
-    var date = (document.getElementById('cev-date') || {}).value;
-    var time = (document.getElementById('cev-time') || {}).value || '07:00';
-    var location = (document.getElementById('cev-location') || {}).value;
-    location = location ? location.trim() : '';
-    var distance = (document.getElementById('cev-distance') || {}).value;
-    distance = distance ? distance.trim() : '';
-    var level = (document.getElementById('cev-level') || {}).value;
-    var description = (document.getElementById('cev-desc') || {}).value;
-    description = description ? description.trim() : '';
-    var errorEl = document.getElementById('cev-error');
-    function fail(msg) { if (errorEl) { errorEl.textContent = msg; errorEl.style.display = 'block'; } }
-    if (!title) return fail('Please enter an event title.');
-    if (!date) return fail('Please select a date.');
-    if (!location) return fail('Please enter a location.');
-    // A crop still resolving is a validation-stage block, same as the events
-    // page create form — never race the create past an unresolved crop.
-    if (cevCropState === 'pending') return fail('Still preparing the image crop — one moment.');
-    var submitBtn = document.getElementById('cev-submit-btn');
-    if (submitBtn) { submitBtn.textContent = 'Creating…'; submitBtn.disabled = true; }
-    try {
-      var r = await fetch(B + '/api/events/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: title, sport: sport, event_type: event_type,
-          date: new Date(date + 'T' + time).toISOString(),
-          location: location, distance: distance, level: level, description: description,
-          visibility: 'club', club_id: clubId, invitees: []
-        })
-      });
-      var result = await r.json();
-      if (result.error) {
-        fail('Error: ' + result.error);
-        if (submitBtn) { submitBtn.textContent = 'Create & notify members →'; submitBtn.disabled = false; }
-        return;
-      }
-      // Optional cover image: the event exists now, so a failed upload never
-      // rolls back the create — it reports honestly and the events page
-      // card's Image action is the retry path (same endpoint). Cropped
-      // export uploads when a crop was accepted; the raw file goes up ONLY
-      // on the explicit decode-fallback path; 'pending'/'none' upload
-      // nothing — never a center-crop the user hasn't seen.
-      var imgEl = document.getElementById('cev-image');
-      var rawFile = imgEl && imgEl.files && imgEl.files[0];
-      var file = cevCropState === 'ready' ? cevCropBlob
-        : (cevCropState === 'fallback' ? rawFile : null);
-      if (file && result.event && result.event.id) {
-        try {
-          var fd = new FormData();
-          if (cevCropState === 'ready') fd.append('image', cevCropBlob, 'crop.png');
-          else fd.append('image', file);
-          var upR = await fetch(B + '/api/events/' + encodeURIComponent(result.event.id) + '/image', {
-            method: 'POST', credentials: 'same-origin', body: fd
-          });
-          var up = await upR.json();
-          if (up && up.error) showToast('Event created — image failed: ' + up.error);
-          else showToast('✓ Event created — all club members notified!');
-        } catch (imgErr) {
-          showToast('Event created — image failed: ' + imgErr.message);
-        }
-      } else {
-        showToast('✓ Event created — all club members notified!');
-      }
-      closeCreateClubEvent();
-      setTimeout(function () { window.location.hash = 'events'; window.location.reload(); }, 1500);
-    } catch (err) {
-      fail('Something went wrong — please try again.');
-      if (submitBtn) { submitBtn.textContent = 'Create & notify members →'; submitBtn.disabled = false; }
-    }
-  };
 
   // Render now, on load, and whenever the Events tab is opened via setTab.
   if (typeof window.setTab === 'function') {
