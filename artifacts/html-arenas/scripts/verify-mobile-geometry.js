@@ -162,6 +162,21 @@ const evPriv = await ins('events', { created_by: C, title: 'Invitational Fjordli
 EVENTS.push(evPriv.id);
 for (const u of [M, users.f0.id]) await ins('event_invites', { event_id: evPriv.id, invitee_id: u, inviter_id: C });
 await ins('event_rsvps', { event_id: evPriv.id, user_id: users.f0.id, status: 'going' });
+// Cover images on every seeded event so image-bearing variants of each
+// surface are MEASURED (events-page banners incl. the mobile top band,
+// calendar day-panel 44px thumbs, member-home 48px thumbs, feed RSVP 56px
+// thumbs). Real objects in the private bucket — a broken <img> occupies no
+// height and would silently un-measure the banner.
+const sharp = (await import('sharp')).default;
+const coverWebp = await sharp({ create: { width: 1200, height: 400, channels: 3, background: { r: 30, g: 90, b: 160 } } })
+  .webp({ quality: 82 }).toBuffer();
+for (const evId of EVENTS) {
+  const objectPath = 'events/' + evId + '/' + Date.now() + '.webp';
+  const { error: imgErr } = await admin.storage.from('event-images')
+    .upload(objectPath, coverWebp, { contentType: 'image/webp', upsert: false });
+  if (imgErr) throw new Error('event image seed: ' + imgErr.message);
+  await admin.from('events').update({ image_path: objectPath }).eq('id', evId);
+}
 // notifications for creator
 for (const [a, ty, ti] of [[M, 'like', 'New kudos'], [users.f0.id, 'follow', 'New follower'], [users.f1.id, 'comment', 'New comment']]) {
   await ins('notifications', { user_id: C, actor_id: a, type: ty, title: ti, body: 'Geo seed notification body text' });
@@ -355,7 +370,15 @@ console.log('\nPER-PAGE SUMMARY:', JSON.stringify(summary, null, 1));
         await del('challenge_invites', admin.from('challenge_invites').delete().eq('challenge_id', r.id));
         await del('challenge_participants', admin.from('challenge_participants').delete().eq('challenge_id', r.id));
       }
-      if (r.table === 'events') await del('event_rsvps', admin.from('event_rsvps').delete().eq('event_id', r.id));
+      if (r.table === 'events') {
+        await del('event_rsvps', admin.from('event_rsvps').delete().eq('event_id', r.id));
+        // Seeded cover-image objects (private bucket) — best-effort sweep.
+        try {
+          const { data: objs } = await admin.storage.from('event-images').list('events/' + r.id);
+          if (objs && objs.length) await admin.storage.from('event-images')
+            .remove(objs.map((o) => 'events/' + r.id + '/' + o.name));
+        } catch (e) { console.log('event image sweep (ignored):', e.message); }
+      }
       if (r.table === 'posts') {
         await del('post_likes', admin.from('post_likes').delete().eq('post_id', r.id));
         await del('post_comments', admin.from('post_comments').delete().eq('post_id', r.id));

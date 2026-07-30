@@ -827,7 +827,11 @@ function collectRsvpItems() {
             '<div style="font-size:13px;font-weight:600;color:var(--gray-900)">' + escFeedAct(ev.title || 'Event') + '</div>' +
             '<div style="font-size:11px;color:var(--gray-500)">' + (when ? escFeedAct(when) : '') + (ev.location ? ' · ' + escFeedAct(ev.location) : '') + '</div>' +
           '</div>' +
-          '<span style="font-size:11px;color:var(--gray-400)">View →</span>' +
+          // 56px thumbnail on the card's right edge — same crop source (the
+          // authenticated proxy), never the full banner; nothing when imageless.
+          (ev.image
+            ? '<img src="' + escFeedAct(B + '/api/events/' + encodeURIComponent(ev.id) + '/image?v=' + encodeURIComponent(ev.image)) + '" alt="" style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0">'
+            : '<span style="font-size:11px;color:var(--gray-400)">View →</span>') +
         '</div>' +
       '</div>';
     // Sort key: when the RSVP action happened (row created_at), not the

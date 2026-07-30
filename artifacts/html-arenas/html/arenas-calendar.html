@@ -662,8 +662,13 @@ button{font-family:var(--font)}
   function eventItemHtml(ev, cls, withActions) {
     var meta = [timeOf(ev.date), ev.club_name ? esc(ev.club_name) : null, ev.location ? esc(ev.location) : null]
       .filter(Boolean).join(' · ');
+    // 44px square thumbnail from the same crop source (authenticated proxy),
+    // never the full banner. Imageless events keep today's row exactly.
+    var thumb = ev.image
+      ? '<img src="' + esc(window.BASE + '/api/events/' + encodeURIComponent(ev.id) + '/image?v=' + encodeURIComponent(ev.image)) + '" alt="" style="width:44px;height:44px;border-radius:6px;object-fit:cover;flex-shrink:0;align-self:flex-start">'
+      : '';
     return '<div class="' + cls + (ev.myStatus === 'none' ? ' nr' : '') + '">' +
-      '<span class="ag-ic">' + sportIcon(ev.sport) + '</span>' +
+      '<span class="ag-ic">' + sportIcon(ev.sport) + '</span>' + thumb +
       '<div class="ag-body"><div class="ag-title">' + esc(ev.title || 'Event') + '</div>' +
       (meta ? '<div class="ag-meta">' + meta + '</div>' : '') +
       (withActions ? eventActionsHtml(ev) : '') + '</div>' +

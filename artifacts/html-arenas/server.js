@@ -1911,13 +1911,13 @@ async function buildFeedRsvps(currentUserId) {
     if (eventIds.length) {
       const { data: evs } = await supabaseAdmin
         .from('events')
-        .select('id, title, date, location, sport, event_type, visibility, club_id, created_by')
+        .select('id, title, date, location, sport, event_type, visibility, club_id, created_by, image_path')
         .in('id', eventIds);
       // Visibility gate: a followed athlete's RSVP to a private/club event the
       // VIEWER can't see must not surface that event's title in their feed.
       const visibleEvs = await visibleEventsFilter(currentUserId, evs || []);
       visibleEvs.forEach(e => {
-        eventMap[e.id] = { id: e.id, title: e.title, date: e.date, location: e.location, sport: e.sport, event_type: e.event_type };
+        eventMap[e.id] = { id: e.id, title: e.title, date: e.date, location: e.location, sport: e.sport, event_type: e.event_type, image: eventImageVersion(e.image_path) };
       });
     }
     const nameMap = await buildUserDisplayMap(rsvpRows.map(r => r.user_id));
@@ -5456,8 +5456,12 @@ app.get(BASE + '/api/events', requireAuth, async (req, res) => {
           handle: (nameMap[r.user_id] || {}).handle || 'athlete'
         }));
       const creator = nameMap[event.created_by] || {};
+      // The storage object path is server-side only: payloads carry the
+      // version token (the timestamp segment), never the path or any URL.
+      const { image_path, ...eventPublic } = event;
       return {
-        ...event,
+        ...eventPublic,
+        image: eventImageVersion(image_path),
         creatorName: creator.name || 'Athlete',
         creatorHandle: creator.handle || 'athlete',
         clubs: (event.club_id && clubMap[event.club_id]) ? { name: clubMap[event.club_id].name } : null,
@@ -5666,7 +5670,7 @@ app.delete(BASE + '/api/events/:id', requireAuth, async (req, res) => {
   // Zero-leak: an event the caller can't SEE answers exactly like a
   // nonexistent id; only a visible-but-unauthorized caller gets the distinct
   // permission message.
-  const event = await getVisibleEvent(req.user.id, req.params.id, 'id, created_by, club_id, visibility');
+  const event = await getVisibleEvent(req.user.id, req.params.id, 'id, created_by, club_id, visibility, image_path');
   if (!event) return res.json({ error: 'Event not found' });
   let allowed = event.created_by === req.user.id;
   if (!allowed && event.club_id) {
@@ -5679,6 +5683,9 @@ app.delete(BASE + '/api/events/:id', requireAuth, async (req, res) => {
   if (!allowed) return res.json({ error: 'You do not have permission to cancel this event' });
   const { error } = await supabaseAdmin.from('events').delete().eq('id', req.params.id);
   if (error) return res.json({ error: error.message });
+  // Row first, storage object second (best-effort, failures logged and
+  // ignored) — object cleanup must never be able to block an event delete.
+  await deleteEventImageObject(event.image_path, event.id);
   res.json({ success: true });
 });
 
@@ -7101,6 +7108,7 @@ app.get(BASE + '/api/calendar/month', requireAuth, async (req, res) => {
           id: e.id, title: e.title, sport: e.sport, date: e.date,
           location: e.location || null, event_type: e.event_type || null,
           club_id: e.club_id || null, club_name: e.club_id ? (clubMap[e.club_id] || null) : null,
+          image: eventImageVersion(e.image_path),
           myStatus
         };
       })
@@ -7765,10 +7773,12 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
         await del('challenge_participants', q => q.in('challenge_id', idsOf(clubChallenges)));
         await del('challenges', q => q.in('id', idsOf(clubChallenges)));
       }
-      const { data: clubEvents } = await supabaseAdmin.from('events').select('id').eq('club_id', cid);
+      const { data: clubEvents } = await supabaseAdmin.from('events').select('id, image_path').eq('club_id', cid);
       if (idsOf(clubEvents).length) {
         await del('event_rsvps', q => q.in('event_id', idsOf(clubEvents)));
         await del('events', q => q.in('id', idsOf(clubEvents)));
+        // Rows first, storage objects second — best-effort, never blocking.
+        for (const ev of clubEvents) await deleteEventImageObject(ev.image_path, ev.id);
       }
       // (posts are user-scoped — no club_id column; the club feed derives
       // from member activity — so there is no club-posts table to sweep)
@@ -7816,10 +7826,12 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
     await del('post_comments', q => q.eq('user_id', uid));
     if (idsOf(userPosts).length) await del('posts', q => q.in('id', idsOf(userPosts)));
 
-    const { data: userEvents } = await supabaseAdmin.from('events').select('id').eq('created_by', uid);
+    const { data: userEvents } = await supabaseAdmin.from('events').select('id, image_path').eq('created_by', uid);
     if (idsOf(userEvents).length) {
       await del('event_rsvps', q => q.in('event_id', idsOf(userEvents)));
       await del('events', q => q.in('id', idsOf(userEvents)));
+      // Rows first, storage objects second — best-effort, never blocking.
+      for (const ev of userEvents) await deleteEventImageObject(ev.image_path, ev.id);
     }
     const { data: userChallenges } = await supabaseAdmin.from('challenges').select('id').eq('created_by', uid);
     if (idsOf(userChallenges).length) {
@@ -7903,6 +7915,159 @@ const AVATAR_BUCKET = 'avatars';
     console.log('Avatar bucket setup error:', err.message);
   }
 })();
+
+// ── EVENT IMAGES (Supabase Storage, PRIVATE bucket) ──
+// One PRIVATE bucket, path-namespaced events/{eventId}/{ts}.webp. No public
+// URL exists for any object; the ONLY read path is the authenticated proxy
+// GET /api/events/:id/image, gated by getVisibleEvent (the single event
+// access rule). The events.image_path column stores the object path — the
+// path itself is server-side only and appears in no payload; clients get the
+// timestamp segment as a version token (`image`) for cache busting.
+const EVENT_IMAGE_BUCKET = 'event-images';
+(async () => {
+  if (!supabaseAdmin) return;
+  try {
+    const { error } = await supabaseAdmin.storage.createBucket(EVENT_IMAGE_BUCKET, { public: false });
+    if (error && !/already exists|duplicate/i.test(error.message || '')) {
+      console.log('Event image bucket setup error:', error.message);
+    }
+  } catch (err) {
+    console.log('Event image bucket setup error:', err.message);
+  }
+})();
+
+// The version token clients see: the timestamp segment of the stored object
+// path. Same versioned-filename cache logic the avatars rely on — replacing
+// an image changes the timestamp, which busts the ?v= URL naturally.
+function eventImageVersion(imagePath) {
+  const m = /^events\/[^/]+\/(\d+)\.webp$/.exec(imagePath || '');
+  return m ? m[1] : null;
+}
+
+// Best-effort object cleanup. Prefix-checked (defense in depth: a corrupted
+// pointer can never delete another event's object) and failures are logged
+// and ignored — cleanup must never block or fail the request that runs it.
+async function deleteEventImageObject(objectPath, eventId) {
+  if (!objectPath || !supabaseAdmin) return;
+  if (!objectPath.startsWith('events/' + eventId + '/')) return;
+  try {
+    const { error } = await supabaseAdmin.storage.from(EVENT_IMAGE_BUCKET).remove([objectPath]);
+    if (error) console.log('Event image cleanup failed (ignored):', error.message);
+  } catch (err) {
+    console.log('Event image cleanup failed (ignored):', err.message);
+  }
+}
+
+// Multer stage for event images: same memory storage + 5 MiB cap + error
+// mapping as avatars, different field name.
+function eventImageUploadSingle(req, res, next) {
+  avatarUpload.single('image')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'Image is too large — the maximum is 5 MB' });
+      }
+      console.log('Event image upload parse error:', err.message);
+      return res.status(400).json({ error: 'Could not read the uploaded file' });
+    }
+    next();
+  });
+}
+
+// Upload/replace an event's image. CREATOR-ONLY, and the authorization check
+// runs BEFORE multer touches the body: nonexistent id and non-creator answer
+// with the byte-identical not-found body (zero-leak standard). Never
+// plan-gated. Pipeline mirrors avatars: Sharp format validation, .rotate()
+// EXIF apply+strip, 1200×400 cover-crop (center) WebP re-encode, timestamped
+// filename, pointer-write rollback, best-effort old-object cleanup, per-event
+// concurrency lock.
+app.post(BASE + '/api/events/:id/image', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  const { data: event } = await supabaseAdmin
+    .from('events').select('id, created_by, image_path').eq('id', req.params.id).maybeSingle();
+  if (!event || event.created_by !== req.user.id) return res.json({ error: 'Event not found' });
+  eventImageUploadSingle(req, res, async () => {
+    if (!req.file || !req.file.buffer) return res.status(400).json({ error: 'No image file received' });
+    const lockKey = 'event:' + event.id;
+    if (avatarUploadsInFlight.has(lockKey)) {
+      return res.status(429).json({ error: 'An upload is already in progress — give it a second' });
+    }
+    avatarUploadsInFlight.add(lockKey);
+    try {
+      let meta;
+      try { meta = await sharp(req.file.buffer).metadata(); } catch (err) { meta = null; }
+      if (!meta || !['jpeg', 'png', 'webp'].includes(meta.format)) {
+        return res.status(400).json({ error: 'That file is not a supported image — upload a JPG, PNG or WebP' });
+      }
+      const webp = await sharp(req.file.buffer).rotate()
+        .resize(1200, 400, { fit: 'cover' }).webp({ quality: 82 }).toBuffer();
+      const objectPath = 'events/' + event.id + '/' + Date.now() + '.webp';
+      const { error: upErr } = await supabaseAdmin.storage
+        .from(EVENT_IMAGE_BUCKET)
+        .upload(objectPath, webp, { contentType: 'image/webp', upsert: false });
+      if (upErr) {
+        console.log('Event image storage upload error:', upErr.message);
+        return res.status(500).json({ error: 'Could not store the image — please try again' });
+      }
+      const { error: ptrErr } = await supabaseAdmin
+        .from('events').update({ image_path: objectPath }).eq('id', event.id);
+      if (ptrErr) {
+        // Pointer write failed — remove the just-uploaded object so it never
+        // becomes an orphan nobody references.
+        console.log('Event image pointer write error:', ptrErr.message);
+        await deleteEventImageObject(objectPath, event.id);
+        return res.status(500).json({ error: 'Could not save the image' });
+      }
+      await deleteEventImageObject(event.image_path, event.id);
+      res.json({ success: true, image: eventImageVersion(objectPath) });
+    } catch (err) {
+      console.log('Event image upload error:', err.message);
+      res.status(500).json({ error: 'Upload failed' });
+    } finally {
+      avatarUploadsInFlight.delete(lockKey);
+    }
+  });
+});
+
+// Remove an event's image. Creator-only with the same zero-leak gate.
+// Pointer cleared FIRST, then the object best-effort (avatar DELETE order).
+app.delete(BASE + '/api/events/:id/image', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  const { data: event } = await supabaseAdmin
+    .from('events').select('id, created_by, image_path').eq('id', req.params.id).maybeSingle();
+  if (!event || event.created_by !== req.user.id) return res.json({ error: 'Event not found' });
+  const { error } = await supabaseAdmin
+    .from('events').update({ image_path: null }).eq('id', event.id);
+  if (error) return res.status(500).json({ error: 'Could not remove the image' });
+  await deleteEventImageObject(event.image_path, event.id);
+  res.json({ success: true });
+});
+
+// Authenticated image proxy — THE only read path for event images. The image
+// is exactly as visible as the event: getVisibleEvent is the single gate, and
+// nonexistent id, denied access and imageless event all answer with the
+// byte-identical not-found body (no existence oracle). The ?v= query is
+// deliberately IGNORED: stale or absent v serves the current object bytes —
+// v exists purely so replacing an image changes the URL and busts caches.
+// Cache-Control is private+immutable: browsers cache per-user, the SW never
+// touches it (same-origin /api/* is network-only by SW rule 3).
+app.get(BASE + '/api/events/:id/image', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(404).json({ error: 'Event not found' });
+  try {
+    const event = await getVisibleEvent(req.user.id, req.params.id,
+      'id, created_by, visibility, club_id, image_path');
+    if (!event || !event.image_path) return res.status(404).json({ error: 'Event not found' });
+    const { data: blob, error } = await supabaseAdmin.storage
+      .from(EVENT_IMAGE_BUCKET).download(event.image_path);
+    if (error || !blob) return res.status(404).json({ error: 'Event not found' });
+    const buf = Buffer.from(await blob.arrayBuffer());
+    res.set('Content-Type', 'image/webp');
+    res.set('Cache-Control', 'private, max-age=31536000, immutable');
+    res.send(buf);
+  } catch (err) {
+    console.log('Event image proxy error:', err.message);
+    res.status(404).json({ error: 'Event not found' });
+  }
+});
 
 // Multer stage: memory storage, 5 MB hard cap. The size cap maps to 413; any
 // other multipart parse problem is a clean 400 — never an unhandled throw.
@@ -8723,7 +8888,7 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
     const nowIso = new Date().toISOString();
     const { data: clubEvents } = await supabaseAdmin
       .from('events')
-      .select('id, title, date, location, sport')
+      .select('id, title, date, location, sport, image_path')
       .eq('club_id', clubId)
       .gte('date', nowIso)
       .order('date', { ascending: true })
@@ -8740,6 +8905,7 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
       const myRsvp = rsvps.find((r) => r.user_id === userId);
       return {
         id: e.id, title: e.title, date: e.date, location: e.location, sport: e.sport,
+        image: eventImageVersion(e.image_path),
         goingCount: rsvps.filter((r) => r.status === 'going').length,
         myStatus: myRsvp ? myRsvp.status : null
       };
