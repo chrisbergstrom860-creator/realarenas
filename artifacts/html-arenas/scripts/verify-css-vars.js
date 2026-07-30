@@ -22,6 +22,10 @@
  * unrelated selector satisfies the check) but never over-reports; modelling
  * CSS cascade scope statically is out of scope for this guard. Comments are
  * stripped before parsing so commented-out declarations do NOT count.
+ *
+ * Tests: scripts/verify-css-vars.test.js (run with `node scripts/verify-css-vars.test.js`)
+ * exercises the exported parsing helpers with fixtures, so future edits to
+ * this guard can't quietly weaken it. Keep it green after any change here.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -36,11 +40,11 @@ const read = (f) => stripComments(fs.readFileSync(f, 'utf8'));
 
 // Remove /* */ CSS/JS block comments and // JS line comments (crude but safe:
 // only strips // when preceded by whitespace or line start, so URLs survive).
-function stripComments(text) {
+export function stripComments(text) {
   return text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|\s)\/\/[^\n]*/g, '$1');
 }
 
-function definedIn(text) {
+export function definedIn(text) {
   const out = new Set();
   // custom-property declarations: preceded by { ; " ' ` whitespace or start
   for (const m of text.matchAll(/(?:^|[;{\s"'`])--([a-zA-Z0-9-]+)\s*:/g)) out.add(m[1]);
@@ -48,13 +52,13 @@ function definedIn(text) {
   for (const m of text.matchAll(/setProperty\(\s*['"`]--([a-zA-Z0-9-]+)['"`]/g)) out.add(m[1]);
   return out;
 }
-function consumedIn(text) {
+export function consumedIn(text) {
   const out = new Set();
   // comments were stripped in read(); tolerate any whitespace after var(
   for (const m of text.matchAll(/var\(\s*--([a-zA-Z0-9-]+)/gi)) out.add(m[1]);
   return out;
 }
-function dynamicRefsIn(text) {
+export function dynamicRefsIn(text) {
   const hits = [];
   for (const re of [/var\(--\$\{[^}]*\}/g, /['"`]var\(--['"`]\s*\+/g, /\+\s*['"`]--[a-zA-Z0-9-]*['"`]/g]) {
     for (const m of text.matchAll(re)) hits.push(m[0]);
@@ -62,6 +66,12 @@ function dynamicRefsIn(text) {
   return hits;
 }
 
+// Run the full scan only when executed directly (not when imported by tests).
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}
+
+function main() {
 const shared = definedIn(read(path.join(HTML_DIR, 'arenas.css')));
 
 const pages = fs.readdirSync(HTML_DIR).filter((f) => f.endsWith('.html')).sort();
@@ -118,3 +128,4 @@ if (failures.length) {
   process.exit(1);
 }
 console.log('ALL PASS');
+}

@@ -1,17 +1,92 @@
 #!/usr/bin/env node
 /**
- * verify-css-vars.test.js — fixture tests proving verify-css-vars.js catches
- * the realistic ways a var() reference or definition escapes a parser.
- * Each FAIL case is proven by observing the guard exit non-zero AND name the
- * page and variable in its output — never by reasoning that it would.
+ * verify-css-vars.test.js — two fixture suites protecting verify-css-vars.js
+ * so future edits to the guard can't quietly weaken it:
  *
- * Run: node scripts/verify-css-vars.test.js
+ * 1. Unit tests of the exported parsing helpers (stripComments/definedIn/
+ *    consumedIn/dynamicRefsIn) — comment stripping, whitespace after var(,
+ *    setProperty definitions, missing-variable detection.
+ * 2. End-to-end tests running the guard against temp fixture pages — each
+ *    FAIL case is proven by observing the guard exit non-zero AND name the
+ *    page and variable in its output — never by reasoning that it would.
+ *
+ * Run: node scripts/verify-css-vars.test.js  (exits 1 on any failure)
  */
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { stripComments, definedIn, consumedIn, dynamicRefsIn } from './verify-css-vars.js';
+
+let failures = 0;
+
+// ---------------------------------------------------------------------------
+// Suite 1: unit tests of the exported parsing helpers
+// ---------------------------------------------------------------------------
+
+// The guard always strips comments before parsing (see read() in the guard);
+// mirror that pipeline here.
+const defs = (s) => definedIn(stripComments(s));
+const uses = (s) => consumedIn(stripComments(s));
+
+function test(name, fn) {
+  try { fn(); console.log(`PASS  ${name}`); }
+  catch (e) { console.error(`FAIL  ${name}\n      ${e.message}`); failures++; }
+}
+
+// --- consumption parsing ---------------------------------------------------
+test('var( with newline/whitespace before the name still counts as usage', () => {
+  assert.ok(uses('a { color: var(\n  --tint-blue\n); }').has('tint-blue'));
+  assert.ok(uses('a { box-shadow: var(   --shadow-soft ); }').has('shadow-soft'));
+});
+
+test('commented-out consumption must NOT count as usage', () => {
+  const css = 'a { color: red; /* color: var(--ghost-var); */ }';
+  assert.ok(!uses(css).has('ghost-var'));
+  const js = 'const x = 1;\n// el.style.color = "var(--js-ghost)";\n';
+  assert.ok(!uses(js).has('js-ghost'));
+});
+
+// --- definition parsing ----------------------------------------------------
+test('commented-out declarations must NOT count as definitions', () => {
+  const css = ':root { /* --dead-var: #fff; */ --live-var: #000; }';
+  const d = defs(css);
+  assert.ok(!d.has('dead-var'));
+  assert.ok(d.has('live-var'));
+});
+
+test("setProperty('--x', ...) counts as a definition", () => {
+  const js = `el.style.setProperty('--panel-h', h + 'px');
+    root.style.setProperty( "--accent" , color);`;
+  const d = defs(js);
+  assert.ok(d.has('panel-h'));
+  assert.ok(d.has('accent'));
+});
+
+test('declarations anywhere (not just :root) and inline style attrs count', () => {
+  assert.ok(defs('.card { --card-pad: 8px; }').has('card-pad'));
+  assert.ok(defs('<div style="--row-gap: 4px">').has('row-gap'));
+});
+
+test('a consumed-but-never-defined variable is detected as unresolved', () => {
+  const page = `:root { --defined-ok: 1px; }
+    .a { margin: var(--defined-ok); color: var(--totally-missing); }`;
+  const defined = defs(page);
+  const unresolved = [...uses(page)].filter((n) => !defined.has(n));
+  assert.deepEqual(unresolved, ['totally-missing']);
+});
+
+test('dynamically constructed var() names are reported', () => {
+  assert.ok(dynamicRefsIn('el.style.color = `var(--${name}-tint)`;').length > 0);
+  assert.ok(dynamicRefsIn("s = 'var(--' + name + ')';").length > 0);
+  assert.equal(dynamicRefsIn('a { color: var(--static-name); }').length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Suite 2: end-to-end fixture pages run through the real guard
+// ---------------------------------------------------------------------------
 
 const GUARD = path.join(path.dirname(fileURLToPath(import.meta.url)), 'verify-css-vars.js');
 
@@ -39,7 +114,6 @@ function runGuard(files) {
   }
 }
 
-let failures = 0;
 function expect(name, res, wantFail, page, variable) {
   const okCode = wantFail ? res.code !== 0 : res.code === 0;
   const okNamed = !wantFail || (res.out.includes(page) && res.out.includes('--' + variable));
@@ -104,5 +178,5 @@ expect('control: linked page using shared var PASSES',
   runGuard({ 'page.html': `${LINK}<style>.a{color:var(--gray-100)}</style>` }),
   false);
 
-if (failures) { console.error(`${failures} fixture test(s) FAILED`); process.exit(1); }
-console.log('ALL FIXTURE TESTS PASS');
+if (failures) { console.error(`${failures} test(s) FAILED`); process.exit(1); }
+console.log('ALL TESTS PASS');
