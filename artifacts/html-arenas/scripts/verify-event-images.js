@@ -25,13 +25,19 @@ const emails = {
   c: 'evimg-creator@arenas-test.dev',
   i: 'evimg-invitee@arenas-test.dev',
   s: 'evimg-stranger@arenas-test.dev',
-  x: 'evimg-acctdel@arenas-test.dev'
+  x: 'evimg-acctdel@arenas-test.dev',
+  h: 'evimg-coach@arenas-test.dev',
+  a: 'evimg-clubadmin@arenas-test.dev',
+  m: 'evimg-member@arenas-test.dev'
 };
 const names = {
   c: ['Evimg Creator', 'evimg_creator'],
   i: ['Evimg Invitee', 'evimg_invitee'],
   s: ['Evimg Stranger', 'evimg_stranger'],
-  x: ['Evimg Acctdel', 'evimg_acctdel']
+  x: ['Evimg Acctdel', 'evimg_acctdel'],
+  h: ['Evimg Coach', 'evimg_coach'],
+  a: ['Evimg Clubadmin', 'evimg_clubadmin'],
+  m: ['Evimg Member', 'evimg_member']
 };
 
 let failures = 0;
@@ -116,8 +122,8 @@ async function proxyRaw(cookie, id, q) {
 }
 
 async function main() {
-  for (const k of ['c', 'i', 's', 'x']) { await mkUser(k); await login(k); }
-  console.log('MANIFEST users:', JSON.stringify({ c: users.c.id, i: users.i.id, s: users.s.id, x: users.x.id }));
+  for (const k of ['c', 'i', 's', 'x', 'h', 'a', 'm']) { await mkUser(k); await login(k); }
+  console.log('MANIFEST users:', JSON.stringify(Object.fromEntries(Object.keys(users).map(k => [k, users[k].id]))));
   await admin.from('follows').insert([{ follower_id: users.c.id, following_id: users.i.id }]);
 
   // Private event with invitee I; public event too (images are not private-only).
@@ -235,20 +241,88 @@ async function main() {
   after = await listPrefix(doomed.id);
   check('account delete: bucket prefix empty', after.length === 0, JSON.stringify(after));
 
+  // ── Manager matrix: creator OR club admin/coach (canManageEvent) ──
+  // A club event: coach + admin can upload/replace/remove; a plain member and
+  // a stranger get the byte-identical ghost answer; a manager of SOME club
+  // still cannot touch someone else's solo event.
+  await admin.from('clubs').delete().eq('handle', 'evimg-mgr-club');
+  const { data: club, error: clubErr } = await admin.from('clubs')
+    .insert({ name: 'Evimg Manager Club', handle: 'evimg-mgr-club', sport: 'running', owner_id: users.c.id }).select().single();
+  check('seed: club created', !clubErr, clubErr && clubErr.message);
+  console.log('MANIFEST club:', club.id);
+  await admin.from('memberships').insert([
+    { user_id: users.c.id, club_id: club.id, role: 'admin' },
+    { user_id: users.h.id, club_id: club.id, role: 'coach' },
+    { user_id: users.a.id, club_id: club.id, role: 'admin' },
+    { user_id: users.m.id, club_id: club.id, role: 'member' }
+  ]);
+  r = await apiJson('c', '/api/events/create', {
+    method: 'POST',
+    body: JSON.stringify({ title: 'Evimg Club Session', sport: 'running', date: future, location: 'Club Track', visibility: 'club', club_id: club.id })
+  });
+  const clubEv = JSON.parse(r.text).event;
+  console.log('MANIFEST club event:', clubEv.id);
+
+  let cu = await uploadImage('h', clubEv.id, png);
+  check('coach upload succeeds', cu.status === 200 && JSON.parse(await cu.text()).success === true, cu.status);
+  let objs = await listPrefix(clubEv.id);
+  const firstObj = objs[0];
+  cu = await uploadImage('a', clubEv.id, png);
+  check('club admin replace succeeds', cu.status === 200 && JSON.parse(await cu.text()).success === true, cu.status);
+  objs = await listPrefix(clubEv.id);
+  check('admin replace: still one object, new name', objs.length === 1 && objs[0] !== firstObj, JSON.stringify({ firstObj, objs }));
+
+  // Denials: plain member and stranger, upload AND remove, byte-identical to ghost.
+  const ghostUp2 = await uploadImage('m', ghost, png);
+  const ghostUp2Text = await ghostUp2.text();
+  for (const [k, who] of [['m', 'plain member'], ['s', 'stranger']]) {
+    const den = await uploadImage(k, clubEv.id, png);
+    const denText = await den.text();
+    check(who + ' upload ≡ ghost id (byte-identical)', den.status === ghostUp2.status && denText === ghostUp2Text, denText + ' vs ' + ghostUp2Text);
+    const denRm = await apiJson(k, '/api/events/' + clubEv.id + '/image', { method: 'DELETE' });
+    const ghostRm = await apiJson(k, '/api/events/' + ghost + '/image', { method: 'DELETE' });
+    check(who + ' remove ≡ ghost id (byte-identical)', denRm.status === ghostRm.status && denRm.text === ghostRm.text, denRm.text + ' vs ' + ghostRm.text);
+  }
+  check('member/stranger denials left the admin object untouched', (await listPrefix(clubEv.id)).length === 1 && (await listPrefix(clubEv.id))[0] === objs[0], JSON.stringify(await listPrefix(clubEv.id)));
+
+  // Coach can remove.
+  const coachRm = await apiJson('h', '/api/events/' + clubEv.id + '/image', { method: 'DELETE' });
+  check('coach remove succeeds', JSON.parse(coachRm.text).success === true, coachRm.text);
+  check('coach remove: bucket prefix empty', (await listPrefix(clubEv.id)).length === 0, 'residue');
+
+  // Solo events stay creator-only: the coach (a manager of SOME club) gets
+  // the ghost answer on the creator's solo public event.
+  const soloDen = await uploadImage('h', pub.id, png);
+  const soloDenText = await soloDen.text();
+  const soloGhost = await uploadImage('h', ghost, png);
+  const soloGhostText = await soloGhost.text();
+  check('solo event: club coach upload ≡ ghost id', soloDen.status === soloGhost.status && soloDenText === soloGhostText, soloDenText + ' vs ' + soloGhostText);
+  const soloRm = await apiJson('h', '/api/events/' + pub.id + '/image', { method: 'DELETE' });
+  const soloRmGhost = await apiJson('h', '/api/events/' + ghost + '/image', { method: 'DELETE' });
+  check('solo event: club coach remove ≡ ghost id', soloRm.status === soloRmGhost.status && soloRm.text === soloRmGhost.text, soloRm.text);
+
+  // Manager-matrix cleanup (rows first, error-checked).
+  await uploadImage('h', clubEv.id, png); // leave an object so delete-cleanup is proven for the manager path
+  const clubEvDel = await apiJson('h', '/api/events/' + clubEv.id, { method: 'DELETE' });
+  check('cleanup: coach deletes club event, no orphan', JSON.parse(clubEvDel.text).success === true && (await listPrefix(clubEv.id)).length === 0, clubEvDel.text);
+  const { error: memDelErr } = await admin.from('memberships').delete().eq('club_id', club.id);
+  const { error: clubDelErr } = await admin.from('clubs').delete().eq('id', club.id);
+  check('cleanup: club + memberships deleted', !memDelErr && !clubDelErr, (memDelErr || clubDelErr || {}).message);
+
   // ── Cleanup ──
   const pubDel = await apiJson('c', '/api/events/' + pub.id, { method: 'DELETE' });
   check('cleanup: public event delete leaves no orphan', JSON.parse(pubDel.text).success === true && (await listPrefix(pub.id)).length === 0, pubDel.text);
   // Row cleanup BEFORE auth deletion (lingering references can make the auth
   // delete fail), and every auth delete is error-checked — a silent failure
   // here is exactly what leaves baseline residue.
-  const ids = ['c', 'i', 's'].map(k => users[k].id);
+  const ids = ['c', 'i', 's', 'h', 'a', 'm'].map(k => users[k].id);
   await admin.from('notifications').delete().in('user_id', ids);
   await admin.from('notifications').delete().in('actor_id', ids);
   await admin.from('follows').delete().in('follower_id', ids);
   await admin.from('follows').delete().in('following_id', ids);
   await admin.from('event_rsvps').delete().in('user_id', ids);
   await admin.from('event_invites').delete().in('invitee_id', ids);
-  for (const k of ['c', 'i', 's']) {
+  for (const k of ['c', 'i', 's', 'h', 'a', 'm']) {
     const { error } = await admin.auth.admin.deleteUser(users[k].id);
     check('cleanup: user ' + k + ' deleted', !error, error && error.message);
   }

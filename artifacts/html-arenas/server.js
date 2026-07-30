@@ -5354,6 +5354,24 @@ async function visibleEventsFilter(userId, events) {
   return list.filter(e => canUserSeeEvent(userId, e, ctx));
 }
 
+// THE single write-authorization rule for an event: its creator, OR — for
+// club events — an admin/coach of that club. Takes an already-fetched event
+// row (needs created_by + club_id). PATCH, DELETE and the image routes all
+// call this; never re-inline the rule (this project has repeatedly grown
+// four and five inline copies of checks that were meant to be identical).
+// Response shape stays per-route: PATCH/DELETE give a visible caller a
+// distinct permission message, image routes answer byte-identical not-found.
+async function canManageEvent(event, userId) {
+  if (!event) return false;
+  if (event.created_by === userId) return true;
+  if (!event.club_id) return false;
+  const { data: mgr } = await supabaseAdmin
+    .from('memberships').select('role')
+    .eq('club_id', event.club_id).eq('user_id', userId)
+    .in('role', ['admin', 'coach']).maybeSingle();
+  return !!mgr;
+}
+
 // Single-event read gate. Returns the event row when userId may see it, and
 // null BOTH when the id doesn't exist and when access is denied — callers must
 // answer with the identical not-found body in both cases (zero-leak standard,
@@ -5372,8 +5390,13 @@ app.get(BASE + '/api/events', requireAuth, async (req, res) => {
     const userId = req.user.id;
     const nowIso = new Date().toISOString();
     const { data: memberships } = await supabaseAdmin
-      .from('memberships').select('club_id').eq('user_id', userId);
+      .from('memberships').select('club_id, role').eq('user_id', userId);
     const clubIds = (memberships || []).map(m => m.club_id).filter(Boolean);
+    // Clubs the viewer manages (admin/coach) — drives the canManage flag so
+    // the UI can show the Image action wherever the server would allow it.
+    const managedClubIds = new Set((memberships || [])
+      .filter(m => m.club_id && ['admin', 'coach'].includes(m.role))
+      .map(m => m.club_id));
     const { data: following } = await supabaseAdmin
       .from('follows').select('following_id').eq('follower_id', userId);
     const followingIds = (following || []).map(f => f.following_id).filter(Boolean);
@@ -5474,7 +5497,10 @@ app.get(BASE + '/api/events', requireAuth, async (req, res) => {
         interestedCount,
         myRsvpStatus: myRsvp ? myRsvp.status : null,
         followersGoing,
-        isOwner: event.created_by === userId
+        isOwner: event.created_by === userId,
+        // Mirrors server-side canManageEvent: creator OR admin/coach of the
+        // event's club. UI-affordance only — routes re-check for real.
+        canManage: event.created_by === userId || (event.club_id ? managedClubIds.has(event.club_id) : false)
       };
     }
 
@@ -5677,15 +5703,7 @@ app.delete(BASE + '/api/events/:id', requireAuth, async (req, res) => {
   // permission message.
   const event = await getVisibleEvent(req.user.id, req.params.id, 'id, created_by, club_id, visibility, image_path');
   if (!event) return res.json({ error: 'Event not found' });
-  let allowed = event.created_by === req.user.id;
-  if (!allowed && event.club_id) {
-    const { data: mgr } = await supabaseAdmin
-      .from('memberships').select('role')
-      .eq('club_id', event.club_id).eq('user_id', req.user.id)
-      .in('role', ['admin', 'coach']).maybeSingle();
-    allowed = !!mgr;
-  }
-  if (!allowed) return res.json({ error: 'You do not have permission to cancel this event' });
+  if (!(await canManageEvent(event, req.user.id))) return res.json({ error: 'You do not have permission to cancel this event' });
   const { error } = await supabaseAdmin.from('events').delete().eq('id', req.params.id);
   if (error) return res.json({ error: error.message });
   // Row first, storage object second (best-effort, failures logged and
@@ -5968,15 +5986,7 @@ app.patch(BASE + '/api/events/:id', requireAuth, async (req, res) => {
   // Same zero-leak gate as delete: not-visible === nonexistent.
   const event = await getVisibleEvent(req.user.id, req.params.id, 'id, created_by, club_id, visibility');
   if (!event) return res.json({ error: 'Event not found' });
-  let allowed = event.created_by === req.user.id;
-  if (!allowed && event.club_id) {
-    const { data: mgr } = await supabaseAdmin
-      .from('memberships').select('role')
-      .eq('club_id', event.club_id).eq('user_id', req.user.id)
-      .in('role', ['admin', 'coach']).maybeSingle();
-    allowed = !!mgr;
-  }
-  if (!allowed) return res.json({ error: 'You do not have permission to edit this event' });
+  if (!(await canManageEvent(event, req.user.id))) return res.json({ error: 'You do not have permission to edit this event' });
 
   const { title, event_type, date, location, distance, level, description, entry_fee, max_participants } = req.body;
   if (date !== undefined && isNaN(new Date(date).getTime())) {
@@ -7978,9 +7988,11 @@ function eventImageUploadSingle(req, res, next) {
   });
 }
 
-// Upload/replace an event's image. CREATOR-ONLY, and the authorization check
-// runs BEFORE multer touches the body: nonexistent id and non-creator answer
-// with the byte-identical not-found body (zero-leak standard). Never
+// Upload/replace an event's image. Creator OR club admin/coach — the same
+// canManageEvent rule as PATCH/DELETE, so anyone who can edit/cancel an event
+// can also fix its cover image. The check runs BEFORE multer touches the
+// body: nonexistent id and non-manager answer with the byte-identical
+// not-found body (zero-leak standard). Never
 // plan-gated. Pipeline mirrors avatars: Sharp format validation, .rotate()
 // EXIF apply+strip, 1200×400 cover-crop (center) WebP re-encode, timestamped
 // filename, pointer-write rollback, best-effort old-object cleanup, per-event
@@ -7988,8 +8000,8 @@ function eventImageUploadSingle(req, res, next) {
 app.post(BASE + '/api/events/:id/image', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
   const { data: event } = await supabaseAdmin
-    .from('events').select('id, created_by, image_path').eq('id', req.params.id).maybeSingle();
-  if (!event || event.created_by !== req.user.id) return res.json({ error: 'Event not found' });
+    .from('events').select('id, created_by, club_id, image_path').eq('id', req.params.id).maybeSingle();
+  if (!event || !(await canManageEvent(event, req.user.id))) return res.json({ error: 'Event not found' });
   eventImageUploadSingle(req, res, async () => {
     if (!req.file || !req.file.buffer) return res.status(400).json({ error: 'No image file received' });
     const lockKey = 'event:' + event.id;
@@ -8033,13 +8045,14 @@ app.post(BASE + '/api/events/:id/image', requireAuth, async (req, res) => {
   });
 });
 
-// Remove an event's image. Creator-only with the same zero-leak gate.
-// Pointer cleared FIRST, then the object best-effort (avatar DELETE order).
+// Remove an event's image. Same canManageEvent gate as upload, same zero-leak
+// not-found. Pointer cleared FIRST, then the object best-effort (avatar
+// DELETE order).
 app.delete(BASE + '/api/events/:id/image', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
   const { data: event } = await supabaseAdmin
-    .from('events').select('id, created_by, image_path').eq('id', req.params.id).maybeSingle();
-  if (!event || event.created_by !== req.user.id) return res.json({ error: 'Event not found' });
+    .from('events').select('id, created_by, club_id, image_path').eq('id', req.params.id).maybeSingle();
+  if (!event || !(await canManageEvent(event, req.user.id))) return res.json({ error: 'Event not found' });
   const { error } = await supabaseAdmin
     .from('events').update({ image_path: null }).eq('id', event.id);
   if (error) return res.status(500).json({ error: 'Could not remove the image' });

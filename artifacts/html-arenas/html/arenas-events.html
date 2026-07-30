@@ -332,7 +332,10 @@ function showToast(msg){
     } else {
       actions =
         '<button class="evx-rbtn' + (goingOn ? ' on' : '') + '" onclick="ARENAS_EVENTS.rsvp(\'' + esc(ev.id) + '\',\'' + (goingOn ? 'cancelled' : 'going') + '\')">' + (goingOn ? '✓ Going' : 'Going') + '</button>' +
-        '<button class="evx-rbtn int' + (intOn ? ' on' : '') + '" onclick="ARENAS_EVENTS.rsvp(\'' + esc(ev.id) + '\',\'' + (intOn ? 'cancelled' : 'interested') + '\')">' + (intOn ? '★ Interested' : 'Interested') + '</button>';
+        '<button class="evx-rbtn int' + (intOn ? ' on' : '') + '" onclick="ARENAS_EVENTS.rsvp(\'' + esc(ev.id) + '\',\'' + (intOn ? 'cancelled' : 'interested') + '\')">' + (intOn ? '★ Interested' : 'Interested') + '</button>' +
+        // Club admins/coaches can manage the image on their club's events
+        // even when they didn't create them (mirrors server canManageEvent).
+        (ev.canManage ? '<button class="evx-rbtn" onclick="ARENAS_EVENTS.manageImage(\'' + esc(ev.id) + '\')">Image</button>' : '');
     }
 
     var banner = ev.image ? esc(eventImageUrl(ev.id, ev.image)) : null;
@@ -904,8 +907,9 @@ function showToast(msg){
     }).catch(function (e) { console.log('Delete failed:', e.message); });
   }
 
-  // Image manager for creator-owned events (all visibilities): preview,
-  // upload/replace, remove. Same endpoint as the create-form upload.
+  // Image manager for events the viewer can manage — creator, or club
+  // admin/coach for club events (all visibilities): preview, upload/replace,
+  // remove. Same endpoint as the create-form upload.
   function manageImage(eventId) {
     var ev = evById[eventId] || {};
     var existing = document.getElementById('evx-img-modal');
