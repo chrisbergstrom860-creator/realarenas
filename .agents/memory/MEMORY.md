@@ -9,6 +9,7 @@
 - [html-arenas club invites](html-arenas-invites.md) — open links (OPEN_INVITE_EMAIL) stay pending/reusable, personal invites single-use + email-bound; revoke=DELETE row.
 - [html-arenas invite stats + History](html-arenas-invite-history.md) — setStat label-match is page-wide (scope per-tab + run after renderPending); isExpired ignores status; no 'declined' status; History = clean partition of current records.
 - [html-arenas events](html-arenas-events.md) — events/RSVP feature: club-scoped writes need membership gate; notif fan-out only on transition into "going"; events page is fully real-data-driven (mock chrome DELETED, not hidden; grid/RSVP card start empty).
+- [html-arenas event images](html-arenas-event-images.md) — PRIVATE bucket + canUserSeeEvent proxy, version-token payloads (never image_path), rows-first best-effort object cleanup, no placeholders.
 - [html-arenas event invites](html-arenas-event-invites.md) — invite-only events: ONE canUserSeeEvent rule (club scope wins; NO rsvp-as-access), zero-leak not-found parity, shared pendingInvites w/ idField, dual-mode form list.
 - [html-arenas activity logging](html-arenas-activities.md) — manual training log; `activities` table must be user-created via SQL (no DDL via service role); author from auth metadata; GET /api/activities/:userId is self-only (IDOR).
 - [html-arenas challenges](html-arenas-challenges.md) — private solo now GATED (join+leaderboard); coach rollup + requireChallengeManager; same-route writes need hash+reload not nav().
