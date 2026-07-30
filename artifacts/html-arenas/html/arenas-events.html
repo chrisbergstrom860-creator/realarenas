@@ -28,6 +28,8 @@ document.addEventListener('DOMContentLoaded', function(){
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/html/arenas.css">
 <script src="/html/arenas-club-create.js"></script>
+<script src="/html/arenas-overlay.js"></script>
+<script src="/html/arenas-crop.js"></script>
 <style>
 button,select,input,textarea{font-family:var(--font)}
 @keyframes fade-up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
@@ -609,7 +611,44 @@ function showToast(msg){
     document.getElementById('evx-visibility').addEventListener('change', syncInviteMode);
     document.getElementById('evx-invitees').addEventListener('change', syncInviteMode);
     syncInviteMode();
+
+    // Cover image goes through the shared 3:1 crop step. The cropped blob is
+    // held in memory and uploaded after create (as before). Explicit state
+    // machine + selection token: the raw file is uploaded ONLY on the
+    // explicit decode-fallback path, never because an async crop hadn't
+    // resolved yet, and a stale crop from a superseded selection can never
+    // attach to a newer file (every callback checks its token first).
+    createCropBlob = null; createCropState = 'none';
+    var imgInput = document.getElementById('evx-image');
+    imgInput.addEventListener('change', function () {
+      var seq = ++createCropSeq;         // supersedes all in-flight callbacks
+      createCropBlob = null;
+      var file = imgInput.files && imgInput.files[0];
+      if (!file) { createCropState = 'none'; return; }
+      if (!window.arenasCrop) { createCropState = 'fallback'; return; }
+      createCropState = 'pending';
+      window.arenasCrop.open({
+        file: file,
+        onDone: function (blob) {
+          if (seq !== createCropSeq) return;    // stale selection — drop it
+          createCropBlob = blob; createCropState = 'ready';
+        },
+        onCancel: function (reason) {
+          if (seq !== createCropSeq) return;
+          if (reason === 'decode') {
+            createCropState = 'fallback';
+            if (window.showToast) showToast('Couldn\u2019t open the crop tool — the photo will be center-cropped');
+          } else {
+            // Dismissed without choosing: keep nothing selected rather than
+            // silently uploading a center-crop the user never saw.
+            createCropState = 'none';
+            imgInput.value = '';
+          }
+        }
+      });
+    });
   }
+  var createCropBlob = null, createCropState = 'none', createCropSeq = 0;
 
   function submitCreate(e) {
     e.preventDefault();
@@ -633,6 +672,14 @@ function showToast(msg){
       visibility: form.visibility.value,
       invitees: invitees
     };
+    // Decode window guard: 'pending' with no overlay visible means the crop
+    // step is still opening — creating now would have to either drop or
+    // center-crop an image the user never saw. Block honestly instead.
+    if (createCropState === 'pending') {
+      errBox.textContent = 'Still preparing the image crop — one moment.';
+      errBox.style.display = 'block';
+      return;
+    }
     if (!body.title || !body.sport || !body.date || !body.location) {
       errBox.textContent = 'Please fill in title, sport, date and location.';
       errBox.style.display = 'block';
@@ -664,14 +711,20 @@ function showToast(msg){
       // rolls back the create — it reports honestly and the card's Image
       // action is the retry path (same endpoint).
       var fileInput = document.getElementById('evx-image');
-      var file = fileInput && fileInput.files && fileInput.files[0];
+      // Upload the cropped export when a crop was accepted; the raw file goes
+      // up ONLY on the explicit decode-fallback path. 'pending'/'none' upload
+      // nothing — never a center-crop the user hasn't seen.
+      var rawFile = fileInput && fileInput.files && fileInput.files[0];
+      var file = createCropState === 'ready' ? createCropBlob
+        : (createCropState === 'fallback' ? rawFile : null);
       var finish = function () {
         var m = document.getElementById('evx-modal'); if (m) m.remove();
         loadEvents();
       };
       if (file && data.event && data.event.id) {
         var fd = new FormData();
-        fd.append('image', file);
+        if (createCropState === 'ready') fd.append('image', createCropBlob, 'crop.png');
+        else fd.append('image', file);
         fetch(B + '/api/events/' + encodeURIComponent(data.event.id) + '/image', {
           method:'POST', credentials:'same-origin', body: fd
         }).then(function (r) { return r.json(); }).then(function (up) {
@@ -884,16 +937,48 @@ function showToast(msg){
     var rmBtn = document.getElementById('evx-img-rm');
     var errBox = document.getElementById('evx-img-err');
     function fail(msg) { errBox.textContent = msg; errBox.style.display = 'block'; }
+    // File choice goes through the shared 3:1 crop step; the cropped blob is
+    // what gets uploaded. Same state machine + selection token as the create
+    // form: the Upload button stays DISABLED until a crop is accepted (or the
+    // explicit decode-fallback fires), so a slow decode can never race a raw
+    // file up, and stale callbacks from a superseded selection are dropped.
+    var cropBlob = null, cropState = 'none', cropSeq = 0;
     fileInput.addEventListener('change', function () {
-      upBtn.disabled = !(fileInput.files && fileInput.files[0]);
+      var seq = ++cropSeq;
+      cropBlob = null; cropState = 'none';
       errBox.style.display = 'none';
+      upBtn.disabled = true;
+      var file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      if (!window.arenasCrop) { cropState = 'fallback'; upBtn.disabled = false; return; }
+      cropState = 'pending';
+      window.arenasCrop.open({
+        file: file,
+        onDone: function (blob) {
+          if (seq !== cropSeq) return;    // stale selection — drop it
+          cropBlob = blob; cropState = 'ready'; upBtn.disabled = false;
+        },
+        onCancel: function (reason) {
+          if (seq !== cropSeq) return;
+          if (reason === 'decode') {
+            cropState = 'fallback'; upBtn.disabled = false;
+            if (window.showToast) showToast('Couldn\u2019t open the crop tool — the photo will be center-cropped');
+          } else {
+            cropState = 'none';
+            fileInput.value = '';
+            upBtn.disabled = true;
+          }
+        }
+      });
     });
     upBtn.addEventListener('click', function () {
-      var file = fileInput.files && fileInput.files[0];
+      var rawFile = fileInput.files && fileInput.files[0];
+      var file = cropState === 'ready' ? cropBlob : (cropState === 'fallback' ? rawFile : null);
       if (!file) return;
       upBtn.disabled = true; upBtn.textContent = 'Uploading…';
       var fd = new FormData();
-      fd.append('image', file);
+      if (cropState === 'ready') fd.append('image', cropBlob, 'crop.png');
+      else fd.append('image', file);
       fetch(B + '/api/events/' + encodeURIComponent(eventId) + '/image', {
         method:'POST', credentials:'same-origin', body: fd
       }).then(function (r) { return r.json(); }).then(function (data) {

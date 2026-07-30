@@ -261,6 +261,11 @@ app.get(['/html/arenas-hpw-modal.js', '/arenas-hpw-modal.js'], (req, res) => {
 app.get(['/html/arenas-overlay.js', '/arenas-overlay.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-overlay.js'));
 });
+// Shared 3:1 cover-image cropper (events page create form + Image action).
+// Builds on window.arenasOverlay — load order matters on consumer pages.
+app.get(['/html/arenas-crop.js', '/arenas-crop.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-crop.js'));
+});
 
 // Shared activity stat-tile builder (feed + my-profile Activities tab render
 // the same boxed tiles from this one file). Dual-path like the panel above.

@@ -233,7 +233,17 @@ const PAGES = [
       { name: 'modal-event-invites',
         js: `document.querySelectorAll('#evx-modal,#evx-inv-modal').forEach((m) => m.remove()); document.querySelector('[onclick*="manageInvites"]').click()`,
         waitFor: '#evx-inv-pick', root: '#evx-inv-modal',
-        surfaces: [{ name: 'event invite manager', sel: '#evx-inv-modal > div', min: 2 }] }
+        surfaces: [{ name: 'event invite manager', sel: '#evx-inv-modal > div', min: 2 }] },
+      // Shared 3:1 crop overlay (arenas-crop.js on arenasOverlay). Driven via
+      // the image hook — file pickers can't be automated here. Non-black test
+      // image so the blank-export guard never trips on the seed.
+      { name: 'modal-crop',
+        js: `document.querySelectorAll('#evx-modal,#evx-inv-modal,#evx-img-modal').forEach((m) => m.remove());
+             (() => { const c = document.createElement('canvas'); c.width = 300; c.height = 900;
+               const x = c.getContext('2d'); x.fillStyle = '#B33A3A'; x.fillRect(0, 0, 300, 900);
+               window.arenasCrop.open({ image: c.toDataURL(), onDone: () => {}, onCancel: () => {} }); })()`,
+        waitFor: '#arenas-crop-overlay #ac-slider', root: '#arenas-crop-overlay',
+        surfaces: [{ name: 'crop overlay panel', sel: '#arenas-crop-overlay > div', min: 4 }] }
     ] },
   { user: 'creator', name: 'leaderboards', path: '/leaderboards', waitFor: '.lb-row', root: 'body',
     surfaces: [
