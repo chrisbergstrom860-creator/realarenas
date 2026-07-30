@@ -27,8 +27,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// CSS_VARS_HTML_DIR override exists for the fixture tests (verify-css-vars.test.js).
-const HTML_DIR = process.env.CSS_VARS_HTML_DIR ||
+// CSS_VARS_HTML_DIR override is honored ONLY under CSS_VARS_TEST_MODE=1, so a
+// stray CI/shell env var can never redirect a production guard run.
+const HTML_DIR = (process.env.CSS_VARS_TEST_MODE === '1' && process.env.CSS_VARS_HTML_DIR) ||
   path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'html');
 
 const read = (f) => stripComments(fs.readFileSync(f, 'utf8'));
@@ -80,9 +81,13 @@ for (const page of pages) {
   for (const m of html.matchAll(/<script[^>]+src=["']([^"']+)["']/g)) {
     const src = m[1];
     if (/^https?:|^\/\//.test(src)) continue; // external CDN
-    const base = path.basename(src.split('?')[0]);
-    const local = path.join(HTML_DIR, base);
-    if (fs.existsSync(local)) { corpus += '\n' + read(local); scriptFiles.push(base); }
+    // Browser semantics: resolve relative to the referring page's directory
+    // (absolute /html/... paths resolve from HTML_DIR); never follow a path
+    // that escapes HTML_DIR.
+    const clean = src.split(/[?#]/)[0];
+    const local = path.resolve(HTML_DIR, clean.replace(/^\/(html\/)?/, ''));
+    if (!local.startsWith(path.resolve(HTML_DIR) + path.sep)) continue;
+    if (fs.existsSync(local) && fs.statSync(local).isFile()) { corpus += '\n' + read(local); scriptFiles.push(clean); }
   }
 
   const defined = definedIn(corpus);

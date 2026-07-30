@@ -23,9 +23,13 @@ function runGuard(files) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cssvars-'));
   try {
     fs.writeFileSync(path.join(dir, 'arenas.css'), SHARED_CSS);
-    for (const [name, content] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), content);
+    for (const [name, content] of Object.entries(files)) {
+      const p = path.join(dir, name);
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      fs.writeFileSync(p, content);
+    }
     try {
-      const out = execFileSync('node', [GUARD], { env: { ...process.env, CSS_VARS_HTML_DIR: dir }, encoding: 'utf8', stdio: 'pipe' });
+      const out = execFileSync('node', [GUARD], { env: { ...process.env, CSS_VARS_TEST_MODE: '1', CSS_VARS_HTML_DIR: dir }, encoding: 'utf8', stdio: 'pipe' });
       return { code: 0, out };
     } catch (e) {
       return { code: e.status, out: (e.stdout || '') + (e.stderr || '') };
@@ -68,6 +72,15 @@ expect('var() consumed inside a <script src> file FAILS when undefined',
     'widget.js': 'root.insertAdjacentHTML("beforeend", `<b style="background:var(--script-var)">y</b>`);'
   }),
   true, 'page.html', 'script-var');
+
+// 3c. Same, via a NESTED relative script path (browser resolves js/widget.js
+//     relative to the page; the guard must too, not just flat basenames).
+expect('var() consumed inside a nested <script src="js/widget.js"> FAILS when undefined',
+  runGuard({
+    'page.html': `${LINK}<script src="js/widget.js"></script>`,
+    'js/widget.js': 'root.insertAdjacentHTML("beforeend", `<b style="background:var(--nested-var)">y</b>`);'
+  }),
+  true, 'page.html', 'nested-var');
 
 // 4. Reference inside the page's own @media block.
 expect('var() consumed inside @media FAILS when undefined',
