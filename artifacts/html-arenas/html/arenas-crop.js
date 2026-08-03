@@ -267,6 +267,11 @@
       // raw file, which the server center-crops exactly as before).
       if (opts.onCancel) opts.onCancel('decode');
     });
+    // The {cancel} handle MUST be returned on this (normal) path too — it was
+    // only returned from the no-primitive early exit before, so every caller's
+    // cropHandle was undefined and mid-decode cancellation silently never
+    // worked. The decode window is exactly what the handle exists for.
+    return handle;
   }
 
   window.arenasCrop = { open: open };

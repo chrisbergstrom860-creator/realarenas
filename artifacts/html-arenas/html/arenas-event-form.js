@@ -418,30 +418,37 @@
   // opts.onChanged() runs after a successful upload or removal.
   function manageImage(ev, opts) {
     opts = opts || {};
-    // Replacing an existing manager must go through ITS teardown too, or a
-    // decode still in flight from the old instance can orphan a crop overlay.
-    var existing = document.getElementById('evx-img-modal');
-    if (existing) {
-      if (typeof existing._aefTeardown === 'function') existing._aefTeardown();
-      else existing.remove();
-    }
-    var overlay = document.createElement('div');
-    overlay.id = 'evx-img-modal';
-    overlay.className = 'modal-overlay open';
-    overlay.style.cssText = 'display:flex;position:fixed;inset:0;background:rgba(0,0,0,.4);align-items:center;justify-content:center;z-index:500;padding:16px';
-    // Single close path for ×, backdrop, replacement, and post-action:
-    // invalidate the token, cancel a mid-decode crop, close an open crop
-    // overlay, THEN remove the manager — same contract as the create forms.
-    var closeManager = function () {
+    // Crop state must exist BEFORE the overlay opens: the primitive's onClose
+    // (the single cancellation path) and beforeClose both read it.
+    var cropBlob = null, cropState = 'none', cropSeq = 0, cropHandle = null;
+    // Runs on EVERY close route the primitive has — Escape, backdrop, explicit
+    // close(id) (✕, post-upload/remove), and same-id replacement: invalidate
+    // the selection token, cancel a mid-decode crop, close an open crop
+    // overlay. Same contract as the create/edit forms; no path can bypass it
+    // because cancellation IS the close hook.
+    var closed = false; // once true, this instance may never open a crop again
+    var cancelCrop = function () {
+      closed = true;
       cropSeq++; cropBlob = null; cropState = 'none';
       if (cropHandle) { cropHandle.cancel(); cropHandle = null; }
-      if (window.arenasOverlay) window.arenasOverlay.close('arenas-crop-overlay');
-      overlay.remove();
+      window.arenasOverlay.close('arenas-crop-overlay');
     };
-    overlay._aefTeardown = closeManager;
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeManager(); });
-    overlay.innerHTML =
-      '<div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:22px" onclick="event.stopPropagation()">' +
+    var closeManager = function () { window.arenasOverlay.close('evx-img-modal'); };
+    var overlay = window.arenasOverlay.open({
+      id: 'evx-img-modal', // same-id replace goes through close → onClose, so a decode from an old instance can't orphan a crop overlay
+      label: 'Event image',
+      onClose: cancelCrop,
+      // Escape/backdrop with a selected-but-not-uploaded image would silently
+      // lose the user's crop — ask first. (✕ bypasses this by the primitive's
+      // deliberate semantics, same as the create/edit dirty-guards.)
+      beforeClose: function () {
+        if (cropState === 'pending' || cropState === 'ready' || cropState === 'fallback') {
+          return window.confirm('Discard the selected image?');
+        }
+        return true;
+      },
+      html:
+      '<div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:22px">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">' +
           '<div style="font-size:16px;font-weight:700;color:var(--gray-900)">Event image</div>' +
           '<div style="cursor:pointer;font-size:20px;color:var(--gray-400)" id="evx-img-x">×</div>' +
@@ -455,8 +462,8 @@
           '<button id="evx-img-up" class="evx-rbtn" disabled>' + (ev.image ? 'Replace image' : 'Upload image') + '</button>' +
           (ev.image ? '<button id="evx-img-rm" class="evx-rbtn" style="color:#b91c1c;border-color:#fecaca">Remove image</button>' : '') +
         '</div>' +
-      '</div>';
-    document.body.appendChild(overlay);
+      '</div>'
+    });
     document.getElementById('evx-img-x').addEventListener('click', closeManager);
     var fileInput = document.getElementById('evx-img-file');
     var upBtn = document.getElementById('evx-img-up');
@@ -468,9 +475,14 @@
     // selection token as the create form: the Upload button stays DISABLED
     // until a crop is accepted (or the explicit decode-fallback fires), so a
     // slow decode can never race a raw file up, and stale callbacks from a
-    // superseded selection are dropped.
-    var cropBlob = null, cropState = 'none', cropSeq = 0, cropHandle = null;
+    // superseded selection are dropped. (State declared above the open() call
+    // — onClose/beforeClose close over it.)
     fileInput.addEventListener('change', function () {
+      // A change event can be delivered AFTER this instance closed (the input
+      // is detached but its listener still fires — seen with synthetic file
+      // setting). Opening a crop then would orphan the overlay; the seq guard
+      // can't catch it because this handler takes a fresh seq. Hard-stop.
+      if (closed) return;
       var seq = ++cropSeq;
       cropBlob = null; cropState = 'none';
       if (cropHandle) { cropHandle.cancel(); cropHandle = null; }
