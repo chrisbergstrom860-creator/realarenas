@@ -88,7 +88,12 @@
       return '<div class="evx-field"><label class="evx-label">' + labelHtml + '</label>' + inner + '</div>';
     }
     function optHtml(list, current) {
-      return list.map(function (o) {
+      // A stored value outside the fixed list (free-text-created event, data
+      // migration) must be PRESERVED as a selected option — otherwise the
+      // browser silently submits the first option on any save, rewriting the
+      // field the user never touched.
+      var opts = list.indexOf(current) === -1 && current ? [current].concat(list) : list;
+      return opts.map(function (o) {
         return '<option' + (current === o ? ' selected' : '') + '>' + esc(o) + '</option>';
       }).join('');
     }
@@ -115,10 +120,15 @@
             '</div>');
         }
       } else if (f === 'event_type') {
-        // Events page renders Type inline next to Sport (free-text, above);
-        // the dashboard uses the fixed select.
+        // Events page renders Type inline next to Sport (free-text, above) in
+        // create mode; the dashboard uses the fixed select. Events-page EDIT
+        // has no sport row, so Type must render here as its own free-text
+        // field — without it, collect() would send event_type: null and the
+        // PATCH would silently wipe the stored value.
         if (onDashboard) {
           parts.push(field('Event type', '<select class="evx-select" id="' + id('type') + '" name="event_type">' + optHtml(TYPE_OPTIONS, ev.event_type) + '</select>'));
+        } else if (mode === 'edit') {
+          parts.push(field('Type', '<input class="evx-input" id="' + id('type') + '" name="event_type" value="' + esc(ev.event_type || '') + '" placeholder="e.g. 10K, Sportive">'));
         }
       } else if (f === 'datetime') {
         parts.push('<div class="evx-row">' +
@@ -297,8 +307,12 @@
       // never saw. Block honestly instead. (Validation-stage in every host.)
       if (cropState === 'pending') return 'Still preparing the image crop — one moment.';
       if (ctx === 'events-page') {
-        if (!body.title || !body.sport || !body.date || !body.location) {
-          return 'Please fill in title, sport, date and location.';
+        // Sport only exists (and is only required) in create mode — edit mode
+        // has no sport field (immutable after creation).
+        if (!body.title || (mode === 'create' && !body.sport) || !body.date || !body.location) {
+          return mode === 'edit'
+            ? 'Please fill in title, date and location.'
+            : 'Please fill in title, sport, date and location.';
         }
         // Mirror the server's visibility/club shape rules with friendlier copy.
         if (body.visibility === 'club' && !body.club_id) {

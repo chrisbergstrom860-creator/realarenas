@@ -224,7 +224,13 @@ const PAGES = [
     steps: [{ name: 'discover', js: `document.getElementById('tab-btn-discover').click()`, waitFor: '#discover-grid .challenge-card',
       surfaces: [{ name: 'discover cards (member)', sel: '#discover-grid', min: 1 }] }] },
   { user: 'creator', name: 'events', path: '/events', waitFor: '#events-grid > *', root: 'body',
-    surfaces: [{ name: 'events grid', sel: '#events-grid', min: 2 }],
+    surfaces: [
+      { name: 'events grid', sel: '#events-grid', min: 2 },
+      // Owner's PRIVATE event card action row: pill + Edit + Invites + Image +
+      // Delete (5 children) — the widest manage row anywhere. Measured at all
+      // VIEWPORTS (360/380/414); clip/offscreen checks catch a squeezed button.
+      { name: 'owner private card actions', sel: '#events-grid div:has(> [onclick*="manageInvites"])', min: 5 }
+    ],
     steps: [
       { name: 'modal-create-event', js: `document.getElementById('create-event-btn').click()`,
         waitFor: '#evx-modal', root: '#evx-modal' },

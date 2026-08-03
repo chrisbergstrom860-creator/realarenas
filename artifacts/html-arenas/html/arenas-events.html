@@ -319,6 +319,7 @@ function showToast(msg){
     if (ev.isOwner) {
       actions =
         '<span style="font-size:11px;font-weight:600;color:#166534;background:var(--green-light);padding:4px 9px;border-radius:20px">Your event</span>' +
+        '<button class="evx-rbtn" onclick="ARENAS_EVENTS.edit(\'' + esc(ev.id) + '\')">Edit</button>' +
         (ev.visibility === 'private'
           ? '<button class="evx-rbtn" onclick="ARENAS_EVENTS.manageInvites(\'' + esc(ev.id) + '\')">Invites</button>'
           : '') +
@@ -349,7 +350,9 @@ function showToast(msg){
           (banner ? '<img class="evx-banner" src="' + banner + '" alt="">' : '') +
           '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;flex-wrap:wrap">' +
             '<span class="ev-social-text" style="color:var(--gray-500)">' + social + '</span>' +
-            '<div style="display:flex;gap:8px">' + actions + '</div>' +
+            // flex-wrap: the owner's private card carries four buttons + the
+            // pill — at ~328px content width that group must wrap, not clip.
+            '<div style="display:flex;gap:8px;flex-wrap:wrap">' + actions + '</div>' +
           '</div>' +
           '<div style="font-size:11px;color:var(--gray-400);margin-top:6px">Organised by ' + esc(ev.creatorName || 'Athlete') + '</div>' +
         '</div>' +
@@ -727,6 +730,60 @@ function showToast(msg){
   }
 
 
+  // Edit modal for the creator's own events — thin chrome around the shared
+  // module in edit mode (events-page context: free-text type/level, split
+  // date/time, fee/max; NO visibility/club/invitee fields — those are
+  // immutable by construction after creation). Every close path routes
+  // through closeEditModal so a crop mid-decode can never orphan its overlay.
+  var editFormApi = null;
+  function editEvent(eventId) {
+    var ev = evById[eventId];
+    if (!ev || !window.arenasEventForm) return;
+    if (document.getElementById('eev-modal')) closeEditModal();
+    var overlay = document.createElement('div');
+    overlay.id = 'eev-modal';
+    overlay.className = 'modal-overlay open';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:500;padding:32px 16px;overflow-y:auto';
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeEditModal(); });
+    var shell = document.createElement('div');
+    shell.style.cssText = 'background:#fff;border-radius:14px;max-width:520px;width:100%;padding:22px';
+    shell.addEventListener('click', function (e) { e.stopPropagation(); });
+    shell.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
+        '<div style="font-size:17px;font-weight:700;color:var(--gray-900)">Edit event</div>' +
+        '<div style="cursor:pointer;font-size:20px;color:var(--gray-400)" id="eev-close">×</div>' +
+      '</div>';
+    editFormApi = window.arenasEventForm.build({
+      mode: 'edit', context: 'events-page', prefix: 'eev',
+      event: ev,
+      submitBtn: function () { return document.getElementById('eev-submit'); },
+      submitBusyLabel: 'Saving…', submitIdleLabel: 'Save changes',
+      onSuccess: function () {
+        closeEditModal();
+        if (window.showToast) showToast('✓ Event updated');
+        loadEvents();
+      }
+    });
+    var note = document.createElement('div');
+    note.style.cssText = 'background:var(--yellow-light);border:1px solid #fde68a;border-radius:8px;padding:10px 14px;font-size:12px;color:#7a5c00;margin-bottom:12px';
+    note.textContent = '🔔 If you change the date or location, everyone who RSVP\u2019d will be notified. Other edits are saved quietly.';
+    var btn = document.createElement('button');
+    btn.type = 'submit'; btn.id = 'eev-submit';
+    btn.className = 'btn btn-yellow btn-full';
+    btn.style.justifyContent = 'center';
+    btn.textContent = 'Save changes';
+    editFormApi.el.appendChild(note);
+    editFormApi.el.appendChild(btn);
+    shell.appendChild(editFormApi.el);
+    overlay.appendChild(shell);
+    document.body.appendChild(overlay);
+    document.getElementById('eev-close').addEventListener('click', closeEditModal);
+  }
+  function closeEditModal() {
+    if (editFormApi) { editFormApi.teardown(); editFormApi = null; }
+    var m = document.getElementById('eev-modal'); if (m) m.remove();
+  }
+
   // Image manager moved into shared arenas-event-form.js — the same overlay
   // now serves the events page and the club dashboard. Payloads carry only
   // the version token (never image_path); the preview uses the authed proxy.
@@ -736,7 +793,7 @@ function showToast(msg){
   }
 
 
-  window.ARENAS_EVENTS = { rsvp: rsvp, del: del, manageInvites: manageInvites, manageImage: manageImage };
+  window.ARENAS_EVENTS = { rsvp: rsvp, del: del, manageInvites: manageInvites, manageImage: manageImage, edit: editEvent };
   window.openCreateEvent = openCreateEvent;
 
   loadEvents();

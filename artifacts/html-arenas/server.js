@@ -5989,7 +5989,9 @@ app.get(BASE + '/api/events/:id/rsvps', requireAuth, async (req, res) => {
 app.patch(BASE + '/api/events/:id', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for events' });
   // Same zero-leak gate as delete: not-visible === nonexistent.
-  const event = await getVisibleEvent(req.user.id, req.params.id, 'id, created_by, club_id, visibility');
+  // date/location/title are fetched for material-change detection + the
+  // notification copy below, not for authorization.
+  const event = await getVisibleEvent(req.user.id, req.params.id, 'id, created_by, club_id, visibility, title, date, location');
   if (!event) return res.json({ error: 'Event not found' });
   if (!(await canManageEvent(event, req.user.id))) return res.json({ error: 'You do not have permission to edit this event' });
 
@@ -6012,6 +6014,47 @@ app.patch(BASE + '/api/events/:id', requireAuth, async (req, res) => {
   }
   const { error } = await supabaseAdmin.from('events').update(updates).eq('id', req.params.id);
   if (error) return res.json({ error: error.message });
+
+  // Material-change fan-out (BOTH hosts — this is the single code path):
+  // when the date or location ACTUALLY changed, notify everyone with a live
+  // going/interested RSVP so nobody shows up at the wrong place or time.
+  // Cosmetic edits (title/type/level/distance/fee/max/description) stay
+  // silent. Date compares as an instant (the form re-composes the ISO string,
+  // so string equality would false-positive); location compares trimmed.
+  // Recipient prefs (notify_events) are enforced inside createNotification.
+  try {
+    const dateChanged = updates.date !== undefined &&
+      new Date(updates.date).getTime() !== new Date(event.date).getTime();
+    const normLoc = (v) => (v == null ? '' : String(v).trim());
+    const locationChanged = updates.location !== undefined &&
+      normLoc(updates.location) !== normLoc(event.location);
+    if (dateChanged || locationChanged) {
+      const { data: rsvps } = await supabaseAdmin
+        .from('event_rsvps').select('user_id, status')
+        .eq('event_id', event.id).in('status', ['going', 'interested']);
+      const recipients = [...new Set((rsvps || []).map(r => r.user_id))]
+        .filter(id => id && id !== req.user.id);
+      if (recipients.length) {
+        const actor = displayFromUser(req.user);
+        const newDate = updates.date !== undefined ? updates.date : event.date;
+        const newLoc = updates.location !== undefined ? updates.location : event.location;
+        const when = new Date(newDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+        const what = dateChanged && locationChanged ? 'the date and location'
+          : dateChanged ? 'the date' : 'the location';
+        const title = updates.title !== undefined ? updates.title : event.title;
+        for (const uid of recipients) {
+          await createNotification({
+            userId: uid, type: 'event', title: 'Event updated',
+            body: `${actor.name} changed ${what} of "${title}" — now ${when} at ${newLoc}`,
+            link: '/events', actorId: req.user.id, entityId: event.id
+          });
+        }
+      }
+    }
+  } catch (err) {
+    // Fan-out must never fail the edit itself.
+    console.log('Event edit notification error:', err.message);
+  }
   res.json({ success: true });
 });
 

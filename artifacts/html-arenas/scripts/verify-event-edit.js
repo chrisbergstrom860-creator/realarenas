@@ -44,8 +44,11 @@ await admin.from('memberships').insert({ user_id: coachId, club_id: club.id, rol
 
 const origDate = new Date(Date.now() + 3 * 86400000);
 origDate.setHours(9, 30, 0, 0);
+// event_type deliberately OUTSIDE the dashboard select's fixed options —
+// proves an unknown stored value is preserved as a selected option instead of
+// being silently rewritten to the first option on save.
 const { data: ev, error: evErr } = await admin.from('events').insert({
-  title: 'Evedit Original', sport: 'running', event_type: 'Track session',
+  title: 'Evedit Original', sport: 'running', event_type: 'Midnight fartlek social',
   date: origDate.toISOString(), location: 'Evedit Track', distance: '5km',
   level: 'Intermediate', description: 'Original description',
   entry_fee: '£5', max_participants: 10,
@@ -96,8 +99,8 @@ try {
     JSON.stringify(prefill));
   check('prefill: entry fee + max participants (new on dashboard edit)',
     prefill.fee === '£5' && prefill.max === '10', JSON.stringify(prefill));
-  check('prefill: type/level selects carry stored values',
-    prefill.type === 'Track session' && prefill.level === 'Intermediate', JSON.stringify(prefill));
+  check('prefill: unknown stored type preserved as selected option (not rewritten)',
+    prefill.type === 'Midnight fartlek social' && prefill.level === 'Intermediate', JSON.stringify(prefill));
   check('edit mode has no sport field', !prefill.hasSportField);
   await page.fill('#edit-ev-title', 'Should Not Save');
   await page.click('#edit-ev-cancel');
