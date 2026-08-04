@@ -269,11 +269,18 @@ const PAGES = [
     surfaces: [{ name: 'overview', sel: '#tab-overview', min: 1 }],
     steps: [
       { name: 'activities', js: htab('activities'), surfaces: [{ name: 'activities list', sel: '#tab-activities', min: 1 }] },
-      { name: 'stats', js: htab('stats'), surfaces: [
+      // waitFor the goals-vs-actual bars: they arrive in the same innerHTML
+      // assignment as the by-sport svgs, and the render now awaits the goals
+      // fetch too — the step's 250ms settle alone is not enough.
+      { name: 'stats', js: htab('stats'), waitFor: '#gvw-card .gvw-bar', surfaces: [
         { name: 'stats & PRs body', sel: '#sp-stats-body', min: 1 },
         // By-sport redesign: exactly the three chart SVGs (Sessions, Time,
         // Share of sessions) — weekly stack is divs, so svg count = charts.
-        { name: 'by-sport chart svgs', sel: '#sp-stats-body svg[role="img"]', min: 3 }
+        { name: 'by-sport chart svgs', sel: '#sp-stats-body svg[role="img"]', min: 3 },
+        // Goals vs actual card (creator has a seeded weekly goal): header +
+        // chart body must render at every width (the surface check counts
+        // CHILDREN of the matched element, so target the card, not the bars).
+        { name: 'goals vs actual card', sel: '#gvw-card', min: 2 }
       ] },
       { name: 'achievements', js: htab('achievements'), surfaces: [{ name: 'achievements tab', sel: '#tab-achievements .content-cols-full', min: 1 }] },
       { name: 'following', js: htab('following'), surfaces: [{ name: 'following grid', sel: '.following-grid', min: 2 }] },
