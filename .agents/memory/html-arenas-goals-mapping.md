@@ -36,3 +36,9 @@ description: Goals Pro feature (API + my-profile Goals tab + Overview mini-card 
 - Card hidden entirely at zero goals (create CTA lives in the Goals tab); it also renders above the "No stats yet" empty state when goals exist but activities don't.
 - **Why:** user mandated client-never-recomputes as the failure condition and honest empty/exceeded states.
 - Guard: scripts/verify-goal-chart.js (values vs API + vs Goals-tab strings, switcher, mobile).
+
+## Sport-scoped streak goals (Aug 2026)
+- Streak goals now take a sport (Frequency-identical picker, "Any sport" + ALL_SPORTS). Semantics: sport-scoped streak = ALL-TIME current streak of days with an activity IN THAT SPORT (cross-training doesn't extend it); window stays deadline-only; sport=null is byte-identical to before.
+- **Implementation rule: filter-before-call.** `enrichGoal` filters activities by sport then calls the untouched `computeStreaks` — never add a sport parameter inside the six-caller shared helper. Empty filtered set → 0, never a sport-blind fallback (user-mandated edge).
+- No DDL, no validation change (validateGoalConfig already accepted sport on any type). Title copy: "14-day running streak" vs unchanged "14-day streak"; icon stays 🔥 for all streaks (frequency precedent); chart labels needed zero changes.
+- Guard: streak section in scripts/verify-goal-chart.js (NY-tz boundary activity, gap-break, never-logged-sport zero, profile/feed sport-blind parity).
