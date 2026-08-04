@@ -51,8 +51,10 @@ const HEX = {};
 SPORTS.forEach((s) => { COLORS[s.id] = { bar: s.colors.text, icon: s.emoji, name: s.label }; HEX[s.id] = s.colors.text; });
 
 const fills = (html) => [...html.matchAll(/(?:fill|background):?[="]*\s*(#[0-9A-Fa-f]{6})/g)].map((m) => m[1].toUpperCase());
-// ">NN%<" = printed legend percents only (style attrs also contain "100%").
-const legendPcts = (html) => [...html.matchAll(/>(\d+)%</g)].map((m) => parseInt(m[1], 10));
+// Legend percents render as ">NN%</span>" — in-slice labels are SVG <text>
+// (fill="#FFFFFF">NN%</text>) and style attrs contain "100%", so anchor on
+// the closing </span>.
+const legendPcts = (html) => [...html.matchAll(/>(\d+)%<\/span>/g)].map((m) => parseInt(m[1], 10));
 
 function fixedCases() {
   console.log('— builder fixed cases —');
@@ -87,8 +89,31 @@ function fixedCases() {
   // 12 sports: labels shrink to 9px, legend still lists all 12.
   const twelve = SPORTS.map((s, i) => ({ sport: s.id, sessions: i + 1, km: 0, hours: i * 0.5 }));
   const h12 = buildSportCharts(twelve, COLORS, false);
-  check('12 sports → 9px value labels', h12.includes('font-size="9"') && !h12.includes('font-size="10"'));
+  check('12 sports → 11px value labels', h12.includes('font-size="11"') && !h12.includes('font-size="13"'));
   check('12 sports → all 12 in legend', SPORTS.every((s) => h12.includes(s.label)));
+
+  // In-slice labels: 12/5/1/1 sessions → 63/27/5/5 (largest remainder).
+  // 63% and 27% fit (arc at label radius >= text width), the 5% slices do
+  // not; every sport still gets a legend row. Labels are white.
+  const h4 = buildSportCharts([
+    { sport: 'cycling', sessions: 12, km: 200, hours: 10 },
+    { sport: 'weightlifting', sessions: 5, km: 0, hours: 4 },
+    { sport: 'pickleball', sessions: 1, km: 0, hours: 1 },
+    { sport: 'golf', sessions: 1, km: 0, hours: 0 }
+  ], COLORS, false);
+  const inSlice = [...h4.matchAll(/fill="#FFFFFF">(\d+)%<\/text>/g)].map((m) => parseInt(m[1], 10));
+  check('63/27 in-slice, 5/5 omitted', JSON.stringify(inSlice.sort((a, b) => b - a)) === '[63,27]', JSON.stringify(inSlice));
+  check('legend still lists all four', JSON.stringify(legendPcts(h4)) === '[63,27,5,5]', JSON.stringify(legendPcts(h4)));
+  check('single sport → centered 100% label', /fill="#FFFFFF">100%<\/text>/.test(
+    buildSportCharts([{ sport: 'running', sessions: 5, km: 40, hours: 4 }], COLORS, false)));
+
+  // White in-slice text must clear WCAG AA (4.5) on every registry accent.
+  const linC = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const lumC = (h) => { const [R, G, B] = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)).map(linC); return 0.2126 * R + 0.7152 * G + 0.0722 * B; };
+  SPORTS.forEach((s) => {
+    const c = (1 + 0.05) / (lumC(s.colors.text) + 0.05);
+    check('white on ' + s.id + ' slice >= 4.5', c >= 4.5, c.toFixed(2));
+  });
 
   // Narrow flag: single column + legend below the pie (flex-direction:column
   // inside the pie panel).
@@ -97,7 +122,7 @@ function fixedCases() {
   check('narrow → pie legend stacks below', hn.includes('flex-direction:column;align-items:center;gap:10px'));
 
   // Rendered-color ΔE floor on the actual 12-sport output.
-  const used = [...new Set(fills(h12))].filter((f) => f !== '#374151'); // value-label ink isn't a sport channel
+  const used = [...new Set(fills(h12))].filter((f) => f !== '#374151' && f !== '#FFFFFF'); // label ink isn't a sport channel
   check('12 distinct sport colors rendered', used.length === 12, String(used.length));
   const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
   const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
@@ -190,7 +215,7 @@ async function e2e() {
 
       const got = await page.evaluate(() => {
         const svgs = [...document.querySelectorAll('#sp-stats-body svg[role="img"]')];
-        const fillsOf = (svg) => [...svg.querySelectorAll('[fill]')].map((el) => el.getAttribute('fill').toUpperCase()).filter((f) => f.startsWith('#') && f !== '#374151');
+        const fillsOf = (svg) => [...svg.querySelectorAll('[fill]')].map((el) => el.getAttribute('fill').toUpperCase()).filter((f) => f.startsWith('#') && f !== '#374151' && f !== '#FFFFFF');
         const texts = (svg) => [...svg.querySelectorAll('text')].map((t) => t.textContent.trim());
         const card = svgs[0] && svgs[0].closest('div[style*="border-radius"]');
         const grid = svgs[0] && svgs[0].closest('div[style*="grid-template-columns"]');
@@ -199,9 +224,13 @@ async function e2e() {
           sessionsLabels: svgs[0] ? texts(svgs[0]) : [],
           timeLabels: svgs[1] ? texts(svgs[1]) : [],
           pieFills: svgs[2] ? fillsOf(svgs[2]) : [],
+          pieTexts: svgs[2] ? texts(svgs[2]) : [],
           sessionsFills: svgs[0] ? fillsOf(svgs[0]) : [],
           timeFills: svgs[1] ? fillsOf(svgs[1]) : [],
           gridCols: grid ? getComputedStyle(grid).gridTemplateColumns.split(' ').length : 0,
+          legendPctSum: [...document.querySelectorAll('#sp-stats-body span')]
+            .map((el) => el.textContent.trim()).filter((t) => /^\d+%$/.test(t))
+            .reduce((a, t) => a + parseInt(t, 10), 0),
           cardText: card ? card.textContent : ''
         };
       });
@@ -215,8 +244,11 @@ async function e2e() {
       check(w + ': time labels match api (incl golf —)', timeLbls.every((v) => got.timeLabels.includes(v)), JSON.stringify(got.timeLabels));
       const kmStr = bd.filter((s) => s.km > 0).map((s) => s.km + ' km');
       check(w + ': table km figures match api', kmStr.every((v) => got.cardText.includes(v)), JSON.stringify(kmStr));
-      check(w + ': legend percentages sum to 100',
-        (got.cardText.match(/(\d+)%/g) || []).map((x) => parseInt(x, 10)).reduce((a, b) => a + b, 0) === 100);
+      // In-slice rule live: 57/29/14 all clear the fit threshold → three
+      // white in-slice labels matching the legend percentages.
+      const inSliceLive = (got.pieTexts || []).filter((t) => /^\d+%$/.test(t)).length;
+      check(w + ': in-slice labels where they fit (3 of 3 here)', inSliceLive === 3, String(inSliceLive));
+      check(w + ': legend percentages sum to 100', got.legendPctSum === 100, String(got.legendPctSum));
       // Color consistency: per-sport fill identical across all three SVGs and
       // equal to the registry hex.
       for (const s of bd) {

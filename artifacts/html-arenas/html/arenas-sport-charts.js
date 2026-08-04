@@ -32,16 +32,18 @@
   // ── Vertical bar chart (SVG) ──
   // rows: [{ sport, value, label }] — label printed above the bar ('—' for a
   // missing value, which renders a 2px stub). Emoji axis labels below.
-  function barChart(rows, colors, title, ariaLabel) {
+  function barChart(rows, colors, title, ariaLabel, narrow) {
     var n = rows.length;
-    var slotW = 28, gap = 6, padX = 8;
+    // Narrow keeps slimmer slots so a 12-sport chart doesn't scale down as
+    // hard when width:100% fits it to a phone viewport.
+    var slotW = narrow ? 30 : 40, gap = narrow ? 6 : 10, padX = 8;
     var W = padX * 2 + n * slotW + (n - 1) * gap;
-    var chartH = 120, labelH = 14, axisH = 20;
+    var chartH = 200, labelH = 20, axisH = 26;
     var H = labelH + chartH + axisH;
     var max = 0;
     rows.forEach(function (r) { if (r.value > max) max = r.value; });
     // Shrink value labels when 9+ bars squeeze the slots.
-    var vFont = n >= 9 ? 9 : 10;
+    var vFont = n >= 9 ? 11 : 13;
     var parts = [];
     rows.forEach(function (r, i) {
       var sc = colors[r.sport] || FALLBACK;
@@ -49,13 +51,13 @@
       var h = max > 0 && r.value > 0 ? Math.max(3, Math.round((r.value / max) * chartH)) : 2;
       var y = labelH + chartH - h;
       parts.push('<rect x="' + x + '" y="' + y + '" width="' + slotW + '" height="' + h + '" rx="3" fill="' + sc.bar + '"/>');
-      parts.push('<text x="' + (x + slotW / 2) + '" y="' + (y - 4) + '" text-anchor="middle" font-size="' + vFont + '" font-weight="700" font-family="ui-monospace,monospace" fill="#374151">' + esc(r.label) + '</text>');
-      parts.push('<text x="' + (x + slotW / 2) + '" y="' + (labelH + chartH + 15) + '" text-anchor="middle" font-size="12">' + sc.icon + '</text>');
+      parts.push('<text x="' + (x + slotW / 2) + '" y="' + (y - 5) + '" text-anchor="middle" font-size="' + vFont + '" font-weight="700" font-family="ui-monospace,monospace" fill="#374151">' + esc(r.label) + '</text>');
+      parts.push('<text x="' + (x + slotW / 2) + '" y="' + (labelH + chartH + 20) + '" text-anchor="middle" font-size="16">' + sc.icon + '</text>');
     });
     return (
       '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0">' +
       '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:' + W + 'px;display:block" role="img" aria-label="' + esc(ariaLabel) + '">' + parts.join('') + '</svg>' +
-      '<div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em">' + esc(title) + '</div>' +
+      '<div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em">' + esc(title) + '</div>' +
       '</div>'
     );
   }
@@ -73,11 +75,28 @@
       .slice(0, 100 - used)
       .forEach(function (d) { d.pct += 1; });
 
+    // In-slice percentage labels, only where legible: the label sits at
+    // mid-angle on radius 50 (of an 80 radius pie); it "fits" when the arc
+    // length there (slice angle x 50) >= estimated text width (7.2 viewBox
+    // units per character, bold 12) + 6 padding. Effectively >= ~9-10% for a
+    // two/three-character label. White text — every registry accent is dark
+    // enough that white clears WCAG AA on it (asserted by the verify script).
+    var sliceLabel = function (pct, midDeg) {
+      var txt = pct + '%';
+      var mid = (midDeg * Math.PI) / 180;
+      return '<text x="' + (100 + 50 * Math.cos(mid)).toFixed(2) + '" y="' + (100 + 50 * Math.sin(mid)).toFixed(2) +
+        '" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="700" font-family="ui-monospace,monospace" fill="#FFFFFF">' + txt + '</text>';
+    };
+    var fits = function (exact, pct) {
+      var theta = (exact / 100) * 2 * Math.PI;
+      return theta * 50 >= String(pct + '%').length * 7.2 + 6;
+    };
     var parts = [];
     if (data.length === 1) {
       // One sport = a full circle; that's the honest picture.
       var sc1 = colors[data[0].sport] || FALLBACK;
       parts.push('<circle cx="100" cy="100" r="80" fill="' + sc1.bar + '"/>');
+      parts.push('<text x="100" y="100" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="700" font-family="ui-monospace,monospace" fill="#FFFFFF">' + data[0].pct + '%</text>');
     } else {
       var cum = 0;
       data.forEach(function (d) {
@@ -94,18 +113,19 @@
           ' A80 80 0 ' + large + ' 1 ' + x1.toFixed(2) + ' ' + y1.toFixed(2) +
           ' Z" fill="' + sc.bar + '" stroke="white" stroke-width="2" stroke-linejoin="round"/>'
         );
+        if (fits(d.exact, d.pct)) parts.push(sliceLabel(d.pct, (a0 + a1) / 2));
       });
     }
     // Every sport in the legend (swatch · name · percent) — same legend scale
     // as the weekly-stack legend (14px swatch / 12px label).
     var legend = data.map(function (d) {
       var sc = colors[d.sport] || FALLBACK;
-      return '<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--gray-600);white-space:nowrap">' +
-        '<span style="width:14px;height:14px;border-radius:3px;background:' + sc.bar + ';flex-shrink:0"></span>' +
+      return '<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--gray-600);white-space:nowrap">' +
+        '<span style="width:16px;height:16px;border-radius:3px;background:' + sc.bar + ';flex-shrink:0"></span>' +
         '<span style="overflow:hidden;text-overflow:ellipsis">' + sc.icon + ' ' + esc(sc.name || d.sport) + '</span>' +
         '<span style="font-family:var(--mono);color:var(--gray-500);margin-left:auto">' + d.pct + '%</span></div>';
     }).join('');
-    var svg = '<svg viewBox="0 0 200 200" style="width:150px;height:150px;flex-shrink:0;display:block" role="img" aria-label="Share of sessions by sport">' + parts.join('') + '</svg>';
+    var svg = '<svg viewBox="0 0 200 200" style="width:220px;height:220px;flex-shrink:0;display:block" role="img" aria-label="Share of sessions by sport">' + parts.join('') + '</svg>';
     // Desktop: legend stacked to the pie's RIGHT. Narrow: legend BELOW the
     // pie — beside it would squeeze the pie on a 360px viewport.
     return (
@@ -114,9 +134,9 @@
         ? 'flex-direction:column;align-items:center;gap:10px'
         : 'align-items:center;gap:14px') + ';min-width:0">' +
       svg +
-      '<div style="display:flex;flex-direction:column;gap:5px;min-width:0' + (narrow ? ';align-self:stretch' : '') + '">' + legend + '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:6px;min-width:0' + (narrow ? ';align-self:stretch' : '') + '">' + legend + '</div>' +
       '</div>' +
-      '<div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em">Share of sessions</div>' +
+      '<div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em">Share of sessions</div>' +
       '</div>'
     );
   }
@@ -127,12 +147,12 @@
   function exactTable(rows, colors) {
     var body = rows.map(function (s) {
       var sc = colors[s.sport] || FALLBACK;
-      return '<div style="display:flex;align-items:center;gap:8px;padding:7px 14px;border-top:1px solid var(--gray-100);font-size:12px">' +
-        '<span style="width:10px;height:10px;border-radius:3px;background:' + sc.bar + ';flex-shrink:0"></span>' +
+      return '<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--gray-100);font-size:13px">' +
+        '<span style="width:12px;height:12px;border-radius:3px;background:' + sc.bar + ';flex-shrink:0"></span>' +
         '<span style="font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sc.icon + ' ' + esc(sc.name || s.sport) + '</span>' +
-        '<span style="font-family:var(--mono);color:var(--gray-500);width:86px;text-align:right;flex-shrink:0">' + s.sessions + ' session' + (s.sessions !== 1 ? 's' : '') + '</span>' +
-        '<span style="font-family:var(--mono);color:var(--gray-500);width:70px;text-align:right;flex-shrink:0">' + (s.km > 0 ? s.km + ' km' : '—') + '</span>' +
-        '<span style="font-family:var(--mono);color:var(--gray-500);width:52px;text-align:right;flex-shrink:0">' + (s.hours > 0 ? s.hours + 'h' : '—') + '</span>' +
+        '<span style="font-family:var(--mono);color:var(--gray-500);width:96px;text-align:right;flex-shrink:0">' + s.sessions + ' session' + (s.sessions !== 1 ? 's' : '') + '</span>' +
+        '<span style="font-family:var(--mono);color:var(--gray-500);width:78px;text-align:right;flex-shrink:0">' + (s.km > 0 ? s.km + ' km' : '—') + '</span>' +
+        '<span style="font-family:var(--mono);color:var(--gray-500);width:60px;text-align:right;flex-shrink:0">' + (s.hours > 0 ? s.hours + 'h' : '—') + '</span>' +
         '</div>';
     }).join('');
     return '<div>' + body + '</div>';
@@ -147,14 +167,14 @@
 
     var sessions = barChart(rows.map(function (s) {
       return { sport: s.sport, value: s.sessions, label: String(s.sessions) };
-    }), colors, 'Sessions', 'Sessions per sport');
+    }), colors, 'Sessions', 'Sessions per sport', narrow);
     var time = barChart(rows.map(function (s) {
       return { sport: s.sport, value: s.hours, label: s.hours > 0 ? s.hours + 'h' : '—' };
-    }), colors, 'Time', 'Hours per sport');
+    }), colors, 'Time', 'Hours per sport', narrow);
     var pie = piePanel(rows, colors, narrow);
 
     var cell = function (inner, last) {
-      return '<div style="padding:16px 14px;min-width:0;' +
+      return '<div style="padding:20px 16px;min-width:0;' +
         (narrow ? (last ? '' : 'border-bottom:var(--border)') : (last ? '' : 'border-right:var(--border)')) +
         '">' + inner + '</div>';
     };
