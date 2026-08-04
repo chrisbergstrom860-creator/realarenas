@@ -1954,14 +1954,15 @@ if (logHashMatch) {
 
       if (r.hero.activities === 0 && r.prs.length === 0) {
         // Goals with zero activities still chart honestly (goal bar vs a
-        // zero-stub actual) — the card renders above the empty-stats note.
+        // zero-stub actual) — the card sits at the bottom here too, below
+        // the empty-stats note, matching the tab's card-last placement.
         body.innerHTML =
-          (goalsActive.length ? '<div style="height:12px"></div>' + gvwCard() : '') +
           '<div style="text-align:center;padding:48px 24px">' +
           '<div style="font-size:36px;margin-bottom:12px">📊</div>' +
           '<div style="font-size:15px;font-weight:600;color:var(--gray-900);margin-bottom:6px">No stats yet</div>' +
           '<div style="font-size:13px;color:var(--gray-500);line-height:1.6">Log your first activity and your stats, streaks, and personal records will appear here.</div>' +
-          '</div>';
+          '</div>' +
+          gvwCard();
         return;
       }
 
@@ -2019,12 +2020,10 @@ if (logHashMatch) {
           '<div style="padding:12px 14px;border-right:var(--border);display:flex;align-items:center;gap:10px"><div style="font-size:18px">🏆</div><div><div style="font-size:15px;font-weight:700;font-family:var(--mono);line-height:1">' + r.streaks.longest + ' day' + (r.streaks.longest !== 1 ? 's' : '') + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px">Longest streak</div></div></div>' +
           '<div style="padding:12px 14px;display:flex;align-items:center;gap:10px"><div style="font-size:18px">📅</div><div><div style="font-size:15px;font-weight:700;font-family:var(--mono);line-height:1">' + r.streaks.avgPerWeek + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px">Avg sessions / week</div></div></div>' +
         '</div>' +
-        // Goals vs actual (top card — hidden entirely when there are no
-        // active goals; the create CTA lives in the Goals tab).
-        gvwCard() +
-        // Card order: By sport → Personal records → Weekly activity (chart
-        // moved to the bottom of the tab). Last card carries the 14px bottom
-        // margin to keep the spacing rhythm.
+        // Card order: By sport → Personal records → Weekly activity →
+        // Goals vs actual (moved to the bottom of the tab; hidden entirely
+        // when there are no active goals — the create CTA lives in the
+        // Goals tab, and no gap is left because gvwCard() returns '').
         (r.sportBreakdown.length > 0 ?
           '<div style="margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
             '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between"><div style="font-size:12px;font-weight:600">🏅 By sport</div><div style="font-size:11px;color:var(--gray-400)">sessions · distance · time</div></div>' +
@@ -2041,7 +2040,8 @@ if (logHashMatch) {
         '<div style="margin:0 12px 14px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
           '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div style="font-size:12px;font-weight:600">📊 Weekly activity · last ' + nWeeks + ' weeks</div><div style="display:flex;align-items:center;gap:6px">' + weekPill(6) + weekPill(12) + weekPill(24) + '<div style="font-size:11px;color:var(--gray-400);margin-left:4px">hours per week</div></div></div>' +
           weeklyStack +
-        '</div>';
+        '</div>' +
+        gvwCard();
     } catch (err) {
       body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Could not load stats.</div>';
     }

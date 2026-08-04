@@ -170,6 +170,14 @@ const localKey = (offsetDays) => {
         JSON.stringify(panels));
       check('@1280 panel titles: uppercase Weekly/Custom treatment', /Weekly/.test(panels[0].title) && /Custom/.test(panels[1].title), JSON.stringify(panels.map((p) => p.title)));
       check('@1280 pills gone (no view switcher)', await page.locator('#gvw-card .gvw-pill').count() === 0);
+      // Position: bottom of the tab — last card in the body, below Weekly activity.
+      const pos = await page.evaluate(() => {
+        const body = document.getElementById('sp-stats-body');
+        const card = document.getElementById('gvw-card');
+        const txt = body.textContent;
+        return { last: body.lastElementChild === card, afterWeekly: txt.indexOf('Weekly activity') < txt.indexOf('Goals vs actual') };
+      });
+      check('@1280 position: card is LAST, below Weekly activity', pos.last && pos.afterWeekly, JSON.stringify(pos));
       const bars = await readBars(page);
       check('@1280: 4 bar pairs (streak leaves the bar sections)', Object.keys(bars).length === 4, String(Object.keys(bars).length));
       for (const g of nonStreak) {
@@ -362,6 +370,11 @@ const localKey = (offsetDays) => {
       // Horizontal layout: bars are wider than tall.
       const first = bars[active[0].id];
       check(`@${w}: horizontal bars`, first.goal.w > first.goal.h, JSON.stringify(first.goal));
+      const mPos = await page.evaluate(() => {
+        const body = document.getElementById('sp-stats-body');
+        return body.lastElementChild === document.getElementById('gvw-card') && body.textContent.indexOf('Weekly activity') < body.textContent.indexOf('Goals vs actual');
+      });
+      check(`@${w}: card last, below Weekly activity`, mPos);
       const overflowX = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       check(`@${w}: no horizontal overflow`, overflowX <= 1, String(overflowX));
       check(`@${w}: zero console errors`, errors.length === 0, errors.join(' | '));
