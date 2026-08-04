@@ -86,7 +86,7 @@ function fixedCases() {
   check('empty breakdown → ""', buildSportCharts([], COLORS, false) === '');
   check('zero-session rows filtered → ""', buildSportCharts([{ sport: 'running', sessions: 0, km: 0, hours: 0 }], COLORS, false) === '');
 
-  // 12 sports: labels shrink to 9px, legend still lists all 12.
+  // 12 sports: value labels shrink to 11px, legend still lists all 12.
   const twelve = SPORTS.map((s, i) => ({ sport: s.id, sessions: i + 1, km: 0, hours: i * 0.5 }));
   const h12 = buildSportCharts(twelve, COLORS, false);
   check('12 sports → 11px value labels', h12.includes('font-size="11"') && !h12.includes('font-size="13"'));
@@ -115,11 +115,12 @@ function fixedCases() {
     check('white on ' + s.id + ' slice >= 4.5', c >= 4.5, c.toFixed(2));
   });
 
-  // Narrow flag: single column + legend below the pie (flex-direction:column
-  // inside the pie panel).
+  // Narrow flag: single column + slimmer 30px bar slots. (The pie legend now
+  // stacks below the pie at EVERY width — the pie fills its panel.)
   const hn = buildSportCharts(twelve, COLORS, true);
   check('narrow → single-column grid', hn.includes('grid-template-columns:1fr>') || hn.includes('grid-template-columns:1fr"'));
-  check('narrow → pie legend stacks below', hn.includes('flex-direction:column;align-items:center;gap:10px'));
+  check('narrow → 30px bar slots', hn.includes('width="30"') && !hn.includes('width="40"'));
+  check('legend stacks below the pie (all widths)', html.includes('align-self:stretch') && hn.includes('align-self:stretch'));
 
   // Rendered-color ΔE floor on the actual 12-sport output.
   const used = [...new Set(fills(h12))].filter((f) => f !== '#374151' && f !== '#FFFFFF'); // label ink isn't a sport channel

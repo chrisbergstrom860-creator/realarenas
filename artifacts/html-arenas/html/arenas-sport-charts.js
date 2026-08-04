@@ -36,7 +36,7 @@
     var n = rows.length;
     // Narrow keeps slimmer slots so a 12-sport chart doesn't scale down as
     // hard when width:100% fits it to a phone viewport.
-    var slotW = narrow ? 30 : 40, gap = narrow ? 6 : 10, padX = 8;
+    var slotW = narrow ? 30 : 40, gap = narrow ? 10 : 16, padX = 8;
     var W = padX * 2 + n * slotW + (n - 1) * gap;
     var chartH = 200, labelH = 20, axisH = 26;
     var H = labelH + chartH + axisH;
@@ -57,9 +57,15 @@
     return (
       '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0">' +
       '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:' + W + 'px;display:block" role="img" aria-label="' + esc(ariaLabel) + '">' + parts.join('') + '</svg>' +
-      '<div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em">' + esc(title) + '</div>' +
+      chartTitle(title) +
       '</div>'
     );
+  }
+
+  // Chart caption — 13px/700 in --gray-700 (#374151, ~10.3:1 on the white
+  // card) so the labels read as labels, not afterthoughts.
+  function chartTitle(title) {
+    return '<div style="font-size:13px;font-weight:700;color:var(--gray-700);text-transform:uppercase;letter-spacing:.05em">' + esc(title) + '</div>';
   }
 
   // ── Pie + full legend (largest-remainder percentages) ──
@@ -116,27 +122,27 @@
         if (fits(d.exact, d.pct)) parts.push(sliceLabel(d.pct, (a0 + a1) / 2));
       });
     }
-    // Every sport in the legend (swatch · name · percent) — same legend scale
-    // as the weekly-stack legend (14px swatch / 12px label).
+    // Every sport in the legend (swatch · name · percent) at 15px — the legend
+    // is the pie's only complete listing, so it reads as body text, not fine
+    // print.
     var legend = data.map(function (d) {
       var sc = colors[d.sport] || FALLBACK;
-      return '<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--gray-600);white-space:nowrap">' +
-        '<span style="width:16px;height:16px;border-radius:3px;background:' + sc.bar + ';flex-shrink:0"></span>' +
+      return '<div style="display:flex;align-items:center;gap:10px;font-size:15px;color:var(--gray-600);white-space:nowrap">' +
+        '<span style="width:18px;height:18px;border-radius:4px;background:' + sc.bar + ';flex-shrink:0"></span>' +
         '<span style="overflow:hidden;text-overflow:ellipsis">' + sc.icon + ' ' + esc(sc.name || d.sport) + '</span>' +
         '<span style="font-family:var(--mono);color:var(--gray-500);margin-left:auto">' + d.pct + '%</span></div>';
     }).join('');
-    var svg = '<svg viewBox="0 0 200 200" style="width:220px;height:220px;flex-shrink:0;display:block" role="img" aria-label="Share of sessions by sport">' + parts.join('') + '</svg>';
-    // Desktop: legend stacked to the pie's RIGHT. Narrow: legend BELOW the
-    // pie — beside it would squeeze the pie on a 360px viewport.
+    // The pie fills its panel width (capped at 300px) the way the bar charts
+    // fill theirs; viewBox is fixed at 200, so the in-slice labels scale up
+    // with the rendered size. Legend sits BELOW the pie at every width —
+    // beside it, a panel-filling pie would squeeze the legend (and vice
+    // versa).
+    var svg = '<svg viewBox="0 0 200 200" style="width:100%;max-width:300px;height:auto;display:block" role="img" aria-label="Share of sessions by sport">' + parts.join('') + '</svg>';
     return (
-      '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0">' +
-      '<div style="display:flex;' + (narrow
-        ? 'flex-direction:column;align-items:center;gap:10px'
-        : 'align-items:center;gap:14px') + ';min-width:0">' +
+      '<div style="display:flex;flex-direction:column;align-items:center;gap:12px;min-width:0">' +
       svg +
-      '<div style="display:flex;flex-direction:column;gap:6px;min-width:0' + (narrow ? ';align-self:stretch' : '') + '">' + legend + '</div>' +
-      '</div>' +
-      '<div style="font-size:11px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em">Share of sessions</div>' +
+      '<div style="display:flex;flex-direction:column;gap:7px;min-width:0;align-self:stretch">' + legend + '</div>' +
+      chartTitle('Share of sessions') +
       '</div>'
     );
   }
