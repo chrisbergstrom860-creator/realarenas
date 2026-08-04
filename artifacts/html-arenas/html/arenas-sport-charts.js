@@ -132,16 +132,25 @@
         '<span style="overflow:hidden;text-overflow:ellipsis">' + sc.icon + ' ' + esc(sc.name || d.sport) + '</span>' +
         '<span style="font-family:var(--mono);color:var(--gray-500);margin-left:auto">' + d.pct + '%</span></div>';
     }).join('');
-    // The pie fills its panel width (capped at 300px) the way the bar charts
-    // fill theirs; viewBox is fixed at 200, so the in-slice labels scale up
-    // with the rendered size. Legend sits BELOW the pie at every width —
-    // beside it, a panel-filling pie would squeeze the legend (and vice
-    // versa).
-    var svg = '<svg viewBox="0 0 200 200" style="width:100%;max-width:300px;height:auto;display:block" role="img" aria-label="Share of sessions by sport">' + parts.join('') + '</svg>';
+    // Desktop: legend BESIDE the pie (right, stacked, sized to its content so
+    // percentages sit next to their names) — a panel-filling pie pushed the
+    // legend below, stretched it to the panel width, and made the card much
+    // taller. The pie is sized to what fits alongside (230px). Narrow (the
+    // caller's <=480 flag, where the whole grid stacks to one column): legend
+    // below a column-filling pie (capped 300px) — beside it would squeeze the
+    // pie on a 360px viewport. viewBox stays 200, so in-slice label fit is
+    // size-invariant.
+    var svg = '<svg viewBox="0 0 200 200" style="' + (narrow
+      ? 'width:100%;max-width:300px;height:auto'
+      : 'width:230px;height:230px;flex-shrink:0') + ';display:block" role="img" aria-label="Share of sessions by sport">' + parts.join('') + '</svg>';
     return (
       '<div style="display:flex;flex-direction:column;align-items:center;gap:12px;min-width:0">' +
+      '<div style="display:flex;' + (narrow
+        ? 'flex-direction:column;align-items:center;gap:12px'
+        : 'align-items:center;gap:16px') + ';min-width:0' + (narrow ? ';align-self:stretch' : '') + '">' +
       svg +
-      '<div style="display:flex;flex-direction:column;gap:7px;min-width:0;align-self:stretch">' + legend + '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:7px;min-width:0' + (narrow ? ';align-self:stretch' : '') + '">' + legend + '</div>' +
+      '</div>' +
       chartTitle('Share of sessions') +
       '</div>'
     );

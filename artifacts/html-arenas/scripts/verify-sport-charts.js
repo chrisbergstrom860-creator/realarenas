@@ -115,12 +115,14 @@ function fixedCases() {
     check('white on ' + s.id + ' slice >= 4.5', c >= 4.5, c.toFixed(2));
   });
 
-  // Narrow flag: single column + slimmer 30px bar slots. (The pie legend now
-  // stacks below the pie at EVERY width — the pie fills its panel.)
+  // Narrow flag: single column + slimmer 30px bar slots + legend BELOW a
+  // column-filling pie. Desktop keeps the legend BESIDE a fixed 230px pie,
+  // sized to its content (no align-self:stretch).
   const hn = buildSportCharts(twelve, COLORS, true);
   check('narrow → single-column grid', hn.includes('grid-template-columns:1fr>') || hn.includes('grid-template-columns:1fr"'));
   check('narrow → 30px bar slots', hn.includes('width="30"') && !hn.includes('width="40"'));
-  check('legend stacks below the pie (all widths)', html.includes('align-self:stretch') && hn.includes('align-self:stretch'));
+  check('narrow → legend below column-filling pie', hn.includes('flex-direction:column;align-items:center;gap:12px') && hn.includes('max-width:300px'));
+  check('desktop → legend beside fixed 230px pie, content-sized', html.includes('width:230px;height:230px') && !html.includes('align-self:stretch'));
 
   // Rendered-color ΔE floor on the actual 12-sport output.
   const used = [...new Set(fills(h12))].filter((f) => f !== '#374151' && f !== '#FFFFFF'); // label ink isn't a sport channel
