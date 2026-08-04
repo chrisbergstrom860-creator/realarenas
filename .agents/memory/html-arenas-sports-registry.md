@@ -5,9 +5,12 @@ description: The SSOT SPORTS registry in sports.js — how sport data flows to s
 
 # html-arenas sports registry (SSOT — shipped July 2026)
 
-`artifacts/html-arenas/sports.js` is the single source of truth for the 12 sports
+`artifacts/html-arenas/sports.js` is the single source of truth for the 14 sports
 (running, cycling, climbing, swimming, football, hiking, weightlifting, yoga,
-golf, pickleball, basketball, hockey). Per sport: `id`, `label`, `emoji`,
+golf, pickleball, basketball, hockey, tennis, pilates — Session ③ Aug 2026:
+tennis mirrors hockey 40/session, pilates mirrors yoga 20/session; accents
+shade-searched under the white-AA cap AND own-bg AA — check BOTH, tennis's
+first pick failed own-bg at 4.40). Per sport: `id`, `label`, `emoji`,
 `colors {bg,text,border}`, `scoring {per,rate}`, `isDistance`, `fieldsConfig`.
 Everything sport-shaped derives from it. New-sport points are argued against the
 existing session-sport spread (comment block in sports.js): hockey 40 = swimming,
@@ -55,8 +58,13 @@ sport map in a page or the server.
   `/api/profile/update` (validated against KNOWN_SPORTS, dedup, cap =
   KNOWN_SPORTS.length so it auto-scales with the registry); consumed from
   `user_metadata.sports` by leaderboards/athletes/challenges and the feed.
-- Landing stat tile hard-codes the sport count ("12 Sports supported") — must
-  change with any sport expansion.
+- Landing hard-codes the sport count in TWO places (stats-bar tile + auth-left
+  "Sports" stat) — both must change with any sport expansion (now 14).
+- sports.test.js pins the registry (ids, points, labels, colors, icons) — run
+  `pnpm test` after ANY registry change; the July 2026 accent refresh missed it
+  and the color pin sat stale/failing until the Session ③ work fixed it.
+- E2E for new sports: scripts/verify-new-sports.js (browser /log flow + points
+  parity vs anchors + /how-points-work).
 - Golf is the only new sport with its own columns (`golf_strokes` int 1–300
   server-validated, `golf_course` text ≤120) — deliberately distinct from
   swimming's `stroke` column/`sf-stroke` input. Pickleball/basketball/hockey
