@@ -65,6 +65,15 @@ sport map in a page or the server.
   and the color pin sat stale/failing until the Session ③ work fixed it.
 - E2E for new sports: scripts/verify-new-sports.js (browser /log flow + points
   parity vs anchors + /how-points-work).
+- The four formerly-curated filter surfaces are now DERIVED (Session ③, never
+  re-hardcode): leaderboards tabs = viewer's profile sports (server injects
+  ARENAS_DATA.sports; trio fallback); club-dashboard pill rows = distinct
+  sports of the club's actual challenges/events (row hidden when empty);
+  challenges discover pills = sports present in loaded publicChallenges
+  (renderDiscoverSportPills; default relabeled "All sports" — old "All my
+  sports" label lied; leaderboards' same label is honest, kept); feed
+  fallbacks = no sport pills for sport-less users / full registry composer
+  chips. E2E: scripts/verify-curated-filters.js.
 - Golf is the only new sport with its own columns (`golf_strokes` int 1–300
   server-validated, `golf_course` text ≤120) — deliberately distinct from
   swimming's `stroke` column/`sf-stroke` input. Pickleball/basketball/hockey
