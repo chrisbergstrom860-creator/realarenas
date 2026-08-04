@@ -5239,6 +5239,7 @@ async function buildAthleteDirectory(viewerId) {
       name: disp.name,
       handle: disp.handle,
       avatar_url: disp.avatar_url || null,
+      banner_url: meta.banner_url || null,
       bio: meta.bio || null,
       location: meta.location || null,
       // Structured place for the client-side search text (country/state
@@ -6307,6 +6308,7 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
         state: display.state || '',
         stateName: display.stateName || '',
         avatar_url: meta.avatar_url || null,
+        banner_url: meta.banner_url || null,
         // Saved "Your sports" selection (registry ids) — drives the settings
         // sport chips' initial .on state.
         sports: Array.isArray(meta.sports) ? meta.sports : [],
@@ -7946,6 +7948,7 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
 
     // 3d. Storage avatar, then the auth user LAST.
     if (meta.avatar_url) await deleteAvatarObject(meta.avatar_url, 'users/' + uid);
+    if (meta.banner_url) await deleteAvatarObject(meta.banner_url, 'banners/' + uid);
     const { error: authErr } = await supabaseAdmin.auth.admin.deleteUser(uid);
     if (authErr) throw new Error('auth delete: ' + authErr.message);
 
@@ -8201,7 +8204,7 @@ async function deleteAvatarObject(url, expectedPrefix) {
 // The versioned filename is the cache-buster: Supabase public URLs are
 // CDN/browser cached, so a new path per upload propagates instantly, then the
 // previous object is deleted best-effort.
-async function processAndStoreAvatar({ buffer, prefix, previousUrl }) {
+async function processAndStoreAvatar({ buffer, prefix, previousUrl, width = 512, height = 512 }) {
   let meta;
   try {
     meta = await sharp(buffer).metadata();
@@ -8215,7 +8218,7 @@ async function processAndStoreAvatar({ buffer, prefix, previousUrl }) {
     e.status = 400;
     throw e;
   }
-  const webp = await sharp(buffer).rotate().resize(512, 512, { fit: 'cover' }).webp({ quality: 82 }).toBuffer();
+  const webp = await sharp(buffer).rotate().resize(width, height, { fit: 'cover' }).webp({ quality: 82 }).toBuffer();
   const objectPath = `${prefix}/${Date.now()}.webp`;
   const { error: upErr } = await supabaseAdmin.storage
     .from(AVATAR_BUCKET)
@@ -8287,6 +8290,65 @@ app.delete(BASE + '/api/profile/avatar', requireAuth, async (req, res) => {
   } catch (err) {
     console.log('Avatar remove error:', err.message);
     res.status(500).json({ error: 'Could not remove the photo' });
+  }
+});
+
+// Upload/replace the signed-in user's profile BANNER (the wide header
+// background). Same model as the avatar in every respect — public bucket,
+// versioned filename, user_metadata pointer (banner_url), lock, rollback —
+// only the prefix (banners/{uid}) and the 1600×400 4:1 output differ.
+app.post(BASE + '/api/profile/banner', requireAuth, avatarUploadSingle, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  if (!req.file || !req.file.buffer) return res.status(400).json({ error: 'No image file received' });
+  const lockKey = 'banner:' + req.user.id;
+  if (avatarUploadsInFlight.has(lockKey)) {
+    return res.status(429).json({ error: 'An upload is already in progress — give it a second' });
+  }
+  avatarUploadsInFlight.add(lockKey);
+  try {
+    const meta = Object.assign({}, req.user.user_metadata || {});
+    const prefix = 'banners/' + req.user.id;
+    const { publicUrl } = await processAndStoreAvatar({
+      buffer: req.file.buffer,
+      prefix,
+      previousUrl: meta.banner_url,
+      width: 1600,
+      height: 400
+    });
+    meta.banner_url = publicUrl;
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.user.id, { user_metadata: meta });
+    if (error) {
+      console.log('Banner metadata write error:', error.message);
+      await deleteAvatarObject(publicUrl, prefix).catch(() => {});
+      return res.status(500).json({ error: 'Could not save the new banner' });
+    }
+    res.json({ success: true, banner_url: publicUrl });
+  } catch (err) {
+    console.log('Banner upload error:', err.message);
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Upload failed' });
+  } finally {
+    avatarUploadsInFlight.delete(lockKey);
+  }
+});
+
+// Remove the banner: pointer null first, then best-effort object delete.
+app.delete(BASE + '/api/profile/banner', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  try {
+    const meta = Object.assign({}, req.user.user_metadata || {});
+    const oldUrl = meta.banner_url;
+    if (!oldUrl) return res.json({ success: true });
+    meta.banner_url = null;
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.user.id, { user_metadata: meta });
+    if (error) {
+      console.log('Banner remove error:', error.message);
+      return res.status(500).json({ error: 'Could not remove the banner' });
+    }
+    await deleteAvatarObject(oldUrl, 'banners/' + req.user.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.log('Banner remove error:', err.message);
+    res.status(500).json({ error: 'Could not remove the banner' });
   }
 });
 

@@ -57,6 +57,14 @@ button,select,input,textarea{font-family:var(--font)}
 
 /* ── PROFILE HERO ── */
 .profile-hero{background:var(--gray-900);position:relative;overflow:hidden}
+/* Banner band: display gated on .has-banner so an imageless profile pays
+   ZERO header height (today's exact layout). With a banner, the avatar pulls
+   up over its lower edge (margin = half the avatar + the inner top padding). */
+.hero-banner{display:none;position:relative;height:220px;background-size:cover;background-position:center;z-index:1}
+.profile-hero.has-banner .hero-banner{display:block}
+.profile-hero.has-banner .hero-av-wrap{margin-top:-108px;align-self:flex-start}
+.hero-banner-btn{position:absolute;top:12px;right:12px;z-index:2;width:30px;height:30px;border-radius:50%;background:white;border:2px solid var(--gray-900);display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;opacity:0;transition:opacity .2s;padding:0}
+.profile-hero:hover .hero-banner-btn{opacity:1}
 .hero-bg{position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,210,30,.08) 0%,transparent 50%),linear-gradient(225deg,rgba(249,115,22,.05) 0%,transparent 50%);pointer-events:none}
 .hero-bg-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);background-size:32px 32px;pointer-events:none}
 .hero-inner{max-width:1200px;margin:0 auto;padding:32px 28px;display:flex;align-items:flex-end;gap:24px;position:relative;z-index:1}
@@ -102,6 +110,9 @@ button,select,input,textarea{font-family:var(--font)}
   /* Column layout stretches children — pin the wrap to the avatar so the 📷
      edit overlay stays on the circle instead of floating to the header edge. */
   body:has(.bottom-nav) .hero-av-wrap{width:112px}
+  body:has(.bottom-nav) .hero-banner{height:120px}
+  body:has(.bottom-nav) .profile-hero.has-banner .hero-av-wrap{margin-top:-76px}
+  body:has(.bottom-nav) .hero-banner-btn{opacity:1}
   /* Following/Followers: stack people one per row — two columns cramps names
      at phone width. Name/subline left (ellipsized, never multi-line), button
      pinned right and never shrinking. Desktop keeps the 2-col grid above. */
@@ -397,9 +408,15 @@ button,select,input,textarea{font-family:var(--font)}
 
 <!-- PROFILE HERO (shared across tabs) -->
 <div id="profile-hero-section">
-  <div class="profile-hero">
+  <div class="profile-hero" id="profile-hero">
     <div class="hero-bg"></div>
     <div class="hero-bg-grid"></div>
+    <!-- Background banner (LinkedIn-style). Rendered ONLY when the user has
+         uploaded one — imageless profiles keep today's exact header (real or
+         absent; never stock). The 📷 button lives on the hero itself so the
+         affordance exists in both states. -->
+    <div class="hero-banner" id="hero-banner" role="img" aria-label="Profile background image"></div>
+    <button class="hero-banner-btn" id="hero-banner-btn" type="button" onclick="openModal('banner-photo')" title="Change background image">📷</button>
     <div class="hero-inner">
       <div class="hero-av-wrap">
         <div class="hero-av" onclick="openModal('avatar-photo')" title="Change profile photo">·</div>
@@ -701,6 +718,29 @@ button,select,input,textarea{font-family:var(--font)}
           <div id="ep-avatar-error" style="display:none;font-size:12px;color:#B91C1C;margin-top:6px"></div>
         </div>
         <input id="ep-avatar-file" type="file" accept="image/jpeg,image/png,image/webp" style="display:none">
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModals()">Done</button></div>
+  </div>
+</div>
+
+<!-- Background banner modal — mirrors the profile-photo modal. File select
+     routes through the shared crop overlay (4:1 frame, 1600×400 export). -->
+<div class="modal-overlay" id="modal-banner-photo" onclick="closeModals(event)">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Background image</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
+    <div class="modal-body">
+      <div style="display:flex;align-items:center;gap:14px;padding:12px;background:var(--gray-50);border-radius:var(--radius)">
+        <div id="bn-preview" style="width:128px;height:32px;border-radius:6px;background:var(--gray-900);background-size:cover;background-position:center;flex-shrink:0"></div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button id="bn-upload" class="btn btn-ghost btn-sm" type="button">Upload image</button>
+            <button id="bn-remove" class="btn btn-ghost btn-sm" type="button" style="display:none">Remove</button>
+          </div>
+          <div style="font-size:11px;color:var(--gray-500);margin-top:6px">JPG, PNG or WebP · max 5 MB · wide (4:1) works best</div>
+          <div id="bn-error" style="display:none;font-size:12px;color:#B91C1C;margin-top:6px"></div>
+        </div>
+        <input id="bn-file" type="file" accept="image/jpeg,image/png,image/webp" style="display:none">
       </div>
     </div>
     <div class="modal-footer"><button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModals()">Done</button></div>
@@ -2739,6 +2779,129 @@ if (logHashMatch) {
 })();
 </script>
 <script>
+// ── PROFILE BANNER (background image) ──
+// Mirrors the avatar flow but routes every file through the shared crop
+// overlay (4:1 frame, 1600×400 PNG export → server WebP). Caller contract
+// from the event-image work: monotonic selection token drops stale decode
+// callbacks, the {cancel} handle is invoked if the parent modal closes
+// mid-decode, raw-file upload happens ONLY on explicit decode fallback.
+(function () {
+  var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
+  var data = window.ARENAS_DATA || {};
+  var p = data.profile || {};
+
+  var hero = document.getElementById('profile-hero');
+  var band = document.getElementById('hero-banner');
+  var fileInput = document.getElementById('bn-file');
+  var uploadBtn = document.getElementById('bn-upload');
+  var removeBtn = document.getElementById('bn-remove');
+  var errEl = document.getElementById('bn-error');
+  var preview = document.getElementById('bn-preview');
+  if (!hero || !band || !fileInput || !uploadBtn) return;
+
+  var token = 0;          // monotonic selection token — stale callbacks drop
+  var cropHandle = null;  // {cancel} from arenasCrop.open, for mid-decode close
+
+  function applyBanner(url) {
+    hero.classList.toggle('has-banner', !!url);
+    band.style.backgroundImage = url ? 'url("' + encodeURI(url) + '")' : '';
+    if (preview) preview.style.backgroundImage = url ? 'url("' + encodeURI(url) + '")' : '';
+    if (removeBtn) removeBtn.style.display = url ? '' : 'none';
+  }
+  function showErr(msg) { if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; } }
+  function clearErr() { if (errEl) errEl.style.display = 'none'; }
+  function setBusy(busy) {
+    uploadBtn.disabled = busy;
+    uploadBtn.textContent = busy ? 'Uploading…' : 'Upload image';
+  }
+
+  function upload(blobOrFile, filename) {
+    setBusy(true);
+    var fd = new FormData();
+    fd.append('avatar', blobOrFile, filename || 'banner.png');
+    fetch(B + '/api/profile/banner', { method: 'POST', body: fd })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; });
+      })
+      .then(function (res) {
+        if (res.ok && res.j && res.j.success) {
+          applyBanner(res.j.banner_url);
+          if (window.showToast) showToast('✓ Background updated');
+        } else {
+          showErr((res.j && res.j.error) || 'Upload failed — please try again');
+        }
+      })
+      .catch(function () { showErr('Upload failed — please try again'); })
+      .then(function () { setBusy(false); fileInput.value = ''; });
+  }
+
+  uploadBtn.onclick = function () { clearErr(); fileInput.click(); };
+
+  fileInput.onchange = function () {
+    var f = fileInput.files && fileInput.files[0];
+    if (!f) return;
+    clearErr();
+    var myToken = ++token;
+    if (!window.arenasCrop) { upload(f, f.name); return; } // no cropper — raw path
+    cropHandle = window.arenasCrop.open({
+      file: f,
+      aspect: 4, outWidth: 1600, outHeight: 400,
+      onDone: function (blob) {
+        cropHandle = null;
+        if (myToken !== token) return;      // superseded selection — drop
+        upload(blob, 'banner.png');
+      },
+      onCancel: function (reason) {
+        cropHandle = null;
+        if (myToken !== token) return;
+        if (reason === 'decode') { upload(f, f.name); return; } // explicit fallback only
+        fileInput.value = '';               // plain dismissal — clear, no upload
+      }
+    });
+  };
+
+  if (removeBtn) removeBtn.onclick = function () {
+    clearErr();
+    removeBtn.disabled = true;
+    fetch(B + '/api/profile/banner', { method: 'DELETE' })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; });
+      })
+      .then(function (res) {
+        if (res.ok && res.j && res.j.success) {
+          applyBanner(null);
+          if (window.showToast) showToast('Background removed');
+        } else {
+          showErr((res.j && res.j.error) || 'Could not remove the background');
+        }
+      })
+      .catch(function () { showErr('Could not remove the background'); })
+      .then(function () { removeBtn.disabled = false; });
+  };
+
+  // If the banner modal closes while a crop decode is pending, cancel the
+  // handle so the overlay can't open orphaned above a closed parent. Wrap the
+  // page's shared closeModals; only act when the modal actually closed
+  // (inside-modal clicks bubble to the overlay's onclick too).
+  var _closeModals = window.closeModals;
+  if (typeof _closeModals === 'function') {
+    window.closeModals = function (e) {
+      var out = _closeModals(e);
+      var modal = document.getElementById('modal-banner-photo');
+      if (modal && !modal.classList.contains('open') && cropHandle) {
+        token++;
+        cropHandle.cancel();
+        cropHandle = null;
+        fileInput.value = '';
+      }
+      return out;
+    };
+  }
+
+  applyBanner(p.banner_url || null);
+})();
+</script>
+<script>
 // ── ATHLETES TAB (lazy directory) ──
 // The mobile path to browsing athletes: bottom nav → Profile → Athletes tab.
 // Fetches GET /api/athletes/directory on first open and renders through the
@@ -2849,6 +3012,7 @@ if (logHashMatch) {
 })();
 </script>
 <script src="/html/arenas-overlay.js" defer></script>
+<script src="/html/arenas-crop.js" defer></script>
 <script src="/html/arenas-hpw-modal.js" defer></script>
 </body>
 </html>

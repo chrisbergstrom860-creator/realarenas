@@ -111,6 +111,9 @@ button,select,input,textarea{font-family:var(--font)}
 .modal{max-width:560px;animation:fade-up .2s ease}
 .modal-header{padding:0;position:relative;border-bottom:none;display:block}
 .modal-hero{background:var(--gray-900);padding:24px;display:flex;gap:16px;align-items:flex-end;position:relative;overflow:hidden}
+/* Athlete's profile background banner — shown above the dark mini-hero when
+   the athlete has one (display toggled per-open; never a stock image). */
+.mh-banner{display:none;height:96px;background-size:cover;background-position:center;background-color:var(--gray-900)}
 .modal-hero::before{content:'';position:absolute;top:-60px;right:-60px;width:200px;height:200px;background:radial-gradient(circle,rgba(255,210,30,.12) 0%,transparent 70%);pointer-events:none}
 .mh-av{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;flex-shrink:0;border:3px solid rgba(255,255,255,.15);position:relative;z-index:1}
 .mh-info{flex:1;position:relative;z-index:1}
@@ -259,6 +262,7 @@ button,select,input,textarea{font-family:var(--font)}
 <div class="modal-overlay" id="modal-profile" onclick="closeModal(event)">
   <div class="modal">
     <div class="modal-header">
+      <div class="mh-banner" id="modal-banner"></div>
       <div class="modal-hero" id="modal-hero">
         <div class="mh-av" id="modal-av">·</div>
         <div class="mh-info">
@@ -400,6 +404,16 @@ function showToast(msg) {
     const av = window.ArenasAthleteCards.avColor(athletes.indexOf(a));
     const modal = document.getElementById('modal-profile');
     if (!modal) return;
+    const bannerEl = document.getElementById('modal-banner');
+    if (bannerEl) {
+      if (a.banner_url) {
+        bannerEl.style.backgroundImage = 'url("' + encodeURI(a.banner_url) + '")';
+        bannerEl.style.display = 'block';
+      } else {
+        bannerEl.style.backgroundImage = '';
+        bannerEl.style.display = 'none';
+      }
+    }
     const avEl = document.getElementById('modal-av');
     if (avEl) {
       avEl.innerHTML = window.avatarHtml.content(a.avatar_url || null, a.name || 'Athlete');

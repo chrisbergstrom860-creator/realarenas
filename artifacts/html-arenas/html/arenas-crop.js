@@ -20,18 +20,23 @@
 //     uploading a black banner.
 //
 // API:
-//   window.arenasCrop.open({ file, image, onDone(blob), onCancel })
+//   window.arenasCrop.open({ file, image, onDone(blob), onCancel,
+//                            aspect, outWidth, outHeight })
 //     file  : File from an <input type=file> (normal path)
 //     image : HTMLImageElement/ImageBitmap or data-URL string (test/geometry
 //             hook — file pickers can't be automated in the harness)
-//     onDone: called with the cropped 1200×400 PNG Blob after "Use this crop"
+//     onDone: called with the cropped PNG Blob after "Use this crop"
 //     onCancel: called when the overlay is dismissed without exporting
+//     aspect / outWidth / outHeight: optional frame ratio + export size.
+//       DEFAULTS ARE THE EVENT CONTRACT (3:1, 1200×400) — omitting them keeps
+//       every existing caller byte-identical. The profile banner passes
+//       { aspect: 4, outWidth: 1600, outHeight: 400 }.
 (function () {
   var OVERLAY_ID = 'arenas-crop-overlay';
   var MAX_WORK_EDGE = 2400;   // working-bitmap cap: well under iOS's ~4096
                               // edge / ~16.7M-pixel canvas limits, and ≥2× the
                               // 1200px output so quality is untouched.
-  var OUT_W = 1200, OUT_H = 400;
+  var DEFAULT_OUT_W = 1200, DEFAULT_OUT_H = 400, DEFAULT_ASPECT = 3;
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -134,14 +139,19 @@
     if (!window.arenasOverlay) { if (opts.onCancel) opts.onCancel(); return handle; }
     var done = false;
 
+    var ASPECT = opts.aspect > 0 ? opts.aspect : DEFAULT_ASPECT;
+    var OUT_W = opts.outWidth > 0 ? Math.round(opts.outWidth) : DEFAULT_OUT_W;
+    var OUT_H = opts.outHeight > 0 ? Math.round(opts.outHeight) : DEFAULT_OUT_H;
+    var RATIO_LABEL = (ASPECT % 1 === 0 ? ASPECT : ASPECT.toFixed(2)) + ':1';
+
     decodeAny(opts).then(function (work) {
       if (cancelled) return;             // torn down mid-decode — never open
       var imgW = work.width, imgH = work.height;
       // Crop rect in source coords: full extent on the constrained axis.
-      var vertical = (imgH / imgW) > (1 / 3);          // taller than 3:1 → vertical slice choice
-      var cropW = vertical ? imgW : Math.round(imgH * 3);
-      var cropH = vertical ? Math.round(imgW / 3) : imgH;
-      if (cropH > imgH) cropH = imgH;                   // exact-3:1 guard
+      var vertical = (imgH / imgW) > (1 / ASPECT);      // taller than the frame → vertical slice choice
+      var cropW = vertical ? imgW : Math.round(imgH * ASPECT);
+      var cropH = vertical ? Math.round(imgW / ASPECT) : imgH;
+      if (cropH > imgH) cropH = imgH;                   // exact-ratio guard
       if (cropW > imgW) cropW = imgW;
       var range = vertical ? (imgH - cropH) : (imgW - cropW); // px of freedom
       var offset = 0.5;                                 // 0..1, start centered
@@ -159,7 +169,7 @@
               (range > 0
                 ? (vertical ? 'Drag the photo (or use the slider) to pick the slice that\u2019s kept.'
                             : 'Drag the photo (or use the slider) to pick the section that\u2019s kept.')
-                : 'This photo is already 3:1 — nothing to choose.') +
+                : 'This photo is already ' + RATIO_LABEL + ' — nothing to choose.') +
             '</div>' +
             '<canvas id="ac-frame" style="display:block;width:100%;border-radius:8px;background:var(--gray-100);cursor:' +
               (range > 0 ? (vertical ? 'ns-resize' : 'ew-resize') : 'default') + ';touch-action:none"></canvas>' +
@@ -182,7 +192,7 @@
       // positioning preview; the EXPORT is always drawn from the working
       // bitmap at full 1200×400).
       var frameW = Math.max(1, Math.round(frame.getBoundingClientRect().width)) || 400;
-      var frameH = Math.round(frameW / 3);
+      var frameH = Math.round(frameW / ASPECT);
       frame.width = frameW; frame.height = frameH;
       frame.style.height = frameH + 'px';
 
