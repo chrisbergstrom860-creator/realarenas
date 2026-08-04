@@ -42,3 +42,10 @@ description: Goals Pro feature (API + my-profile Goals tab + Overview mini-card 
 - **Implementation rule: filter-before-call.** `enrichGoal` filters activities by sport then calls the untouched `computeStreaks` — never add a sport parameter inside the six-caller shared helper. Empty filtered set → 0, never a sport-blind fallback (user-mandated edge).
 - No DDL, no validation change (validateGoalConfig already accepted sport on any type). Title copy: "14-day running streak" vs unchanged "14-day streak"; icon stays 🔥 for all streaks (frequency precedent); chart labels needed zero changes.
 - Guard: streak section in scripts/verify-goal-chart.js (NY-tz boundary activity, gap-break, never-logged-sport zero, profile/feed sport-blind parity).
+
+## Goals-vs-actual card v2: sectioned panels + streak heat map (Aug 2026)
+- Pill switcher ("Overall" concept) DELETED. Card = header + period panel grid (Weekly/Monthly/Custom, By-sport panel chrome: equal 1fr cells, border-right dividers desktop / border-bottom stacked <=480px, uppercase title below content) + streak heat map section. Empty sections don't render; card absent iff zero active goals.
+- Full partition rule: non-streak goals → their period's panel (enum weekly/monthly/custom); ALL streak goals → heat map regardless of deadline period (streak progress is all-time; period is only a deadline).
+- Heat map semantics (user-mandated, NOT calendar days): target squares, min(streak,target) filled yellow+#E6B800 stroke left-to-right; broken streak = all gray; overshoot keeps squares full — the mono "N of M" text is the honest channel and must NEVER clamp ("4 of 3", user-pinned assertion).
+- Squares fixed 14px + 4px gap, flex-wrap for big targets (56/row @1280 card content 1034px, 17/row @360 content 334px) — never shrink squares.
+- Guards in verify-goal-chart.js (60 checks incl. panel absence, overshoot no-clamp, reset, 40-square wrap).
