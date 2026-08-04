@@ -21,13 +21,13 @@
 // - fieldsConfig: key into the activity-form per-sport field config
 //   (activitySportFields in arenas-my-profile.html). 1:1 with id today.
 const SPORTS = [
-  { id: 'running',       label: 'Running',       emoji: '🏃', colors: { bg: '#FFF7ED', text: '#9A3412', border: '#FDBA74' }, scoring: { per: 'km',      rate: 10 }, isDistance: true,  fieldsConfig: 'running' },
+  { id: 'running',       label: 'Running',       emoji: '🏃', colors: { bg: '#FFF7ED', text: '#C2410C', border: '#FDBA74' }, scoring: { per: 'km',      rate: 10 }, isDistance: true,  fieldsConfig: 'running' },
   { id: 'cycling',       label: 'Cycling',       emoji: '🚴', colors: { bg: '#EFF6FF', text: '#1E40AF', border: '#93C5FD' }, scoring: { per: 'km',      rate: 6  }, isDistance: true,  fieldsConfig: 'cycling' },
-  { id: 'climbing',      label: 'Climbing',      emoji: '🧗', colors: { bg: '#F5F3FF', text: '#5B21B6', border: '#C4B5FD' }, scoring: { per: 'session', rate: 50 }, isDistance: false, fieldsConfig: 'climbing' },
-  { id: 'swimming',      label: 'Swimming',      emoji: '🏊', colors: { bg: '#F0FDFA', text: '#134E4A', border: '#5EEAD4' }, scoring: { per: 'session', rate: 40 }, isDistance: true,  fieldsConfig: 'swimming' },
+  { id: 'climbing',      label: 'Climbing',      emoji: '🧗', colors: { bg: '#F5F3FF', text: '#6D28D9', border: '#C4B5FD' }, scoring: { per: 'session', rate: 50 }, isDistance: false, fieldsConfig: 'climbing' },
+  { id: 'swimming',      label: 'Swimming',      emoji: '🏊', colors: { bg: '#F0FDFA', text: '#0F766E', border: '#5EEAD4' }, scoring: { per: 'session', rate: 40 }, isDistance: true,  fieldsConfig: 'swimming' },
   { id: 'football',      label: 'Football',      emoji: '⚽', colors: { bg: '#ECFDF5', text: '#166534', border: '#86EFAC' }, scoring: { per: 'session', rate: 30 }, isDistance: false, fieldsConfig: 'football' },
-  { id: 'hiking',        label: 'Hiking',        emoji: '🥾', colors: { bg: '#FAEEDA', text: '#633806', border: '#EF9F27' }, scoring: { per: 'session', rate: 30 }, isDistance: true,  fieldsConfig: 'hiking' },
-  { id: 'weightlifting', label: 'Weightlifting', emoji: '🏋️', colors: { bg: '#FEF9C3', text: '#854D0E', border: '#FDE047' }, scoring: { per: 'session', rate: 20 }, isDistance: false, fieldsConfig: 'weightlifting' },
+  { id: 'hiking',        label: 'Hiking',        emoji: '🥾', colors: { bg: '#FAEEDA', text: '#57534E', border: '#EF9F27' }, scoring: { per: 'session', rate: 30 }, isDistance: true,  fieldsConfig: 'hiking' },
+  { id: 'weightlifting', label: 'Weightlifting', emoji: '🏋️', colors: { bg: '#FEF9C3', text: '#713F12', border: '#FDE047' }, scoring: { per: 'session', rate: 20 }, isDistance: false, fieldsConfig: 'weightlifting' },
   { id: 'yoga',          label: 'Yoga',          emoji: '🧘', colors: { bg: '#FBEAF0', text: '#72243E', border: '#F4C0D1' }, scoring: { per: 'session', rate: 20 }, isDistance: false, fieldsConfig: 'yoga' },
   // ── Session ② additions (July 2026) — all per-session scoring, no distance
   // goals. Rates argued against the existing session-sport spread (climbing 50
@@ -37,10 +37,10 @@ const SPORTS = [
   // golf 30 = hiking/football (4+ hours, ~10km walked — long duration, low
   // intensity); pickleball 25 above weightlifting/yoga 20 (real cardio, but
   // lighter than the field-sport sessions).
-  { id: 'golf',          label: 'Golf',          emoji: '⛳', colors: { bg: '#F7FEE7', text: '#3F6212', border: '#BEF264' }, scoring: { per: 'session', rate: 30 }, isDistance: false, fieldsConfig: 'golf' },
+  { id: 'golf',          label: 'Golf',          emoji: '⛳', colors: { bg: '#F7FEE7', text: '#4D7C0F', border: '#BEF264' }, scoring: { per: 'session', rate: 30 }, isDistance: false, fieldsConfig: 'golf' },
   { id: 'pickleball',    label: 'Pickleball',    emoji: '🏓', colors: { bg: '#ECFEFF', text: '#155E75', border: '#67E8F9' }, scoring: { per: 'session', rate: 25 }, isDistance: false, fieldsConfig: 'pickleball' },
-  { id: 'basketball',    label: 'Basketball',    emoji: '🏀', colors: { bg: '#FFFBEB', text: '#92400E', border: '#FCD34D' }, scoring: { per: 'session', rate: 35 }, isDistance: false, fieldsConfig: 'basketball' },
-  { id: 'hockey',        label: 'Hockey',        emoji: '🏒', colors: { bg: '#F1F5F9', text: '#334155', border: '#94A3B8' }, scoring: { per: 'session', rate: 40 }, isDistance: false, fieldsConfig: 'hockey' }
+  { id: 'basketball',    label: 'Basketball',    emoji: '🏀', colors: { bg: '#FFFBEB', text: '#A3412C', border: '#FCD34D' }, scoring: { per: 'session', rate: 35 }, isDistance: false, fieldsConfig: 'basketball' },
+  { id: 'hockey',        label: 'Hockey',        emoji: '🏒', colors: { bg: '#F1F5F9', text: '#1E293B', border: '#94A3B8' }, scoring: { per: 'session', rate: 40 }, isDistance: false, fieldsConfig: 'hockey' }
 ];
 
 // Leaderboard points per sport — derived; must stay identical to the historic

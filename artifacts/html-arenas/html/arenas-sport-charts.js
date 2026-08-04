@@ -1,0 +1,168 @@
+// Shared "By sport" charts builder for the Stats & PRs tab (and its verify
+// harness). Hand-rolled SVG — no chart library, same approach as the weekly
+// stack and the old pie.
+//
+// Three charts: Sessions (vertical bars), Time (vertical bars, hours), Share
+// of sessions (flat pie + a legend listing EVERY sport — swatch, name,
+// percent). One color per sport from the sports registry (colors.text), the
+// same hex in all three charts so the eye connects them without a per-chart
+// legend. A compact table below carries the exact figures — sessions, km
+// (distance would otherwise be dropped by the charts), time.
+//
+// Percentages: largest-remainder rounding (carried over from arenas-pie.js)
+// so the printed whole numbers always sum to exactly 100. Geometry uses the
+// exact fractional shares.
+//
+// States: an empty breakdown returns '' (the caller's card gate owns that
+// case); a single sport renders one labelled bar per chart and a full
+// <circle> pie (an SVG arc cannot draw a 360° sweep); a sport with sessions
+// but no recorded time keeps its slot in the Time chart — 2px baseline stub
+// in the sport's color with "—" above it, so the sport stays aligned across
+// charts instead of silently vanishing.
+(function () {
+  'use strict';
+
+  var esc = function (t) {
+    return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+  var FALLBACK = { bar: '#6B7280', icon: '🏅', name: '' };
+
+  // ── Vertical bar chart (SVG) ──
+  // rows: [{ sport, value, label }] — label printed above the bar ('—' for a
+  // missing value, which renders a 2px stub). Emoji axis labels below.
+  function barChart(rows, colors, title, ariaLabel) {
+    var n = rows.length;
+    var slotW = 28, gap = 6, padX = 8;
+    var W = padX * 2 + n * slotW + (n - 1) * gap;
+    var chartH = 120, labelH = 14, axisH = 20;
+    var H = labelH + chartH + axisH;
+    var max = 0;
+    rows.forEach(function (r) { if (r.value > max) max = r.value; });
+    // Shrink value labels when 9+ bars squeeze the slots.
+    var vFont = n >= 9 ? 9 : 10;
+    var parts = [];
+    rows.forEach(function (r, i) {
+      var sc = colors[r.sport] || FALLBACK;
+      var x = padX + i * (slotW + gap);
+      var h = max > 0 && r.value > 0 ? Math.max(3, Math.round((r.value / max) * chartH)) : 2;
+      var y = labelH + chartH - h;
+      parts.push('<rect x="' + x + '" y="' + y + '" width="' + slotW + '" height="' + h + '" rx="3" fill="' + sc.bar + '"/>');
+      parts.push('<text x="' + (x + slotW / 2) + '" y="' + (y - 4) + '" text-anchor="middle" font-size="' + vFont + '" font-weight="700" font-family="ui-monospace,monospace" fill="#374151">' + esc(r.label) + '</text>');
+      parts.push('<text x="' + (x + slotW / 2) + '" y="' + (labelH + chartH + 15) + '" text-anchor="middle" font-size="12">' + sc.icon + '</text>');
+    });
+    return (
+      '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0">' +
+      '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:' + W + 'px;display:block" role="img" aria-label="' + esc(ariaLabel) + '">' + parts.join('') + '</svg>' +
+      '<div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em">' + esc(title) + '</div>' +
+      '</div>'
+    );
+  }
+
+  // ── Pie + full legend (largest-remainder percentages) ──
+  function piePanel(rows, colors, narrow) {
+    var total = rows.reduce(function (a, s) { return a + s.sessions; }, 0);
+    var data = rows.map(function (s) {
+      var exact = (s.sessions / total) * 100;
+      return { sport: s.sport, exact: exact, pct: Math.floor(exact) };
+    });
+    var used = data.reduce(function (a, d) { return a + d.pct; }, 0);
+    data.slice()
+      .sort(function (a, b) { return (b.exact - Math.floor(b.exact)) - (a.exact - Math.floor(a.exact)); })
+      .slice(0, 100 - used)
+      .forEach(function (d) { d.pct += 1; });
+
+    var parts = [];
+    if (data.length === 1) {
+      // One sport = a full circle; that's the honest picture.
+      var sc1 = colors[data[0].sport] || FALLBACK;
+      parts.push('<circle cx="100" cy="100" r="80" fill="' + sc1.bar + '"/>');
+    } else {
+      var cum = 0;
+      data.forEach(function (d) {
+        var sc = colors[d.sport] || FALLBACK;
+        var a0 = (cum / 100) * 360 - 90;
+        cum += d.exact;
+        var a1 = (cum / 100) * 360 - 90;
+        var r0 = (a0 * Math.PI) / 180, r1 = (a1 * Math.PI) / 180;
+        var x0 = 100 + 80 * Math.cos(r0), y0 = 100 + 80 * Math.sin(r0);
+        var x1 = 100 + 80 * Math.cos(r1), y1 = 100 + 80 * Math.sin(r1);
+        var large = a1 - a0 > 180 ? 1 : 0;
+        parts.push(
+          '<path d="M100 100 L' + x0.toFixed(2) + ' ' + y0.toFixed(2) +
+          ' A80 80 0 ' + large + ' 1 ' + x1.toFixed(2) + ' ' + y1.toFixed(2) +
+          ' Z" fill="' + sc.bar + '" stroke="white" stroke-width="2" stroke-linejoin="round"/>'
+        );
+      });
+    }
+    // Every sport in the legend (swatch · name · percent) — same legend scale
+    // as the weekly-stack legend (14px swatch / 12px label).
+    var legend = data.map(function (d) {
+      var sc = colors[d.sport] || FALLBACK;
+      return '<div style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--gray-600);white-space:nowrap">' +
+        '<span style="width:14px;height:14px;border-radius:3px;background:' + sc.bar + ';flex-shrink:0"></span>' +
+        '<span style="overflow:hidden;text-overflow:ellipsis">' + sc.icon + ' ' + esc(sc.name || d.sport) + '</span>' +
+        '<span style="font-family:var(--mono);color:var(--gray-500);margin-left:auto">' + d.pct + '%</span></div>';
+    }).join('');
+    var svg = '<svg viewBox="0 0 200 200" style="width:150px;height:150px;flex-shrink:0;display:block" role="img" aria-label="Share of sessions by sport">' + parts.join('') + '</svg>';
+    // Desktop: legend stacked to the pie's RIGHT. Narrow: legend BELOW the
+    // pie — beside it would squeeze the pie on a 360px viewport.
+    return (
+      '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0">' +
+      '<div style="display:flex;' + (narrow
+        ? 'flex-direction:column;align-items:center;gap:10px'
+        : 'align-items:center;gap:14px') + ';min-width:0">' +
+      svg +
+      '<div style="display:flex;flex-direction:column;gap:5px;min-width:0' + (narrow ? ';align-self:stretch' : '') + '">' + legend + '</div>' +
+      '</div>' +
+      '<div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.05em">Share of sessions</div>' +
+      '</div>'
+    );
+  }
+
+  // ── Compact exact-figures table (sessions · km · time) ──
+  // Distance lives HERE: the three charts don't carry km, and dropping it
+  // silently was ruled out. "—" for no distance / no recorded time.
+  function exactTable(rows, colors) {
+    var body = rows.map(function (s) {
+      var sc = colors[s.sport] || FALLBACK;
+      return '<div style="display:flex;align-items:center;gap:8px;padding:7px 14px;border-top:1px solid var(--gray-100);font-size:12px">' +
+        '<span style="width:10px;height:10px;border-radius:3px;background:' + sc.bar + ';flex-shrink:0"></span>' +
+        '<span style="font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sc.icon + ' ' + esc(sc.name || s.sport) + '</span>' +
+        '<span style="font-family:var(--mono);color:var(--gray-500);width:86px;text-align:right;flex-shrink:0">' + s.sessions + ' session' + (s.sessions !== 1 ? 's' : '') + '</span>' +
+        '<span style="font-family:var(--mono);color:var(--gray-500);width:70px;text-align:right;flex-shrink:0">' + (s.km > 0 ? s.km + ' km' : '—') + '</span>' +
+        '<span style="font-family:var(--mono);color:var(--gray-500);width:52px;text-align:right;flex-shrink:0">' + (s.hours > 0 ? s.hours + 'h' : '—') + '</span>' +
+        '</div>';
+    }).join('');
+    return '<div>' + body + '</div>';
+  }
+
+  // breakdown: [{ sport, sessions, km, hours }] (server order preserved)
+  // colors:    { sportId: { bar, icon, name } } from the sports registry
+  // narrow:    true stacks the three charts vertically (mobile)
+  window.buildSportCharts = function (breakdown, colors, narrow) {
+    var rows = (breakdown || []).filter(function (s) { return s.sessions > 0; });
+    if (rows.length === 0) return '';
+
+    var sessions = barChart(rows.map(function (s) {
+      return { sport: s.sport, value: s.sessions, label: String(s.sessions) };
+    }), colors, 'Sessions', 'Sessions per sport');
+    var time = barChart(rows.map(function (s) {
+      return { sport: s.sport, value: s.hours, label: s.hours > 0 ? s.hours + 'h' : '—' };
+    }), colors, 'Time', 'Hours per sport');
+    var pie = piePanel(rows, colors, narrow);
+
+    var cell = function (inner, last) {
+      return '<div style="padding:16px 14px;min-width:0;' +
+        (narrow ? (last ? '' : 'border-bottom:var(--border)') : (last ? '' : 'border-right:var(--border)')) +
+        '">' + inner + '</div>';
+    };
+    return (
+      '<div style="display:grid;grid-template-columns:' + (narrow ? '1fr' : '1fr 1fr 1.25fr') + '">' +
+      cell(sessions) + cell(time) + cell(pie, true) +
+      '</div>' +
+      '<div style="border-top:var(--border)">' + exactTable(rows, colors) + '</div>'
+    );
+  };
+})();

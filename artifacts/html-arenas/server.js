@@ -278,10 +278,11 @@ app.get(['/html/arenas-stat-tiles.js', '/arenas-stat-tiles.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-stat-tiles.js'));
 });
 
-// Shared "By sport" pie builder (Stats & PRs tab + visual harness). Dual-path
-// as above.
-app.get(['/html/arenas-pie.js', '/arenas-pie.js'], (req, res) => {
-  res.sendFile(path.join(HTML, 'arenas-pie.js'));
+// Shared "By sport" three-chart builder (Stats & PRs tab + verify harness).
+// Dual-path as above. (Replaced arenas-pie.js — its arc + largest-remainder
+// logic moved into this module.)
+app.get(['/html/arenas-sport-charts.js', '/arenas-sport-charts.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-sport-charts.js'));
 });
 
 // Shared "Weekly activity" stacked-column builder (Stats & PRs tab + visual

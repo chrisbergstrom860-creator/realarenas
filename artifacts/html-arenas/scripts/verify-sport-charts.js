@@ -1,0 +1,249 @@
+// Verifies the redesigned "By sport" card (shared builder:
+// html/arenas-sport-charts.js — three charts + exact-figures table).
+//
+// 1. Builder fixed cases (real module in a sandbox): largest-remainder
+//    percentages sum to exactly 100 and match hand-computed shares; registry
+//    color per sport reused across Sessions bars, Time bars, pie slice,
+//    legend swatch, and table swatch; single sport = full <circle>; empty /
+//    zero-session breakdown = ''; sessions-without-time = "—" label + 2px
+//    stub in the sport color; distance figures land in the table ("—" when
+//    none); legend lists EVERY sport; 12-sport render shrinks value labels.
+// 2. Rendered-color distinguishability: every fill the builder emits for a
+//    12-sport breakdown stays pairwise CIE76 ΔE >= 20 (same floor as the
+//    registry guard, but measured on the actual markup output).
+// 3. E2E: seeds a multi-sport user (incl. a no-duration sport), logs in, and
+//    asserts the live profile page at 1280/414/380/360 renders exactly three
+//    chart SVGs whose bar labels, legend percentages, and table figures match
+//    /api/profile/stats EXACTLY; per-sport fill hex identical across all
+//    three SVGs and equal to the registry; mobile stacks the charts (single
+//    column) with the pie legend BELOW the pie; zero console errors.
+//    Cleans the seeded user up afterwards (error-checked).
+//
+// Run with the dev server up: node artifacts/html-arenas/scripts/verify-sport-charts.js
+import fs from 'fs';
+import path from 'path';
+import vm from 'vm';
+import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+import { createClient } from '@supabase/supabase-js';
+import { launchBrowser } from './lib/mobile-geometry.js';
+
+const require = createRequire(import.meta.url);
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const BASE_URL = 'http://localhost:80/html';
+const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+let failures = 0;
+function check(name, ok, detail) {
+  if (ok) console.log('  ok  ' + name);
+  else { failures++; console.log('FAIL  ' + name + (detail ? ' — ' + detail : '')); }
+}
+
+// ── Load the real builder ──
+const sandbox = { window: {} };
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(path.join(ROOT, 'html', 'arenas-sport-charts.js'), 'utf8'), sandbox);
+const buildSportCharts = sandbox.window.buildSportCharts;
+
+const SPORTS = require(path.join(ROOT, 'sports.js')).SPORTS;
+const COLORS = {};
+const HEX = {};
+SPORTS.forEach((s) => { COLORS[s.id] = { bar: s.colors.text, icon: s.emoji, name: s.label }; HEX[s.id] = s.colors.text; });
+
+const fills = (html) => [...html.matchAll(/(?:fill|background):?[="]*\s*(#[0-9A-Fa-f]{6})/g)].map((m) => m[1].toUpperCase());
+// ">NN%<" = printed legend percents only (style attrs also contain "100%").
+const legendPcts = (html) => [...html.matchAll(/>(\d+)%</g)].map((m) => parseInt(m[1], 10));
+
+function fixedCases() {
+  console.log('— builder fixed cases —');
+  // 8/3/1 → exact 66.667/25/8.333 → largest remainder → 67/25/8.
+  let html = buildSportCharts([
+    { sport: 'cycling', sessions: 8, km: 120, hours: 6.5 },
+    { sport: 'weightlifting', sessions: 3, km: 0, hours: 2.5 },
+    { sport: 'golf', sessions: 1, km: 0, hours: 0 }
+  ], COLORS, false);
+  const pcts = legendPcts(html);
+  check('8/3/1 legend → 67/25/8 (sums 100)', JSON.stringify(pcts) === '[67,25,8]', JSON.stringify(pcts));
+  check('three chart SVGs', (html.match(/<svg /g) || []).length === 3);
+  for (const id of ['cycling', 'weightlifting', 'golf']) {
+    const n = fills(html).filter((f) => f === HEX[id].toUpperCase()).length;
+    // sessions bar + time bar + slice + legend swatch + table swatch = 5
+    check(id + ' registry hex ' + HEX[id] + ' appears in all 5 slots', n === 5, 'found ' + n);
+  }
+  check('golf zero hours → "—" label above stub', />—<\/text>/.test(html));
+  check('golf zero hours → 2px stub bar', /height="2" rx="3" fill="#4D7C0F"/.test(html));
+  check('table: cycling 120 km exact', html.includes('120 km'));
+  check('table: no-distance sports show —', /—<\/span>/.test(html));
+  check('table: golf zero hours —', (html.match(/>—<\/span>/g) || []).length >= 3);
+  check('sessions values above bars (8,3,1)', />8<\/text>/.test(html) && />3<\/text>/.test(html) && />1<\/text>/.test(html));
+  check('legend lists every sport', ['Cycling', 'Weightlifting', 'Golf'].every((n) => html.includes(n)));
+
+  // Honest states.
+  check('single sport → full circle', /<circle cx="100" cy="100" r="80" fill="#C2410C"/.test(
+    buildSportCharts([{ sport: 'running', sessions: 5, km: 40, hours: 4 }], COLORS, false)));
+  check('empty breakdown → ""', buildSportCharts([], COLORS, false) === '');
+  check('zero-session rows filtered → ""', buildSportCharts([{ sport: 'running', sessions: 0, km: 0, hours: 0 }], COLORS, false) === '');
+
+  // 12 sports: labels shrink to 9px, legend still lists all 12.
+  const twelve = SPORTS.map((s, i) => ({ sport: s.id, sessions: i + 1, km: 0, hours: i * 0.5 }));
+  const h12 = buildSportCharts(twelve, COLORS, false);
+  check('12 sports → 9px value labels', h12.includes('font-size="9"') && !h12.includes('font-size="10"'));
+  check('12 sports → all 12 in legend', SPORTS.every((s) => h12.includes(s.label)));
+
+  // Narrow flag: single column + legend below the pie (flex-direction:column
+  // inside the pie panel).
+  const hn = buildSportCharts(twelve, COLORS, true);
+  check('narrow → single-column grid', hn.includes('grid-template-columns:1fr>') || hn.includes('grid-template-columns:1fr"'));
+  check('narrow → pie legend stacks below', hn.includes('flex-direction:column;align-items:center;gap:10px'));
+
+  // Rendered-color ΔE floor on the actual 12-sport output.
+  const used = [...new Set(fills(h12))].filter((f) => f !== '#374151'); // value-label ink isn't a sport channel
+  check('12 distinct sport colors rendered', used.length === 12, String(used.length));
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const lab = (hex) => {
+    const [R, G, B] = rgb(hex).map(lin);
+    const X = (0.4124 * R + 0.3576 * G + 0.1805 * B) / 0.95047;
+    const Y = 0.2126 * R + 0.7152 * G + 0.0722 * B;
+    const Z = (0.0193 * R + 0.1192 * G + 0.9505 * B) / 1.08883;
+    const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+    const [fx, fy, fz] = [X, Y, Z].map(f);
+    return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+  };
+  let min = Infinity, pair = '';
+  for (let i = 0; i < used.length; i++) for (let j = i + 1; j < used.length; j++) {
+    const A = lab(used[i]), B = lab(used[j]);
+    const d = Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]);
+    if (d < min) { min = d; pair = used[i] + '/' + used[j]; }
+  }
+  check('rendered pairwise ΔE >= 20', min >= 20, min.toFixed(1) + ' (' + pair + ')');
+}
+
+// ── E2E ──
+const EMAIL = 'vsc-user@arenas-test.dev';
+const PW = 'ArenasTest!234';
+async function e2e() {
+  console.log('— e2e (live page vs /api/profile/stats) —');
+  // All seeding happens INSIDE the try so the finally cleanup always runs —
+  // a mid-seed or login failure must not orphan the fixed-email account.
+  let uid = null;
+  let browser = null;
+  try {
+  const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
+  for (const u of (data && data.users) || []) if (u.email === EMAIL) {
+    await admin.from('activities').delete().eq('user_id', u.id);
+    await admin.auth.admin.deleteUser(u.id);
+  }
+  const { data: created, error: mkErr } = await admin.auth.admin.createUser({
+    email: EMAIL, password: PW, email_confirm: true,
+    user_metadata: { name: 'Vsc Charts', handle: 'vsc_charts' }
+  });
+  check('create user', !mkErr, mkErr && mkErr.message);
+  if (mkErr) throw new Error('createUser failed');
+  uid = created.user.id;
+
+  const today = new Date();
+  const day = (back) => new Date(today.getTime() - back * 86400000).toISOString().slice(0, 10) + 'T12:00:00Z';
+  const seed = [];
+  // running 4×45min w/ 8km, cycling 2×90min w/ 30km, golf 1 with NO duration.
+  for (let i = 0; i < 4; i++) seed.push({ user_id: uid, sport: 'running', title: 'Run ' + i, date: day(i), duration: '00:45', distance: '8 km' });
+  for (let i = 0; i < 2; i++) seed.push({ user_id: uid, sport: 'cycling', title: 'Ride ' + i, date: day(i + 4), duration: '01:30', distance: '30 km' });
+  seed.push({ user_id: uid, sport: 'golf', title: 'Round', date: day(6), duration: null, distance: null });
+  const { error: iErr } = await admin.from('activities').insert(seed);
+  check('insert activities', !iErr, iErr && iErr.message);
+  if (iErr) throw new Error('insert failed');
+
+  const r = await fetch(BASE_URL + '/auth/login', {
+    method: 'POST', redirect: 'manual',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `email=${encodeURIComponent(EMAIL)}&password=${encodeURIComponent(PW)}`
+  });
+  const setC = r.headers.getSetCookie ? r.headers.getSetCookie() : [r.headers.get('set-cookie')];
+  const rawCookies = (setC || []).filter(Boolean).map((c) => c.split(';')[0]);
+  check('login', r.status === 302 && rawCookies.length > 0);
+  const cookieHeader = rawCookies.join('; ');
+
+  const api = await (await fetch(BASE_URL + '/api/profile/stats?period=all', { headers: { Cookie: cookieHeader } })).json();
+  const bd = api.sportBreakdown || [];
+  check('api breakdown has 3 sports', bd.length === 3, JSON.stringify(bd.map((s) => s.sport)));
+  const bySport = {};
+  bd.forEach((s) => { bySport[s.sport] = s; });
+  check('api golf has sessions but 0 hours', bySport.golf && bySport.golf.sessions === 1 && bySport.golf.hours === 0,
+    JSON.stringify(bySport.golf));
+
+  const DOMAIN = process.env.REPLIT_DEV_DOMAIN;
+  const cookies = rawCookies.map((pair) => {
+    const i = pair.indexOf('=');
+    return { name: pair.slice(0, i), value: pair.slice(i + 1), domain: DOMAIN, path: '/' };
+  });
+  browser = await launchBrowser();
+    for (const width of [1280, 414, 380, 360]) {
+      const context = await browser.newContext({ viewport: { width, height: 1400 } });
+      await context.addCookies(cookies);
+      const page = await context.newPage();
+      const errors = [];
+      page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+      page.on('pageerror', (e) => errors.push(String(e)));
+      await page.goto(`https://${DOMAIN}/html/profile#stats`, { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('#sp-stats-body svg[role="img"]', { timeout: 15000 });
+      await page.waitForTimeout(800);
+
+      const got = await page.evaluate(() => {
+        const svgs = [...document.querySelectorAll('#sp-stats-body svg[role="img"]')];
+        const fillsOf = (svg) => [...svg.querySelectorAll('[fill]')].map((el) => el.getAttribute('fill').toUpperCase()).filter((f) => f.startsWith('#') && f !== '#374151');
+        const texts = (svg) => [...svg.querySelectorAll('text')].map((t) => t.textContent.trim());
+        const card = svgs[0] && svgs[0].closest('div[style*="border-radius"]');
+        const grid = svgs[0] && svgs[0].closest('div[style*="grid-template-columns"]');
+        return {
+          svgCount: svgs.length,
+          sessionsLabels: svgs[0] ? texts(svgs[0]) : [],
+          timeLabels: svgs[1] ? texts(svgs[1]) : [],
+          pieFills: svgs[2] ? fillsOf(svgs[2]) : [],
+          sessionsFills: svgs[0] ? fillsOf(svgs[0]) : [],
+          timeFills: svgs[1] ? fillsOf(svgs[1]) : [],
+          gridCols: grid ? getComputedStyle(grid).gridTemplateColumns.split(' ').length : 0,
+          cardText: card ? card.textContent : ''
+        };
+      });
+      const w = 'w' + width;
+      check(w + ': three chart SVGs', got.svgCount === 3, String(got.svgCount));
+      check(w + ': zero console errors', errors.length === 0, errors.slice(0, 2).join(' | '));
+      // Values match the API exactly.
+      const sess = bd.map((s) => String(s.sessions));
+      check(w + ': sessions labels match api', sess.every((v) => got.sessionsLabels.includes(v)), JSON.stringify(got.sessionsLabels));
+      const timeLbls = bd.map((s) => (s.hours > 0 ? s.hours + 'h' : '—'));
+      check(w + ': time labels match api (incl golf —)', timeLbls.every((v) => got.timeLabels.includes(v)), JSON.stringify(got.timeLabels));
+      const kmStr = bd.filter((s) => s.km > 0).map((s) => s.km + ' km');
+      check(w + ': table km figures match api', kmStr.every((v) => got.cardText.includes(v)), JSON.stringify(kmStr));
+      check(w + ': legend percentages sum to 100',
+        (got.cardText.match(/(\d+)%/g) || []).map((x) => parseInt(x, 10)).reduce((a, b) => a + b, 0) === 100);
+      // Color consistency: per-sport fill identical across all three SVGs and
+      // equal to the registry hex.
+      for (const s of bd) {
+        const hex = HEX[s.sport].toUpperCase();
+        const inAll = got.sessionsFills.includes(hex) && got.timeFills.includes(hex) && got.pieFills.includes(hex);
+        check(w + ': ' + s.sport + ' ' + hex + ' consistent across all three SVGs', inAll,
+          JSON.stringify({ s: got.sessionsFills, t: got.timeFills, p: got.pieFills }));
+      }
+      // Layout: desktop 3 columns, mobile stacked single column.
+      check(w + ': ' + (width > 480 ? '3-column row' : 'stacked single column'),
+        width > 480 ? got.gridCols === 3 : got.gridCols === 1, String(got.gridCols));
+      await context.close();
+    }
+  } catch (e) {
+    check('e2e completed', false, e.message);
+  } finally {
+    if (browser) await browser.close();
+    if (uid) {
+      const { error: dErr } = await admin.from('activities').delete().eq('user_id', uid);
+      check('cleanup activities', !dErr, dErr && dErr.message);
+      const { error: uErr } = await admin.auth.admin.deleteUser(uid);
+      check('cleanup user', !uErr, uErr && uErr.message);
+    }
+  }
+}
+
+fixedCases();
+await e2e();
+console.log(failures ? failures + ' FAILURE(S)' : 'ALL PASS');
+process.exit(failures ? 1 : 0);

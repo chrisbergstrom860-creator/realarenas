@@ -266,7 +266,12 @@ const PAGES = [
     surfaces: [{ name: 'overview', sel: '#tab-overview', min: 1 }],
     steps: [
       { name: 'activities', js: htab('activities'), surfaces: [{ name: 'activities list', sel: '#tab-activities', min: 1 }] },
-      { name: 'stats', js: htab('stats'), surfaces: [{ name: 'stats & PRs body', sel: '#sp-stats-body', min: 1 }] },
+      { name: 'stats', js: htab('stats'), surfaces: [
+        { name: 'stats & PRs body', sel: '#sp-stats-body', min: 1 },
+        // By-sport redesign: exactly the three chart SVGs (Sessions, Time,
+        // Share of sessions) — weekly stack is divs, so svg count = charts.
+        { name: 'by-sport chart svgs', sel: '#sp-stats-body svg[role="img"]', min: 3 }
+      ] },
       { name: 'achievements', js: htab('achievements'), surfaces: [{ name: 'achievements tab', sel: '#tab-achievements .content-cols-full', min: 1 }] },
       { name: 'following', js: htab('following'), surfaces: [{ name: 'following grid', sel: '.following-grid', min: 2 }] },
       { name: 'goals', js: htab('goals'), surfaces: [{ name: 'goals tab', sel: '#tab-goals', min: 1 }] },
