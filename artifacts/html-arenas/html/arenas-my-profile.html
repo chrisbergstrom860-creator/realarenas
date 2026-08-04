@@ -61,7 +61,7 @@ button,select,input,textarea{font-family:var(--font)}
 .hero-bg-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);background-size:32px 32px;pointer-events:none}
 .hero-inner{max-width:1200px;margin:0 auto;padding:32px 28px;display:flex;align-items:flex-end;gap:24px;position:relative;z-index:1}
 .hero-av-wrap{position:relative;flex-shrink:0}
-.hero-av{width:96px;height:96px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:700;color:var(--gray-900);border:4px solid rgba(255,255,255,.15);flex-shrink:0;cursor:pointer;transition:border-color .2s}
+.hero-av{width:152px;height:152px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:50px;font-weight:700;color:var(--gray-900);border:4px solid rgba(255,255,255,.15);flex-shrink:0;cursor:pointer;transition:border-color .2s}
 .hero-av:hover{border-color:var(--yellow)}
 .hero-av-edit{position:absolute;bottom:2px;right:2px;width:26px;height:26px;border-radius:50%;background:white;display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer;border:2px solid var(--gray-900);opacity:0;transition:opacity .2s}
 .hero-av-wrap:hover .hero-av-edit{opacity:1}
@@ -99,6 +99,10 @@ button,select,input,textarea{font-family:var(--font)}
   body:has(.bottom-nav) .hero-actions{align-self:stretch}
   body:has(.bottom-nav) .hero-clubs{justify-content:flex-start;max-width:none}
   body:has(.bottom-nav) .hero-av-edit{opacity:1}
+  body:has(.bottom-nav) .hero-av{width:112px;height:112px;font-size:38px}
+  /* Column layout stretches children — pin the wrap to the avatar so the 📷
+     edit overlay stays on the circle instead of floating to the header edge. */
+  body:has(.bottom-nav) .hero-av-wrap{width:112px}
   /* Following/Followers: stack people one per row — two columns cramps names
      at phone width. Name/subline left (ellipsized, never multi-line), button
      pinned right and never shrinking. Desktop keeps the 2-col grid above. */

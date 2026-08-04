@@ -263,6 +263,9 @@ const PAGES = [
         waitFor: '#hpw-modal-body', root: '#hpw-modal-overlay' }
     ] },
   { user: 'creator', name: 'profile', path: '/profile', waitFor: '.hero-inner', root: 'body',
+    // The 📷 edit badge deliberately sits ON the avatar circle (desktop
+    // parity) — exempt the wrap from the text-overlap rule only.
+    ignoreOverlap: ['.hero-av-wrap'],
     surfaces: [{ name: 'overview', sel: '#tab-overview', min: 1 }],
     steps: [
       { name: 'activities', js: htab('activities'), surfaces: [{ name: 'activities list', sel: '#tab-activities', min: 1 }] },

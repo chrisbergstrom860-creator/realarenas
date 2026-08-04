@@ -8196,7 +8196,7 @@ async function deleteAvatarObject(url, expectedPrefix) {
 // The shared pipeline used by BOTH the user-avatar and club-logo endpoints.
 // sharp decode is the real validation (extensions/mime lie; pixels don't):
 // only jpeg/png/webp content passes, anything else is a clean 400. The
-// re-encode to a 256×256 cover-cropped WebP strips all EXIF/GPS metadata
+// re-encode to a 512×512 cover-cropped WebP strips all EXIF/GPS metadata
 // (.rotate() first applies EXIF orientation so phone photos aren't sideways).
 // The versioned filename is the cache-buster: Supabase public URLs are
 // CDN/browser cached, so a new path per upload propagates instantly, then the
@@ -8215,7 +8215,7 @@ async function processAndStoreAvatar({ buffer, prefix, previousUrl }) {
     e.status = 400;
     throw e;
   }
-  const webp = await sharp(buffer).rotate().resize(256, 256, { fit: 'cover' }).webp({ quality: 82 }).toBuffer();
+  const webp = await sharp(buffer).rotate().resize(512, 512, { fit: 'cover' }).webp({ quality: 82 }).toBuffer();
   const objectPath = `${prefix}/${Date.now()}.webp`;
   const { error: upErr } = await supabaseAdmin.storage
     .from(AVATAR_BUCKET)
