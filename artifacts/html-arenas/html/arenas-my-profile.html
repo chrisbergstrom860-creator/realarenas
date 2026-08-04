@@ -2436,7 +2436,8 @@ if (logHashMatch) {
     }
     if (g.type === 'frequency') return t + ' ' + unitWord(g) + (g.sport ? ' of ' + SPORT_META[g.sport][1].toLowerCase() : '');
     if (g.type === 'duration') return t + 'h of ' + (g.sport ? SPORT_META[g.sport][1].toLowerCase() : 'training');
-    return t + '-day streak';
+    // Sport-scoped: "14-day running streak"; Any sport keeps "14-day streak".
+    return t + '-day ' + (g.sport && SPORT_META[g.sport] ? SPORT_META[g.sport][1].toLowerCase() + ' ' : '') + 'streak';
   }
   function periodChip(g) {
     if (g.period === 'weekly') return 'This week';
@@ -2570,7 +2571,8 @@ if (logHashMatch) {
   function setSportOptions() {
     var sel = document.getElementById('g-sport');
     var hint = document.getElementById('g-sport-hint');
-    if (fType === 'streak') { show('g-sport-field', false); return; }
+    // Streak goals take the same picker as Frequency: "Any sport" + every
+    // registry sport (sport-scoped streak = consecutive days in that sport).
     show('g-sport-field', true);
     var sports = fType === 'distance' ? DISTANCE_SPORTS : ALL_SPORTS;
     var current = sel.value;
@@ -2668,7 +2670,7 @@ if (logHashMatch) {
     }
     var sportSel = document.getElementById('g-sport');
     var body = {
-      sport: (fType === 'streak' ? null : sportSel.value || null),
+      sport: sportSel.value || null,
       target_value: target,
       unit: fType === 'distance' ? document.getElementById('g-unit').value : null,
       period: fPeriod

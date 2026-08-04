@@ -6605,7 +6605,13 @@ function enrichGoal(goal, activities, streaks, tz) {
 
   let progressCmp = 0;
   if (goal.type === 'streak') {
-    progressCmp = streaks.currentStreak;
+    // Sport-scoped streak = ALL-TIME current streak in that sport only
+    // (window stays a deadline). Filter-before-call: computeStreaks itself is
+    // untouched (six callers). No sport ever logged → empty array → 0, never
+    // a fallback to the sport-blind number.
+    progressCmp = goal.sport
+      ? computeStreaks(activities.filter((a) => a.sport === goal.sport), tz).currentStreak
+      : streaks.currentStreak;
   } else {
     // Window membership by user-zone day key, so a 6 PM Pacific activity
     // (next-day UTC) counts toward the Pacific day's window.

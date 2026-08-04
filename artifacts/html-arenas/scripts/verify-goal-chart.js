@@ -13,12 +13,15 @@
 //  - Zero console errors everywhere. Cleanup in finally.
 import { launchBrowser } from './lib/mobile-geometry.js';
 import { createClient } from '@supabase/supabase-js';
+import { createRequire } from 'module';
+const { computeStreaks, dayKey, zoneMidnightUtc } = createRequire(import.meta.url)('../tzdate.js');
 
 const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const DOMAIN = process.env.REPLIT_DEV_DOMAIN;
 const BASE_URL = `https://${DOMAIN}/html`;
 const EMAIL = 'vgc-goals@arenas-test.dev';
 const EMAIL2 = 'vgc-nogoals@arenas-test.dev';
+const EMAIL3 = 'vgc-streak@arenas-test.dev';
 const PW = 'ArenasTest!234';
 
 let failures = 0;
@@ -48,20 +51,22 @@ const localKey = (offsetDays) => {
 };
 
 (async () => {
-  let uid = null, uid2 = null; let browser = null;
+  let uid = null, uid2 = null, uid3 = null; let browser = null;
   try {
     const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
-    for (const u of (data && data.users) || []) if (u.email === EMAIL || u.email === EMAIL2) await admin.auth.admin.deleteUser(u.id);
-    const mk = async (email, name, handle) => {
+    for (const u of (data && data.users) || []) if ([EMAIL, EMAIL2, EMAIL3].includes(u.email)) await admin.auth.admin.deleteUser(u.id);
+    const mk = async (email, name, handle, extraMeta) => {
       const { data: c, error } = await admin.auth.admin.createUser({
         email, password: PW, email_confirm: true,
-        user_metadata: { name, handle, sports: ['running'] }
+        user_metadata: { name, handle, sports: ['running'], ...(extraMeta || {}) }
       });
       if (error) throw new Error('createUser: ' + error.message);
       return c.user.id;
     };
     uid = await mk(EMAIL, 'Goal Chart Tester', 'vgc_goals');
     uid2 = await mk(EMAIL2, 'No Goals Tester', 'vgc_nogoals');
+    // Streak-scoping user in a non-UTC zone (day-boundary case is real).
+    uid3 = await mk(EMAIL3, 'Streak Scope Tester', 'vgc_streak', { timezone: 'America/New_York' });
 
     // Activities: 3 runs TODAY (in this week + this month + streak feed), a
     // 2h ride today. Today always lies inside both current windows.
@@ -206,6 +211,83 @@ const localKey = (offsetDays) => {
       await context.close();
     }
 
+    // ── Sport-scoped streak goals (uid3, America/New_York) ──
+    // Days: running today + "yesterday" logged at 23:30 NY (= today's UTC
+    // date — the boundary case), cycling-ONLY 2 days ago, running 3 days ago.
+    //  any-sport streak = 4 · running = 2 (broken by the cycling-only day
+    //  even though the user trained) · cycling = 0 (last day too old) ·
+    //  swimming = 0 (never logged — must NOT fall back to sport-blind).
+    {
+      const TZ3 = 'America/New_York';
+      const todayK = dayKey(new Date(), TZ3);
+      const dk = (off) => { // ISO timestamp at NY noon, `off` days back
+        const mid = zoneMidnightUtc(dayKey(new Date(Date.now() + off * 86400000), TZ3));
+        return new Date(mid.getTime() + 12 * 3600000).toISOString();
+      };
+      const boundary = new Date(zoneMidnightUtc(todayK).getTime() - 30 * 60000).toISOString(); // 23:30 NY yesterday
+      const acts3 = [
+        { sport: 'running', date: dk(0), title: 'run today' },
+        { sport: 'running', date: boundary, title: 'run 23:30 NY yesterday' },
+        { sport: 'cycling', date: dk(-2), title: 'ride only' },
+        { sport: 'running', date: dk(-3), title: 'run -3' }
+      ].map((a) => ({ ...a, user_id: uid3, distance: '5 km', duration: '00:30:00' }));
+      const { error: a3Err } = await admin.from('activities').insert(acts3);
+      if (a3Err) throw new Error('acts3: ' + a3Err.message);
+      const { error: g3Err } = await admin.from('goals').insert([
+        { user_id: uid3, type: 'streak', sport: null, target_value: 7, period: 'monthly', status: 'active', start_date: localKey(0) },
+        { user_id: uid3, type: 'streak', sport: 'running', target_value: 5, period: 'monthly', status: 'active', start_date: localKey(0) },
+        { user_id: uid3, type: 'streak', sport: 'cycling', target_value: 3, period: 'monthly', status: 'active', start_date: localKey(0) },
+        { user_id: uid3, type: 'streak', sport: 'swimming', target_value: 5, period: 'monthly', status: 'active', start_date: localKey(0) }
+      ]);
+      if (g3Err) throw new Error('goals3: ' + g3Err.message);
+
+      // Independent expectations from the SAME shared helper (one boundary rule).
+      const expAny = computeStreaks(acts3, TZ3).currentStreak;
+      const expBySport = (s) => computeStreaks(acts3.filter((a) => a.sport === s), TZ3).currentStreak;
+      check('streak seed: any-sport expectation is 4', expAny === 4, String(expAny));
+      check('streak seed: running expectation is 2 (broken by cycling-only day)', expBySport('running') === 2, String(expBySport('running')));
+
+      const ck3 = await loginCookies(EMAIL3);
+      const hdr3 = { cookie: ck3.map((c) => c.name + '=' + c.value).join('; ') };
+      const api3 = await (await fetch(BASE_URL + '/api/goals', { headers: hdr3 })).json();
+      const by3 = {};
+      for (const g of api3.active || []) by3[g.sport || 'any'] = g;
+      check('streak any-sport progress matches helper (4)', by3.any && by3.any.progress === expAny, JSON.stringify(by3.any));
+      check('streak running progress = 2 (sport-scoped, gap breaks it)', by3.running && by3.running.progress === 2, JSON.stringify(by3.running));
+      check('streak cycling progress = 0 (last day too old)', by3.cycling && by3.cycling.progress === 0, JSON.stringify(by3.cycling));
+      check('streak swimming progress = 0 (never logged — no sport-blind fallback)', by3.swimming && by3.swimming.progress === 0, JSON.stringify(by3.swimming));
+
+      // Profile display + feed sidebar remain sport-blind and unchanged.
+      const stats3 = await (await fetch(BASE_URL + '/api/profile/stats?period=all&weeks=12', { headers: hdr3 })).json();
+      check('profile stats current streak unchanged (sport-blind 4)', stats3.streaks && stats3.streaks.current === expAny, JSON.stringify(stats3.streaks));
+      const feedHtml = await (await fetch(BASE_URL + '/feed', { headers: hdr3 })).text();
+      const fm = feedHtml.match(/"currentStreak":(\d+)/);
+      check('feed sidebar streak unchanged (sport-blind 4)', fm && Number(fm[1]) === expAny, fm && fm[1]);
+
+      // Surfaces: chart labels, Goals tab titles, Overview mini-card.
+      const { context, page, errors } = await openStats(1280, EMAIL3);
+      await page.waitForSelector('#gvw-card', { timeout: 15000 });
+      const labels = await page.evaluate(() => Array.from(document.querySelectorAll('#gvw-card .gvw-item')).map((i) => i.textContent.replace(/\s+/g, ' ')));
+      check('chart: running streak labeled "Running … Streak (days)"', labels.some((t) => /Running/.test(t) && /Streak \(days\)/.test(t)), JSON.stringify(labels));
+      check('chart: any-sport streak labeled "Any sport … Streak (days)"', labels.some((t) => /Any sport/.test(t) && /Streak \(days\)/.test(t)));
+      const bars3 = await readBars(page);
+      check('chart: sport-scoped streak values match API', ['any', 'running', 'cycling', 'swimming'].every((k) => {
+        const g = by3[k]; const p = g && bars3[g.id];
+        return p && p.actual.value === Number(g.progress) && p.goal.value === Number(g.target);
+      }), JSON.stringify(bars3));
+      await page.evaluate(() => document.getElementById('htab-goals').click());
+      await page.waitForFunction(() => document.querySelectorAll('#tab-goals [onclick^="archiveGoal"]').length >= 4, null, { timeout: 15000 });
+      const goalsTxt = await page.evaluate(() => document.getElementById('tab-goals').textContent);
+      check('Goals tab: "5-day running streak" title', /5-day running streak/.test(goalsTxt));
+      check('Goals tab: any-sport title stays "7-day streak"', /7-day streak/.test(goalsTxt) && !/7-day \w+ streak/.test(goalsTxt));
+      await page.evaluate(() => document.getElementById('htab-overview').click());
+      await page.waitForFunction(() => /streak/i.test((document.getElementById('tab-overview') || {}).textContent || ''), null, { timeout: 15000 }).catch(() => {});
+      const ovTxt = await page.evaluate(() => (document.getElementById('tab-overview') || {}).textContent || '');
+      check('Overview mini-card renders a streak goal title', /-day (\w+ )?streak/.test(ovTxt), ovTxt.slice(0, 120));
+      check('streak surfaces: zero console errors', errors.length === 0, errors.join(' | '));
+      await context.close();
+    }
+
     // ── Mobile widths: horizontal layout, values match, no overflow ──
     for (const w of [360, 380, 414]) {
       const { context, page, errors } = await openStats(w);
@@ -241,7 +323,7 @@ const localKey = (offsetDays) => {
     console.log('  FAIL (exception) ' + e.message);
   } finally {
     if (browser) await browser.close().catch(() => {});
-    for (const id of [uid, uid2]) {
+    for (const id of [uid, uid2, uid3]) {
       if (!id) continue;
       await admin.from('goals').delete().eq('user_id', id);
       await admin.from('activities').delete().eq('user_id', id);
