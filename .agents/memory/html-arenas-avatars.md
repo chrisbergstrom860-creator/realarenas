@@ -42,3 +42,10 @@ description: Photo avatars + club logos end-state - storage pipeline, shared ren
 - The edit-profile modal is RETIRED — all profile field editing lives only in the Settings tab. The hero avatar (+ always-visible-on-mobile 📷 overlay) opens `#modal-avatar-photo`, a photo-only modal that kept every `ep-*` element ID so the upload script and hydration code needed zero changes.
 - **How to apply:** when moving UI blocks between containers, preserve element IDs so ID-wired scripts survive untouched; don't reintroduce an "Edit profile" entry point — Settings is the single edit surface.
 - Hero club area = `.hero-clubs` wrapping pill row rendering ALL of `data.clubs` (clubTileHtml tile + name; admin/coach→dashboard, else member page — same routing as sidebar My clubs). The /profile route's single-`membership` payload key was removed with it.
+
+## Profile background banner (Aug 2026)
+- Same pipeline as avatars: public `avatars` bucket, prefix `banners/{uid}`, pointer `user_metadata.banner_url`, POST/DELETE `/api/profile/banner`, lock `banner:<uid>`, replace-deletes-old, account-delete cleanup line beside the avatar one. `processAndStoreAvatar` now takes width/height (default 512) — banner = 1600×400 WebP.
+- arenas-crop.js is parametrized (`aspect`/`outWidth`/`outHeight`); DEFAULTS ARE THE EVENT CONTRACT (3:1, 1200×400) — never change the defaults; banner passes 4/1600/400.
+- Header: `.hero-banner` band display-gated on `.profile-hero.has-banner` so imageless profiles pay ZERO height (real-or-absent rule, never stock); 220px desktop / 120px mobile; avatar overlap via margin-top -108/-76 + align-self:flex-start (values include hero-inner padding).
+- Surfaces: my-profile header + /athletes modal `.mh-banner` (banner_url in buildAthleteDirectory payload). E2E: scripts/verify-profile-banner.js.
+- Banner IIFE wraps window.closeModals to cancel a pending crop handle — acts only when the modal actually closed (inside-modal clicks bubble to the overlay onclick).
