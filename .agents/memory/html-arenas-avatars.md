@@ -7,7 +7,7 @@ description: Photo avatars + club logos end-state - storage pipeline, shared ren
 
 ## Storage & upload pipeline (Session ①)
 - ONE public `avatars` bucket (idempotent createBucket at startup — safe to leave in), path namespacing `users/{id}/{ts}.webp` + `clubs/{clubId}/{ts}.webp`. All writes server-mediated via service role; clients never touch Storage.
-- Shared processAndStoreAvatar: multer memoryStorage 5MB (field name `avatar` for both endpoints) → sharp decode allowlist (jpeg/png/webp) → 256×256 cover webp (EXIF stripped) → versioned filename (the cache-buster — never reuse a path, Supabase CDN caches ~1h) → delete old object.
+- Shared processAndStoreAvatar: multer memoryStorage 5MB (field name `avatar` for both endpoints) → sharp decode allowlist (jpeg/png/webp) → 512×512 cover webp (EXIF stripped; raised from 256 on 2026-08-04 for the 152px profile hero — pre-existing 256px avatars deliberately left, mix self-heals on replacement; re-encoding a 256 to 512 is strictly worse) → versioned filename (the cache-buster — never reuse a path, Supabase CDN caches ~1h) → delete old object.
 - Endpoints: POST/DELETE `/api/profile/avatar` (self) and `/api/clubs/:clubId/logo` (getClubRole+isClubManagerRole, UNCONDITIONAL — never behind plan gates). Per-subject in-flight lock Set → 429, released in `finally`.
 - Source of truth: `avatar_url` in auth **user_metadata** (profiles table stays unused); `clubs.logo_url` (user-ran the ALTER TABLE — DDL is user-run SQL, service role can't).
 - `updateUserById(..., { user_metadata: { avatar_url: null } })` REMOVES the key — falsy checks everywhere.
@@ -34,6 +34,9 @@ description: Photo avatars + club logos end-state - storage pipeline, shared ren
 
 ## Verification harness lesson
 - Temp self-login route for screenshots must live under `/landing/...` (screenshot tool prepends previewPath `/html/landing`); signInWithPassword + setSession + redirect works. REMOVE the route after — it's an unauthenticated login-as-user hole.
+
+## Profile hero avatar sizing (2026-08-04)
+- `.hero-av` is header-own markup (page-scoped, not the shared helpers): 152px/50px-initials desktop, 112px/38px at ≤768px. Mobile column layout stretches children — `.hero-av-wrap{width:112px}` pins the absolutely-positioned 📷 badge to the circle; without it the badge floats to the header edge. verify-mobile-geometry profile config carries `ignoreOverlap:['.hero-av-wrap']` (badge-on-circle is deliberate). E2E: scripts/verify-header-avatar.js.
 
 ## Profile photo modal (my-profile hero)
 - The edit-profile modal is RETIRED — all profile field editing lives only in the Settings tab. The hero avatar (+ always-visible-on-mobile 📷 overlay) opens `#modal-avatar-photo`, a photo-only modal that kept every `ep-*` element ID so the upload script and hydration code needed zero changes.
