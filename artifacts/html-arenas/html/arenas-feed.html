@@ -323,14 +323,16 @@ button,select,input,textarea{font-family:var(--font)}
       </div>
       <script>
       // Sport filter pills rendered from the sports registry. Session ②: the
-      // pill set is now the viewer's OWN profile sports (user_metadata.sports,
-      // injected as ARENAS_DATA.sports) — plus All + Clubs. Users who haven't
-      // picked sports yet fall back to the historic curated trio.
+      // pill set is the viewer's OWN profile sports (user_metadata.sports,
+      // injected as ARENAS_DATA.sports) — plus All + Clubs. Session ③: users
+      // who haven't picked sports get NO sport pills (the old curated-trio
+      // fallback offered filters for sports the viewer never claimed — dead
+      // chrome that went stale on every registry addition). The row keeps
+      // All + Clubs, so it never collapses to a lone stray pill.
       (function () {
         var mine = (window.ARENAS_DATA && window.ARENAS_DATA.sports) || [];
         var by = window.ARENAS_SPORTS_BY_ID || {};
         var FILTER_SPORTS = mine.filter(function (id) { return by[id]; });
-        if (!FILTER_SPORTS.length) FILTER_SPORTS = ['running', 'cycling', 'climbing'];
         var clubsPill = document.getElementById('f-pill-clubs');
         if (!clubsPill) return;
         FILTER_SPORTS.forEach(function (id) {
@@ -363,13 +365,15 @@ button,select,input,textarea{font-family:var(--font)}
           <script>
           // Composer sport chips rendered from the sports registry. Session ②:
           // like the filter pills, the chips are the viewer's own profile
-          // sports (ARENAS_DATA.sports); fallback to the historic curated four
-          // when the user hasn't picked sports yet.
+          // sports (ARENAS_DATA.sports). Session ③: users who haven't picked
+          // sports fall back to the FULL registry (the old curated four made
+          // 10 sports untaggable for them and went stale on every registry
+          // addition; the chip row wraps, and only sport-less users see it).
           (function () {
             var mine = (window.ARENAS_DATA && window.ARENAS_DATA.sports) || [];
             var by = window.ARENAS_SPORTS_BY_ID || {};
             var COMPOSER_SPORTS = mine.filter(function (id) { return by[id]; });
-            if (!COMPOSER_SPORTS.length) COMPOSER_SPORTS = ['running', 'cycling', 'climbing', 'swimming'];
+            if (!COMPOSER_SPORTS.length) COMPOSER_SPORTS = (window.ARENAS_SPORTS || []).map(function (s) { return s.id; });
             var wrap = document.getElementById('composer-sports');
             if (!wrap) return;
             wrap.innerHTML = COMPOSER_SPORTS.map(function (id) {

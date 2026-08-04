@@ -247,11 +247,16 @@ document.addEventListener('DOMContentLoaded', function(){
       🏅 All my sports
     </button>
     <script>
-    // Sport tabs rendered from the sports registry. WHICH sports get a tab
-    // (running/cycling/climbing) stays a page-level curation choice; the
-    // ids/emoji/labels come from the registry.
+    // Sport tabs rendered from the sports registry. Session ③: the tab set is
+    // the viewer's OWN profile sports (ARENAS_DATA.sports, server-injected) —
+    // same derivation as the feed filter pills, so registry additions appear
+    // automatically for the athletes who do them. Users who haven't picked
+    // sports yet fall back to the historic curated trio.
     (function () {
-      var TAB_SPORTS = ['running', 'cycling', 'climbing'];
+      var mine = (window.ARENAS_DATA && window.ARENAS_DATA.sports) || [];
+      var by0 = window.ARENAS_SPORTS_BY_ID || {};
+      var TAB_SPORTS = mine.filter(function (id) { return by0[id]; });
+      if (!TAB_SPORTS.length) TAB_SPORTS = ['running', 'cycling', 'climbing'];
       var allTab = document.getElementById('sport-tab-all');
       if (!allTab) return;
       var by = window.ARENAS_SPORTS_BY_ID || {};

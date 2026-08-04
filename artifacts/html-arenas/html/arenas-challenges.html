@@ -359,23 +359,12 @@ document.addEventListener('DOMContentLoaded', function(){
     <div id="tab-discover" style="display:none">
       <div class="filter-bar">
         <span class="filter-label">Sport:</span>
-        <button class="sport-filter active" onclick="setFilter(this,'sport','all')" id="ch-sport-filter-all">All my sports</button>
-        <script>
-        // Discover-tab sport filter pills rendered from the sports registry.
-        // WHICH sports get a pill (running/cycling/climbing) stays a page-level
-        // curation choice; ids/emoji/labels come from the registry.
-        (function () {
-          var FILTER_SPORTS = ['running', 'cycling', 'climbing'];
-          var allBtn = document.getElementById('ch-sport-filter-all');
-          if (!allBtn) return;
-          var by = window.ARENAS_SPORTS_BY_ID || {};
-          FILTER_SPORTS.slice().reverse().forEach(function (id) {
-            var s = by[id]; if (!s) return;
-            allBtn.insertAdjacentHTML('afterend',
-              '<button class="sport-filter" onclick="setFilter(this,\'sport\',\'' + s.id + '\')">' + s.emoji + ' ' + s.label + '</button>');
-          });
-        })();
-        </script>
+        <!-- Session ③: relabeled from "All my sports" — the default never
+             filtered by the viewer's sports (it shows every public
+             challenge), so the old label lied. Sport pills are rendered by
+             renderDiscoverSportPills() from the sports actually present in
+             the loaded public challenges (see data script). -->
+        <button class="sport-filter active" onclick="setFilter(this,'sport','all')" id="ch-sport-filter-all">All sports</button>
         <div style="width:1px;height:20px;background:var(--gray-200);margin:0 4px"></div>
         <button class="difficulty-filter active" onclick="setFilter(this,'type','all')">All types</button>
         <button class="difficulty-filter" onclick="setFilter(this,'type','solo')">Solo</button>
@@ -910,6 +899,7 @@ function showToast(msg) {
   // Resolve every container to its empty state. Used on load failure so the
   // initial "Loading…" placeholders never get stuck on screen.
   function renderEmptyAll() {
+    renderDiscoverSportPills();
     renderMine([]);
     renderCompleted([]);
     renderFriends([]);
@@ -918,12 +908,34 @@ function showToast(msg) {
     renderSidebar({});
   }
 
+  // Session ③: discover sport pills derive from the sports actually present
+  // in the loaded public challenges — one pill per distinct sport, registry
+  // order ('any' challenges are covered by "All sports"; no pseudo-sport
+  // pill). Re-rendered on every load; the filter resets to 'all' so a
+  // vanished sport can never remain silently selected.
+  function renderDiscoverSportPills() {
+    const allBtn = document.getElementById('ch-sport-filter-all');
+    if (!allBtn) return;
+    allBtn.parentNode.querySelectorAll('.sport-filter[data-derived]').forEach((p) => p.remove());
+    const present = {};
+    (lastResult.publicChallenges || []).forEach((c) => { if (c && c.sport) present[c.sport] = true; });
+    (window.ARENAS_SPORTS || []).slice().reverse().forEach((s) => {
+      if (!present[s.id]) return;
+      allBtn.insertAdjacentHTML('afterend',
+        '<button class="sport-filter" data-derived="1" onclick="setFilter(this,\'sport\',\'' + s.id + '\')">' + s.emoji + ' ' + s.label + '</button>');
+    });
+    currentSportFilter = 'all';
+    document.querySelectorAll('.sport-filter').forEach((f) => f.classList.remove('active'));
+    allBtn.classList.add('active');
+  }
+
   window.loadChallenges = async function () {
     try {
       const res = await fetch(B + '/api/challenges');
       const result = await res.json();
       if (result.error) { console.log('Challenges load error:', result.error); renderEmptyAll(); return; }
       lastResult = result;
+      renderDiscoverSportPills();
       renderMine(result.myChallenges || []);
       renderCompleted(result.myChallenges || []);
       renderFriends(result.friendsChallenges || []);

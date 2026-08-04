@@ -6106,7 +6106,13 @@ app.get(BASE + '/leaderboards', requirePageAuth, async (req, res) => {
       clubName = (c && c.name) || null;
     }
     const clubs = await getSidebarClubs(req.user.id);
-    const lbData = { userId: req.user.id, profile: displayFromUser(req.user), clubName, clubs };
+    const lbData = {
+      userId: req.user.id, profile: displayFromUser(req.user), clubName, clubs,
+      // Viewer's own profile sports — the sport tab row derives from these
+      // (Session ② pattern from the feed pills), so new registry sports show
+      // up automatically for the athletes who actually do them.
+      sports: Array.isArray((req.user.user_metadata || {}).sports) ? req.user.user_metadata.sports : []
+    };
     const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-leaderboards.html'), 'utf8'), lbData), 'leaderboards'), (await getUserPlan(req.user.id)) === 'pro');
     res.type('html').send(html);
   } catch (err) {
