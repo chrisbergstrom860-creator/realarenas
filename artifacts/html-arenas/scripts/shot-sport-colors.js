@@ -57,7 +57,8 @@ try {
   ['climbing', 2, '01:15', null], ['football', 2, '01:00', null],
   ['weightlifting', 3, '00:50', null], ['yoga', 2, '01:00', null],
   ['golf', 1, null, null], ['pickleball', 1, '00:45', null],
-  ['basketball', 2, '00:55', null], ['hockey', 1, '01:00', null]
+  ['basketball', 2, '00:55', null], ['hockey', 1, '01:00', null],
+  ['tennis', 1, '01:10', null], ['pilates', 1, '00:50', null]
 ];
   const rows = [];
   let dayBack = 0;

@@ -40,7 +40,16 @@ const SPORTS = [
   { id: 'golf',          label: 'Golf',          emoji: '⛳', colors: { bg: '#F7FEE7', text: '#4D7C0F', border: '#BEF264' }, scoring: { per: 'session', rate: 30 }, isDistance: false, fieldsConfig: 'golf' },
   { id: 'pickleball',    label: 'Pickleball',    emoji: '🏓', colors: { bg: '#ECFEFF', text: '#155E75', border: '#67E8F9' }, scoring: { per: 'session', rate: 25 }, isDistance: false, fieldsConfig: 'pickleball' },
   { id: 'basketball',    label: 'Basketball',    emoji: '🏀', colors: { bg: '#FFFBEB', text: '#A3412C', border: '#FCD34D' }, scoring: { per: 'session', rate: 35 }, isDistance: false, fieldsConfig: 'basketball' },
-  { id: 'hockey',        label: 'Hockey',        emoji: '🏒', colors: { bg: '#F1F5F9', text: '#1E293B', border: '#94A3B8' }, scoring: { per: 'session', rate: 40 }, isDistance: false, fieldsConfig: 'hockey' }
+  { id: 'hockey',        label: 'Hockey',        emoji: '🏒', colors: { bg: '#F1F5F9', text: '#1E293B', border: '#94A3B8' }, scoring: { per: 'session', rate: 40 }, isDistance: false, fieldsConfig: 'hockey' },
+  // ── Session ③ additions (Aug 2026) — scoring MIRRORS an anchor sport
+  // (structure and rate, both per-session): tennis = hockey 40 (short,
+  // high-intensity, whole-body session); pilates = yoga 20 (controlled
+  // low-intensity studio session). Neither is a distance sport. Accents are
+  // shade-searched under the white-on-slice AA cap (relative luminance <=
+  // 0.183, ~L* 50): magenta/pink was the only open region at pairwise
+  // dE >= 20 across all 14 — both sit dE 45 from every existing accent.
+  { id: 'tennis',        label: 'Tennis',        emoji: '🎾', colors: { bg: '#FDF2F8', text: '#DA0064', border: '#F9A8D4' }, scoring: { per: 'session', rate: 40 }, isDistance: false, fieldsConfig: 'tennis' },
+  { id: 'pilates',       label: 'Pilates',       emoji: '🤸', colors: { bg: '#FDF4FF', text: '#D000B0', border: '#F0ABFC' }, scoring: { per: 'session', rate: 20 }, isDistance: false, fieldsConfig: 'pilates' }
 ];
 
 // Leaderboard points per sport — derived; must stay identical to the historic

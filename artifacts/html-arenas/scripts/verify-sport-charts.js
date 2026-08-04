@@ -126,7 +126,7 @@ function fixedCases() {
 
   // Rendered-color ΔE floor on the actual 12-sport output.
   const used = [...new Set(fills(h12))].filter((f) => f !== '#374151' && f !== '#FFFFFF'); // label ink isn't a sport channel
-  check('12 distinct sport colors rendered', used.length === 12, String(used.length));
+  check('all registry sport colors rendered distinctly', used.length === SPORTS.length, String(used.length));
   const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
   const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
   const lab = (hex) => {

@@ -318,6 +318,23 @@ var activitySportFields = {
       <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Session type</div><select class="form-select" id="sf-sessiontype"><option value="">Select…</option><option>Game</option><option>Practice</option><option>Skills session</option><option>Scrimmage</option></select></div>
       <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg HR <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-hr" placeholder="e.g. 155 bpm"></div>
     </div>`
+  },
+  // Session ③ (Aug 2026): tennis + pilates reuse EXISTING columns only
+  // (session_type / avg_hr), same as pickleball/basketball/hockey — a new
+  // per-sport column would require user-run SQL.
+  tennis: {
+    label: 'Tennis details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Session type</div><select class="form-select" id="sf-sessiontype"><option value="">Select…</option><option>Singles match</option><option>Doubles match</option><option>Practice / drills</option><option>Lesson</option><option>Hitting session</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg HR <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-hr" placeholder="e.g. 150 bpm"></div>
+    </div>`
+  },
+  pilates: {
+    label: 'Pilates details',
+    html: `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Session type</div><select class="form-select" id="sf-sessiontype"><option value="">Select…</option><option>Mat class</option><option>Reformer class</option><option>Private session</option><option>Online class</option><option>Self-practice</option></select></div>
+      <div><div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Avg HR <span style="font-weight:400;color:var(--gray-400)">(opt)</span></div><input class="form-input" type="text" id="sf-hr" placeholder="e.g. 110 bpm"></div>
+    </div>`
   }
 };
 

@@ -48,7 +48,7 @@ function simulate(hex, kind) {
   return '#' + s.map((c) => Math.max(0, Math.min(255, g(c))).toString(16).padStart(2, '0')).join('');
 }
 
-check('registry has 12 sports', SPORTS.length === 12, String(SPORTS.length));
+check('registry has 14 sports', SPORTS.length === 14, String(SPORTS.length));
 
 // 1. Pairwise ΔE floor.
 let min = Infinity, minPair = '';
