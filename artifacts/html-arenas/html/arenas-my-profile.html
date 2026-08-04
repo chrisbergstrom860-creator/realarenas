@@ -1767,8 +1767,6 @@ if (logHashMatch) {
   // window.__goalFmt the Goals tab uses — this chart never recomputes a
   // number, so it can never disagree with the Goals tab.
   var goalsActive = null;      // last /api/goals active list (null = fetch failed)
-  var spGoalView = 'overall';  // weekly | monthly | overall (filters, not rescaling)
-
   var GVW_GOAL_GRAY = '#6B7280';   // 4.83:1 on white; 3.34:1 vs the yellow
   var GVW_YELLOW_STROKE = '#E6B800';
 
@@ -1787,35 +1785,20 @@ if (logHashMatch) {
     if (g.type === 'duration') return 'Hours';
     return 'Streak (days)';
   }
-  // Streak (all-time measure) and custom-window goals only make sense in
-  // Overall; Weekly/Monthly are period filters (no invented pro-rating).
-  function gvwFilter(gs, view) {
-    if (view === 'overall') return gs;
-    return gs.filter(function (g) { return g.period === view && g.type !== 'streak'; });
+  // Same uppercase title treatment as the By-sport card's chart panels.
+  function gvwPanelTitle(t) {
+    return '<div style="font-size:13px;font-weight:700;color:var(--gray-700);text-transform:uppercase;letter-spacing:.05em">' + esc(t) + '</div>';
   }
 
-  function gvwCard() {
-    var gs = goalsActive || [];
-    if (!gs.length) return ''; // no goals (or goals unavailable) → no card
-    var narrow = window.innerWidth <= 480;
-    var fmt = window.__goalFmt || { num: function (n) { return String(n); } };
-    var pill = function (v, label) {
-      var on = v === spGoalView;
-      return '<div class="gvw-pill" data-view="' + v + '" onclick="setGoalView(\'' + v + '\')" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;border:' + (on ? '1px solid var(--yellow-dark)' : 'var(--border)') + ';background:' + (on ? 'var(--yellow-light)' : 'white') + ';color:' + (on ? '#7a5c00' : 'var(--gray-600)') + '">' + label + '</div>';
-    };
-    var shown = gvwFilter(gs, spGoalView);
+  // Bar pairs for one period panel — bars byte-identical to the shipped
+  // treatment (gray goal, yellow+stroke actual, per-pair scale, printed
+  // values, uncapped overshoot). Padding lives on the panel cell.
+  function gvwBarsInner(shown, narrow, fmt) {
     var inner;
-    if (!shown.length) {
-      // Honest empty view — the pills stay visible so the view reads as
-      // "exists and is empty", never "missing".
-      inner = '<div id="gvw-empty" style="padding:30px 20px;text-align:center">' +
-        '<div style="font-size:13px;font-weight:600;color:var(--gray-700);margin-bottom:4px">No ' + spGoalView + ' goals</div>' +
-        '<div style="font-size:12px;color:var(--gray-400)">Goals with a ' + spGoalView + ' period appear here. Streak and custom-window goals live under Overall.</div>' +
-      '</div>';
-    } else if (narrow) {
+    if (narrow) {
       // Phones: horizontal bars — full-width label line, then goal and actual
       // rows with the value at the end. No truncation at any label length.
-      inner = '<div style="padding:12px 14px;display:flex;flex-direction:column;gap:12px">' + shown.map(function (g) {
+      inner = '<div style="display:flex;flex-direction:column;gap:12px">' + shown.map(function (g) {
         var scale = Math.max(Number(g.target) || 0, Number(g.progress) || 0) || 1;
         var row = function (kind, val, style) {
           var pct = Math.max(1, Math.round((val / scale) * 100));
@@ -1836,7 +1819,7 @@ if (logHashMatch) {
       // Desktop: vertical grouped bars, one pair per goal, two-line text label.
       // Each pair is scaled to its own max(goal, actual) — goals mix units, so
       // there is deliberately NO shared axis; the printed values are the truth.
-      inner = '<div style="padding:16px 14px 12px;display:flex;align-items:flex-end;gap:18px;justify-content:space-around">' + shown.map(function (g) {
+      inner = '<div style="display:flex;align-items:flex-end;gap:18px;justify-content:space-around">' + shown.map(function (g) {
         var scale = Math.max(Number(g.target) || 0, Number(g.progress) || 0) || 1;
         var bar = function (kind, val, style) {
           var h = Math.max(2, Math.round((val / scale) * 118));
@@ -1854,22 +1837,77 @@ if (logHashMatch) {
         '</div>';
       }).join('') + '</div>';
     }
-    return '<div id="gvw-card" style="margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
-      '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">' +
-        '<div style="font-size:12px;font-weight:600">🎯 Goals vs actual</div>' +
-        '<div style="display:flex;align-items:center;gap:6px">' + pill('weekly', 'Weekly') + pill('monthly', 'Monthly') + pill('overall', 'Overall') +
-          '<div style="font-size:11px;color:var(--gray-400);margin-left:4px">goal grey · actual yellow · each pair on its own scale</div>' +
-        '</div>' +
-      '</div>' + inner +
+    return inner;
+  }
+
+  // Streak heat map row: squares are progress toward the TARGET, not
+  // calendar days — min(streak, target) fill yellow left-to-right; a broken
+  // streak resets to zero and every square goes gray. Overshoot keeps all
+  // squares full; the printed "N of M" is the honest channel for the excess
+  // (never clamped). Squares stay a fixed 14px and wrap to more rows for
+  // large targets — shrinking them goes illegible fast at 360px.
+  function gvwHeatRow(g, fmt) {
+    var target = Math.max(1, Math.round(Number(g.target) || 0));
+    var prog = Math.max(0, Math.round(Number(g.progress) || 0));
+    var filled = Math.min(prog, target);
+    var squares = '';
+    for (var i = 0; i < target; i++) {
+      var on = i < filled;
+      squares += '<div class="gvw-sq" data-filled="' + (on ? '1' : '0') + '" style="width:14px;height:14px;border-radius:3px;flex-shrink:0;background:' +
+        (on ? 'var(--yellow);box-shadow:inset 0 0 0 1px ' + GVW_YELLOW_STROKE : 'var(--gray-100)') + '"></div>';
+    }
+    return '<div class="gvw-heat-row" data-goal-id="' + esc(g.id) + '" data-target="' + target + '" data-progress="' + prog + '">' +
+      '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px">' +
+        '<div style="font-size:11px;font-weight:600;color:var(--gray-700)">' + esc(gvwSportLabel(g)) + ' — ' + esc(gvwMetric(g)) + '</div>' +
+        '<div class="gvw-heat-value" style="font-size:10px;font-family:var(--mono);color:var(--gray-600);flex-shrink:0">' + fmt.num(prog) + ' of ' + fmt.num(target) + '</div>' +
+      '</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:4px">' + squares + '</div>' +
     '</div>';
   }
 
-  window.setGoalView = function (v) {
-    if (v === spGoalView) return;
-    spGoalView = v;
-    var card = document.getElementById('gvw-card');
-    if (card) card.outerHTML = gvwCard();
-  };
+  function gvwCard() {
+    var gs = goalsActive || [];
+    if (!gs.length) return ''; // no goals (or goals unavailable) → no card
+    var narrow = window.innerWidth <= 480;
+    var fmt = window.__goalFmt || { num: function (n) { return String(n); } };
+    // Full partition: every active goal lands in exactly one place — streaks
+    // (whatever their deadline period) in the heat map, everything else in
+    // its period's panel. Empty sections don't render at all.
+    var streakGs = gs.filter(function (g) { return g.type === 'streak'; });
+    var barGs = gs.filter(function (g) { return g.type !== 'streak'; });
+    var panels = [['weekly', 'Weekly'], ['monthly', 'Monthly'], ['custom', 'Custom']].map(function (p) {
+      return { period: p[0], label: p[1], goals: barGs.filter(function (g) { return g.period === p[0]; }) };
+    }).filter(function (p) { return p.goals.length > 0; });
+
+    // Same panel chrome as the By-sport card: grid cells, border dividers
+    // (right on desktop, bottom stacked on phones), 20/16 padding, uppercase
+    // title. Equal 1fr columns — By-sport's 1.25fr exists only for its pie.
+    var grid = '';
+    if (panels.length) {
+      var cells = panels.map(function (p, i) {
+        var last = i === panels.length - 1;
+        return '<div class="gvw-panel" data-period="' + p.period + '" style="padding:20px 16px;min-width:0;display:flex;flex-direction:column;gap:14px;' +
+          (narrow ? (last ? '' : 'border-bottom:var(--border)') : (last ? '' : 'border-right:var(--border)')) + '">' +
+          gvwBarsInner(p.goals, narrow, fmt) +
+          '<div style="margin-top:auto">' + gvwPanelTitle(p.label) + '</div>' +
+        '</div>';
+      }).join('');
+      grid = '<div style="display:grid;grid-template-columns:' + (narrow ? '1fr' : 'repeat(' + panels.length + ',1fr)') + '">' + cells + '</div>';
+    }
+    var heat = '';
+    if (streakGs.length) {
+      heat = '<div class="gvw-heat" style="' + (panels.length ? 'border-top:var(--border);' : '') + 'padding:16px;display:flex;flex-direction:column;gap:14px">' +
+        streakGs.map(function (g) { return gvwHeatRow(g, fmt); }).join('') +
+        gvwPanelTitle('Streaks') +
+      '</div>';
+    }
+    return '<div id="gvw-card" style="margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
+      '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">' +
+        '<div style="font-size:12px;font-weight:600">🎯 Goals vs actual</div>' +
+        '<div style="font-size:11px;color:var(--gray-400)">goal grey · actual yellow · each pair on its own scale</div>' +
+      '</div>' + grid + heat +
+    '</div>';
+  }
 
   window.setStatsPeriod = function (el, period) {
     document.querySelectorAll('.sp-period').forEach(function (p) {

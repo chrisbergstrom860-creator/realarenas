@@ -135,17 +135,55 @@ const localKey = (offsetDays) => {
       return out;
     });
 
-    // ── Desktop 1280: Overall view — every value exactly matches the API ──
+    const readHeat = (page) => page.evaluate(() => {
+      const out = {};
+      document.querySelectorAll('#gvw-card .gvw-heat-row').forEach((r) => {
+        out[r.getAttribute('data-goal-id')] = {
+          target: Number(r.getAttribute('data-target')),
+          progress: Number(r.getAttribute('data-progress')),
+          squares: r.querySelectorAll('.gvw-sq').length,
+          filled: r.querySelectorAll('.gvw-sq[data-filled="1"]').length,
+          value: (r.querySelector('.gvw-heat-value') || {}).textContent || '',
+          label: (r.textContent || '').replace(/\s+/g, ' ')
+        };
+      });
+      return out;
+    });
+    const readPanels = (page) => page.evaluate(() =>
+      Array.from(document.querySelectorAll('#gvw-card .gvw-panel')).map((p) => ({
+        period: p.getAttribute('data-period'),
+        goals: p.querySelectorAll('.gvw-item').length,
+        title: (Array.from(p.children).pop() || {}).textContent || ''
+      })));
+
+    const streakGoal = byType['streak:'];
+    const nonStreak = active.filter((g) => g.type !== 'streak');
+
+    // ── Desktop 1280: sectioned panels — every value exactly matches the API ──
     {
       const { context, page, errors } = await openStats(1280);
       await page.waitForSelector('#gvw-card', { timeout: 15000 });
+      // Panels: weekly(3) + custom(1) render, monthly (no goals) is ABSENT.
+      const panels = await readPanels(page);
+      check('@1280 panels: weekly(3) + custom(1), monthly absent',
+        panels.length === 2 && panels[0].period === 'weekly' && panels[0].goals === 3 && panels[1].period === 'custom' && panels[1].goals === 1,
+        JSON.stringify(panels));
+      check('@1280 panel titles: uppercase Weekly/Custom treatment', /Weekly/.test(panels[0].title) && /Custom/.test(panels[1].title), JSON.stringify(panels.map((p) => p.title)));
+      check('@1280 pills gone (no view switcher)', await page.locator('#gvw-card .gvw-pill').count() === 0);
       const bars = await readBars(page);
-      check('@1280 overall: 5 goal pairs rendered', Object.keys(bars).length === 5, String(Object.keys(bars).length));
-      for (const g of active) {
+      check('@1280: 4 bar pairs (streak leaves the bar sections)', Object.keys(bars).length === 4, String(Object.keys(bars).length));
+      for (const g of nonStreak) {
         const pair = bars[g.id];
         const ok = pair && pair.goal && pair.actual && pair.goal.value === Number(g.target) && pair.actual.value === Number(g.progress);
         check(`@1280 values match API for ${g.type}:${g.sport || 'any'}`, !!ok, JSON.stringify({ pair, target: g.target, progress: g.progress }));
       }
+      // Heat map: the monthly-period streak goal renders as squares, one row.
+      const heat = await readHeat(page);
+      const hr = heat[streakGoal.id];
+      check('@1280 heat: streak row with target squares, progress filled',
+        Object.keys(heat).length === 1 && hr && hr.squares === Number(streakGoal.target) && hr.filled === Math.min(Number(streakGoal.progress), Number(streakGoal.target)),
+        JSON.stringify(heat));
+      check('@1280 heat: "N of M" matches API', hr && hr.value.trim() === `${streakGoal.progress} of ${streakGoal.target}`, hr && hr.value);
       // Exceeded: actual bar strictly taller than goal bar (uncapped).
       const ex = bars[(byType['frequency:'] || {}).id];
       check('@1280 exceeded goal: actual bar taller than goal bar', ex && ex.actual.h > ex.goal.h, JSON.stringify(ex));
@@ -184,30 +222,16 @@ const localKey = (offsetDays) => {
         return out;
       });
       let matched = 0;
-      for (const g of active) {
+      for (const g of nonStreak) {
         const ct = chartText[g.id], gt = goalsTab[g.id];
         if (ct && gt && ct[0] === gt.goal && ct[1] === gt.actual) matched++;
         else console.log('  detail ' + g.type + ':' + (g.sport || 'any') + ' chart=' + JSON.stringify(ct) + ' goalsTab=' + JSON.stringify(gt));
       }
-      check('@1280: chart strings equal Goals-tab rendered strings (5/5)', matched === 5, matched + '/5');
+      check('@1280: chart strings equal Goals-tab rendered strings (4/4)', matched === 4, matched + '/4');
+      // Heat "N of M" equals the Goals-tab rendered strings for the streak goal.
+      const sgt = goalsTab[streakGoal.id];
+      check('@1280: heat value string equals Goals-tab strings', sgt && hr.value.trim() === `${sgt.actual} of ${sgt.goal}`, JSON.stringify({ heat: hr.value, goalsTab: sgt }));
       check('@1280: zero console errors', errors.length === 0, errors.join(' | '));
-
-      // ── View switcher ──
-      await page.evaluate(() => document.getElementById('htab-stats').click());
-      await page.waitForSelector('#gvw-card');
-      await page.evaluate(() => setGoalView('weekly'));
-      let n = await page.locator('#gvw-card .gvw-item').count();
-      check('weekly view: 3 goals', n === 3, String(n));
-      const weeklyIds = await page.evaluate(() => Array.from(document.querySelectorAll('#gvw-card .gvw-item')).map((i) => i.getAttribute('data-goal-id')));
-      check('weekly view: excludes streak + custom', !weeklyIds.includes(byType['streak:'].id) && !weeklyIds.includes(byType['distance:swimming'].id));
-      await page.evaluate(() => setGoalView('monthly'));
-      const emptyTxt = await page.locator('#gvw-empty').textContent().catch(() => '');
-      check('monthly view: honest empty copy', /No monthly goals/.test(emptyTxt), emptyTxt.slice(0, 60));
-      const pills = await page.locator('#gvw-card .gvw-pill').count();
-      check('monthly view: all 3 pills still visible', pills === 3, String(pills));
-      await page.evaluate(() => setGoalView('overall'));
-      n = await page.locator('#gvw-card .gvw-item').count();
-      check('back to overall: 5 goals', n === 5, String(n));
       await context.close();
     }
 
@@ -233,11 +257,15 @@ const localKey = (offsetDays) => {
       ].map((a) => ({ ...a, user_id: uid3, distance: '5 km', duration: '00:30:00' }));
       const { error: a3Err } = await admin.from('activities').insert(acts3);
       if (a3Err) throw new Error('acts3: ' + a3Err.message);
+      // any-sport target 3 < streak 4 → the OVERSHOOT row ("4 of 3", squares
+      // full but the number carries the excess). Plus one monthly frequency
+      // goal so uid3 exercises a period panel alongside the heat map.
       const { error: g3Err } = await admin.from('goals').insert([
-        { user_id: uid3, type: 'streak', sport: null, target_value: 7, period: 'monthly', status: 'active', start_date: localKey(0) },
+        { user_id: uid3, type: 'streak', sport: null, target_value: 3, period: 'monthly', status: 'active', start_date: localKey(0) },
         { user_id: uid3, type: 'streak', sport: 'running', target_value: 5, period: 'monthly', status: 'active', start_date: localKey(0) },
         { user_id: uid3, type: 'streak', sport: 'cycling', target_value: 3, period: 'monthly', status: 'active', start_date: localKey(0) },
-        { user_id: uid3, type: 'streak', sport: 'swimming', target_value: 5, period: 'monthly', status: 'active', start_date: localKey(0) }
+        { user_id: uid3, type: 'streak', sport: 'swimming', target_value: 5, period: 'monthly', status: 'active', start_date: localKey(0) },
+        { user_id: uid3, type: 'frequency', sport: null, target_value: 20, period: 'monthly', status: 'active', start_date: localKey(0) }
       ]);
       if (g3Err) throw new Error('goals3: ' + g3Err.message);
 
@@ -251,11 +279,11 @@ const localKey = (offsetDays) => {
       const hdr3 = { cookie: ck3.map((c) => c.name + '=' + c.value).join('; ') };
       const api3 = await (await fetch(BASE_URL + '/api/goals', { headers: hdr3 })).json();
       const by3 = {};
-      for (const g of api3.active || []) by3[g.sport || 'any'] = g;
-      check('streak any-sport progress matches helper (4)', by3.any && by3.any.progress === expAny, JSON.stringify(by3.any));
-      check('streak running progress = 2 (sport-scoped, gap breaks it)', by3.running && by3.running.progress === 2, JSON.stringify(by3.running));
-      check('streak cycling progress = 0 (last day too old)', by3.cycling && by3.cycling.progress === 0, JSON.stringify(by3.cycling));
-      check('streak swimming progress = 0 (never logged — no sport-blind fallback)', by3.swimming && by3.swimming.progress === 0, JSON.stringify(by3.swimming));
+      for (const g of api3.active || []) by3[g.type + ':' + (g.sport || 'any')] = g;
+      check('streak any-sport progress matches helper (4)', by3['streak:any'] && by3['streak:any'].progress === expAny, JSON.stringify(by3['streak:any']));
+      check('streak running progress = 2 (sport-scoped, gap breaks it)', by3['streak:running'] && by3['streak:running'].progress === 2, JSON.stringify(by3['streak:running']));
+      check('streak cycling progress = 0 (last day too old)', by3['streak:cycling'] && by3['streak:cycling'].progress === 0, JSON.stringify(by3['streak:cycling']));
+      check('streak swimming progress = 0 (never logged — no sport-blind fallback)', by3['streak:swimming'] && by3['streak:swimming'].progress === 0, JSON.stringify(by3['streak:swimming']));
 
       // Profile display + feed sidebar remain sport-blind and unchanged.
       const stats3 = await (await fetch(BASE_URL + '/api/profile/stats?period=all&weeks=12', { headers: hdr3 })).json();
@@ -264,28 +292,56 @@ const localKey = (offsetDays) => {
       const fm = feedHtml.match(/"currentStreak":(\d+)/);
       check('feed sidebar streak unchanged (sport-blind 4)', fm && Number(fm[1]) === expAny, fm && fm[1]);
 
-      // Surfaces: chart labels, Goals tab titles, Overview mini-card.
+      // Surfaces: heat map rows, monthly panel, Goals tab titles, Overview.
       const { context, page, errors } = await openStats(1280, EMAIL3);
       await page.waitForSelector('#gvw-card', { timeout: 15000 });
-      const labels = await page.evaluate(() => Array.from(document.querySelectorAll('#gvw-card .gvw-item')).map((i) => i.textContent.replace(/\s+/g, ' ')));
-      check('chart: running streak labeled "Running … Streak (days)"', labels.some((t) => /Running/.test(t) && /Streak \(days\)/.test(t)), JSON.stringify(labels));
-      check('chart: any-sport streak labeled "Any sport … Streak (days)"', labels.some((t) => /Any sport/.test(t) && /Streak \(days\)/.test(t)));
+      const heat3 = await readHeat(page);
+      check('heat: 4 streak rows, no streak bar pairs', Object.keys(heat3).length === 4 && Object.keys(await readBars(page)).length === 1, JSON.stringify(Object.keys(heat3)));
+      const row3 = (k) => heat3[(by3[k] || {}).id];
+      check('heat: running row labeled "Running … Streak (days)"', row3('streak:running') && /Running — Streak \(days\)/.test(row3('streak:running').label), JSON.stringify(row3('streak:running')));
+      check('heat: any-sport row labeled "Any sport … Streak (days)"', row3('streak:any') && /Any sport — Streak \(days\)/.test(row3('streak:any').label));
+      // OVERSHOOT (user-pinned): 4-day streak vs target 3 → all 3 squares full
+      // but the text reads "4 of 3", never a clamped "3 of 3".
+      const ov = row3('streak:any');
+      check('heat OVERSHOOT: all squares full, text "4 of 3" not clamped', ov && ov.squares === 3 && ov.filled === 3 && ov.value.trim() === '4 of 3' && !/^3 of 3$/.test(ov.value.trim()), JSON.stringify(ov));
+      const run3 = row3('streak:running');
+      check('heat: running 2 of 5 → 2 yellow, 3 gray', run3 && run3.squares === 5 && run3.filled === 2 && run3.value.trim() === '2 of 5', JSON.stringify(run3));
+      const swim3 = row3('streak:swimming');
+      check('heat RESET: swimming 0 of 5 → all squares gray', swim3 && swim3.squares === 5 && swim3.filled === 0 && swim3.value.trim() === '0 of 5', JSON.stringify(swim3));
+      // Monthly panel renders alongside the heat map with the frequency pair.
+      const panels3 = await readPanels(page);
+      const freq3 = by3['frequency:any'];
       const bars3 = await readBars(page);
-      check('chart: sport-scoped streak values match API', ['any', 'running', 'cycling', 'swimming'].every((k) => {
-        const g = by3[k]; const p = g && bars3[g.id];
-        return p && p.actual.value === Number(g.progress) && p.goal.value === Number(g.target);
-      }), JSON.stringify(bars3));
+      check('monthly panel: frequency goal pair matches API', panels3.length === 1 && panels3[0].period === 'monthly' && bars3[freq3.id] && bars3[freq3.id].actual.value === Number(freq3.progress) && bars3[freq3.id].goal.value === Number(freq3.target), JSON.stringify({ panels3, pair: bars3[freq3.id], freq3 }));
       await page.evaluate(() => document.getElementById('htab-goals').click());
-      await page.waitForFunction(() => document.querySelectorAll('#tab-goals [onclick^="archiveGoal"]').length >= 4, null, { timeout: 15000 });
+      await page.waitForFunction(() => document.querySelectorAll('#tab-goals [onclick^="archiveGoal"]').length >= 5, null, { timeout: 15000 });
       const goalsTxt = await page.evaluate(() => document.getElementById('tab-goals').textContent);
       check('Goals tab: "5-day running streak" title', /5-day running streak/.test(goalsTxt));
-      check('Goals tab: any-sport title stays "7-day streak"', /7-day streak/.test(goalsTxt) && !/7-day \w+ streak/.test(goalsTxt));
+      // "3-day streak" (no sport word between) can only come from the
+      // any-sport goal; the cycling goal renders "3-day cycling streak".
+      check('Goals tab: any-sport title stays "3-day streak"', /3-day streak/.test(goalsTxt));
       await page.evaluate(() => document.getElementById('htab-overview').click());
       await page.waitForFunction(() => /streak/i.test((document.getElementById('tab-overview') || {}).textContent || ''), null, { timeout: 15000 }).catch(() => {});
       const ovTxt = await page.evaluate(() => (document.getElementById('tab-overview') || {}).textContent || '');
       check('Overview mini-card renders a streak goal title', /-day (\w+ )?streak/.test(ovTxt), ovTxt.slice(0, 120));
       check('streak surfaces: zero console errors', errors.length === 0, errors.join(' | '));
       await context.close();
+
+      // ── Large target at 360px: fixed 14px squares WRAP, no shrink/overflow ──
+      await admin.from('goals').update({ target_value: 40 }).eq('id', by3['streak:running'].id);
+      const m = await openStats(360, EMAIL3);
+      await m.page.waitForSelector('#gvw-card .gvw-heat-row', { timeout: 15000 });
+      const wrap = await m.page.evaluate((gid) => {
+        const row = document.querySelector('.gvw-heat-row[data-goal-id="' + gid + '"]');
+        const sqs = Array.from(row.querySelectorAll('.gvw-sq'));
+        const rects = sqs.map((s) => s.getBoundingClientRect());
+        return { n: sqs.length, w: rects[0].width, rows: new Set(rects.map((r) => Math.round(r.top))).size };
+      }, by3['streak:running'].id);
+      check('@360 wrap: 40 squares stay 14px across multiple rows', wrap.n === 40 && Math.round(wrap.w) === 14 && wrap.rows >= 2, JSON.stringify(wrap));
+      const ovX = await m.page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      check('@360 wrap: no horizontal overflow', ovX <= 1, String(ovX));
+      check('@360 wrap: zero console errors', m.errors.length === 0, m.errors.join(' | '));
+      await m.context.close();
     }
 
     // ── Mobile widths: horizontal layout, values match, no overflow ──
@@ -293,9 +349,12 @@ const localKey = (offsetDays) => {
       const { context, page, errors } = await openStats(w);
       await page.waitForSelector('#gvw-card', { timeout: 15000 });
       const bars = await readBars(page);
-      check(`@${w}: 5 pairs`, Object.keys(bars).length === 5, String(Object.keys(bars).length));
+      check(`@${w}: 4 pairs + streak heat row`, Object.keys(bars).length === 4 && Object.keys(await readHeat(page)).length === 1, String(Object.keys(bars).length));
+      // Stacked panels on phones: weekly + custom present, monthly absent.
+      const mPanels = await readPanels(page);
+      check(`@${w}: stacked panels weekly+custom only`, mPanels.map((p) => p.period).join(',') === 'weekly,custom', JSON.stringify(mPanels));
       let allMatch = true;
-      for (const g of active) {
+      for (const g of nonStreak) {
         const p = bars[g.id];
         if (!p || p.goal.value !== Number(g.target) || p.actual.value !== Number(g.progress)) allMatch = false;
       }
