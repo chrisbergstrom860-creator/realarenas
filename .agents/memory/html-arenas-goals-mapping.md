@@ -28,3 +28,11 @@ description: Goals Pro feature (API + my-profile Goals tab + Overview mini-card 
 ## Build lessons
 - `goals` table is live in Supabase (user-created; 12 cols incl. defaults status=active, start_date=today) with CHECK constraints on type/period/status/target_value>0 — a malformed enum reaching Postgres is a 500, so validate everything app-side first.
 - Backgrounded processes do NOT survive across separate bash tool invocations here — run a temp test server and its test suite inside ONE command (`(node server.js &); sleep 3; node test.cjs; kill ...`).
+
+## Goals vs actual chart (Stats & PRs tab, Aug 2026)
+- New top card in the stats renderer (`gvwCard()` in the stats IIFE): grouped goal-gray/actual-yellow bars per active goal, fed by a parallel `/api/goals` fetch inside `loadProfileStats` and formatted through the shared `window.__goalFmt` — the acceptance bar was exact equality with the Goals tab's rendered "X of Y" strings, so never fork the formatting.
+- **Views are FILTERS, not rescalings:** Weekly/Monthly show only goals with that period; streak (all-time measure) + custom-window goals appear ONLY in Overall regardless of their period field. Empty views show honest copy with all three pills visible.
+- Per-pair scaling to max(goal, actual) — goals mix units so there is deliberately NO shared axis; overshoot uncapped; zero progress = 2px stub. Horizontal bars ≤480px, vertical grouped on desktop. Goal gray #6B7280 (4.83:1 white / 3.34:1 vs yellow); actual yellow carries an inset 1px #E6B800 stroke — the only chart in the app with a stroke treatment (weekly-activity stack uses registry sport colors, no stroke).
+- Card hidden entirely at zero goals (create CTA lives in the Goals tab); it also renders above the "No stats yet" empty state when goals exist but activities don't.
+- **Why:** user mandated client-never-recomputes as the failure condition and honest empty/exceeded states.
+- Guard: scripts/verify-goal-chart.js (values vs API + vs Goals-tab strings, switcher, mobile).

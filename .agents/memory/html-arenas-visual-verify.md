@@ -18,3 +18,7 @@ description: How to screenshot auth-gated html-arenas widgets, and the screensho
 - Instead of copying widget CSS/fns into a standalone file, add a temp unauthed route `BASE+'/landing/__preview/<name>'` that serves the REAL page file through the real `injectArenasData` + `injectBottomNav` pipeline with fixture data, then appends a `<script>` before `</body>` that (1) monkey-patches `window.fetch` for the page's API URL to return fixture JSON (query param like `?ms=0` toggles empty states) and (2) on DOMContentLoaded calls `setTab('<tab>', el)` to open the target tab. Expected: 401 console noise from the notifications poll — harmless.
 - Remove the route + `node --check server.js` + restart before push so `git status` shows only the intended files.
 - E2E tester wanders into root React app: any /html test plan must say 'two apps on this domain; every URL must start with /html; /landing or /member-dashboard means wrong app'.
+
+## verify-mobile-geometry surface semantics
+- A `surfaces` entry `{ sel, min }` counts **children of the first matched element**, not matched elements — target a container (e.g. `#gvw-card`), never a leaf bar/span, or you get found:true/children:0 failures.
+- Tab steps only settle 250ms after their `js` click; any tab whose render awaits an extra fetch needs an explicit `waitFor` on an element from the final innerHTML.
