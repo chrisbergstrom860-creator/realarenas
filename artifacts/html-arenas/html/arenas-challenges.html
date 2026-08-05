@@ -196,9 +196,6 @@ document.addEventListener('DOMContentLoaded', function(){
 .sport-filter { padding: 5px 14px; border-radius: 20px; font-size: 13px; font-weight: 500; border: var(--border); background: white; color: var(--gray-600); cursor: pointer; font-family: var(--font); transition: all 0.12s; white-space: nowrap; }
 .sport-filter:hover { border-color: var(--gray-400); }
 .sport-filter.active { background: var(--gray-900); color: white; border-color: var(--gray-900); }
-.difficulty-filter { padding: 5px 14px; border-radius: 20px; font-size: 13px; font-weight: 500; border: var(--border); background: white; color: var(--gray-600); cursor: pointer; font-family: var(--font); transition: all 0.12s; }
-.difficulty-filter:hover { border-color: var(--gray-400); }
-.difficulty-filter.active { background: var(--yellow-light); color: #7a5c00; border-color: #fde68a; }
 
 /* ── RIGHT SIDEBAR ── */
 .right-col { display: flex; flex-direction: column; gap: 14px; }
@@ -324,9 +321,9 @@ document.addEventListener('DOMContentLoaded', function(){
       <h1>Challenges 🏆</h1>
       <p id="header-subtitle">Personalised to your sports — earn points, beat friends, and hit milestones.</p>
       <div class="header-stats">
-        <div class="header-stat"><div class="stat-dot" style="background:#10B981"></div> <strong id="active-count">—</strong> active challenges</div>
+        <div class="header-stat"><div class="stat-dot" style="background:#10B981"></div> <strong id="active-count">—</strong> <span id="active-count-label">active challenges</span></div>
         <div class="header-stat"><div class="stat-dot" style="background:#FFD21E"></div> <strong id="pts-month">—</strong> pts earned this month</div>
-        <div class="header-stat"><div class="stat-dot" style="background:#3B82F6"></div> <strong id="challenges-available">—</strong> challenges available</div>
+        <div class="header-stat"><div class="stat-dot" style="background:#3B82F6"></div> <strong id="challenges-available">—</strong> <span id="challenges-available-label">challenges available</span></div>
         <div class="header-stat"><div class="stat-dot" style="background:#8B5CF6"></div> <strong id="longest-streak">—</strong> day longest streak</div>
         <div class="header-stat"><a class="hpw-link" href="/html/how-points-work">ⓘ How points work</a></div>
       </div>
@@ -365,17 +362,15 @@ document.addEventListener('DOMContentLoaded', function(){
              renderDiscoverSportPills() from the sports actually present in
              the loaded public challenges (see data script). -->
         <button class="sport-filter active" onclick="setFilter(this,'sport','all')" id="ch-sport-filter-all">All sports</button>
-        <div style="width:1px;height:20px;background:var(--gray-200);margin:0 4px"></div>
-        <button class="difficulty-filter active" onclick="setFilter(this,'type','all')">All types</button>
-        <button class="difficulty-filter" onclick="setFilter(this,'type','solo')">Solo</button>
-        <button class="difficulty-filter" onclick="setFilter(this,'type','community')">Community</button>
-        <button class="difficulty-filter" onclick="setFilter(this,'type','performance')">Performance</button>
+        <!-- The prototype "All types / Solo / Community / Performance" pill
+             row and the "Load more challenges" button were DELETED (2026-08,
+             same dead-chrome rule as the fake modal pills): no `type` field
+             exists on the challenge model, renderDiscover ignored the value,
+             and Load-more only showed a toast (Discover is a single
+             server-capped list, no pagination). -->
       </div>
 
       <div class="cards-grid-2" id="discover-grid" style="margin-top:4px"></div>
-      <div style="text-align:center;margin-top:16px">
-        <button class="btn btn-ghost" onclick="showToast('Loading more challenges...')">Load more challenges</button>
-      </div>
     </div>
 
     <!-- ═══ WITH FRIENDS TAB (private challenges: invitations + yours) ═══ -->
@@ -490,20 +485,15 @@ function setTab(tab) {
 }
 
 // ── FILTERS ──
+// Sport is the only Discover filter; the prototype "type" pill row was
+// deleted (no such field on the model — see the filter-bar comment).
 let currentSportFilter = 'all';
-let currentTypeFilter = 'all';
 
 function setFilter(el, kind, val) {
-  if (kind === 'sport') {
-    document.querySelectorAll('.sport-filter').forEach(f => f.classList.remove('active'));
-    el.classList.add('active');
-    currentSportFilter = val;
-  } else {
-    document.querySelectorAll('.difficulty-filter').forEach(f => f.classList.remove('active'));
-    el.classList.add('active');
-    currentTypeFilter = val;
-  }
-  renderDiscover(currentSportFilter, currentTypeFilter);
+  document.querySelectorAll('.sport-filter').forEach(f => f.classList.remove('active'));
+  el.classList.add('active');
+  currentSportFilter = val;
+  renderDiscover(currentSportFilter);
 }
 
 // ── DETAIL MODAL ──
@@ -758,8 +748,8 @@ function showToast(msg) {
     container.innerHTML = html;
   }
 
-  // Real discover renderer — replaces the static prototype version while keeping
-  // the (sportFilter, typeFilter) signature that setTab/setFilter call with.
+  // Real discover renderer — replaces the degraded-mode stub at parse time;
+  // sport is the only filter (the prototype type row was deleted).
   window.renderDiscover = function (filter = 'all') {
     const grid = document.getElementById('discover-grid');
     if (!grid) return;
@@ -897,8 +887,11 @@ function showToast(msg) {
     // Header stats strip — all real, honest-zero on empty, from this same load.
     const setStat = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
     setStat('active-count', mineActive);
+    setStat('active-count-label', mineActive === 1 ? 'active challenge' : 'active challenges');
     setStat('pts-month', (result.pointsThisMonth || 0).toLocaleString());
-    setStat('challenges-available', (result.publicChallenges || []).length);
+    const availCount = (result.publicChallenges || []).length;
+    setStat('challenges-available', availCount);
+    setStat('challenges-available-label', availCount === 1 ? 'challenge available' : 'challenges available');
     setStat('longest-streak', result.longestStreak || 0);
     // Completed-tab folded header: same `completed` value as the tab badge —
     // one computation site for both, honest zero via renderEmptyAll's empty call.
