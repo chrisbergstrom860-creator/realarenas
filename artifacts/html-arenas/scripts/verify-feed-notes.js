@@ -250,6 +250,82 @@ const SHORT_NOTE = 'Quick spin, легкий день 🚴';
       }
     }
 
+    // ---- Profile Activities tab: same shared body builder — notes clamp,
+    // toggle, pre-line and XSS-as-text now hold on this surface too (it
+    // gained clamp/pre-line in the renderer convergence). ----
+    {
+      const aCtxCookies = await loginCookies(AUTHOR);
+      for (const width of [1280, 360, 380, 414]) {
+        const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+        await ctx.addCookies(aCtxCookies);
+        const page = await ctx.newPage();
+        const errors = [];
+        page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+        page.on('pageerror', (e) => errors.push(String(e)));
+        await page.goto(BASE_URL + '/profile#activities', { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(() => {
+          const c = document.querySelectorAll('.activity-card-item');
+          return c.length && Array.from(c).some((x) => x.textContent.includes('VFN'));
+        }, { timeout: 20000 });
+        const w = 'profile@' + width;
+
+        const r = await page.evaluate(() => {
+          const cards = Array.from(document.querySelectorAll('.activity-card-item'));
+          const info = (t) => {
+            const c = cards.find((x) => x.textContent.includes(t));
+            if (!c) return null;
+            const n = c.querySelector('.fa-notes');
+            const btn = c.querySelector('.fa-notes-toggle');
+            return {
+              titleShown: c.textContent.includes(t),
+              hasNotes: !!n,
+              text: n ? n.textContent : '',
+              clamped: !!(n && n.classList.contains('clamped')),
+              clampedOverflow: n ? n.scrollHeight > n.clientHeight + 1 : false,
+              whiteSpace: n ? getComputedStyle(n).whiteSpace : '',
+              hasToggle: !!btn,
+              injectedImg: !!(n && n.querySelector('img'))
+            };
+          };
+          return {
+            long: info('VFN long note run'),
+            multi: info('VFN multiline run'),
+            xss: info('VFN xss run'),
+            noteless: info('VFN noteless run'),
+            xssFired: !!window.__xssFired,
+            docW: document.documentElement.scrollWidth,
+            winW: window.innerWidth
+          };
+        });
+        // clampedOverflow only asserted at narrow widths — the profile column
+        // at 1280 is wide enough that this note fits within the 3-line clamp
+        // (nothing to hide), which is correct behavior, not a regression.
+        const needOverflow = width < 1280;
+        check('long note renders + clamped + toggle ' + w, !!(r.long && r.long.hasNotes && r.long.clamped && (!needOverflow || r.long.clampedOverflow) && r.long.hasToggle), JSON.stringify(r.long));
+        check('multiline pre-line ' + w, !!(r.multi && r.multi.whiteSpace === 'pre-line' && r.multi.text.includes('Warmup 15min easy\nMain set')), JSON.stringify(r.multi));
+        check('xss as text ' + w, !!(r.xss && r.xss.text.includes('<img src=x') && !r.xss.injectedImg && !r.xssFired), JSON.stringify(r.xss));
+        check('noteless: NO note block ' + w, !!(r.noteless && r.noteless.titleShown && !r.noteless.hasNotes), JSON.stringify(r.noteless));
+        check('no horizontal overflow ' + w, r.docW <= r.winW + 1, r.docW + ' vs ' + r.winW);
+        // Expansion asserted at 360 — the only width set where the clamp
+        // actually truncates on this wide-column surface (see above).
+        if (width === 360) {
+          const t = await page.evaluate(() => {
+            const c = Array.from(document.querySelectorAll('.activity-card-item')).find((x) => x.textContent.includes('VFN long note run'));
+            const n = c.querySelector('.fa-notes'); const btn = c.querySelector('.fa-notes-toggle');
+            const before = n.clientHeight;
+            btn.click();
+            const open = { h: n.clientHeight, clamped: n.classList.contains('clamped'), label: btn.textContent };
+            btn.click();
+            return { before, open, closed: { clamped: n.classList.contains('clamped'), label: btn.textContent } };
+          });
+          check('profile: Show more expands', t.open.h > t.before && !t.open.clamped && t.open.label === 'Show less', JSON.stringify(t));
+          check('profile: Show less re-clamps', t.closed.clamped && t.closed.label === 'Show more', JSON.stringify(t));
+        }
+        check('zero console errors ' + w, errors.length === 0, errors.join(' | '));
+        await ctx.close();
+      }
+    }
+
     // ---- Privacy: author turns Activity feed visible OFF → cards vanish ----
     const { data: aUser } = await admin.auth.admin.getUserById(authorId);
     const meta = (aUser && aUser.user && aUser.user.user_metadata) || {};

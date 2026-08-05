@@ -274,6 +274,10 @@ app.get(['/html/arenas-event-form.js', '/arenas-event-form.js'], (req, res) => {
 
 // Shared activity stat-tile builder (feed + my-profile Activities tab render
 // the same boxed tiles from this one file). Dual-path like the panel above.
+app.get(['/html/arenas-activity-card.js', '/arenas-activity-card.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-activity-card.js'));
+});
+
 app.get(['/html/arenas-stat-tiles.js', '/arenas-stat-tiles.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-stat-tiles.js'));
 });
@@ -2962,31 +2966,26 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
     // 2. Activities from members. Ordered/stamped by `created_at` (logged
     // moment) so "X ago" reflects when it was logged, not the local-noon
     // training-day anchor stored in `date`.
+    // Payload CONVERGED with the main feed's activity shape: the full raw
+    // activity row is spread in (the shared card builder + stat tiles read
+    // the same columns everywhere — a projected subset here is exactly the
+    // hidden divergence that produced the old `notes || title` title-loss
+    // bug). Header fields (name/avatarUrl/...) stay flattened on top.
     const { data: activities } = await supabaseAdmin
       .from('activities')
-      .select('id, user_id, sport, title, notes, distance, duration, pace, ai_insight, date, created_at')
+      .select('*')
       .in('user_id', safeIds)
       .order('created_at', { ascending: false })
       .limit(20);
     (activities || []).forEach((a) => {
       feed.push({
         type: 'activity',
-        id: a.id,
+        ...a,
         userId: a.user_id,
         name: prof(a.user_id).name || 'Member',
         handle: prof(a.user_id).handle || 'member',
         avatarUrl: prof(a.user_id).avatar_url || null,
-        // Title and notes are SEPARATE fields — the old `notes || title`
-        // substitution made noted activities lose their title on the club
-        // dashboard Feed tab. `content` kept (title-only) for compatibility.
-        content: a.title || '',
-        title: a.title || '',
-        notes: a.notes || '',
-        sport: a.sport,
-        distance: a.distance,
-        duration: a.duration,
-        pace: a.pace,
-        aiInsight: a.ai_insight,
+        content: a.title || '', // kept title-only for compatibility
         timestamp: a.created_at || a.date
       });
     });
