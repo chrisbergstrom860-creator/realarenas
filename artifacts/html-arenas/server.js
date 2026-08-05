@@ -2976,7 +2976,12 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
         name: prof(a.user_id).name || 'Member',
         handle: prof(a.user_id).handle || 'member',
         avatarUrl: prof(a.user_id).avatar_url || null,
-        content: a.notes || a.title || '',
+        // Title and notes are SEPARATE fields — the old `notes || title`
+        // substitution made noted activities lose their title on the club
+        // dashboard Feed tab. `content` kept (title-only) for compatibility.
+        content: a.title || '',
+        title: a.title || '',
+        notes: a.notes || '',
         sport: a.sport,
         distance: a.distance,
         duration: a.duration,

@@ -50,7 +50,7 @@ const XSS_NOTE = `<img src=x onerror="window.__xssFired=true"> <script>window.__
 const SHORT_NOTE = 'Quick spin, легкий день 🚴';
 
 (async () => {
-  let authorId = null, viewerId = null, browser = null;
+  let authorId = null, viewerId = null, clubId = null, browser = null;
   try {
     const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
     for (const u of (data && data.users) || []) if ([AUTHOR, VIEWER].includes(u.email)) await admin.auth.admin.deleteUser(u.id);
@@ -171,6 +171,85 @@ const SHORT_NOTE = 'Quick spin, легкий день 🚴';
       await ctx.close();
     }
 
+    // ---- Club dashboard Feed tab: title first, notes below (the old
+    // `notes || title` substitution dropped the title on noted activities) ----
+    {
+      const { data: club, error: cErr } = await admin.from('clubs')
+        .insert({ name: 'VFN Notes Club', handle: 'vfn-notes-club', sport: 'running', owner_id: authorId }).select().single();
+      if (cErr) throw new Error('club: ' + cErr.message);
+      clubId = club.id;
+      const { error: mErr } = await admin.from('memberships').insert({ user_id: authorId, club_id: clubId, role: 'admin' });
+      if (mErr) throw new Error('membership: ' + mErr.message);
+
+      const aCtxCookies = await loginCookies(AUTHOR);
+      for (const width of [1280, 360, 380, 414]) {
+        const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+        await ctx.addCookies(aCtxCookies);
+        const page = await ctx.newPage();
+        const errors = [];
+        page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+        page.on('pageerror', (e) => errors.push(String(e)));
+        await page.goto(BASE_URL + '/clubs/dashboard?club=' + clubId + '#feed', { waitUntil: 'networkidle' });
+        await page.waitForFunction(() => {
+          const el = document.getElementById('cf-feed-list');
+          return el && el.textContent.includes('VFN');
+        }, { timeout: 15000 });
+        const w = 'club@' + width;
+
+        const r = await page.evaluate(() => {
+          const list = document.getElementById('cf-feed-list');
+          const cards = Array.from(list.children);
+          const info = (t) => {
+            const c = cards.find((x) => x.textContent.includes(t));
+            if (!c) return null;
+            const n = c.querySelector('.fa-notes');
+            const btn = c.querySelector('.fa-notes-toggle');
+            return {
+              titleShown: c.textContent.includes(t),
+              hasNotes: !!n,
+              text: n ? n.textContent : '',
+              clamped: !!(n && n.classList.contains('clamped')),
+              clampedOverflow: n ? n.scrollHeight > n.clientHeight + 1 : false,
+              whiteSpace: n ? getComputedStyle(n).whiteSpace : '',
+              hasToggle: !!btn,
+              injectedImg: !!(n && n.querySelector('img'))
+            };
+          };
+          return {
+            long: info('VFN long note run'),
+            multi: info('VFN multiline run'),
+            xss: info('VFN xss run'),
+            noteless: info('VFN noteless run'),
+            xssFired: !!window.__xssFired,
+            docW: document.documentElement.scrollWidth,
+            winW: window.innerWidth
+          };
+        });
+        check('title shown + note below ' + w, !!(r.long && r.long.titleShown && r.long.hasNotes && r.long.text.includes('Negative-split')), JSON.stringify(r.long));
+        check('long note clamped + toggle ' + w, !!(r.long && r.long.clamped && r.long.clampedOverflow && r.long.hasToggle), JSON.stringify(r.long));
+        check('multiline pre-line ' + w, !!(r.multi && r.multi.whiteSpace === 'pre-line' && r.multi.text.includes('Warmup 15min easy\nMain set')), JSON.stringify(r.multi));
+        check('xss as text ' + w, !!(r.xss && r.xss.text.includes('<img src=x') && !r.xss.injectedImg && !r.xssFired), JSON.stringify(r.xss));
+        check('noteless: title, NO note block ' + w, !!(r.noteless && r.noteless.titleShown && !r.noteless.hasNotes), JSON.stringify(r.noteless));
+        check('no horizontal overflow ' + w, r.docW <= r.winW + 1, r.docW + ' vs ' + r.winW);
+        if (width === 1280) {
+          const t = await page.evaluate(() => {
+            const list = document.getElementById('cf-feed-list');
+            const c = Array.from(list.children).find((x) => x.textContent.includes('VFN long note run'));
+            const n = c.querySelector('.fa-notes'); const btn = c.querySelector('.fa-notes-toggle');
+            const before = n.clientHeight;
+            btn.click();
+            const open = { h: n.clientHeight, clamped: n.classList.contains('clamped'), label: btn.textContent };
+            btn.click();
+            return { before, open, closed: { clamped: n.classList.contains('clamped'), label: btn.textContent } };
+          });
+          check('club: Show more expands', t.open.h > t.before && !t.open.clamped && t.open.label === 'Show less', JSON.stringify(t));
+          check('club: Show less re-clamps', t.closed.clamped && t.closed.label === 'Show more', JSON.stringify(t));
+        }
+        check('zero console errors ' + w, errors.length === 0, errors.join(' | '));
+        await ctx.close();
+      }
+    }
+
     // ---- Privacy: author turns Activity feed visible OFF → cards vanish ----
     const { data: aUser } = await admin.auth.admin.getUserById(authorId);
     const meta = (aUser && aUser.user && aUser.user.user_metadata) || {};
@@ -189,11 +268,29 @@ const SHORT_NOTE = 'Quick spin, легкий день 🚴';
     console.log('  FAIL script error — ' + (err && err.stack || err));
   } finally {
     if (browser) await browser.close().catch(() => {});
+    if (clubId) {
+      await admin.from('memberships').delete().eq('club_id', clubId).then(() => {});
+      await admin.from('clubs').delete().eq('id', clubId).then(() => {});
+    }
+    // Per-user reference tables THIS script's fixtures can touch (subset of
+    // the sweep's list — no events/challenges/invites here) — the API-created
+    // activity fires achievement awards + notifications, and any leftover
+    // row makes auth deleteUser fail with "Database error deleting user".
+    const USER_REFS = [
+      ['activities', 'user_id'], ['posts', 'user_id'], ['post_likes', 'user_id'],
+      ['activity_likes', 'user_id'], ['post_comments', 'user_id'],
+      ['follows', 'follower_id'], ['follows', 'following_id'],
+      ['memberships', 'user_id'], ['event_rsvps', 'user_id'],
+      ['challenge_participants', 'user_id'], ['notifications', 'user_id'], ['notifications', 'actor_id'],
+      ['goals', 'user_id'], ['achievements', 'user_id'], ['planned_sessions', 'user_id'],
+      ['profiles', 'id']
+    ];
     for (const id of [authorId, viewerId]) {
       if (!id) continue;
-      await admin.from('activities').delete().eq('user_id', id).then(() => {});
-      await admin.from('follows').delete().or(`follower_id.eq.${id},following_id.eq.${id}`).then(() => {});
-      await admin.auth.admin.deleteUser(id).catch(() => {});
+      for (const [t, c] of USER_REFS) await admin.from(t).delete().eq(c, id).then(() => {});
+      let { error: dErr } = await admin.auth.admin.deleteUser(id);
+      if (dErr) ({ error: dErr } = await admin.auth.admin.deleteUser(id));
+      if (dErr) console.log('  WARN cleanup: deleteUser ' + id + ' — ' + dErr.message);
     }
   }
   console.log(failures ? `\n${failures} FAILURES` : '\nALL CHECKS PASSED');

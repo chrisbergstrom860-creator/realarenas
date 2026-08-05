@@ -307,6 +307,11 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
   body.printing-report #tab-reports > div:first-child { break-inside: avoid; }
   @page { margin: 1.5cm; }
 }
+/* Activity notes on club-feed cards — same treatment as the main feed. */
+.fa-notes { white-space: pre-line; overflow-wrap: break-word; }
+.fa-notes.clamped { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.fa-notes-toggle { border: none; background: none; padding: 0; margin-top: 4px; font-size: 12px; font-weight: 600; color: var(--gray-500); cursor: pointer; }
+.fa-notes-toggle:hover { color: var(--gray-700); }
 </style>
 </head>
 <body>
@@ -3058,6 +3063,26 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     }
 
+    // Athlete notes on club-feed activity cards — same rules as the main
+    // feed: escaped, white-space:pre-line, clamp long notes (>220 chars or
+    // >3 line breaks) to 3 lines with a Show more toggle. '' when no notes.
+    function clubFeedNotesHtml(notes) {
+      var text = String(notes == null ? '' : notes);
+      if (!text.trim()) return '';
+      var isLong = text.length > 220 || (text.match(/\n/g) || []).length > 3;
+      return '<div style="margin:0 14px 10px;font-size:12px;color:var(--gray-600);line-height:1.6;padding:8px 10px;background:var(--gray-50);border-radius:6px">' +
+        '<div class="fa-notes' + (isLong ? ' clamped' : '') + '">' + esc(text) + '</div>' +
+        (isLong ? '<button type="button" class="fa-notes-toggle" onclick="toggleClubFeedNotes(this)">Show more</button>' : '') +
+      '</div>';
+    }
+    function toggleClubFeedNotes(btn) {
+      var n = btn.previousElementSibling;
+      if (!n) return;
+      n.classList.toggle('clamped');
+      btn.textContent = n.classList.contains('clamped') ? 'Show more' : 'Show less';
+    }
+    window.toggleClubFeedNotes = toggleClubFeedNotes;
+
     function renderClubFeed() {
       var container = document.getElementById('cf-feed-list');
       if (!container) return;
@@ -3096,7 +3121,10 @@ document.addEventListener('DOMContentLoaded', function () {
           if (item.distance) statCells.push('<div style="background:var(--gray-50);border-radius:8px;padding:9px 12px;text-align:center"><div style="font-size:15px;font-weight:600;font-family:var(--mono);color:var(--gray-900)">' + esc(item.distance) + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;margin-top:2px">Distance</div></div>');
           if (item.duration) statCells.push('<div style="background:var(--gray-50);border-radius:8px;padding:9px 12px;text-align:center"><div style="font-size:15px;font-weight:600;font-family:var(--mono);color:var(--gray-900)">' + esc(item.duration) + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;margin-top:2px">Duration</div></div>');
           if (item.pace) statCells.push('<div style="background:var(--gray-50);border-radius:8px;padding:9px 12px;text-align:center"><div style="font-size:15px;font-weight:600;font-family:var(--mono);color:var(--gray-900)">' + esc(item.pace) + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;margin-top:2px">Pace</div></div>');
-          body = (item.content ? '<div style="padding:0 14px 10px;font-size:13px;color:var(--gray-900);line-height:1.6">' + esc(item.content) + '</div>' : '')
+          // Title first (bold), then the athlete's notes below in the gray
+          // escaped block — same structure as the main feed's activity card.
+          body = (item.title ? '<div style="padding:0 14px 6px;font-size:13px;font-weight:600;color:var(--gray-900);line-height:1.5">' + esc(item.title) + '</div>' : '')
+            + clubFeedNotesHtml(item.notes)
             + (statCells.length ? '<div style="display:grid;grid-template-columns:repeat(' + statCells.length + ',1fr);gap:8px;margin:0 14px 10px">' + statCells.join('') + '</div>' : '')
             + (item.aiInsight ? '<div style="margin:0 14px 10px;background:var(--yellow-light);border:0.5px solid #fde68a;border-radius:8px;padding:9px 12px;display:flex;gap:8px;align-items:flex-start"><span style="font-size:13px;flex-shrink:0">📝</span><div style="font-size:11px;color:#633806;line-height:1.55"><strong>Coach&#39;s note:</strong> ' + esc(item.aiInsight) + '</div></div>' : '');
         } else if (item.type === 'rsvp') {
