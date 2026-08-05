@@ -595,7 +595,16 @@ function showToast(msg) {
   (window.ARENAS_SPORTS || []).forEach(function (s) {
     SPORT_COLORS[s.id] = 'background:' + s.colors.bg + ';color:' + s.colors.text;
   });
-  const PROGRESS_COLORS = { running:'#F97316', cycling:'#3B82F6', climbing:'#8B5CF6', swimming:'#14B8A6', football:'#10B981', weightlifting:'#EAB308', hiking:'#F59E0B', yoga:'#EC4899', any:'#6B7280' };
+  // Full 14-sport coverage, CVD-safe: hues stay in each sport's family but
+  // lightness is deliberately spread (that's what separates the set under
+  // deuteranopia/protanopia — hue alone collapses). Set minima: normal-vision
+  // ΔE 25.0, deutan 10.1, protan 9.1; verify-sport-colors.js enforces floors.
+  const PROGRESS_COLORS = {
+    running:'#FB923C', cycling:'#3B82F6', climbing:'#7C3AED', swimming:'#0D9488',
+    football:'#34D399', weightlifting:'#EAB308', hiking:'#92400E', yoga:'#BE185D',
+    tennis:'#F9A8D4', pilates:'#E879F9', golf:'#3F6212', hockey:'#0F172A',
+    basketball:'#EA580C', pickleball:'#0891B2', any:'#6B7280'
+  };
   const sportIcon = s => SPORT_ICONS[s] || '⚡';
   const sportColor = s => SPORT_COLORS[s] || SPORT_COLORS.any;
   const progressColor = s => PROGRESS_COLORS[s] || '#6B7280';

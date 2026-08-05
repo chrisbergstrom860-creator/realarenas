@@ -732,15 +732,27 @@ document.addEventListener('DOMContentLoaded', function(){
 
   // Icons come from the sports registry; bg/bar stay a local challenge-card
   // accent palette (deliberately different hexes from the registry tag colors).
+  // Full 14-sport coverage, CVD-safe bars: hues stay in each sport's family
+  // but lightness is deliberately spread (hue alone collapses under
+  // deuteranopia/protanopia). Bar-set minima: normal-vision ΔE 23.9,
+  // deutan 11.2, protan 9.5; verify-sport-colors.js enforces floors.
+  // bg tile tints are NOT part of the distinguishability contract — the emoji
+  // carries identity on the tile — so they stay near-indistinguishable pales.
   var CHALLENGE_ACCENTS = {
-    running:       { bg: '#FFF7ED', bar: '#F97316' },
-    cycling:       { bg: '#EFF6FF', bar: '#3B82F6' },
-    climbing:      { bg: '#F5F3FF', bar: '#8B5CF6' },
-    swimming:      { bg: '#ECFEFF', bar: '#06B6D4' },
-    football:      { bg: '#F0FDF4', bar: '#22C55E' },
-    weightlifting: { bg: '#FEF2F2', bar: '#EF4444' },
-    hiking:        { bg: '#F7FEE7', bar: '#65A30D' },
-    yoga:          { bg: '#FDF4FF', bar: '#D946EF' }
+    running:       { bg: '#FFF7ED', bar: '#EA580C' },
+    cycling:       { bg: '#EFF6FF', bar: '#2563EB' },
+    climbing:      { bg: '#F5F3FF', bar: '#A78BFA' },
+    swimming:      { bg: '#ECFEFF', bar: '#14B8A6' },
+    football:      { bg: '#F0FDF4', bar: '#047857' },
+    weightlifting: { bg: '#FEF2F2', bar: '#F87171' },
+    hiking:        { bg: '#F7FEE7', bar: '#A3E635' },
+    yoga:          { bg: '#FDF4FF', bar: '#A21CAF' },
+    tennis:        { bg: '#FFF1F2', bar: '#9F1239' },
+    pilates:       { bg: '#FDF2F8', bar: '#DB2777' },
+    golf:          { bg: '#ECFDF5', bar: '#34D399' },
+    hockey:        { bg: '#F1F5F9', bar: '#0F172A' },
+    basketball:    { bg: '#FFEDD5', bar: '#9A3412' },
+    pickleball:    { bg: '#E0F2FE', bar: '#22D3EE' }
   };
   var sportStyle = {};
   (window.ARENAS_SPORTS || []).forEach(function (s) {

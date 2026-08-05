@@ -154,5 +154,64 @@ check('no hardcoded sport-color hex outside registry (whitelist: ' +
   WHITELIST.map((w) => w.name).join(', ') + ')', offenders.length === 0,
   offenders.length ? '\n        ' + offenders.join('\n        ') : '');
 
+// 4. Whitelisted palettes are exempt from the registry-match rule — NOT from
+// distinguishability. Each must cover all 14 sports and keep its BAR colors
+// mutually separable, including under CVD (the 2026-08 retint spread
+// lightness precisely to buy these floors — hue alone collapses for
+// dichromats). bg tile tints are deliberately NOT asserted: the emoji carries
+// identity on the tile, the pale tints are near-identical by design.
+// Floors sit just under what the retinted sets achieve (PROG 22.7/11.9/11.4,
+// ACC 23.9/16.0/16.2 by this file's own math) so drift fails loudly.
+const PALETTE_FLOORS = { normal: 20, deutan: 9, protan: 9, track: 30 };
+const TRACKS = ['#F3F4F6', '#FFFFFF'];
+function extractPalette(entry) {
+  const src = fs.readFileSync(path.join(ROOT, entry.file), 'utf8');
+  // Anchor on the assignment (`NAME = {`), not the first mention — the
+  // palettes are referenced in prose comments above their definitions.
+  const assign = src.match(new RegExp(entry.name + '\\s*=\\s*{'));
+  if (!assign) return null;
+  const open = src.indexOf('{', assign.index);
+  let d = 0, end = open;
+  for (let k = open; k < src.length; k++) {
+    if (src[k] === '{') d++;
+    if (src[k] === '}') d--;
+    if (d === 0) { end = k; break; }
+  }
+  const block = src.slice(open, end + 1);
+  const out = {};
+  const re = /(\w+)\s*:\s*(?:'(#[0-9a-fA-F]{6})'|{[^}]*bar:\s*'(#[0-9a-fA-F]{6})'[^}]*})/g;
+  let m;
+  while ((m = re.exec(block))) out[m[1]] = (m[2] || m[3]).toUpperCase();
+  return out;
+}
+for (const entry of WHITELIST) {
+  const pal = extractPalette(entry);
+  check(entry.name + ' palette found and parsed', !!pal && Object.keys(pal).length > 0);
+  if (!pal) continue;
+  const missing = SPORTS.map((s) => s.id).filter((id) => !pal[id]);
+  check(entry.name + ' covers all 14 sports', missing.length === 0, missing.join(','));
+  // Distinguishability is asserted over the 14 real sports; generic fallbacks
+  // ('any' gray / DEFAULT amber) are identity-free by design and excluded.
+  const ids = SPORTS.map((s) => s.id).filter((id) => pal[id]);
+  let pMin = Infinity, pPair = '', pMinD = Infinity, pPairD = '', pMinP = Infinity, pPairP = '';
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      const a = pal[ids[i]], b = pal[ids[j]], pr = ids[i] + '/' + ids[j];
+      const n = dE(a, b);
+      if (n < pMin) { pMin = n; pPair = pr; }
+      const dd = dE(simulate(a, 'deutan'), simulate(b, 'deutan'));
+      if (dd < pMinD) { pMinD = dd; pPairD = pr; }
+      const dp = dE(simulate(a, 'protan'), simulate(b, 'protan'));
+      if (dp < pMinP) { pMinP = dp; pPairP = pr; }
+    }
+  }
+  check(entry.name + ' bar ΔE floor >= ' + PALETTE_FLOORS.normal, pMin >= PALETTE_FLOORS.normal, pMin.toFixed(1) + ' (' + pPair + ')');
+  check(entry.name + ' deuteranopia floor >= ' + PALETTE_FLOORS.deutan, pMinD >= PALETTE_FLOORS.deutan, pMinD.toFixed(1) + ' (' + pPairD + ')');
+  check(entry.name + ' protanopia floor >= ' + PALETTE_FLOORS.protan, pMinP >= PALETTE_FLOORS.protan, pMinP.toFixed(1) + ' (' + pPairP + ')');
+  const weak = ids.filter((id) => TRACKS.some((t) => dE(pal[id], t) < PALETTE_FLOORS.track));
+  check(entry.name + ' every bar visible vs track/white (ΔE >= ' + PALETTE_FLOORS.track + ')', weak.length === 0, weak.map((id) => id + '=' + pal[id]).join(','));
+  console.log('  info: ' + entry.name + ' minima — normal ' + pMin.toFixed(1) + ' (' + pPair + '), deutan ' + pMinD.toFixed(1) + ' (' + pPairD + '), protan ' + pMinP.toFixed(1) + ' (' + pPairP + ')');
+}
+
 console.log(failures ? failures + ' FAILURE(S)' : 'ALL PASS');
 process.exit(failures ? 1 : 0);
