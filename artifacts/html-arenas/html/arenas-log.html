@@ -151,8 +151,11 @@ button{font-family:var(--font)}
 
           <!-- Notes -->
           <div style="margin-bottom:12px">
-            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Notes <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div>
-            <textarea class="form-textarea" id="act-notes" placeholder="How did it feel? Any highlights or things to remember…" style="min-height:72px"></textarea>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">
+              <div style="font-size:11px;font-weight:600;color:var(--gray-600)">Notes <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div>
+              <div id="act-notes-count" style="font-size:11px;color:var(--gray-400)">0/500</div>
+            </div>
+            <textarea class="form-textarea" id="act-notes" maxlength="500" placeholder="How did it feel? Visible to your followers and clubmates." style="min-height:72px" oninput="updateNotesCount()"></textarea>
           </div>
 
           <!-- Feeling -->
@@ -357,6 +360,7 @@ function resetActivityForm() {
   document.getElementById('act-title').value = '';
   document.getElementById('act-duration').value = '';
   document.getElementById('act-notes').value = '';
+  updateNotesCount();
   document.querySelectorAll('.act-sport-chip, .act-feeling-chip').forEach(function(c){ c.classList.remove('selected'); });
   document.getElementById('act-sport-fields').style.display = 'none';
   document.getElementById('act-error').style.display = 'none';
@@ -401,6 +405,13 @@ function showActError(msg) {
 }
 
 function actVal(id){ var el = document.getElementById(id); return (el && el.value) || null; }
+
+// Live character counter for the Notes field (500-char cap; server enforces too).
+function updateNotesCount() {
+  var el = document.getElementById('act-notes');
+  var out = document.getElementById('act-notes-count');
+  if (el && out) out.textContent = el.value.length + '/500';
+}
 
 async function saveActivity() {
   var sport = selectedActivitySport;

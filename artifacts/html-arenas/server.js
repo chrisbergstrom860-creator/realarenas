@@ -1955,6 +1955,12 @@ app.post(BASE + '/api/activities/create', requireAuth, async (req, res) => {
   const b = req.body || {};
   if (!b.sport) return res.json({ error: 'Please select a sport' });
   if (!b.title || !b.title.trim()) return res.json({ error: 'Please enter an activity title' });
+  // Notes are public (feed + club feeds); cap length server-side — the log
+  // form's maxlength is UX only, not a security boundary. 500 chars matches
+  // the planned-session notes limit.
+  if (b.notes && String(b.notes).length > 500) {
+    return res.json({ error: 'Notes must be 500 characters or less' });
+  }
   // Golf's numeric column gets real bounds validation (the other per-sport
   // fields are free-form text columns). Distinct from swimming's `stroke`
   // column — different name, different config, zero interaction.
