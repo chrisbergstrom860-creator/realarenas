@@ -67,4 +67,5 @@
 - [html-arenas challenge edit/delete](html-arenas-challenge-edit-delete.md) — delete branches on aloneness; PATCH whitelist keyed on start_date; end-early = end_date-24h, no snapshot; remove-from-discover separate one-way route; overlay beforeClose dirty-guard.
 - [html-arenas shared-CSS consolidation](html-arenas-css-consolidation.md) — linked = real <link> tag only (grep trap!); partial-coverage rules can't move; check demotion vs sibling `.btn`-style rules.
 - [html-arenas By-sport charts + accents](html-arenas-sport-charts.md) — shared arenas-sport-charts.js (3 charts + exact table; pie.js DELETED); colors.text is a data channel, ΔE≥20 guard verify-sport-colors.js.
+- [html-arenas activity notes](html-arenas-activity-notes.md) — notes public everywhere by user decision (no per-activity privacy — don't re-propose); 500-char cap; desktop feed column needed minmax(0,1fr).
 - [html-arenas athlete directory](html-arenas-athlete-directory.md) — shared adc- card module + profile Athletes tab; follow-change event contract; /athletes?q= is THE search target; new shared JS needs its serve route.
