@@ -11,6 +11,8 @@ description: arenas-activity-card.js renders activity-card bodies on feed, club 
 
 **How to apply:** any new surface showing activity cards uses this module + its serve route. Headers/footers stay per-surface (avatar vs sport tile; kudos give-button vs count chip vs none; delete btn) — known residual divergence: dashboard's rotating-palette avatar fallback vs feed's gray-200, and three sport-pill treatments.
 
+Sport pill: `window.sportPillHtml(sport, {size:'sm'|'xs', icon, style})` in the same module is THE registry-fed pill renderer (colors only from `ARENAS_SPORTS_BY_ID`, no color params; unknown sport → neutral gray + ⚡, never another sport's colors). `xs` = the dashboard's 10px/600/0.5px badge grammar — deliberate, matches its sibling 📣/🎟️ badges, don't converge. verify-sport-colors.js now has a two-tier hardcoded-sport-hex guard: script-context sport+hex lines fail outright; static markup tags (landing/blog mocks — plain sendFile pages, no registry injection) must match current registry hexes or fail; deliberate accent palettes are whitelisted BY NAME (PROGRESS_COLORS, CHALLENGE_ACCENTS) — add a third palette consciously there.
+
 Related facts:
 - Club feed payload (`/api/clubs/:clubId/feed`) is CONVERGED to the feed's activity shape: `select('*')` spread into the item + flattened name/avatarUrl/handle; `content` kept title-only for compat. Don't re-project a column subset — that hid the original bug.
 - Notes clamp rule: >220 chars or >3 line breaks → 3-line clamp + Show more (`window.toggleActivityNotes`). Clamp may legitimately not truncate on wide columns (profile @1280 fits 458 chars in 3 lines) — verify scripts assert overflow only at narrow widths.
