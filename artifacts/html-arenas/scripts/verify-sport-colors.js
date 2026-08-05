@@ -74,5 +74,85 @@ SPORTS.forEach((s) => {
   check('AA ' + s.id + ' text on own bg >= 4.5', c >= 4.5, c.toFixed(2));
 });
 
+// 3. No hardcoded sport-color hexes outside the registry.
+//
+// The registry (sports.js) is the single source of truth for sport colors.
+// Two-tier rule over html/ + server.js:
+//   - SCRIPT context (any .js file, or lines inside <script> in .html):
+//     a line naming a sport AND carrying a #RRGGBB literal fails outright —
+//     that's a page-local sport-color map, the drift pattern this guard
+//     exists to kill.
+//   - STATIC MARKUP (html outside <script>, e.g. marketing mock tags on the
+//     landing page, which is served as a plain file with no registry
+//     injection): literal hexes are allowed ONLY if every hex on the line is
+//     one of that sport's current registry colors (bg/text/border). A palette
+//     change then fails here, pointing at the exact stale line — which is
+//     precisely how the pre-palette landing/blog hexes were caught.
+//
+// EXPLICIT WHITELIST — deliberate, separately-designed accent palettes only.
+// Each entry names a specific palette in a specific file; adding a third
+// palette means adding a conscious entry here, not widening a pattern.
+//   - PROGRESS_COLORS  (arenas-challenges.html):  challenge progress-bar
+//     accents, commented in-page as "not part of the registry".
+//   - CHALLENGE_ACCENTS (arenas-leaderboards.html): challenge-card bg/bar
+//     accents, commented in-page as "deliberately different hexes".
+const fs = require('fs');
+const ROOT = path.join(__dirname, '..');
+const WHITELIST = [
+  { file: 'html/arenas-challenges.html', name: 'PROGRESS_COLORS' },
+  { file: 'html/arenas-leaderboards.html', name: 'CHALLENGE_ACCENTS' }
+];
+const byWord = {};
+SPORTS.forEach((s) => { byWord[s.id.toLowerCase()] = s; byWord[s.label.toLowerCase()] = s; });
+const SPORT_RE = new RegExp('\\b(' + Object.keys(byWord).join('|') + ')\\b', 'i');
+const HEX_RE = /#[0-9a-fA-F]{6}\b/g;
+const scanFiles = fs.readdirSync(path.join(ROOT, 'html'))
+  .filter((f) => f.endsWith('.html') || f.endsWith('.js'))
+  .map((f) => 'html/' + f)
+  .concat(['server.js']);
+const offenders = [];
+for (const rel of scanFiles) {
+  const lines = fs.readFileSync(path.join(ROOT, rel), 'utf8').split('\n');
+  const names = WHITELIST.filter((w) => w.file === rel).map((w) => w.name);
+  let inBlock = null, depth = 0;          // whitelisted object literal
+  let inScript = rel.endsWith('.js');     // script context (js file or <script>)
+  lines.forEach((line, i) => {
+    let whitelisted = false;
+    if (inBlock) {
+      whitelisted = true;
+      depth += (line.match(/{/g) || []).length - (line.match(/}/g) || []).length;
+      if (depth <= 0) inBlock = null;
+    } else {
+      const hit = names.find((n) => line.includes(n));
+      if (hit) {
+        whitelisted = true;
+        depth = (line.match(/{/g) || []).length - (line.match(/}/g) || []).length;
+        if (depth > 0) inBlock = hit;
+      }
+    }
+    const sportM = line.match(SPORT_RE);
+    const hexes = line.match(HEX_RE) || [];
+    if (!whitelisted && sportM && hexes.length) {
+      if (inScript) {
+        offenders.push(rel + ':' + (i + 1) + '  [script sport-color map]  ' + line.trim().slice(0, 110));
+      } else {
+        const s = byWord[sportM[1].toLowerCase()];
+        const allowed = [s.colors.bg, s.colors.text, s.colors.border].map((h) => h.toUpperCase());
+        const stale = hexes.filter((h) => !allowed.includes(h.toUpperCase()));
+        if (stale.length) {
+          offenders.push(rel + ':' + (i + 1) + '  [stale ' + s.id + ' hex ' + stale.join(',') + '; registry: ' + allowed.join(' ') + ']  ' + line.trim().slice(0, 90));
+        }
+      }
+    }
+    if (!rel.endsWith('.js')) {
+      if (/<script\b(?![^>]*\bsrc=)/i.test(line)) inScript = true;
+      if (/<\/script>/i.test(line)) inScript = false;
+    }
+  });
+}
+check('no hardcoded sport-color hex outside registry (whitelist: ' +
+  WHITELIST.map((w) => w.name).join(', ') + ')', offenders.length === 0,
+  offenders.length ? '\n        ' + offenders.join('\n        ') : '');
+
 console.log(failures ? failures + ' FAILURE(S)' : 'ALL PASS');
 process.exit(failures ? 1 : 0);

@@ -2920,11 +2920,7 @@ document.addEventListener('DOMContentLoaded', function () {
       { bg: '#E0F2FE', c: '#0369A1' }, { bg: '#F5F3FF', c: '#5B21B6' },
       { bg: '#ECFDF5', c: '#065F46' }, { bg: '#FAEEDA', c: '#633806' }
     ];
-    // Derived from the sports registry.
-    var sportColors = {};
-    (window.ARENAS_SPORTS || []).forEach(function (s) {
-      sportColors[s.id] = { bg: s.colors.bg, color: s.colors.text, border: s.colors.border, icon: s.emoji };
-    });
+    // Sport pill: shared registry-fed renderer (arenas-activity-card.js).
 
     var cfFilter = 'all';
     var cfFeedItems = [];
@@ -3097,8 +3093,9 @@ document.addEventListener('DOMContentLoaded', function () {
           metaLabel = 'posted a note';
           body = '<div style="padding:0 14px 10px;font-size:13px;color:var(--gray-900);line-height:1.6">' + esc(item.content) + '</div>';
         } else if (item.type === 'activity') {
-          var sc = sportColors[item.sport] || sportColors.running;
-          badge = '<span style="margin-left:auto;font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;background:' + sc.bg + ';color:' + sc.color + ';border:0.5px solid ' + sc.border + ';flex-shrink:0">' + sc.icon + ' ' + esc(cap(item.sport)) + '</span>';
+          // xs = this card row's badge grammar (matches 📣 Coach / 🎟️ RSVP);
+          // unknown sport now renders the neutral gray pill, not running's colors.
+          badge = window.sportPillHtml(item.sport, { size: 'xs', style: 'margin-left:auto;flex-shrink:0' });
           metaLabel = 'logged an activity';
           // Shared body builder (title → stat tiles → notes → coach's note),
           // same renderer as the main feed / profile Activities tab. The

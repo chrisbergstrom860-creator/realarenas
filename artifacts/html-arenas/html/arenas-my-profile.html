@@ -1658,21 +1658,17 @@ function renderActivities(activities) {
   }
   if (empty) empty.style.display = 'none';
 
-  // Icons and tag styles derived from the sports registry (window.ARENAS_SPORTS).
-  var sportIcons = window.ARENAS_SPORT_ICONS || {};
-  var sportColors = {};
-  (window.ARENAS_SPORTS || []).forEach(function (s) {
-    sportColors[s.id] = 'background:' + s.colors.bg + ';color:' + s.colors.text + ';border-color:' + s.colors.border;
-  });
+  // Sport pill: shared registry-fed renderer (arenas-activity-card.js);
+  // icons + tile bg read straight off the registry.
+  var byId = window.ARENAS_SPORTS_BY_ID || {};
 
   // Boxed stat tiles: shared builder (arenas-stat-tiles.js) — the exact same
   // renderer the feed uses. One source, no drift; emoji accents, text-tile
   // treatment (course/terrain), and no-stats→no-row all live there.
   var html = activities.map(function(a) {
-    var icon = sportIcons[a.sport] || '🏃';
-    var colorStyle = sportColors[a.sport] || '';
-    var avBg = colorStyle.split(';')[0];
-    var sportLabel = a.sport ? (a.sport.charAt(0).toUpperCase() + a.sport.slice(1)) : 'Activity';
+    var reg = byId[a.sport];
+    var icon = reg ? reg.emoji : '🏃';
+    var avBg = 'background:' + (reg ? reg.colors.bg : 'var(--gray-100)');
     var cardId = 'act-card-' + escAct(a.id);
     // Count-only kudos chip (no give-button here — giving happens in the feed,
     // where OTHERS' activities appear). Shown only when someone actually gave
@@ -1691,7 +1687,7 @@ function renderActivities(activities) {
           '</div>' +
           '<div style="display:flex;align-items:center;gap:6px">' +
             kudosChip +
-            '<span style="font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;border:1px solid;' + colorStyle + '">' + escAct(sportLabel) + '</span>' +
+            window.sportPillHtml(a.sport, { icon: false }) +
             '<button onclick="deleteActivity(\'' + escAct(a.id) + '\', document.getElementById(\'' + cardId + '\'))" style="width:26px;height:26px;border-radius:6px;border:var(--border);background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--gray-400);font-size:12px" title="Delete activity">✕</button>' +
           '</div>' +
         '</div>' +

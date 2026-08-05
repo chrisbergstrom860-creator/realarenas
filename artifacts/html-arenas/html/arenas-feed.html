@@ -756,12 +756,7 @@ function collectActivityItems() {
   const data = window.ARENAS_DATA;
   if (!data || !data.feedActivities || !data.feedActivities.length) return [];
 
-  // Icons and tag styles derived from the sports registry.
-  const sportIcons = window.ARENAS_SPORT_ICONS || {};
-  const sportColors = {};
-  (window.ARENAS_SPORTS || []).forEach(function (s) {
-    sportColors[s.id] = 'background:' + s.colors.bg + ';color:' + s.colors.text + ';border-color:' + s.colors.border;
-  });
+  // Sport pill: shared registry-fed renderer (arenas-activity-card.js).
 
   // Boxed stat tiles: shared builder (arenas-stat-tiles.js) — same renderer
   // as the my-profile Activities tab, one source, no drift. Emoji accents,
@@ -770,9 +765,6 @@ function collectActivityItems() {
   return data.feedActivities.map(function(a) {
     const author = a.author || { name: 'Athlete' };
     const name = author.name || 'Athlete';
-    const icon = sportIcons[a.sport] || '🏃';
-    const colorStyle = sportColors[a.sport] || '';
-    const sportLabel = a.sport ? (a.sport.charAt(0).toUpperCase() + a.sport.slice(1)) : 'Activity';
 
     const wrap = document.createElement('div');
     wrap.className = 'feed-item-wrap';
@@ -785,7 +777,7 @@ function collectActivityItems() {
             '<div style="font-size:13px;font-weight:600;color:var(--gray-900)">' + escFeedAct(name) + ' <span style="font-weight:400;color:var(--gray-400)">logged an activity</span></div>' +
             '<div style="font-size:11px;color:var(--gray-400)">' + window.arenasTimeAgo(a.created_at || a.date) + '</div>' +
           '</div>' +
-          '<span style="font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;border:1px solid;' + colorStyle + '">' + icon + ' ' + escFeedAct(sportLabel) + '</span>' +
+          window.sportPillHtml(a.sport) +
         '</div>' +
         window.activityCardBody(a) +
         // Kudos footer — same classes, placement and toggle behavior as the

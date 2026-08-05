@@ -38,6 +38,33 @@
     '</div>';
   }
 
+  // Shared sport pill — the ONE registry-fed renderer for sport tags on the
+  // activity-card surfaces (feed header, dashboard feed-tab badge, profile
+  // card header). Colors always come from window.ARENAS_SPORTS_BY_ID; there
+  // is deliberately no way to pass a color in.
+  // Options:
+  //   size: 'sm' (default) 11px/500/1px border — feed + profile grammar.
+  //         'xs' 10px/600/0.5px border — the dashboard's badge-row grammar
+  //         (matches its sibling 📣 Coach / 🎟️ RSVP badges; do not converge).
+  //   icon: false → label only (profile: the icon already lives in its
+  //         38px sport tile).
+  //   style: extra inline CSS appended (e.g. 'margin-left:auto;flex-shrink:0').
+  // Unknown/missing sport → neutral gray "unknown" pill with ⚡ — never
+  // another sport's colors (the old dashboard fallback wore running orange).
+  window.sportPillHtml = function (sport, opts) {
+    opts = opts || {};
+    var s = (window.ARENAS_SPORTS_BY_ID || {})[sport];
+    var colors = s ? 'background:' + s.colors.bg + ';color:' + s.colors.text + ';border-color:' + s.colors.border
+                   : 'background:var(--gray-100);color:var(--gray-600);border-color:var(--gray-200)';
+    var label = s ? s.label : (sport ? sport.charAt(0).toUpperCase() + sport.slice(1) : 'Activity');
+    var icon = opts.icon === false ? '' : (s ? s.emoji : '⚡') + ' ';
+    var size = opts.size === 'xs'
+      ? 'font-size:10px;font-weight:600;border-width:0.5px'
+      : 'font-size:11px;font-weight:500;border-width:1px';
+    return '<span style="' + size + ';padding:2px 9px;border-radius:20px;border-style:solid;' +
+      colors + (opts.style ? ';' + opts.style : '') + '">' + icon + esc(label) + '</span>';
+  };
+
   window.toggleActivityNotes = function (btn) {
     var n = btn.previousElementSibling;
     if (!n) return;

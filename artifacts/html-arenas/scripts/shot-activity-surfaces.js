@@ -63,7 +63,10 @@ async function seed() {
     { user_id: authorId, sport: 'running', title: 'VAC long note run', duration: '00:45:00', distance: '12 km', pace: '5:10 /km', notes: LONG_NOTE, ai_insight: 'Solid threshold control — keep the last rep honest next time.', date: pinned, created_at: pinned },
     { user_id: authorId, sport: 'running', title: 'VAC multiline run', duration: '00:40:00', notes: MULTILINE_NOTE, date: pinned, created_at: pinned },
     { user_id: authorId, sport: 'cycling', title: 'VAC short note ride', duration: '01:00:00', distance: '30 km', notes: 'Quick spin, easy day', date: pinned, created_at: pinned },
-    { user_id: authorId, sport: 'running', title: 'VAC noteless run', duration: '00:20:00', notes: null, date: pinned, created_at: pinned }
+    { user_id: authorId, sport: 'running', title: 'VAC noteless run', duration: '00:20:00', notes: null, date: pinned, created_at: pinned },
+    // Newer registry sports — prove pills pick up registry colors for them too.
+    { user_id: authorId, sport: 'tennis', title: 'VAC tennis session', duration: '01:10:00', notes: 'Serve drills + two tiebreak sets', date: pinned, created_at: pinned },
+    { user_id: authorId, sport: 'pilates', title: 'VAC pilates class', duration: '00:50:00', notes: null, date: pinned, created_at: pinned }
   ];
   const { error: aErr } = await admin.from('activities').insert(acts);
   if (aErr) throw new Error('activities: ' + aErr.message);
@@ -87,7 +90,9 @@ async function shot(dir) {
   const targets = [
     { name: 'feed', cookies: vCookies, url: BASE_URL + '/feed', waitFn: () => Array.from(document.querySelectorAll('.feed-item-wrap')).some((c) => c.textContent.includes('VAC')) },
     { name: 'club-feed', cookies: aCookies, url: BASE_URL + '/clubs/dashboard?club=' + m.clubId + '#feed', waitFn: () => { const el = document.getElementById('cf-feed-list'); return el && el.textContent.includes('VAC'); } },
-    { name: 'profile-acts', cookies: aCookies, url: BASE_URL + '/profile#activities', waitFn: () => document.querySelector('.activity-card-item') }
+    { name: 'profile-acts', cookies: aCookies, url: BASE_URL + '/profile#activities', waitFn: () => document.querySelector('.activity-card-item') },
+    // Unauthed marketing page — carries static sport-tag mocks whose hexes the guard covers.
+    { name: 'landing', cookies: [], url: BASE_URL + '/landing', waitFn: () => document.querySelector('.prev-sport-tag') }
   ];
   try {
     for (const width of [1280, 360]) {
