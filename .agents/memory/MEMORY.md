@@ -54,7 +54,7 @@
 - [Session cleanup practice](session-cleanup.md) — MANDATORY when seeding: manifest of ids at creation time + end-of-session scripts/test-data-sweep.js run; baselines must include auth/storage/subs.
 - [html-arenas time-ago rule](html-arenas-timeago.md) — "ago" lines use created_at via shared arenas-time.js, never the noon-anchored `date`; day-bucket widgets stay on `date` with calendar-day math.
 - [html-arenas bio limit](html-arenas-bio-limit.md) — 220-word rule (trim + /\s+/ split, exact client/server parity), 2000-char backstop, 400 not silent truncate; hero clamps 4 lines w/ sibling Show-more.
-- [html-arenas activity-card body](html-arenas-activity-card-module.md) — ONE shared body builder (feed/dashboard/profile), title→tiles→notes→coach; club feed payload = feed shape; never hand-build a card body.
+- [html-arenas activity-card body](html-arenas-activity-card-module.md) — ONE shared body builder (feed/dashboard/profile), title→tiles→notes; fake "Coach's note" REMOVED (ai_insight scrubbed server-side); never hand-build a card body.
 - [html-arenas stat tiles](html-arenas-feed-stat-tiles.md) — SHARED builder arenas-stat-tiles.js + CSS in arenas.css powers feed AND profile Activities tab; never fork tiles per page.
 - [html-arenas club context](html-arenas-club-context.md) — club-scoped nav must CARRY ?club= (navClub helpers); never infer "the club" from most-recent membership; login lands everyone on /feed.
 - [html-arenas danger zone](html-arenas-danger-zone.md) — export+delete: Stripe cancel FIRST (any error aborts), club survival matrix, transfer billing notif (actor_id null), posts have no club_id.
