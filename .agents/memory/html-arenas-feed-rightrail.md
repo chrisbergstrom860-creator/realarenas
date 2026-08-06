@@ -10,6 +10,17 @@ empty/low-data state and contains no hardcoded users or numbers. Follow buttons 
 real POST/DELETE against `BASE + '/api/follow/:id'` and reflect the server's
 `{following}` response.
 
+**Mobile restructure (shipped):** on phones (page-local 768px block gated on
+`body:has(.bottom-nav)`) only the Activity streak card is visible — the other
+three cards carry `.sc-mobile-hide{display:none}` — and the whole `.side-col`
+gets `order:-1`, lifting it above the feed column (shared shell already
+collapses `.main` to one column and un-stickies the rail). Pure CSS reorder,
+single render, no duplicated markup. `#follow-card`'s loader clears inline
+display (doesn't set `block`) so JS can't re-show it on mobile. Geometry guard
+pins the rail to EXACTLY 1 visible card on phones (`min:1,max:1` — lib supports
+`max` now). Mobile users lose passive follow discovery (rail suggestions);
+`/athletes` remains reachable only via topbar search — no bottom-nav tab.
+
 **Week-boundary trap (RESOLVED):** `getDateRange('week')` is now Monday 00:00 in
 the viewer's timezone (and `'month'` is the calendar month), so leaderboards and
 the feed's Monday-bound "this week" stats finally agree. The trap to preserve:
