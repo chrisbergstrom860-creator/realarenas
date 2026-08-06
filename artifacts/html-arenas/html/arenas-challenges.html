@@ -881,7 +881,9 @@ function showToast(msg) {
     const mineActive = (result.myChallenges || []).filter(c => !isDone(c)).length;
     const completed = (result.myChallenges || []).filter(isDone).length;
     setCount('tab-btn-mine', mineActive);
-    setCount('tab-btn-discover', (result.publicChallenges || []).length);
+    // Same exact-count rule as the header stat below — the tab badge and the
+    // "N challenges available" stat describe the same set and must agree.
+    setCount('tab-btn-discover', (result.publicCount != null) ? result.publicCount : (result.publicChallenges || []).length);
     setCount('tab-btn-friends', (result.friendsChallenges || []).length);
     setCount('tab-btn-completed', completed);
     // Header stats strip — all real, honest-zero on empty, from this same load.
@@ -889,11 +891,10 @@ function showToast(msg) {
     setStat('active-count', mineActive);
     setStat('active-count-label', mineActive === 1 ? 'active challenge' : 'active challenges');
     setStat('pts-month', (result.pointsThisMonth || 0).toLocaleString());
-    // Exact server-side head count (same filter builder as the Discover list);
-    // falls back to the loaded list length if the payload predates the field.
-    const availCount = (typeof result.publicChallengesTotal === 'number')
-      ? result.publicChallengesTotal
-      : (result.publicChallenges || []).length;
+    // Use the server-computed exact count when present (reflects all joinable
+    // public challenges, not just the 20-row Discover grid). Falls back to
+    // the grid length if publicCount is absent (old server / error path).
+    const availCount = (result.publicCount != null) ? result.publicCount : (result.publicChallenges || []).length;
     setStat('challenges-available', availCount);
     setStat('challenges-available-label', availCount === 1 ? 'challenge available' : 'challenges available');
     setStat('longest-streak', result.longestStreak || 0);

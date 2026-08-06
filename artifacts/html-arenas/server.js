@@ -4026,7 +4026,7 @@ app.get(BASE + '/api/profile/overview', requireAuth, async (req, res) => {
 // `profiles` table, no FK embeds).
 app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
   if (!supabaseAdmin) {
-    return res.json({ myChallenges: [], friendsChallenges: [], publicChallenges: [], publicChallengesTotal: 0, myJoinedIds: [], pointsThisMonth: 0, longestStreak: 0, currentStreak: 0, pointsBySport: [], weekGrid: [], friendsInChallenges: [], followsAnyone: false });
+    return res.json({ myChallenges: [], friendsChallenges: [], publicChallenges: [], publicCount: 0, myJoinedIds: [], pointsThisMonth: 0, longestStreak: 0, currentStreak: 0, pointsBySport: [], weekGrid: [], friendsInChallenges: [], followsAnyone: false });
   }
   const userId = req.user.id;
   const PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
@@ -4083,29 +4083,36 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
     }
 
     // Discover = public, non-expired challenges the user neither created nor
-    // joined. ONE filter builder feeds both the capped list query and the
-    // exact head-count query so the header stat and the grid can never
-    // describe different sets (the count/list drift rule). Skip the .not()
-    // filter entirely when there's nothing to exclude.
+    // joined. Skip the .not() filter entirely when there's nothing to exclude.
+    //
+    // applyDiscoverFilters is the SINGLE definition of the three filter
+    // conditions shared by both queries below. Editing conditions here
+    // affects both; there is no second copy that could drift.
     const excludeFromDiscover = [...new Set([...myChallenges.map((c) => c.id), ...myIds])];
     const discoverNowIso = new Date().toISOString();
-    const applyDiscoverFilters = (q) => {
-      q = q.eq('visibility', 'public').gt('end_date', discoverNowIso);
-      if (excludeFromDiscover.length) q = q.not('id', 'in', `(${excludeFromDiscover.join(',')})`);
-      return q;
-    };
-    const [{ data: publicChallenges }, discoverCountRes] = await Promise.all([
+    function applyDiscoverFilters(q) {
+      let query = q.eq('visibility', 'public').gt('end_date', discoverNowIso);
+      if (excludeFromDiscover.length) {
+        query = query.not('id', 'in', `(${excludeFromDiscover.join(',')})`);
+      }
+      return query;
+    }
+
+    // Run an exact head-count (no row data transferred) and the 20-row grid
+    // fetch in parallel. Both use applyDiscoverFilters so the filter set is
+    // guaranteed to be identical.
+    const [countResult, gridResult] = await Promise.all([
+      applyDiscoverFilters(supabaseAdmin.from('challenges').select('*', { count: 'exact', head: true })),
       applyDiscoverFilters(supabaseAdmin.from('challenges').select('*'))
-        .order('created_at', { ascending: false }).limit(20),
-      applyDiscoverFilters(supabaseAdmin.from('challenges').select('id', { count: 'exact', head: true })),
+        .order('created_at', { ascending: false }).limit(20)
     ]);
-    // "challenges available" header stat. Degradation: if the head-count
-    // query fails (error or null count) fall back to the loaded list length —
-    // an honest lower bound consistent with the visible grid, never a fake
-    // zero next to a populated list.
-    const publicChallengesTotal = (!discoverCountRes.error && typeof discoverCountRes.count === 'number')
-      ? discoverCountRes.count
-      : (publicChallenges || []).length;
+    const publicChallenges = gridResult.data || [];
+    // publicCount: exact total of joinable public challenges (always ≥ grid
+    // length). Falls back to the grid length when the count query errors so
+    // the header stat can never silently understate or show zero.
+    const publicCount = (!countResult.error && countResult.count != null)
+      ? countResult.count
+      : publicChallenges.length;
 
     // De-duplicate the full set so we only look up each challenge once.
     const allChallenges = [];
@@ -4291,7 +4298,7 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
       myChallenges: enrich(myChallenges),
       friendsChallenges,
       publicChallenges: enrich(publicChallenges),
-      publicChallengesTotal,
+      publicCount,
       myJoinedIds: myIds,
       pointsThisMonth,
       longestStreak,
