@@ -889,7 +889,11 @@ function showToast(msg) {
     setStat('active-count', mineActive);
     setStat('active-count-label', mineActive === 1 ? 'active challenge' : 'active challenges');
     setStat('pts-month', (result.pointsThisMonth || 0).toLocaleString());
-    const availCount = (result.publicChallenges || []).length;
+    // Exact server-side head count (same filter builder as the Discover list);
+    // falls back to the loaded list length if the payload predates the field.
+    const availCount = (typeof result.publicChallengesTotal === 'number')
+      ? result.publicChallengesTotal
+      : (result.publicChallenges || []).length;
     setStat('challenges-available', availCount);
     setStat('challenges-available-label', availCount === 1 ? 'challenge available' : 'challenges available');
     setStat('longest-streak', result.longestStreak || 0);
