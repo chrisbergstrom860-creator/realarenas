@@ -9,3 +9,11 @@ description: Mobile layout rules for app-shell pages + the permanent geometry gu
 - Dead prototype CSS (athletes rec-strip/nearby/network-stats clusters, ch-mini-lb, cards-grid-3) was DELETED after a proven-unreferenced grep + pixel-identical screenshot check. The athletes-page copies of .side-card/.sc-*, .following-item/.fi-*, .sport-tabs were also proven page-scope dead and deleted (other pages keep their own live copies). Lesson: page CSS blocks duplicate heavily (~333 selectors on ≥2 pages), so deadness must be proven per page, never repo-wide.
 - Card action rows in JS string templates need explicit `flex-wrap:wrap` (challenges buildChallengeCard, club-dashboard event footer); card `overflow:hidden` otherwise clips buttons.
 - Ellipsized name divs must keep status markers ("(you)", role chips) as flex siblings with `flex-shrink:0`, not inside the truncated span.
+
+**Rail-above-content pattern (feed + events):** lift a page's right rail above
+the main column with `order:-1` on the rail container inside the page's 768px
+`body:has(.bottom-nav)` block. TRAP: `order` only works if the collapsed
+parent is grid/flex — events' `.body-grid` collapsed to `display:block`, so it
+had to become `display:flex;flex-direction:column` first (feed's `.main` was
+already a grid). Geometry guard pins both rails to exactly 1 visible card
+(`min:1,max:1`; lib surfacesExpr supports `max`).
