@@ -67,6 +67,14 @@ document.addEventListener('DOMContentLoaded', function(){
      (.cards-grid-2 is page-local, so it is NOT covered by the shared
      .grid-2 collapse in arenas.css.) */
   body:has(.bottom-nav) .cards-grid-2{grid-template-columns:minmax(0,1fr)}
+  /* Right rail (Points breakdown / Suggested / Friends in challenges / Your
+     streak): on phones it stacks below every challenge card, so it's
+     effectively invisible and just lengthens the page. All four cards render
+     from the same /api/challenges payload the tabs use, and their content is
+     reachable elsewhere (profile Stats & PRs, the Discover tab) — hide it.
+     CSS-only hide (not render-skip): the only extra cost is a few avatar
+     thumbnails, and skipping renders would break desktop resize/rotate. */
+  body:has(.bottom-nav) .right-col{display:none}
 }
 .create-btn-wrap { padding: 8px 0; }
 
