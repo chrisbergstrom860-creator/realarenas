@@ -41,3 +41,5 @@ events…" + an empty RSVP card (no fabricated content).
 - Feed shows "X is going to <event>" cards from `window.ARENAS_DATA.followingRsvps` (built by
   `buildFeedRsvps`), alongside the existing activity cards. Names from auth metadata; events joined
   in JS (no PostgREST embeds, consistent with the rest of this app).
+
+**Dead affordances policy (user-driven):** links that promise management they can't deliver get DELETED (like the dead type filter / Load-more toast). The RSVPs card's 'Manage all →' → /profile was removed — no RSVP management surface exists anywhere; profile Overview only shows a read-only upcoming mini-card. 'Show all N past →' is real (in-place expand).
