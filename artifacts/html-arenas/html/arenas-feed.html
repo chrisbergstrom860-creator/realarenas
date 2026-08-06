@@ -54,20 +54,19 @@ button,select,input,textarea{font-family:var(--font)}
    screen edges — same side padding as other pages' mobile .main (calendar/log). */
 @media (max-width:768px){
   .feed-col{padding:0 14px 24px}
-  /* Mobile rail restructure: the rail is the LAST grid child, so once the
-     shared shell collapses .main to one column it stacks below every post —
-     effectively invisible. Keep ONLY the Activity streak card and lift the
-     whole rail above the feed column (CSS reorder, same single render —
-     .main is a grid, so `order` works on its children; no duplicate markup
-     to drift). Same convention as the Challenges rail: page-local rules in
-     the 768px block, gated on body:has(.bottom-nav) so desktop-width
-     windows on shell pages are untouched. CSS-only hide, not render-skip,
-     so desktop resize/rotate keeps working. */
-  body:has(.bottom-nav) .side-col{order:-1;padding:14px 14px 0}
-  body:has(.bottom-nav) .sc-mobile-hide{display:none}
 }
 .side-col{padding:20px 16px;display:flex;flex-direction:column;gap:14px;position:sticky;top:var(--topbar-h);height:calc(100vh - var(--topbar-h));overflow-y:auto}
 .side-col::-webkit-scrollbar{display:none}
+/* Mobile: the rail would otherwise stack BELOW the whole feed where nobody
+   scrolls. Per-card decision: "Your week" + "Activity streak" are hidden
+   (both live on the profile Stats & PRs tab); "Athletes to follow" (the main
+   follow-discovery surface) and "Quick actions" (the only mobile entry point
+   to /challenges — the bottom nav has no Challenges item) move ABOVE the feed
+   via order:-1, same pattern as the club dashboard's rail at ≤900px. */
+@media (max-width:768px){
+  body:has(.bottom-nav) .side-col{order:-1;padding:14px 14px 0}
+  body:has(.bottom-nav) .fs-side-extra{display:none}
+}
 
 /* ── FEED HEADER ── */
 .feed-header{padding:16px 20px 0;border-bottom:var(--border);background:white;position:sticky;top:var(--topbar-h);z-index:90}
@@ -425,7 +424,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="side-col">
 
     <!-- Your stats -->
-    <div class="side-card sc-mobile-hide">
+    <div class="side-card fs-side-extra">
       <div class="side-hdr">
         <span class="side-title">📊 Your week</span>
       </div>
@@ -433,7 +432,7 @@ button,select,input,textarea{font-family:var(--font)}
     </div>
 
     <!-- Streak -->
-    <div class="side-card">
+    <div class="side-card fs-side-extra">
       <div class="side-hdr">
         <span class="side-title">🔥 Activity streak</span>
         <span id="streak-count" style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--orange)"></span>
@@ -443,14 +442,14 @@ button,select,input,textarea{font-family:var(--font)}
     </div>
 
     <!-- Who to follow -->
-    <div class="side-card sc-mobile-hide" id="follow-card" style="display:none">
+    <div class="side-card" id="follow-card" style="display:none">
       <div class="side-hdr"><span class="side-title">👥 Athletes to follow</span></div>
       <div id="follow-list"></div>
       <div onclick="nav('/athletes')" style="padding:9px 14px;border-top:var(--border);font-size:12px;font-weight:500;color:var(--gray-600);cursor:pointer;text-align:center;transition:background .1s" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background=''">See all athletes →</div>
     </div>
 
     <!-- Quick actions -->
-    <div class="side-card sc-mobile-hide">
+    <div class="side-card">
       <div class="side-hdr"><span class="side-title">⚡ Quick actions</span></div>
       <div class="qa-item" onclick="nav('/log')">
         <div class="qa-icon" style="background:var(--orange-light)">📝</div>

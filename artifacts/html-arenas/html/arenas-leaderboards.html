@@ -139,6 +139,13 @@ document.addEventListener('DOMContentLoaded', function(){
 
 /* ── RIGHT SIDEBAR ── */
 .right-col { display: flex; flex-direction: column; gap: 14px; }
+/* Mobile: the single "Active challenges" rail card would stack below the whole
+   leaderboard where nobody sees it; its content is the /challenges page itself,
+   which stays reachable via the feed's Quick actions card — hide it (CSS-only,
+   same rationale as the /challenges rail hide). */
+@media (max-width:768px){
+  body:has(.bottom-nav) .right-col{display:none}
+}
 .side-card { background: white; border: var(--border); border-radius: var(--radius-lg); overflow: hidden; }
 .side-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--gray-500); padding: 14px 16px 8px; }
 

@@ -34,6 +34,13 @@ the km beside it was Monday-bound; later the /how-points-work page publicly
 promised "weeks start Monday in your timezone", which forced getDateRange itself
 to become Monday-true.
 
+**Mobile (≤768px, bottom-nav gated):** per-card rail decision — "Your week" +
+"Activity streak" hidden (`.fs-side-extra`; both live on profile Stats & PRs);
+"Athletes to follow" + "Quick actions" move ABOVE the feed via `.side-col{order:-1}`
+(club-dashboard precedent). Quick actions must stay visible on mobile: it is the
+ONLY mobile entry point to /challenges (bottom nav has no Challenges item, and the
+leaderboards "Active challenges" rail card is hidden on mobile too).
+
 Note: the feed **center-column activity cards** and the **notifications modal** are a
 separate concern and still contain prototype/fabricated content (Hackney RC, Alena/
 Sofia/Marco, "540 pts to #4"); the right-rail task did not touch them.
