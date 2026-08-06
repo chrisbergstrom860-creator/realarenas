@@ -57,15 +57,18 @@ button,select,input,textarea{font-family:var(--font)}
 }
 .side-col{padding:20px 16px;display:flex;flex-direction:column;gap:14px;position:sticky;top:var(--topbar-h);height:calc(100vh - var(--topbar-h));overflow-y:auto}
 .side-col::-webkit-scrollbar{display:none}
-/* Mobile: the rail would otherwise stack BELOW the whole feed where nobody
-   scrolls. Per-card decision: "Your week" + "Activity streak" are hidden
-   (both live on the profile Stats & PRs tab); "Athletes to follow" (the main
-   follow-discovery surface) and "Quick actions" (the only mobile entry point
-   to /challenges — the bottom nav has no Challenges item) move ABOVE the feed
-   via order:-1, same pattern as the club dashboard's rail at ≤900px. */
+/* Mobile rail restructure (user spec): the rail would otherwise stack BELOW
+   the whole feed where nobody scrolls. Keep ONLY the Activity streak card
+   and lift the whole rail above the feed column — CSS reorder on the .main
+   grid child (single render, no duplicated markup to drift). Your week /
+   Athletes to follow / Quick actions are hidden via .sc-mobile-hide (the
+   ONE hiding mechanism on this page). Gated on body:has(.bottom-nav) in the
+   768px block, same convention as the Challenges rail; CSS-only hide so
+   desktop resize/rotate keeps working. Geometry guard pins the mobile rail
+   to EXACTLY 1 visible card. */
 @media (max-width:768px){
   body:has(.bottom-nav) .side-col{order:-1;padding:14px 14px 0}
-  body:has(.bottom-nav) .fs-side-extra{display:none}
+  body:has(.bottom-nav) .sc-mobile-hide{display:none}
 }
 
 /* ── FEED HEADER ── */
@@ -424,7 +427,7 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="side-col">
 
     <!-- Your stats -->
-    <div class="side-card fs-side-extra">
+    <div class="side-card sc-mobile-hide">
       <div class="side-hdr">
         <span class="side-title">📊 Your week</span>
       </div>
@@ -432,7 +435,7 @@ button,select,input,textarea{font-family:var(--font)}
     </div>
 
     <!-- Streak -->
-    <div class="side-card fs-side-extra">
+    <div class="side-card">
       <div class="side-hdr">
         <span class="side-title">🔥 Activity streak</span>
         <span id="streak-count" style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--orange)"></span>
@@ -442,14 +445,14 @@ button,select,input,textarea{font-family:var(--font)}
     </div>
 
     <!-- Who to follow -->
-    <div class="side-card" id="follow-card" style="display:none">
+    <div class="side-card sc-mobile-hide" id="follow-card" style="display:none">
       <div class="side-hdr"><span class="side-title">👥 Athletes to follow</span></div>
       <div id="follow-list"></div>
       <div onclick="nav('/athletes')" style="padding:9px 14px;border-top:var(--border);font-size:12px;font-weight:500;color:var(--gray-600);cursor:pointer;text-align:center;transition:background .1s" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background=''">See all athletes →</div>
     </div>
 
     <!-- Quick actions -->
-    <div class="side-card">
+    <div class="side-card sc-mobile-hide">
       <div class="side-hdr"><span class="side-title">⚡ Quick actions</span></div>
       <div class="qa-item" onclick="nav('/log')">
         <div class="qa-icon" style="background:var(--orange-light)">📝</div>
