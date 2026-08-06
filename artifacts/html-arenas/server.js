@@ -905,6 +905,41 @@ async function requirePageAuth(req, res, next) {
   }
 }
 
+// Honest error page for authenticated app pages. Served when live data cannot
+// be loaded (Supabase unavailable or a route threw). NEVER fall back to the raw
+// prototype HTML files — they contain placeholder personas ("Jamie King",
+// "Hackney Running Club") that must not be shown to real users.
+const PAGE_ERROR_HTML = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arenas — Something went wrong</title>
+<style>
+  body{margin:0;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#F7F7F5;color:#111827;display:flex;align-items:center;justify-content:center;min-height:100vh}
+  .card{text-align:center;padding:40px 28px;max-width:420px}
+  .mark{font-size:40px;margin-bottom:12px}
+  h1{font-size:20px;margin:0 0 8px;font-weight:800}
+  p{font-size:14px;color:#6B7280;line-height:1.5;margin:0 0 20px}
+  a.btn{display:inline-block;background:#FFD21E;color:#111827;font-weight:700;font-size:14px;padding:10px 22px;border-radius:8px;text-decoration:none}
+</style></head><body>
+<div class="card">
+  <div class="mark">🏟</div>
+  <h1>Something went wrong</h1>
+  <p>Arenas couldn’t load this page right now. Your data is safe — please try again in a moment.</p>
+  <a class="btn" href="${BASE}/feed">Try again</a>
+</div>
+</body></html>`;
+function sendPageError(res) {
+  // X-Arenas-App-Error tells the service worker this 503 is an app-generated
+  // error page (render it), not an edge/gateway failure (offline fallback).
+  // no-store so no intermediary or browser ever retains a transient failure.
+  res.status(503)
+    .set('Cache-Control', 'no-store')
+    .set('Retry-After', '30')
+    .set('X-Arenas-App-Error', '1')
+    .type('html')
+    .send(PAGE_ERROR_HTML);
+}
+
 // Resolve the session user when a valid cookie is present, or null. For
 // surfaces that render differently for logged-in visitors but must stay
 // public (e.g. /for-clubs). Never throws, never blocks the request.
@@ -1174,7 +1209,7 @@ function injectAvatarHelpers(html) {
 // same selector AVATAR_MENU_SCRIPT uses — the element keeps its inline onclick
 // because only innerHTML changes) and every standardized sidebar-footer .sf-av.
 // Injected at body end so it runs after the static markup exists; no-ops
-// gracefully on pages without profile data (e.g. servePlain fallbacks).
+// gracefully on pages without profile data.
 const TOPBAR_IDENTITY_SCRIPT = `<script>(function arenasTopbarIdentity(){
   try {
     var d = window.ARENAS_DATA || window.INVITE_DATA;
@@ -5220,7 +5255,7 @@ app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
     res.type('html').send(html);
   } catch (err) {
     console.log('Feed data error:', err.message);
-    res.type('html').send(injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), 'feed'));
+    sendPageError(res);
   }
 });
 // Athletes directory. Lists real signed-up users (resolved from auth metadata,
@@ -5329,7 +5364,7 @@ app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
     res.type('html').send(html);
   } catch (err) {
     console.log('Athletes render error:', err.message);
-    res.type('html').send(injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-athletes.html'), 'utf8'), 'athletes'));
+    sendPageError(res);
   }
 });
 // ── EVENTS API ──
@@ -6095,7 +6130,7 @@ app.patch(BASE + '/api/events/:id', requireAuth, async (req, res) => {
 // `profiles` table, so names come from auth metadata.
 app.get(BASE + '/events', requirePageAuth, async (req, res) => {
   try {
-    if (!supabaseAdmin) return res.type('html').send(injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-events.html'), 'utf8'), 'events'));
+    if (!supabaseAdmin) return sendPageError(res);
     const userId = req.user.id;
     const { data: follows } = await supabaseAdmin
       .from('follows').select('following_id').eq('follower_id', userId);
@@ -6114,16 +6149,15 @@ app.get(BASE + '/events', requirePageAuth, async (req, res) => {
     res.type('html').send(html);
   } catch (err) {
     console.log('Events page error:', err.message);
-    res.type('html').send(injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-events.html'), 'utf8'), 'events'));
+    sendPageError(res);
   }
 });
 // Leaderboards page. Injects the viewer's identity + club name so the client can
 // highlight "you" and label the club scope. There is no `profiles` table, so the
 // name comes from auth metadata.
 app.get(BASE + '/leaderboards', requirePageAuth, async (req, res) => {
-  const servePlain = () => res.type('html').send(injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-leaderboards.html'), 'utf8'), 'leaderboards'));
   try {
-    if (!supabaseAdmin) return servePlain();
+    if (!supabaseAdmin) return sendPageError(res);
     let clubName = null;
     const { data: membership } = await supabaseAdmin
       .from('memberships')
@@ -6148,7 +6182,7 @@ app.get(BASE + '/leaderboards', requirePageAuth, async (req, res) => {
     res.type('html').send(html);
   } catch (err) {
     console.log('Leaderboards page error:', err.message);
-    servePlain();
+    sendPageError(res);
   }
 });
 app.get(BASE + '/challenges', requirePageAuth, async (req, res) => {
@@ -6182,7 +6216,7 @@ app.get(BASE + '/challenges', requirePageAuth, async (req, res) => {
     res.send(html);
   } catch (err) {
     console.log('Challenges page error:', err.message);
-    res.type('html').send(injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-challenges.html'), 'utf8'), 'challenges'));
+    sendPageError(res);
   }
 });
 // My profile requires authentication. Inject the user's real identity, post/
@@ -6190,9 +6224,8 @@ app.get(BASE + '/challenges', requirePageAuth, async (req, res) => {
 // live data instead of the hardcoded "Jamie King" placeholders. There is no
 // `profiles` table, so name/handle/bio/location come from auth user metadata.
 app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
-  const servePlain = () => res.type('html').send(injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-my-profile.html'), 'utf8'), 'profile'));
   try {
-    if (!supabaseAdmin) return servePlain();
+    if (!supabaseAdmin) return sendPageError(res);
     const meta = req.user.user_metadata || {};
     const display = displayFromUser(req.user);
 
@@ -6383,7 +6416,7 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
     res.type('html').send(html);
   } catch (err) {
     console.log('Profile data error:', err.message);
-    servePlain();
+    sendPageError(res);
   }
 });
 // Profile stats & PRs computed from the signed-in user's own `activities`.
@@ -7241,11 +7274,8 @@ app.get(BASE + '/api/calendar/month', requireAuth, async (req, res) => {
 // viewer's identity, and the proLocked gating flag (the read-only day panel is
 // free; the flag is for Session ②'s plan-creation affordances).
 app.get(BASE + '/calendar', requirePageAuth, async (req, res) => {
-  const servePlain = () => res.type('html').send(
-    injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-calendar.html'), 'utf8'), 'calendar')
-  );
   try {
-    if (!supabaseAdmin) return servePlain();
+    if (!supabaseAdmin) return sendPageError(res);
     const data = {
       userId: req.user.id,
       profile: displayFromUser(req.user),
@@ -7262,7 +7292,7 @@ app.get(BASE + '/calendar', requirePageAuth, async (req, res) => {
     res.type('html').send(html);
   } catch (err) {
     console.log('Calendar page error:', err.message);
-    servePlain();
+    sendPageError(res);
   }
 });
 
@@ -7271,11 +7301,8 @@ app.get(BASE + '/calendar', requirePageAuth, async (req, res) => {
 // /calendar. Logging is a free feature — plan-linking included — so no
 // proLocked flag is injected here.
 app.get(BASE + '/log', requirePageAuth, async (req, res) => {
-  const servePlain = () => res.type('html').send(
-    injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-log.html'), 'utf8'), 'log')
-  );
   try {
-    if (!supabaseAdmin) return servePlain();
+    if (!supabaseAdmin) return sendPageError(res);
     const data = {
       userId: req.user.id,
       profile: displayFromUser(req.user),
@@ -7291,7 +7318,7 @@ app.get(BASE + '/log', requirePageAuth, async (req, res) => {
     res.type('html').send(html);
   } catch (err) {
     console.log('Log page error:', err.message);
-    servePlain();
+    sendPageError(res);
   }
 });
 
@@ -8611,9 +8638,8 @@ app.get(BASE + '/how-points-work', async (req, res) => {
 // count, and recent members so the page shows live data instead of the
 // hardcoded "Hackney Running Club" / "Rachel" placeholders.
 app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
-  const servePlain = () => res.type('html').send(injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-club-dashboard.html'), 'utf8'), 'club-dashboard'));
   try {
-    if (!supabaseAdmin) return servePlain();
+    if (!supabaseAdmin) return sendPageError(res);
 
     // The club this user administers. Honor an explicit ?club=<id> when the
     // viewer is an admin/coach of it (so multi-club coaches land on the right
@@ -8919,7 +8945,7 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
     res.type('html').send(html);
   } catch (err) {
     console.log('Dashboard data error:', err.message);
-    servePlain();
+    sendPageError(res);
   }
 });
 // ── CLUB MEMBER PAGE ──
@@ -9199,9 +9225,8 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
 // members injected as window.INVITE_DATA. Falls back to the static mockup if the
 // viewer isn't a club manager or data can't be loaded.
 app.get(BASE + '/clubs/invite', requirePageAuth, async (req, res) => {
-  const servePlain = () => res.type('html').send(injectNotificationsPanel(fs.readFileSync(path.join(HTML, 'arenas-club-invite.html'), 'utf8')));
   try {
-    if (!supabaseAdmin) return servePlain();
+    if (!supabaseAdmin) return sendPageError(res);
 
     // Same club resolution as the dashboard: honor an explicit ?club=<id>
     // when the viewer manages it (so the invite console stays on the club the
@@ -9225,7 +9250,7 @@ app.get(BASE + '/clubs/invite', requirePageAuth, async (req, res) => {
     let membership = requestedClubId ? await pickManagedMembership(requestedClubId) : null;
     if (!membership) membership = await pickManagedMembership(null);
 
-    if (!membership || !membership.club_id) return servePlain();
+    if (!membership || !membership.club_id) return res.redirect(BASE + '/feed');
     const clubId = membership.club_id;
 
     const [invitesRes, membersRes, countRes] = await Promise.all([
@@ -9282,7 +9307,7 @@ app.get(BASE + '/clubs/invite', requirePageAuth, async (req, res) => {
     res.type('html').send(html);
   } catch (err) {
     console.log('Invite page data error:', err.message);
-    servePlain();
+    sendPageError(res);
   }
 });
 
@@ -9416,11 +9441,8 @@ app.post(BASE + '/api/billing/checkout/club', requireAuth, async (req, res) => {
 // buttons with auto-renewal disclosures when free, and Manage billing (Stripe
 // portal) when subscribed. Rendered from injected data only — no fabrication.
 app.get(BASE + '/billing', requirePageAuth, async (req, res) => {
-  const servePlain = () => res.type('html').send(
-    injectBottomNav(fs.readFileSync(path.join(HTML, 'arenas-billing.html'), 'utf8'), 'billing')
-  );
   try {
-    if (!supabaseAdmin) return servePlain();
+    if (!supabaseAdmin) return sendPageError(res);
     const userPlan = await getUserPlan(req.user.id);
     const clubs = await getSidebarClubs(req.user.id);
     const { data: mems } = await supabaseAdmin
@@ -9455,7 +9477,7 @@ app.get(BASE + '/billing', requirePageAuth, async (req, res) => {
     res.type('html').send(html);
   } catch (err) {
     console.log('Billing page error:', err.message);
-    servePlain();
+    sendPageError(res);
   }
 });
 

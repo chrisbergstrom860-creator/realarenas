@@ -25,7 +25,7 @@
  */
 'use strict';
 
-const VERSION = 'v5';
+const VERSION = 'v6';
 const RUNTIME_CACHE = 'arenas-runtime-' + VERSION;
 const AVATAR_CACHE = 'arenas-avatars-' + VERSION;
 const FONT_CACHE = 'arenas-fonts-' + VERSION;
@@ -134,8 +134,12 @@ async function networkFirst(request, isNavigation) {
       if (cacheable) cache.put(request, response.clone()).catch(() => {});
       return response;
     }
+    // App-generated error pages mark themselves (X-Arenas-App-Error) so an
+    // honest 503 from the server renders as-is; only unmarked 502/503/504
+    // (the edge proxy when the app is unreachable) trigger offline fallback.
     const gatewayFail =
-      response.status === 502 || response.status === 503 || response.status === 504;
+      (response.status === 502 || response.status === 503 || response.status === 504) &&
+      !response.headers.get('X-Arenas-App-Error');
     if (!gatewayFail) return response;
   }
 
