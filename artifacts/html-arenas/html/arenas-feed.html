@@ -45,7 +45,14 @@ button,select,input,textarea{font-family:var(--font)}
 /* minmax(0,1fr), not 1fr: a bare 1fr track has min-width auto, so one long
    unbroken-ish text block (e.g. a long activity note) widens the whole column
    past the viewport instead of wrapping. */
-.main{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:0;align-items:start}
+/* Reading-measure cap: 656px track − 16px left gutter = 640px of post text
+   (~45–75ch at 14–15px prose). Deliberately bites at 1280px too (744px was
+   already past a comfortable measure). justify-content:center floats the
+   feed+rail group in the freed space (same centered-column pattern as /log,
+   challenges, leaderboards); left-aligned left a /log-style dead void.
+   Mobile unaffected: the shared shell collapses .main to one full-width
+   column with !important at ≤768px. */
+.main{display:grid;grid-template-columns:minmax(0,656px) 300px;gap:0;align-items:start;justify-content:center}
 /* Symmetric gutters: the right gutter is the rail's 16px padding-left, so the
    feed column gets the same 16px on its left (desktop only — the column goes
    full-width when the shell collapses to one column on mobile). */
