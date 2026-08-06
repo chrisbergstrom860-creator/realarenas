@@ -313,7 +313,7 @@ body {
 
 /* Shared activity-card BODY (arenas-activity-card.js: feed, club dashboard
    Feed tab, my-profile Activities tab). Order app-wide: title → stat tiles →
-   notes → coach's note (→ feeling). .ac-ins = inset modifier for flush cards
+   notes (→ feeling). .ac-ins = inset modifier for flush cards
    (club dashboard) whose card has no inner padding. */
 .ac-title{font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:6px}
 .ac-notes-box{font-size:12px;color:var(--gray-600);line-height:1.6;padding:8px 10px;background:var(--gray-50);border-radius:6px;margin-bottom:8px}
@@ -321,13 +321,10 @@ body {
 .fa-notes.clamped{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .fa-notes-toggle{border:none;background:none;padding:0;margin-top:4px;font-size:12px;font-weight:600;color:var(--gray-500);cursor:pointer}
 .fa-notes-toggle:hover{color:var(--gray-700)}
-.ac-coach-note{background:var(--yellow-light);border:1px solid #fde68a;border-radius:6px;padding:8px 11px;font-size:12px;color:#7a5c00;display:flex;gap:8px;align-items:flex-start}
-.ac-coach-note .ic{font-size:13px;flex-shrink:0}
 .ac-feeling{font-size:11px;color:var(--gray-500);margin-top:8px}
 .ac-title.ac-ins{margin:0 14px 6px}
 .ac-stats-row.ac-ins{margin:0 14px 10px}
 .ac-notes-box.ac-ins{margin:0 14px 10px}
-.ac-coach-note.ac-ins{margin:0 14px 10px}
 .ac-feeling.ac-ins{margin:0 14px 10px}
 
 /* ===========================================================================

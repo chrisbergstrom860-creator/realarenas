@@ -261,7 +261,7 @@ button,select,input,textarea{font-family:var(--font)}
 .pn-action.liked{background:var(--yellow-light);border-color:#fde68a;color:#7a5c00}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--gray-900);color:white;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:500;z-index:999;transition:transform .3s ease;white-space:nowrap;box-shadow:var(--shadow-md)}
 /* Activity notes/body CSS is shared (arenas.css: .ac-title/.ac-notes-box/
-   .fa-notes/.ac-coach-note) — rendered by arenas-activity-card.js. */
+   .fa-notes) — rendered by arenas-activity-card.js. */
 </style>
 </head>
 <body>
@@ -745,7 +745,7 @@ function collectPostItems() {
 function escFeedAct(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
-// Card BODY (title → stat tiles → notes → coach's note) is the shared
+// Card BODY (title → stat tiles → notes) is the shared
 // builder in arenas-activity-card.js — same renderer as the club dashboard
 // Feed tab and the my-profile Activities tab. Notes clamp/Show-more and all
 // escaping live there.

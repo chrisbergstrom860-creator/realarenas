@@ -1636,7 +1636,7 @@ function renderActivities(activities) {
             '<button onclick="deleteActivity(\'' + escAct(a.id) + '\', document.getElementById(\'' + cardId + '\'))" style="width:26px;height:26px;border-radius:6px;border:var(--border);background:white;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--gray-400);font-size:12px" title="Delete activity">✕</button>' +
           '</div>' +
         '</div>' +
-        // Body (stat tiles → notes → coach's note → feeling) via the shared
+        // Body (stat tiles → notes → feeling) via the shared
         // builder; the title lives in THIS surface's header row above, so the
         // module's title block is switched off.
         window.activityCardBody(a, { title: false, feeling: true }) +

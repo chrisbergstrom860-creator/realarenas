@@ -3058,7 +3058,7 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     }
 
-    // Activity-card bodies (title → stat tiles → notes → coach's note) come
+    // Activity-card bodies (title → stat tiles → notes) come
     // from the shared builder (arenas-activity-card.js) with the .ac-ins
     // inset modifier — this card is flush (no inner padding).
 
@@ -3097,7 +3097,7 @@ document.addEventListener('DOMContentLoaded', function () {
           // unknown sport now renders the neutral gray pill, not running's colors.
           badge = window.sportPillHtml(item.sport, { size: 'xs', style: 'margin-left:auto;flex-shrink:0' });
           metaLabel = 'logged an activity';
-          // Shared body builder (title → stat tiles → notes → coach's note),
+          // Shared body builder (title → stat tiles → notes),
           // same renderer as the main feed / profile Activities tab. The
           // payload is the feed's activity shape (raw activity columns).
           body = window.activityCardBody(item, { inset: true });

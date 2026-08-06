@@ -60,7 +60,7 @@ async function seed() {
 
   const pinned = new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString();
   const acts = [
-    { user_id: authorId, sport: 'running', title: 'VAC long note run', duration: '00:45:00', distance: '12 km', pace: '5:10 /km', notes: LONG_NOTE, ai_insight: 'Solid threshold control — keep the last rep honest next time.', date: pinned, created_at: pinned },
+    { user_id: authorId, sport: 'running', title: 'VAC long note run', duration: '00:45:00', distance: '12 km', pace: '5:10 /km', notes: LONG_NOTE, date: pinned, created_at: pinned },
     { user_id: authorId, sport: 'running', title: 'VAC multiline run', duration: '00:40:00', notes: MULTILINE_NOTE, date: pinned, created_at: pinned },
     { user_id: authorId, sport: 'cycling', title: 'VAC short note ride', duration: '01:00:00', distance: '30 km', notes: 'Quick spin, easy day', date: pinned, created_at: pinned },
     { user_id: authorId, sport: 'running', title: 'VAC noteless run', duration: '00:20:00', notes: null, date: pinned, created_at: pinned },

@@ -1798,61 +1798,14 @@ app.get(BASE + '/api/follow/:userId', requireAuth, async (req, res) => {
 });
 
 // ── ACTIVITIES API (manual training log) ──
-// Generates a short, deterministic "AI coach" insight from the logged activity.
-// Pure string logic (no external call) so it works offline and never blocks a
-// save. Values it interpolates are user-supplied, so anything rendered from
-// ai_insight on the client must still be HTML-escaped there.
-function generateAIInsight(activity) {
-  const insights = {
-    running: [
-      activity.run_type === 'Tempo' ?
-        `Tempo work at ${activity.pace || 'your target pace'} builds lactate threshold — one of the highest ROI sessions you can do. ${activity.avg_hr ? 'HR of ' + activity.avg_hr + ' suggests ' + (parseInt(activity.avg_hr) > 165 ? 'you pushed hard today — make sure tomorrow is easy.' : 'good effort control.') : ''}` :
-      activity.run_type === 'Interval / Track' ?
-        `Interval sessions drive VO2 max improvements. ${activity.distance ? 'Covering ' + activity.distance + ' of quality work' : 'This session'} builds the top-end fitness that makes all your other runs feel easier.` :
-      activity.run_type === 'Long run' ?
-        `Long runs build aerobic base and fat adaptation. ${activity.distance ? activity.distance + ' is solid long run volume.' : ''} Keep the pace easy — the benefit comes from time on feet, not speed.` :
-        `${activity.distance ? activity.distance + ' logged.' : 'Session logged.'} Consistency is the most important training variable — showing up regularly matters more than any single workout.`
-    ],
-    cycling: [
-      activity.avg_power ?
-        `${activity.avg_power} average power over ${activity.duration || 'this session'} — ${parseInt(activity.avg_power) > 200 ? 'solid output. Your aerobic engine is clearly developing.' : 'good Zone 2 work. This type of riding builds your aerobic base more than people realise.'}` :
-        `${activity.distance ? activity.distance + ' covered.' : 'Ride logged.'} Every kilometre on the bike builds aerobic capacity and pedalling efficiency.`
-    ],
-    climbing: [
-      activity.top_grade ?
-        `Sending at ${activity.top_grade} shows your current capability. ${activity.project_grade ? 'Projecting ' + activity.project_grade + ' is the right approach — spending time at your limit drives the most adaptation.' : ''} ${activity.notes && activity.notes.includes('foot') ? 'Footwork issues you noted are very common at this grade — deliberate footwork drills in warm-up will pay off fast.' : ''}` :
-        `${activity.problems_count ? activity.problems_count + ' problems completed.' : 'Session logged.'} Volume at the wall builds finger strength and movement pattern recognition simultaneously.`
-    ],
-    swimming: [
-      activity.swim_pace ?
-        `${activity.swim_pace} per 100m is ${activity.pool_type === 'Open water' ? 'strong for open water where conditions add difficulty.' : 'solid pool pace.'} ${activity.distance ? 'Covering ' + activity.distance + ' in one session builds excellent aerobic base.' : ''}` :
-        `Swimming is one of the best cross-training activities for any athlete — low impact, high cardiovascular demand. Consistency here will transfer to all your other sports.`
-    ],
-    football: [
-      `${activity.session_type === 'Match' ? 'Match day effort is high intensity and high reward — make sure the next 48 hours include recovery-focused activity.' : 'Training sessions build the technical and physical foundation that shows up on match day.'} ${activity.distance ? 'Covering ' + activity.distance + ' shows strong work rate.' : ''}`
-    ],
-    weightlifting: [
-      `${activity.session_focus ? activity.session_focus + ' session logged.' : 'Strength session logged.'} ${activity.rpe ? 'RPE ' + activity.rpe + '/10 — ' + (parseInt(activity.rpe) >= 9 ? 'very high intensity. Prioritise sleep and protein today.' : parseInt(activity.rpe) <= 6 ? 'well within your capacity. Good for technique-focused work.' : 'solid working intensity.') : ''} ${activity.total_volume ? 'Total volume of ' + activity.total_volume + ' is trackable — progressive overload over weeks is what drives strength gains.' : ''}`
-    ],
-    hiking: [
-      `${activity.distance ? activity.distance : 'This hike'} ${activity.elevation ? 'with ' + activity.elevation + ' of elevation gain' : ''} is excellent low-impact aerobic work. ${activity.pack_weight ? 'Carrying ' + activity.pack_weight + ' adds resistance training benefit on top of the cardiovascular load.' : ''} Hiking builds the aerobic base and mental resilience that transfers to all other sports.`
-    ],
-    yoga: [
-      `${activity.yoga_style ? activity.yoga_style : 'Yoga'} builds the mobility, body awareness, and breathing control that directly improves performance in every other sport you do. ${activity.yoga_style === 'Yin' || activity.yoga_style === 'Restorative' ? 'Restorative practice like this accelerates recovery from harder training sessions.' : ''} Consistency here matters more than duration.`
-    ],
-    // Session ② sport-specific branch: golf gets one because its two custom
-    // fields (strokes/course) give the note something concrete to say.
-    // Pickleball/basketball/hockey intentionally fall through to the generic
-    // fallback below (banked for a later session).
-    golf: [
-      activity.golf_strokes ?
-        `${activity.golf_strokes} strokes${activity.golf_course ? ' at ' + activity.golf_course : ''} logged. A full round is 4+ hours on your feet — real low-intensity aerobic volume. Track strokes round to round: trends matter more than any single score.` :
-        `Round logged${activity.golf_course ? ' at ' + activity.golf_course : ''}. Walking the course is underrated aerobic work, and the focus practice transfers to every sport you do.`
-    ]
-  };
-  const sportInsights = insights[activity.sport];
-  if (!sportInsights) return 'Activity logged. Keep up the consistent training.';
-  return (sportInsights[0] || 'Activity logged. Keep up the consistent training.').replace(/\s+/g, ' ').trim();
+// Legacy column scrubber: activities.ai_insight held server-canned "Coach's
+// note" strings (fabricated coach persona, removed by user decision). The
+// column stays in the DB (no DDL / no data loss) but must never leave the
+// server — apply this to every activity row that reaches a payload built
+// from select('*').
+function stripLegacyInsight(row) {
+  if (row && typeof row === 'object') delete row.ai_insight;
+  return row;
 }
 
 // Attach author display info (name/handle) to a list of activities. There is no
@@ -1907,6 +1860,7 @@ async function buildFeedActivities(limit, currentUserId) {
     .order('created_at', { ascending: false })
     .limit(limit);
   if (error || !data) return [];
+  data.forEach(stripLegacyInsight);
   const enriched = await enrichActivities(data);
   const likeRows = await fetchActivityLikes(enriched.map((a) => a.id));
   return enriched.map((a) => {
@@ -2073,7 +2027,6 @@ app.post(BASE + '/api/activities/create', requireAuth, async (req, res) => {
     golf_strokes: golfStrokes,
     golf_course: golfCourse
   };
-  activityData.ai_insight = generateAIInsight(activityData);
   const { data, error } = await supabaseAdmin
     .from('activities')
     .insert(activityData)
@@ -2145,7 +2098,7 @@ app.get(BASE + '/api/activities/:userId', requireAuth, async (req, res) => {
   // Kudos counts for the profile Activities tab — count-only (no give-button
   // there): the owner sees appreciation on their own training; giving kudos
   // happens where OTHERS' activities appear, i.e. the feed.
-  const rows = data || [];
+  const rows = (data || []).map(stripLegacyInsight);
   const likeRows = await fetchActivityLikes(rows.map((a) => a.id));
   const activities = rows.map((a) => ({
     ...a,
@@ -3013,6 +2966,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
       .order('created_at', { ascending: false })
       .limit(20);
     (activities || []).forEach((a) => {
+      stripLegacyInsight(a);
       feed.push({
         type: 'activity',
         ...a,
@@ -7541,7 +7495,7 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
       memberships, clubInvitesSent, userSubs
     ] = await Promise.all([
       fetchAllRows('activities', q => q.eq('user_id', uid),
-        'sport, title, date, duration, notes, feeling, distance, pace, avg_hr, elevation, cadence, run_type, avg_power, avg_speed, ride_type, top_grade, project_grade, problems_count, climbing_style, climb_location, swim_pace, pool_type, stroke, session_type, position, session_focus, total_volume, top_lift, sets_completed, rpe, trail, terrain, pack_weight, yoga_style, yoga_format, focus_area, instructor, ai_insight, created_at, golf_strokes, golf_course'),
+        'sport, title, date, duration, notes, feeling, distance, pace, avg_hr, elevation, cadence, run_type, avg_power, avg_speed, ride_type, top_grade, project_grade, problems_count, climbing_style, climb_location, swim_pace, pool_type, stroke, session_type, position, session_focus, total_volume, top_lift, sets_completed, rpe, trail, terrain, pack_weight, yoga_style, yoga_format, focus_area, instructor, created_at, golf_strokes, golf_course'),
       fetchAllRows('posts', q => q.eq('user_id', uid), 'content, sport, feeling, created_at'),
       fetchAllRows('post_comments', q => q.eq('user_id', uid), 'post_id, content, created_at'),
       fetchAllRows('post_likes', q => q.eq('user_id', uid), 'post_id, created_at'),

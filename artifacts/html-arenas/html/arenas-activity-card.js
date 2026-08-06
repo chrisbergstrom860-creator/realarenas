@@ -4,14 +4,14 @@
 // same card body are how that bug happened.
 //
 // Scope: the BODY only, in the app-wide order title → stat tiles → notes →
-// coach's note (→ feeling). Headers and footers stay per-surface — they
+// (→ feeling). Headers and footers stay per-surface — they
 // legitimately differ (avatar vs sport tile, kudos give-button vs count chip
 // vs none, delete button). Stat tiles come from arenas-stat-tiles.js (must be
 // loaded first); classes live in arenas.css (.ac-title, .ac-notes-box,
-// .fa-notes, .ac-coach-note, .ac-feeling + the .ac-ins inset modifier).
+// .fa-notes, .ac-feeling + the .ac-ins inset modifier).
 //
 // Expects the activity in the feed payload shape: raw activities columns
-// (title, notes, ai_insight, feeling + the stat fields the tile builder
+// (title, notes, feeling + the stat fields the tile builder
 // reads). Options:
 //   inset:   true → each block carries .ac-ins (margin:0 14px 10px) for
 //            flush cards (club dashboard). Default false = padded card.
@@ -82,9 +82,9 @@
     var tiles = window.buildActivityStatTiles ? window.buildActivityStatTiles(a) : '';
     if (tiles) html += '<div class="ac-stats-row' + ins + '">' + tiles + '</div>';
     html += notesHtml(a.notes, ins);
-    if (a.ai_insight) {
-      html += '<div class="ac-coach-note' + ins + '"><span class="ic">📝</span><span><strong>Coach&#39;s note:</strong> ' + esc(a.ai_insight) + '</span></div>';
-    }
+    // No "Coach's note" block: the old ai_insight strings were server-canned
+    // templates masquerading as a human coach — removed by user decision.
+    // Existing DB rows may still carry ai_insight; it must never render.
     if (opts.feeling && a.feeling) {
       html += '<div class="ac-feeling' + ins + '">Feeling: ' + esc(a.feeling) + '</div>';
     }
