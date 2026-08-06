@@ -201,8 +201,10 @@ const PAGES = [
       { name: 'feed items', sel: '.feed-items', min: 3 },
       // Mobile rail restructure: only the Activity streak card survives on
       // phones (the other three are display:none via .sc-mobile-hide) and the
-      // rail is reordered above the feed column. Exactly 1 visible card.
-      { name: 'right rail (side-col)', sel: '.side-col', min: 1 }
+      // rail is reordered above the feed column. Exactly 1 visible card —
+      // max guards the hidden-card contract (a regression re-showing the
+      // other three cards must fail here, not just a missing streak).
+      { name: 'right rail (side-col)', sel: '.side-col', min: 1, max: 1 }
     ] },
   { user: 'creator', name: 'challenges', path: '/challenges', waitFor: '#tab-mine .challenge-card', root: 'body',
     surfaces: [{ name: 'mine cards', sel: '#tab-mine', min: 2 }],

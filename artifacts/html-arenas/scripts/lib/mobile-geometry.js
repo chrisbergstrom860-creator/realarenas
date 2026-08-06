@@ -136,7 +136,7 @@ export function surfacesExpr(surfaces) {
   return `(${JSON.stringify(surfaces)}).map((s) => {
     const el = document.querySelector(s.sel);
     const n = el ? [...el.children].filter((c) => c.getBoundingClientRect().height > 0).length : -1;
-    return { name: s.name, found: !!el, children: n, ok: !!el && n >= (s.min ?? 1) };
+    return { name: s.name, found: !!el, children: n, ok: !!el && n >= (s.min ?? 1) && n <= (s.max ?? Infinity) };
   })`;
 }
 
