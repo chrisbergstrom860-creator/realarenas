@@ -44,3 +44,5 @@ leaderboards "Active challenges" rail card is hidden on mobile too).
 Note: the feed **center-column activity cards** and the **notifications modal** are a
 separate concern and still contain prototype/fabricated content (Hackney RC, Alena/
 Sofia/Marco, "540 pts to #4"); the right-rail task did not touch them.
+
+**Desktop reading-measure cap:** feed .main track is minmax(0,656px) 300px + justify-content:center (640px post text after 16px gutter); cap deliberately bites at 1280px too; keep it page-local, NOT in arenas.css. Events .body-grid is still unbounded — needs its own (banner-driven, wider) value if ever capped; challenges/leaderboards already cap via max-width:1280 centered.
