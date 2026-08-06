@@ -63,6 +63,7 @@
 - [html-arenas feed timeline](html-arenas-feed-timeline.md) — /feed is one merged newest-first list; sort by "entered feed" created_at per type (never subject date); server windows must order by the same key.
 - [html-arenas /how-points-work](html-arenas-how-points-work.md) — ONE registry renderer feeds page + in-app modal fragment; per-requester chrome (so NOT SW-cached); modal = shared JS, no history push.
 - [html-arenas PWA](html-arenas-pwa.md) — deploy-wins SW; never cache authed navs (PUBLIC_PAGES); bump VERSION on sw.js edits; setOffline can't test SW (use 502 path); new pages need PWA head block.
+- [html-arenas honest error page](html-arenas-error-page.md) — authed pages NEVER fall back to raw prototype HTML; sendPageError 503 + X-Arenas-App-Error; deny → redirect /feed; prototype artifact deleted.
 - [html-arenas RSVP colors](html-arenas-rsvp-colors.md) — two-tier yellow grammar (solid=committed/action, pale+stroke=tentative, ghost=unanswered); #7a5c00 on #FFD21E fails AA; green = completion only.
 - [html-arenas brand mark](html-arenas-brand-mark.md) — arenas-icon.svg is THE mark (topbar imgs, favicons, PWA icons all derive); no "--" in SVG comments (librsvg rejects); content 🏟 fallbacks stay emoji.
 - [html-arenas challenge edit/delete](html-arenas-challenge-edit-delete.md) — delete branches on aloneness; PATCH whitelist keyed on start_date; end-early = end_date-24h, no snapshot; remove-from-discover separate one-way route; overlay beforeClose dirty-guard.
