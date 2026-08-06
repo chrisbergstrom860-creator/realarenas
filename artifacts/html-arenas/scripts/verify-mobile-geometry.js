@@ -234,7 +234,13 @@ const PAGES = [
       // Owner's PRIVATE event card action row: pill + Edit + Invites + Image +
       // Delete (5 children) — the widest manage row anywhere. Measured at all
       // VIEWPORTS (360/380/414); clip/offscreen checks catch a squeezed button.
-      { name: 'owner private card actions', sel: '#events-grid div:has(> [onclick*="manageInvites"])', min: 5 }
+      { name: 'owner private card actions', sel: '#events-grid div:has(> [onclick*="manageInvites"])', min: 5 },
+      // Mobile rail restructure: the "Your RSVPs" card is the rail's ONLY
+      // card and is lifted above the events list (flex-column + order:-1 —
+      // the collapsed body-grid is display:flex here, not grid). Exactly 1
+      // visible card, same contract as the feed rail: a regression that adds
+      // cards or re-hides the rail must fail, not pass silently.
+      { name: 'right rail (sidebar-col)', sel: '.sidebar-col', min: 1, max: 1 }
     ],
     steps: [
       { name: 'modal-create-event', js: `document.getElementById('create-event-btn').click()`,

@@ -59,9 +59,15 @@ button,select,input,textarea{font-family:var(--font)}
 .events-grid{display:grid;grid-template-columns:1fr 1fr;gap:0}
 @media (max-width:768px){
   body:has(.bottom-nav) .main{overflow-y:auto;-webkit-overflow-scrolling:touch}
-  body:has(.bottom-nav) .body-grid{display:block;overflow:visible}
+  /* Mobile rail restructure (same pattern as the feed's Activity streak):
+     the rail would otherwise stack BELOW the whole events list. The desktop
+     grid collapses to display:block here, where `order` is inert — so use a
+     flex column instead and lift the rail with order:-1. Same single render,
+     no duplicated markup; the rail's only card is "Your RSVPs". Geometry
+     guard pins the mobile rail to exactly 1 visible card. */
+  body:has(.bottom-nav) .body-grid{display:flex;flex-direction:column;overflow:visible}
   body:has(.bottom-nav) .events-col{overflow:visible;border-right:none}
-  body:has(.bottom-nav) .sidebar-col{overflow:visible}
+  body:has(.bottom-nav) .sidebar-col{overflow:visible;order:-1;padding:14px 14px 0}
   body:has(.bottom-nav) .events-grid{grid-template-columns:1fr}
   body:has(.bottom-nav) .evx-banner{display:none}
   body:has(.bottom-nav) .evx-card{flex-wrap:wrap}
