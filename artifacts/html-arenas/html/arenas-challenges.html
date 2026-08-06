@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', function(){
 .stat-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 
 /* ── TABS BAR ── */
-.tabs-bar { grid-column: 1 / -1; background: white; border-bottom: var(--border); position: sticky; top: 56px; z-index: 100; }
+.tabs-bar { grid-column: 1 / -1; background: white; border-bottom: var(--border); position: sticky; top: var(--topbar-h); z-index: 100; }
 .tabs-inner { max-width: 1280px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; }
 .main-tab { padding: 13px 18px; font-size: 14px; font-weight: 500; color: var(--gray-500); border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; border-top: none; border-left: none; border-right: none; background: transparent; font-family: var(--font); transition: color 0.1s, border-color 0.1s; display: flex; align-items: center; gap: 7px; }
 .main-tab:hover { color: var(--gray-800); }
@@ -249,10 +249,10 @@ document.addEventListener('DOMContentLoaded', function(){
 
 /* ── FOOTER ── */
 /* ── APP SHELL ── */
-.topbar-search { display: flex; align-items: center; gap: 8px; background: var(--gray-50); border: var(--border); border-radius: 7px; padding: 6px 12px; width: 260px; }
-.topbar-search input { background: none; border: none; outline: none; font-size: 13px; color: var(--gray-700); width: 100%; }
+.topbar-search { display: flex; align-items: center; gap: 8px; background: var(--gray-50); border: var(--border); border-radius: 8px; padding: 9px 14px; width: 260px; }
+.topbar-search input { background: none; border: none; outline: none; font-size: 14px; color: var(--gray-700); width: 100%; }
 .topbar-search input::placeholder { color: var(--gray-400); }
-.icon-btn { width: 34px; height: 34px; border-radius: 7px; border: var(--border); background: white; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 15px; position: relative; }
+.icon-btn { width: 44px; height: 44px; border-radius: 8px; border: var(--border); background: white; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 19px; position: relative; }
 .main { overflow-y: auto; }
 </style>
 <style>/* Real-data challenges: create-modal form controls + sport chips */

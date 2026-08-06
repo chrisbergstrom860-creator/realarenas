@@ -36,8 +36,8 @@ button,select,input,textarea{font-family:var(--font)}
 @keyframes fade-up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes slide-right{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
 /* ── LAYOUT ── *//* ── TOPBAR ── */
-.topbar-search{display:flex;align-items:center;gap:8px;background:var(--gray-50);border:var(--border);border-radius:7px;padding:6px 12px;width:260px}
-.topbar-search input{background:none;border:none;outline:none;font-size:13px;color:var(--gray-700);width:100%}
+.topbar-search{display:flex;align-items:center;gap:8px;background:var(--gray-50);border:var(--border);border-radius:8px;padding:9px 14px;width:260px}
+.topbar-search input{background:none;border:none;outline:none;font-size:14px;color:var(--gray-700);width:100%}
 .topbar-search input::placeholder{color:var(--gray-400)}
 .notif-btn:hover{background:var(--gray-50)}/* ── SIDEBAR ── */
 
@@ -53,11 +53,11 @@ button,select,input,textarea{font-family:var(--font)}
 /* Mobile: symmetric 14px side padding so cards don't sit flush against the
    screen edges — same side padding as other pages' mobile .main (calendar/log). */
 @media (max-width:768px){ .feed-col{padding:0 14px 24px} }
-.side-col{padding:20px 16px;display:flex;flex-direction:column;gap:14px;position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto}
+.side-col{padding:20px 16px;display:flex;flex-direction:column;gap:14px;position:sticky;top:var(--topbar-h);height:calc(100vh - var(--topbar-h));overflow-y:auto}
 .side-col::-webkit-scrollbar{display:none}
 
 /* ── FEED HEADER ── */
-.feed-header{padding:16px 20px 0;border-bottom:var(--border);background:white;position:sticky;top:56px;z-index:90}
+.feed-header{padding:16px 20px 0;border-bottom:var(--border);background:white;position:sticky;top:var(--topbar-h);z-index:90}
 .feed-header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .feed-title{font-size:18px;font-weight:700;color:var(--gray-900);letter-spacing:-.01em}
 .filter-bar{display:flex;align-items:center;gap:6px;padding-bottom:12px;overflow-x:auto}

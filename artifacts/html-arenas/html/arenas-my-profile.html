@@ -41,11 +41,11 @@ button,select,input,textarea{font-family:var(--font)}
 @keyframes slide-in{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
 @keyframes count-up{from{opacity:0}to{opacity:1}}
 @keyframes pulse-ring{0%{box-shadow:0 0 0 0 rgba(255,210,30,0.4)}70%{box-shadow:0 0 0 10px rgba(255,210,30,0)}100%{box-shadow:0 0 0 0 rgba(255,210,30,0)}}/* ── LAYOUT ── *//* ── TOPBAR ── */
-.topbar-search{display:flex;align-items:center;gap:8px;background:var(--gray-50);border:var(--border);border-radius:7px;padding:6px 12px;width:240px}
-.topbar-search input{background:none;border:none;outline:none;font-size:13px;color:var(--gray-700);width:100%}
+.topbar-search{display:flex;align-items:center;gap:8px;background:var(--gray-50);border:var(--border);border-radius:8px;padding:9px 14px;width:240px}
+.topbar-search input{background:none;border:none;outline:none;font-size:14px;color:var(--gray-700);width:100%}
 .topbar-search input::placeholder{color:var(--gray-400)}
 .notif-btn:hover{background:var(--gray-50)}
-.user-av{width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900);cursor:pointer;animation:pulse-ring 2s ease 1s}/* ── SIDEBAR ── */
+.user-av{width:40px;height:40px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;color:var(--gray-900);cursor:pointer;animation:pulse-ring 2s ease 1s}/* ── SIDEBAR ── */
 .sf-row{display:flex;align-items:center;gap:8px}
 
 /* ── MAIN ── */
@@ -127,7 +127,7 @@ button,select,input,textarea{font-family:var(--font)}
   body:has(.bottom-nav) .ath-tab-search{flex:1 1 100%;width:auto;min-width:0}
   body:has(.bottom-nav) .follow-card .btn{flex-shrink:0}
 }
-.hero-tab-bar{background:white;border-bottom:var(--border);position:sticky;top:56px;z-index:50}
+.hero-tab-bar{background:white;border-bottom:var(--border);position:sticky;top:var(--topbar-h);z-index:50}
 .htb-inner{max-width:1200px;margin:0 auto;padding:0 28px;display:flex;gap:0}
 .htab{padding:13px 18px;font-size:13px;font-weight:500;color:var(--gray-500);border-bottom:2px solid transparent;cursor:pointer;transition:color .1s,border-color .1s;white-space:nowrap;display:flex;align-items:center;gap:6px}
 .htab:hover{color:var(--gray-800)}
