@@ -31,7 +31,10 @@ document.addEventListener('DOMContentLoaded', function(){
 <style>
 button{font-family:var(--font)}
 .notif-btn:hover{background:var(--gray-50)}
-.main{display:block;max-width:820px;padding:28px 32px 60px}
+/* margin:0 auto — the shell grid's main column is 1fr; without it the 820px
+   box sits flush left with a dead zone to its right (desktop only; mobile is
+   full-width so auto margins are a no-op there). */
+.main{display:block;max-width:820px;margin:0 auto;padding:28px 32px 60px;width:100%}
 .page-title{font-size:22px;font-weight:700;color:var(--gray-900);letter-spacing:-.01em;margin-bottom:4px}
 .page-sub{font-size:13px;color:var(--gray-500);margin-bottom:20px}
 /* Form controls fill their grid cells: without width:100% the inputs sit at
