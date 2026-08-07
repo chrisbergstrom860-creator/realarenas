@@ -140,7 +140,10 @@ async function deleteUserStorage(uid) {
         checkErr(`${t} for club ${club.id}`, error);
       }
       const { data: logo } = await admin.storage.from('avatars').list('clubs/' + club.id, { limit: 100 });
-      if (logo && logo.length) await admin.storage.from('avatars').remove(logo.map((f) => `clubs/${club.id}/${f.name}`));
+      if (logo && logo.length) {
+        const { error: logoErr } = await admin.storage.from('avatars').remove(logo.map((f) => `clubs/${club.id}/${f.name}`));
+        checkErr(`club logo objects for club ${club.id}`, logoErr);
+      }
       const { error: cErr } = await admin.from('clubs').delete().eq('id', club.id);
       if (checkErr(`club ${club.id}`, cErr)) console.log(`  DELETED empty test club "${club.name}"`);
     }

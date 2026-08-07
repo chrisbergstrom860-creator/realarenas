@@ -1695,9 +1695,10 @@ app.post(BASE + '/api/posts/:id/like', requireAuth, async (req, res) => {
     .eq('user_id', req.user.id)
     .maybeSingle();
   if (existing) {
-    await supabaseAdmin.from('post_likes').delete()
+    const { error: unlikeErr } = await supabaseAdmin.from('post_likes').delete()
       .eq('post_id', req.params.id)
       .eq('user_id', req.user.id);
+    if (unlikeErr) return res.status(500).json({ error: 'Could not remove kudos' });
     return res.json({ liked: false });
   }
   const { error } = await supabaseAdmin.from('post_likes').insert({
@@ -2203,9 +2204,10 @@ app.post(BASE + '/api/activities/:id/like', requireAuth, async (req, res) => {
     .maybeSingle();
   if (selErr) return res.json({ error: selErr.message });
   if (existing) {
-    await supabaseAdmin.from('activity_likes').delete()
+    const { error: unlikeErr } = await supabaseAdmin.from('activity_likes').delete()
       .eq('activity_id', req.params.id)
       .eq('user_id', req.user.id);
+    if (unlikeErr) return res.status(500).json({ error: 'Could not remove kudos' });
     return res.json({ liked: false });
   }
   const { error } = await supabaseAdmin.from('activity_likes').insert({
@@ -4547,8 +4549,9 @@ app.post(BASE + '/api/challenges/:id/join', requireAuth, async (req, res) => {
 // is an exit action, so gating it would trap a downgraded user in a challenge.
 app.delete(BASE + '/api/challenges/:id/leave', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
-  await supabaseAdmin.from('challenge_participants').delete()
+  const { error: leaveErr } = await supabaseAdmin.from('challenge_participants').delete()
     .eq('challenge_id', req.params.id).eq('user_id', req.user.id);
+  if (leaveErr) return res.status(500).json({ error: 'Could not leave the challenge' });
   res.json({ success: true });
 });
 
@@ -5765,17 +5768,25 @@ app.post(BASE + '/api/events/:id/rsvp', requireAuth, async (req, res) => {
     .from('event_rsvps').select('event_id, status')
     .eq('event_id', req.params.id).eq('user_id', req.user.id).maybeSingle();
   const wasGoing = !!(existing && existing.status === 'going');
+  // Every RSVP write checks the returned error — a failed write must fail the
+  // route BEFORE the notification fan-out below, or the organiser gets told
+  // about an RSVP that never landed and the caller sees false success.
+  let rsvpErr = null;
   if (existing) {
     if (status === 'cancelled') {
-      await supabaseAdmin.from('event_rsvps').delete()
-        .eq('event_id', req.params.id).eq('user_id', req.user.id);
+      ({ error: rsvpErr } = await supabaseAdmin.from('event_rsvps').delete()
+        .eq('event_id', req.params.id).eq('user_id', req.user.id));
     } else {
-      await supabaseAdmin.from('event_rsvps').update({ status })
-        .eq('event_id', req.params.id).eq('user_id', req.user.id);
+      ({ error: rsvpErr } = await supabaseAdmin.from('event_rsvps').update({ status })
+        .eq('event_id', req.params.id).eq('user_id', req.user.id));
     }
   } else if (status !== 'cancelled') {
-    await supabaseAdmin.from('event_rsvps')
-      .insert({ event_id: req.params.id, user_id: req.user.id, status });
+    ({ error: rsvpErr } = await supabaseAdmin.from('event_rsvps')
+      .insert({ event_id: req.params.id, user_id: req.user.id, status }));
+  }
+  if (rsvpErr) {
+    console.log('RSVP write error:', rsvpErr.message);
+    return res.status(500).json({ error: 'Could not save your RSVP' });
   }
   // Only fan out notifications on the transition *into* going, so repeatedly
   // clicking "Going" can't spam the organiser or the viewer's followers.
@@ -10468,12 +10479,31 @@ app.post(BASE + '/auth/join/:token', async (req, res) => {
     }
 
     // Personal invites are single-use (marked accepted). Open shareable links
-    // stay pending so they can be reused until they expire.
+    // stay pending so they can be reused until they expire. A failed marking
+    // must fail the whole flow — otherwise the invite stays redeemable while
+    // the account+membership already exist. Roll both back.
     if (!isOpen) {
-      await supabaseAdmin
+      const { error: markErr } = await supabaseAdmin
         .from('club_invites')
         .update({ status: 'accepted', accepted_at: new Date().toISOString() })
         .eq('token', req.params.token);
+      if (markErr) {
+        console.log('Invite accept: status update failed:', markErr.message);
+        // Compensation order matters: only delete the auth user AFTER the
+        // membership rollback succeeds — deleting the user first (or anyway)
+        // could orphan a membership row, the half-created state this rollback
+        // exists to prevent. The user was created in this request, so the
+        // (user_id, club_id) membership is necessarily the one we inserted.
+        const { error: rbMemErr } = await supabaseAdmin.from('memberships').delete()
+          .eq('user_id', userId).eq('club_id', invite.club_id);
+        if (rbMemErr) {
+          console.error('Invite accept rollback FAILED — user %s left with membership in club %s (invite %s still pending; manual remediation needed):', userId, invite.club_id, invite.id, rbMemErr.message);
+          return back('unknown');
+        }
+        const { error: rbUserErr } = await supabaseAdmin.auth.admin.deleteUser(userId);
+        if (rbUserErr) console.error('Invite accept rollback: orphaned auth user %s (no memberships; manual remediation needed):', userId, rbUserErr.message);
+        return back('unknown');
+      }
     }
 
     try {
@@ -10533,11 +10563,20 @@ app.post(BASE + '/auth/join/:token/existing', requireAuth, async (req, res) => {
     if (error) return res.status(500).json({ error: 'Could not join club' });
 
     // Single-use for personal invites; open links remain reusable until expiry.
+    // A failed marking must fail the route — otherwise the caller is a member
+    // while the invite stays redeemable. Roll the membership back.
     if (!isOpen) {
-      await supabaseAdmin
+      const { error: markErr } = await supabaseAdmin
         .from('club_invites')
         .update({ status: 'accepted', accepted_at: new Date().toISOString() })
         .eq('token', req.params.token);
+      if (markErr) {
+        console.log('Invite join: status update failed:', markErr.message);
+        const { error: rbErr } = await supabaseAdmin.from('memberships').delete()
+          .eq('user_id', req.user.id).eq('club_id', invite.club_id);
+        if (rbErr) console.log('Invite join rollback: membership delete failed:', rbErr.message);
+        return res.status(500).json({ error: 'Could not join club' });
+      }
     }
 
     try {
