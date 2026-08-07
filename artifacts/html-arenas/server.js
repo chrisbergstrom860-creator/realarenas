@@ -10325,6 +10325,16 @@ app.delete(BASE + '/api/clubs/:clubId/members/:userId', requireAuth, async (req,
   if (!requester || requester.role !== 'admin') return res.status(403).json({ error: 'Only admins can remove members' });
   if (userId === req.user.id) return res.status(400).json({ error: 'You cannot remove yourself from the club' });
   try {
+    // Fetch first: "removing" a non-member must not report success. A made-up
+    // user id and a real non-member answer byte-identically.
+    const { data: membership, error: fetchErr } = await supabaseAdmin
+      .from('memberships')
+      .select('user_id')
+      .eq('user_id', userId)
+      .eq('club_id', clubId)
+      .maybeSingle();
+    if (fetchErr) return res.status(500).json({ error: 'Could not remove member' });
+    if (!membership) return res.status(404).json({ error: 'Member not found' });
     const { error } = await supabaseAdmin
       .from('memberships')
       .delete()
@@ -10701,15 +10711,29 @@ app.post(BASE + '/api/notifications/read-all', requireAuth, async (req, res) => 
 });
 
 // Dismiss (delete) a single notification (scoped to the owner).
+// Zero-leak: fetch first — a nonexistent id and someone else's notification
+// answer byte-identically, so the route is not an existence oracle.
 app.delete(BASE + '/api/notifications/:id', requireAuth, async (req, res) => {
-  if (!supabaseAdmin) return res.json({ error: 'Service unavailable' });
-  const { error } = await supabaseAdmin
-    .from('notifications')
-    .delete()
-    .eq('id', req.params.id)
-    .eq('user_id', req.user.id);
-  if (error) return res.json({ error: error.message });
-  res.json({ success: true });
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  try {
+    const { data: notif, error: fetchErr } = await supabaseAdmin
+      .from('notifications')
+      .select('id, user_id')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (fetchErr) return res.status(500).json({ error: 'Could not dismiss notification' });
+    if (!notif || notif.user_id !== req.user.id) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+    const { error } = await supabaseAdmin
+      .from('notifications')
+      .delete()
+      .eq('id', notif.id);
+    if (error) return res.status(500).json({ error: 'Could not dismiss notification' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not dismiss notification' });
+  }
 });
 
 // The standalone notifications page is retired — the bell now opens an in-place
