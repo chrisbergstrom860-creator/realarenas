@@ -811,7 +811,9 @@ document.addEventListener('DOMContentLoaded', function(){
       }
       return '' +
         '<div class="challenge-row" onclick="nav(\'/challenges\')">' +
-          '<div class="ch-icon" style="background:' + st.bg + '">' + st.icon + '</div>' +
+          (c.image
+            ? '<img class="ch-icon" alt="" style="object-fit:cover" src="' + B + '/api/challenges/' + encodeURIComponent(c.id) + '/image?v=' + encodeURIComponent(c.image) + '">'
+            : '<div class="ch-icon" style="background:' + st.bg + '">' + st.icon + '</div>') +
           '<div class="ch-info">' +
             '<div class="ch-name">' + esc(c.title || c.name || 'Challenge') + '</div>' +
             bar +

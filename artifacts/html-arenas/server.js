@@ -240,10 +240,6 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Shared app-shell stylesheet (public, no auth). Served at both the Replit
 // (/html) and Railway (root) base paths so the in-page href resolves in both.
-// TEMP dev-only ribbon harness (delete before commit)
-app.get(['/html/dev-ribbon-harness', '/dev-ribbon-harness', '/html/landing/dev-ribbon-harness'], (req, res) => res.sendFile(require('path').join(__dirname, 'html', 'dev-ribbon-harness.html')));
-app.get(['/html/dev-rib-3x1.webp', '/dev-rib-3x1.webp', '/html/landing/dev-rib-3x1.webp'], (req, res) => res.sendFile('/tmp/rib-3x1.webp'));
-app.get(['/html/dev-rib-6x1.webp', '/dev-rib-6x1.webp', '/html/landing/dev-rib-6x1.webp'], (req, res) => res.sendFile('/tmp/rib-6x1.webp'));
 app.get(['/html/arenas.css', '/arenas.css'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas.css'));
 });
@@ -4295,8 +4291,11 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
       const progress = parseFloat(progressMap[c.id]) || 0;
       // Safe percentage — never divide by zero/null goal_target.
       const pct = goalTarget > 0 ? Math.min(100, Math.round((progress / goalTarget) * 100)) : 0;
+      // image_path is server-only; clients get the version token `image`.
+      const { image_path, ...cPub } = c;
       return {
-        ...c,
+        ...cPub,
+        image: challengeImageVersion(image_path),
         goal_target: goalTarget,
         participantCount: (allParticipants || []).filter((p) => p.challenge_id === c.id).length,
         isJoined: myIds.includes(c.id) || c.created_by === userId,
@@ -4532,29 +4531,23 @@ app.post(BASE + '/api/challenges/create', requireAuth, async (req, res) => {
       }
     }
   }
-  res.json({ success: true, challenge, invitedCount, inviteWarning });
+  res.json({ success: true, challenge: challengePublicRow(challenge), invitedCount, inviteWarning });
 });
 
 // Join a challenge (adds the viewer as a participant).
 app.post(BASE + '/api/challenges/:id/join', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for challenges' });
   const { data: ch } = await supabaseAdmin
-    .from('challenges').select('club_id, visibility, created_by, end_date')
+    .from('challenges').select('id, club_id, visibility, created_by, end_date')
     .eq('id', req.params.id).maybeSingle();
-  if (!ch) return res.json({ error: 'Challenge not found' });
-  // Private solo challenges are ACCESS-CONTROLLED, not merely unlisted: only
-  // the creator or someone holding a live invite record may join. Club and
-  // public challenges keep their existing semantics. An invite-lookup failure
-  // (e.g. table not provisioned) DENIES — obscurity is not authorization.
-  if (ch.visibility === 'private' && !ch.club_id && ch.created_by !== req.user.id) {
-    let invited = false;
-    try {
-      const { data: inv, error: invErr } = await supabaseAdmin
-        .from('challenge_invites').select('challenge_id')
-        .eq('challenge_id', req.params.id).eq('invitee_id', req.user.id).maybeSingle();
-      invited = !invErr && !!inv;
-    } catch (e) { invited = false; }
-    if (!invited) return res.status(403).json({ error: 'invite_required' });
+  // Canonical visibility gate (2026-08-07). This subsumes the old inline
+  // private-solo invite check AND closes the club hole: private CLUB
+  // challenges now require membership to join. Denial is the byte-identical
+  // "Challenge not found" a nonexistent id gets — the old distinct
+  // `invite_required` 403 was an existence oracle. Participant is a grant
+  // (invite rows are retained-on-accept, so leave-and-rejoin also works).
+  if (!ch || !(await canUserSeeChallenge(req.user.id, ch))) {
+    return res.json({ error: 'Challenge not found' });
   }
   // Ended challenges can't be joined — the invite pill/card degrade honestly
   // instead of inserting a participant into a finished contest.
@@ -4571,7 +4564,10 @@ app.post(BASE + '/api/challenges/:id/join', requireAuth, async (req, res) => {
   }
   const { error } = await supabaseAdmin
     .from('challenge_participants').insert({ challenge_id: req.params.id, user_id: req.user.id });
-  if (error) return res.json({ error: error.message });
+  // Duplicate-join is idempotent success (participant is a visibility grant
+  // now, so a current participant can reach this insert) — same precedent as
+  // unfollow. Any other insert failure is still surfaced.
+  if (error && error.code !== '23505') return res.json({ error: error.message });
   // Award any newly earned challenge badges without blocking.
   checkAchievements(req.user.id, getUserTimezone(req.user)).catch(() => {});
   res.json({ success: true });
@@ -4713,26 +4709,15 @@ app.get(BASE + '/api/challenges/:id/leaderboard', requireAuth, async (req, res) 
     const { data: challenge } = await supabaseAdmin
       .from('challenges').select('*').eq('id', req.params.id).single();
     if (!challenge) return res.json({ error: 'Challenge not found' });
+    // Canonical visibility gate — a ranked roster of names/avatars is exactly
+    // what a non-public challenge must protect. Strangers (including
+    // NON-MEMBERS on a private CLUB challenge — hole closed 2026-08-07) get
+    // the same "not found" as a nonexistent id (no existence leak).
+    if (!(await canUserSeeChallenge(req.user.id, challenge))) {
+      return res.json({ error: 'Challenge not found' });
+    }
     const { data: participants } = await supabaseAdmin
       .from('challenge_participants').select('user_id').eq('challenge_id', req.params.id);
-    // Private solo challenges: only the creator, a participant, or a live
-    // invitee may read the roster — a ranked list of names/avatars is exactly
-    // what "private" must protect. Strangers get the same "not found" as a
-    // nonexistent id (no existence leak). Invite-lookup failure ⇒ not allowed.
-    if (challenge.visibility === 'private' && !challenge.club_id) {
-      const uid = req.user.id;
-      let allowed = challenge.created_by === uid
-        || (participants || []).some((p) => p.user_id === uid);
-      if (!allowed) {
-        try {
-          const { data: inv, error: invErr } = await supabaseAdmin
-            .from('challenge_invites').select('challenge_id')
-            .eq('challenge_id', req.params.id).eq('invitee_id', uid).maybeSingle();
-          allowed = !invErr && !!inv;
-        } catch (e) { allowed = false; }
-      }
-      if (!allowed) return res.json({ error: 'Challenge not found' });
-    }
     // Profile map (not display map): also carries each participant's zone so
     // progress windows/streak days follow the PARTICIPANT (boundary policy).
     const nameMap = await buildUserProfileMap((participants || []).map((p) => p.user_id));
@@ -4758,7 +4743,7 @@ app.get(BASE + '/api/challenges/:id/leaderboard', requireAuth, async (req, res) 
     }
     leaderboard.sort((a, b) => b.progress - a.progress);
     leaderboard.forEach((entry, i) => { entry.rank = i + 1; });
-    res.json({ leaderboard, challenge });
+    res.json({ leaderboard, challenge: challengePublicRow(challenge) });
   } catch (err) {
     console.log('Leaderboard error:', err.message);
     res.json({ error: err.message });
@@ -4865,7 +4850,7 @@ app.post(BASE + '/api/challenges/:id/duplicate', requireAuth, async (req, res) =
     if (rbErr) console.error('Challenge duplicate rollback FAILED — orphan challenge %s without creator participant (manual remediation needed):', newChallenge.id, rbErr.message);
     return res.status(500).json({ error: 'Could not duplicate the challenge' });
   }
-  res.json({ success: true, challenge: newChallenge });
+  res.json({ success: true, challenge: challengePublicRow(newChallenge) });
 });
 
 // ── CHALLENGE CREATOR EDIT/DELETE (2026-07-28) ──────────────────────────────
@@ -4889,6 +4874,45 @@ async function requireChallengeEditor(challengeId, userId) {
   }
   if (ch.visibility === 'private' && !ch.club_id) return { fail: { error: 'Challenge not found' } };
   return { fail: { status: 403, error: 'not_authorized' } };
+}
+
+// ── CANONICAL CHALLENGE VISIBILITY ──────────────────────────────────────────
+// THE single "may this user see this challenge?" rule. Visibility wins over
+// club scope (clubs can run open challenges — Discover already lists public
+// club challenges platform-wide), private is enforced:
+//   • visibility='public'            → any authenticated user
+//   • creator or current participant → yes
+//   • private + club_id              → member of that club (any role)
+//   • private solo                   → holder of a challenge_invites row
+//     (rows are retained-on-accept, so leave-and-rejoin keeps access; rows on
+//     ended challenges still grant VIEW — completed contests stay readable)
+// Any lookup failure DENIES — obscurity is not authorization. Callers must
+// answer a denial with the byte-identical "Challenge not found" body they use
+// for a nonexistent id (no existence oracle).
+async function canUserSeeChallenge(userId, ch) {
+  if (!supabaseAdmin || !ch || !userId) return false;
+  if (ch.visibility === 'public') return true;
+  if (ch.created_by === userId) return true;
+  try {
+    const { data: part, error: pErr } = await supabaseAdmin
+      .from('challenge_participants').select('challenge_id')
+      .eq('challenge_id', ch.id).eq('user_id', userId).maybeSingle();
+    if (!pErr && part) return true;
+  } catch (e) { /* fall through to the remaining grants */ }
+  if (ch.club_id) {
+    try {
+      const { data: mem, error: mErr } = await supabaseAdmin
+        .from('memberships').select('role')
+        .eq('club_id', ch.club_id).eq('user_id', userId).maybeSingle();
+      return !mErr && !!mem;
+    } catch (e) { return false; }
+  }
+  try {
+    const { data: inv, error: invErr } = await supabaseAdmin
+      .from('challenge_invites').select('challenge_id')
+      .eq('challenge_id', ch.id).eq('invitee_id', userId).maybeSingle();
+    return !invErr && !!inv;
+  } catch (e) { return false; }
 }
 
 // TWO DISTINCT "done" CONCEPTS — never conflate them again:
@@ -5035,7 +5059,7 @@ app.patch(BASE + '/api/challenges/:id', requireAuth, async (req, res) => {
     await notifyChallengeParticipants(updated, req.user, 'Challenge updated',
       `${displayFromUser(req.user).name} changed the details of “${updated.title}”.`);
   }
-  res.json({ success: true, challenge: updated });
+  res.json({ success: true, challenge: challengePublicRow(updated) });
 });
 
 // End a challenge early: set end_date to 24h ago so the derived Completed
@@ -5055,7 +5079,7 @@ app.post(BASE + '/api/challenges/:id/end-early', requireAuth, async (req, res) =
   if (error) return res.json({ error: error.message });
   await notifyChallengeParticipants(updated, req.user, 'Challenge ended early',
     `${displayFromUser(req.user).name} ended “${updated.title}” early. Standings are as of the end date, recomputed from activities.`);
-  res.json({ success: true, challenge: updated });
+  res.json({ success: true, challenge: challengePublicRow(updated) });
 });
 
 // One-directional public→private escape hatch — THE accidental-public fix.
@@ -5074,7 +5098,7 @@ app.post(BASE + '/api/challenges/:id/remove-from-discover', requireAuth, async (
   const { data: updated, error } = await supabaseAdmin
     .from('challenges').update({ visibility: 'private' }).eq('id', challenge.id).select().single();
   if (error) return res.json({ error: error.message });
-  res.json({ success: true, challenge: updated });
+  res.json({ success: true, challenge: challengePublicRow(updated) });
 });
 
 // Delete a challenge — branches on ALONENESS, not doneness: hard delete only
@@ -5101,6 +5125,8 @@ app.delete(BASE + '/api/challenges/:id', requireAuth, async (req, res) => {
   await supabaseAdmin.from('challenge_participants').delete().eq('challenge_id', challenge.id);
   const { error } = await supabaseAdmin.from('challenges').delete().eq('id', challenge.id);
   if (error) return res.json({ error: error.message });
+  // Rows first, storage object second — best-effort, never blocking.
+  await deleteChallengeImageObject(challenge.image_path, challenge.id);
   res.json({ success: true });
 });
 
@@ -8039,10 +8065,12 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
     // 3a. Dying clubs' full sub-cascade.
     for (const club of dying) {
       const cid = club.id;
-      const { data: clubChallenges } = await supabaseAdmin.from('challenges').select('id').eq('club_id', cid);
+      const { data: clubChallenges } = await supabaseAdmin.from('challenges').select('id, image_path').eq('club_id', cid);
       if (idsOf(clubChallenges).length) {
         await del('challenge_participants', q => q.in('challenge_id', idsOf(clubChallenges)));
         await del('challenges', q => q.in('id', idsOf(clubChallenges)));
+        // Rows first, storage objects second — best-effort, never blocking.
+        for (const ch of clubChallenges) await deleteChallengeImageObject(ch.image_path, ch.id);
       }
       const { data: clubEvents } = await supabaseAdmin.from('events').select('id, image_path').eq('club_id', cid);
       if (idsOf(clubEvents).length) {
@@ -8110,10 +8138,12 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
       // Rows first, storage objects second — best-effort, never blocking.
       for (const ev of userEvents) await deleteEventImageObject(ev.image_path, ev.id);
     }
-    const { data: userChallenges } = await supabaseAdmin.from('challenges').select('id').eq('created_by', uid);
+    const { data: userChallenges } = await supabaseAdmin.from('challenges').select('id, image_path').eq('created_by', uid);
     if (idsOf(userChallenges).length) {
       await del('challenge_participants', q => q.in('challenge_id', idsOf(userChallenges)));
       await del('challenges', q => q.in('id', idsOf(userChallenges)));
+      // Rows first, storage objects second — best-effort, never blocking.
+      for (const ch of userChallenges) await deleteChallengeImageObject(ch.image_path, ch.id);
     }
     // Received challenge invites (invitee side). Creator-side rows die with
     // their challenges via the table's ON DELETE CASCADE FK. Tolerate ONLY the
@@ -8415,6 +8445,167 @@ app.get(BASE + '/api/events/:id/image', requireAuth, async (req, res) => {
   } catch (err) {
     console.log('Event image proxy error:', err.message);
     res.status(404).json({ error: 'Event not found' });
+  }
+});
+
+// ── CHALLENGE IMAGES (Supabase Storage, PRIVATE bucket) ────────────────────
+// Same model as event covers: private bucket, challenges.image_path stores
+// the object path SERVER-SIDE ONLY (appears in no payload — clients get the
+// timestamp segment as a version token `image`), single authenticated proxy
+// gated by canUserSeeChallenge (THE challenge visibility rule), byte-identical
+// not-found for nonexistent/denied/imageless. Stored crop is 6:1 (1440×240):
+// the card ribbon renders at aspect-ratio 6/1 at EVERY width, so the crop the
+// creator chose is exactly what shows (no fixed-height double-crop).
+const CHALLENGE_IMAGE_BUCKET = 'challenge-images';
+(async () => {
+  if (!supabaseAdmin) return;
+  try {
+    const { error } = await supabaseAdmin.storage.createBucket(CHALLENGE_IMAGE_BUCKET, { public: false });
+    if (error && !/already exists|duplicate/i.test(error.message || '')) {
+      console.log('Challenge image bucket setup error:', error.message);
+    }
+  } catch (err) {
+    console.log('Challenge image bucket setup error:', err.message);
+  }
+})();
+
+// Version token clients see: the timestamp segment of the stored object path.
+function challengeImageVersion(imagePath) {
+  const m = /^challenges\/[^/]+\/(\d+)\.webp$/.exec(imagePath || '');
+  return m ? m[1] : null;
+}
+
+// Strip the server-only image_path from a raw challenge row and expose the
+// version token instead. EVERY response that carries a challenge row (or a
+// spread of one) must pass through this — never send image_path to a client.
+function challengePublicRow(ch) {
+  if (!ch || typeof ch !== 'object') return ch;
+  const { image_path, ...pub } = ch;
+  return { ...pub, image: challengeImageVersion(image_path) };
+}
+
+// Best-effort object cleanup. Prefix-checked (a corrupted pointer can never
+// delete another challenge's object); failures logged and ignored — cleanup
+// never blocks or fails the request that runs it. Rows first, objects second.
+async function deleteChallengeImageObject(objectPath, challengeId) {
+  if (!objectPath || !supabaseAdmin) return;
+  if (!objectPath.startsWith('challenges/' + challengeId + '/')) return;
+  try {
+    const { error } = await supabaseAdmin.storage.from(CHALLENGE_IMAGE_BUCKET).remove([objectPath]);
+    if (error) console.log('Challenge image cleanup failed (ignored):', error.message);
+  } catch (err) {
+    console.log('Challenge image cleanup failed (ignored):', err.message);
+  }
+}
+
+// Multer stage for challenge images: same memory storage + 5 MiB cap + error
+// mapping as avatars/events, field name 'image'.
+function challengeImageUploadSingle(req, res, next) {
+  avatarUpload.single('image')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'Image is too large — the maximum is 5 MB' });
+      }
+      console.log('Challenge image upload parse error:', err.message);
+      return res.status(400).json({ error: 'Could not read the uploaded file' });
+    }
+    next();
+  });
+}
+
+// Upload/replace a challenge's image. requireChallengeEditor — the exact
+// PATCH/DELETE rule (creator, or club admin/coach for club-scoped), so anyone
+// who can edit a challenge can fix its image (the event-images lesson: never
+// ship image auth narrower than edit auth). Auth runs BEFORE multer touches
+// the body. Pipeline mirrors events: Sharp format validation, .rotate() EXIF
+// apply+strip, 1440×240 (6:1) cover-crop WebP re-encode, timestamped
+// filename, upload-then-pointer with rollback, best-effort old-object
+// cleanup, per-challenge concurrency lock.
+app.post(BASE + '/api/challenges/:id/image', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  const { challenge, fail } = await requireChallengeEditor(req.params.id, req.user.id);
+  if (fail) return res.status(fail.status || 200).json({ error: fail.error });
+  challengeImageUploadSingle(req, res, async () => {
+    if (!req.file || !req.file.buffer) return res.status(400).json({ error: 'No image file received' });
+    const lockKey = 'challenge:' + challenge.id;
+    if (avatarUploadsInFlight.has(lockKey)) {
+      return res.status(429).json({ error: 'An upload is already in progress — give it a second' });
+    }
+    avatarUploadsInFlight.add(lockKey);
+    try {
+      let meta;
+      try { meta = await sharp(req.file.buffer).metadata(); } catch (err) { meta = null; }
+      if (!meta || !['jpeg', 'png', 'webp'].includes(meta.format)) {
+        return res.status(400).json({ error: 'That file is not a supported image — upload a JPG, PNG or WebP' });
+      }
+      const webp = await sharp(req.file.buffer).rotate()
+        .resize(1440, 240, { fit: 'cover' }).webp({ quality: 82 }).toBuffer();
+      const objectPath = 'challenges/' + challenge.id + '/' + Date.now() + '.webp';
+      const { error: upErr } = await supabaseAdmin.storage
+        .from(CHALLENGE_IMAGE_BUCKET)
+        .upload(objectPath, webp, { contentType: 'image/webp', upsert: false });
+      if (upErr) {
+        console.log('Challenge image storage upload error:', upErr.message);
+        return res.status(500).json({ error: 'Could not store the image — please try again' });
+      }
+      const { error: ptrErr } = await supabaseAdmin
+        .from('challenges').update({ image_path: objectPath }).eq('id', challenge.id);
+      if (ptrErr) {
+        // Pointer write failed — remove the just-uploaded object so it never
+        // becomes an orphan nobody references.
+        console.log('Challenge image pointer write error:', ptrErr.message);
+        await deleteChallengeImageObject(objectPath, challenge.id);
+        return res.status(500).json({ error: 'Could not save the image' });
+      }
+      await deleteChallengeImageObject(challenge.image_path, challenge.id);
+      res.json({ success: true, image: challengeImageVersion(objectPath) });
+    } catch (err) {
+      console.log('Challenge image upload error:', err.message);
+      res.status(500).json({ error: 'Upload failed' });
+    } finally {
+      avatarUploadsInFlight.delete(lockKey);
+    }
+  });
+});
+
+// Remove a challenge's image. Same requireChallengeEditor gate as upload.
+// Pointer cleared FIRST, then the object best-effort.
+app.delete(BASE + '/api/challenges/:id/image', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  const { challenge, fail } = await requireChallengeEditor(req.params.id, req.user.id);
+  if (fail) return res.status(fail.status || 200).json({ error: fail.error });
+  const { error } = await supabaseAdmin
+    .from('challenges').update({ image_path: null }).eq('id', challenge.id);
+  if (error) return res.status(500).json({ error: 'Could not remove the image' });
+  await deleteChallengeImageObject(challenge.image_path, challenge.id);
+  res.json({ success: true });
+});
+
+// Authenticated image proxy — THE only read path for challenge images. The
+// image is exactly as visible as the challenge: canUserSeeChallenge is the
+// single gate; nonexistent id, denied access and imageless challenge all
+// answer with the byte-identical not-found body (no existence oracle). ?v= is
+// deliberately IGNORED (cache-bust only). Cache-Control private+immutable;
+// the SW never touches /api/*.
+app.get(BASE + '/api/challenges/:id/image', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(404).json({ error: 'Challenge not found' });
+  try {
+    const { data: ch } = await supabaseAdmin
+      .from('challenges').select('id, created_by, visibility, club_id, image_path')
+      .eq('id', req.params.id).maybeSingle();
+    if (!ch || !(await canUserSeeChallenge(req.user.id, ch)) || !ch.image_path) {
+      return res.status(404).json({ error: 'Challenge not found' });
+    }
+    const { data: blob, error } = await supabaseAdmin.storage
+      .from(CHALLENGE_IMAGE_BUCKET).download(ch.image_path);
+    if (error || !blob) return res.status(404).json({ error: 'Challenge not found' });
+    const buf = Buffer.from(await blob.arrayBuffer());
+    res.set('Content-Type', 'image/webp');
+    res.set('Cache-Control', 'private, max-age=31536000, immutable');
+    res.send(buf);
+  } catch (err) {
+    console.log('Challenge image proxy error:', err.message);
+    res.status(404).json({ error: 'Challenge not found' });
   }
 });
 
@@ -9088,7 +9279,7 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
           const achievedCount = leaderboard.filter(e => e.achieved).length;
           const endMs = new Date(challenge.end_date).getTime();
           enrichedChallenges.push({
-            ...challenge,
+            ...challengePublicRow(challenge),
             participantCount,
             notJoinedCount,
             leaderboard,
@@ -9335,7 +9526,7 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
     // Active club challenges with the viewer's progress.
     const { data: clubChallenges } = await supabaseAdmin
       .from('challenges')
-      .select('id, title, sport, goal_type, goal_target, goal_unit, start_date, end_date')
+      .select('id, title, sport, goal_type, goal_target, goal_unit, start_date, end_date, image_path')
       .eq('club_id', clubId)
       .gte('end_date', nowIso)
       .order('end_date', { ascending: true });
@@ -9393,6 +9584,7 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
       else { statusText = 'Behind pace — push on'; statusColor = '#854D0E'; }
       challengesOut.push({
         id: ch.id, title: ch.title, sport: ch.sport,
+        image: challengeImageVersion(ch.image_path),
         goalTarget: ch.goal_target, goalUnit: ch.goal_unit,
         joined: !!myPart, progress, pct, daysLeft, statusText, statusColor,
         participantCount: participantCount || 0

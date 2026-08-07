@@ -145,9 +145,11 @@ check('private→public after start stays locked (field_locked)', r.body?.error 
 await api('p2', 'DELETE', `/challenges/${W.id}/leave`);
 r = await api('p2', 'POST', `/challenges/${W.id}/join`);
 check('p2 leave→rejoin passes invite gate on private W', r.body?.success === true || r.body?.error === 'pro_required', r);
-// stranger still locked out of joining W
+// stranger still locked out of joining W — canonical visibility gate answers
+// with the byte-identical not-found (the old invite_required 403 was an
+// existence oracle; removed 2026-08-07).
 r = await api('stranger', 'POST', `/challenges/${W.id}/join`);
-check('stranger join private W → invite_required', r.body?.error === 'invite_required', r);
+check('stranger join private W → zero-leak not-found', r.body?.error === 'Challenge not found', r);
 // 10. end early: flips expired + notifies
 r = await api('creator', 'POST', `/challenges/${X.id}/end-early`);
 check('end-early X succeeds, end_date now past', r.body?.success === true && new Date(r.body.challenge.end_date) < new Date(), r);

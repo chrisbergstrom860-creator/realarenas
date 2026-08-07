@@ -644,6 +644,7 @@ function showToast(msg) {
     const unit = esc(c.goal_unit || '');
     return `
       <div class="challenge-card" id="challenge-${esc(c.id)}" style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:10px;${isCompleted ? 'opacity:.75' : ''}">
+        ${c.image ? `<img src="${B}/api/challenges/${encodeURIComponent(c.id)}/image?v=${encodeURIComponent(c.image)}" alt="" style="display:block;width:100%;aspect-ratio:6/1;object-fit:cover">` : ''}
         <div style="padding:14px 16px;display:flex;align-items:flex-start;gap:10px">
           <div style="width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;${sColor}">${icon}</div>
           <div style="flex:1;min-width:0">
@@ -1049,12 +1050,72 @@ function showToast(msg) {
   // Explicit Cancel/✕ buttons still close immediately — pressing a button is
   // deliberate.
   let chFormBaseline = null;
+
+  // ── Cover-image crop wiring (shared by the create AND edit modals). Same
+  // state machine + monotonic selection token as the event form: none /
+  // pending / ready / fallback; 'pending' blocks submit (never upload a
+  // center-crop the user hasn't seen); a superseded or torn-down selection
+  // cancels its crop handle (mid-decode orphan trap).
+  let chCropBlob = null, chCropState = 'none', chCropSeq = 0, chCropHandle = null;
+  function wireChallengeImage() {
+    chCropBlob = null; chCropState = 'none';
+    if (chCropHandle) { chCropHandle.cancel(); chCropHandle = null; }
+    const input = document.getElementById('ch-image');
+    if (!input) return;
+    input.addEventListener('change', function () {
+      const seq = ++chCropSeq;             // supersedes all in-flight callbacks
+      chCropBlob = null;
+      if (chCropHandle) { chCropHandle.cancel(); chCropHandle = null; }
+      const file = input.files && input.files[0];
+      if (!file) { chCropState = 'none'; return; }
+      if (!window.arenasCrop) { chCropState = 'fallback'; return; }
+      chCropState = 'pending';
+      chCropHandle = window.arenasCrop.open({
+        file: file, aspect: 6, outWidth: 1440, outHeight: 240,
+        onDone: function (blob) {
+          if (seq !== chCropSeq) return;   // stale selection — drop it
+          chCropBlob = blob; chCropState = 'ready';
+        },
+        onCancel: function (reason) {
+          if (seq !== chCropSeq) return;
+          if (reason === 'decode') {
+            chCropState = 'fallback';
+            showToast('Couldn\u2019t open the crop tool — the photo will be center-cropped');
+          } else {
+            // Dismissed without choosing: keep nothing selected rather than
+            // silently uploading a center-crop the user never saw.
+            chCropState = 'none';
+            input.value = '';
+          }
+        }
+      });
+    });
+  }
+  // Create/save-first-then-upload: the challenge row exists before the image
+  // goes up, so a failed upload never rolls back the challenge — it degrades
+  // to an honest "image failed" toast. done(errMsg|null).
+  function uploadChallengeImageThen(challengeId, done) {
+    const input = document.getElementById('ch-image');
+    const rawFile = input && input.files && input.files[0];
+    const file = chCropState === 'ready' ? chCropBlob : (chCropState === 'fallback' ? rawFile : null);
+    if (!file || !challengeId) return done(null);
+    const fd = new FormData();
+    if (chCropState === 'ready') fd.append('image', chCropBlob, 'crop.png');
+    else fd.append('image', file);
+    fetch(B + '/api/challenges/' + encodeURIComponent(challengeId) + '/image', {
+      method: 'POST', credentials: 'same-origin', body: fd
+    }).then(r => r.json())
+      .then(up => done(up && up.error ? up.error : null))
+      .catch(e => done(e.message));
+  }
+
   function chFormSnapshot() {
     const v = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
     const sel = (q, key) => { const el = document.querySelector(q); return (el && el.dataset[key]) || ''; };
     return [
       v('ch-title'), v('ch-desc'), v('ch-target'), v('ch-unit'), v('ch-start'), v('ch-end'),
       sel('.ch-sport-chip.selected', 'sport'), sel('.ch-goal-type.selected', 'type'), sel('.ch-vis-opt.selected', 'vis'),
+      v('ch-image'),
       [...document.querySelectorAll('.ch-inv-cb:checked')].map(cb => cb.value).join(',')
     ].join('|');
   }
@@ -1067,6 +1128,7 @@ function showToast(msg) {
     const end = new Date(); end.setDate(end.getDate() + 30);
     document.getElementById('ch-start').value = today;
     document.getElementById('ch-end').value = end.toISOString().split('T')[0];
+    wireChallengeImage();
     chFormBaseline = chFormSnapshot();
   };
 
@@ -1093,6 +1155,36 @@ function showToast(msg) {
     // Invitees are managed via the Invites modal, never here.
     const invWrap = document.getElementById('ch-invite-wrap');
     if (invWrap) invWrap.style.display = 'none';
+    wireChallengeImage();
+    // Current image: preview via the authenticated proxy (never a storage
+    // path) + immediate Remove (same pattern as the event image manager).
+    if (c.image) {
+      const prev = document.getElementById('ch-image-preview');
+      if (prev) {
+        prev.innerHTML =
+          '<img src="' + B + '/api/challenges/' + encodeURIComponent(c.id) + '/image?v=' + encodeURIComponent(c.image) + '" alt="" style="display:block;width:100%;aspect-ratio:6/1;object-fit:cover;border-radius:8px;margin-bottom:6px">' +
+          '<button type="button" id="ch-image-remove" style="padding:5px 12px;border-radius:7px;font-size:12px;border:1px solid #FECACA;background:var(--red-light);color:#A32D2D;cursor:pointer;margin-bottom:8px">Remove image</button>';
+        const rm = document.getElementById('ch-image-remove');
+        if (rm) rm.onclick = async function () {
+          if (!confirm('Remove this challenge\u2019s image?')) return;
+          rm.disabled = true; rm.textContent = 'Removing…';
+          try {
+            const r = await fetch(B + '/api/challenges/' + encodeURIComponent(c.id) + '/image', { method: 'DELETE', credentials: 'same-origin' });
+            const j = await r.json();
+            if (j && j.error) { showToast('Could not remove the image: ' + j.error); rm.disabled = false; rm.textContent = 'Remove image'; return; }
+            c.image = null;
+            prev.innerHTML = '';
+            showToast('✓ Image removed.');
+            setTimeout(loadChallenges, 400);
+          } catch (err) {
+            showToast('Could not remove the image.');
+            rm.disabled = false; rm.textContent = 'Remove image';
+          }
+        };
+      }
+      const fileNote = document.querySelector('#ch-image + div');
+      if (fileNote) fileNote.textContent = 'Choosing a new file replaces the current image when you save.';
+    }
     const btn = document.getElementById('ch-submit');
     btn.textContent = 'Save changes';
     btn.onclick = function () { submitEditChallenge(id); };
@@ -1118,6 +1210,7 @@ function showToast(msg) {
     const fail = (msg) => { if (errorEl) { errorEl.textContent = msg; errorEl.style.display = 'block'; } };
     const title = (document.getElementById('ch-title')?.value || '').trim();
     if (!title) return fail('Please enter a challenge title.');
+    if (chCropState === 'pending') return fail('Still preparing the image crop — one moment.');
     const body = { title, description: (document.getElementById('ch-desc')?.value || '').trim() };
     if (!started) {
       const goalTarget = document.getElementById('ch-target')?.value;
@@ -1152,10 +1245,15 @@ function showToast(msg) {
         if (btn) { btn.textContent = 'Save changes'; btn.disabled = false; }
         return;
       }
-      chFormBaseline = chFormSnapshot(); // saved — nothing left to discard
-      arenasOverlay.close('create-challenge-overlay');
-      showToast('✓ Challenge updated.');
-      setTimeout(loadChallenges, 400);
+      // Save-first-then-upload: the PATCH is committed; a failed image
+      // upload degrades to an honest toast, never a rollback.
+      uploadChallengeImageThen(id, function (imgErr) {
+        chFormBaseline = chFormSnapshot(); // saved — nothing left to discard
+        arenasOverlay.close('create-challenge-overlay');
+        showToast(imgErr ? '✓ Challenge updated — image failed: ' + imgErr : '✓ Challenge updated.');
+        setTimeout(loadChallenges, 400);
+      });
+      return;
     } catch (err) {
       fail('Something went wrong — please try again.');
       if (btn) { btn.textContent = 'Save changes'; btn.disabled = false; }
@@ -1337,6 +1435,12 @@ function showToast(msg) {
             <textarea class="form-textarea" id="ch-desc" placeholder="What's this challenge about? Any rules or tips…" style="min-height:60px"></textarea>
           </div>
           <div style="margin-bottom:14px">
+            <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:6px">Cover image (optional)</div>
+            <div id="ch-image-preview"></div>
+            <input type="file" id="ch-image" accept="image/jpeg,image/png,image/webp" style="font-size:12px;width:100%">
+            <div style="font-size:10px;color:var(--gray-400);margin-top:4px">Shown as a wide banner on the challenge card — you'll pick the 6:1 crop.</div>
+          </div>
+          <div style="margin-bottom:14px">
             <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:8px">Sport</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap" id="ch-sport-chips">
               <button type="button" class="ch-sport-chip selected" data-sport="any" onclick="selectChSport(this)">⚡ Any sport</button>
@@ -1459,6 +1563,7 @@ function showToast(msg) {
     const fail = (msg) => { if (errorEl) { errorEl.textContent = msg; errorEl.style.display = 'block'; } };
 
     if (!title) return fail('Please enter a challenge title.');
+    if (chCropState === 'pending') return fail('Still preparing the image crop — one moment.');
     if (!goalTarget || parseFloat(goalTarget) < 1) return fail('Please enter a valid target.');
     if (!startDate || !endDate) return fail('Please set a start and end date.');
     if (new Date(endDate) <= new Date(startDate)) return fail('End date must be after start date.');
@@ -1483,18 +1588,25 @@ function showToast(msg) {
         if (submitBtn) { submitBtn.textContent = 'Create challenge →'; submitBtn.disabled = false; }
         return;
       }
-      arenasOverlay.close('create-challenge-overlay');
-      // Honest, differentiated toasts — never claim invites that weren't sent.
-      if (result.inviteWarning === 'invites_unavailable') {
-        showToast('✓ Challenge created — invites are unavailable right now, so it\'s just you for now.');
-      } else if (visibility === 'private' && result.invitedCount > 0) {
-        showToast('✓ Private challenge created — ' + result.invitedCount + ' invite' + (result.invitedCount !== 1 ? 's' : '') + ' sent.');
-      } else if (visibility === 'private') {
-        showToast('✓ Private challenge created — just you until you invite someone.');
-      } else {
-        showToast('✓ Challenge created! It\'s now live in Discover.');
-      }
-      setTimeout(loadChallenges, 400);
+      // Create-first-then-upload: the challenge exists now; a failed image
+      // upload degrades to an honest toast, never a rollback.
+      const newId = result.challenge && result.challenge.id;
+      uploadChallengeImageThen(newId, function (imgErr) {
+        arenasOverlay.close('create-challenge-overlay');
+        if (imgErr) {
+          showToast('✓ Challenge created — image failed: ' + imgErr);
+        } else if (result.inviteWarning === 'invites_unavailable') {
+          showToast('✓ Challenge created — invites are unavailable right now, so it\'s just you for now.');
+        } else if (visibility === 'private' && result.invitedCount > 0) {
+          showToast('✓ Private challenge created — ' + result.invitedCount + ' invite' + (result.invitedCount !== 1 ? 's' : '') + ' sent.');
+        } else if (visibility === 'private') {
+          showToast('✓ Private challenge created — just you until you invite someone.');
+        } else {
+          showToast('✓ Challenge created! It\'s now live in Discover.');
+        }
+        setTimeout(loadChallenges, 400);
+      });
+      return;
     } catch (err) {
       fail('Something went wrong — please try again.');
       if (submitBtn) { submitBtn.textContent = 'Create challenge →'; submitBtn.disabled = false; }
@@ -1706,6 +1818,7 @@ function showToast(msg) {
 })();
 </script>
 <script src="/html/arenas-overlay.js" defer></script>
+<script src="/html/arenas-crop.js" defer></script>
 <script src="/html/arenas-hpw-modal.js" defer></script>
 </body>
 </html>
