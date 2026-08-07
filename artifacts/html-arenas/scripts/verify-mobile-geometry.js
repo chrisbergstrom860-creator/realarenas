@@ -3,7 +3,18 @@
 //      --keep         skip cleanup (debugging)
 //      --page <name>  audit only one page config
 //
-// Engine: scripts/lib/mobile-geometry.js. Asserts at 360/380/414px:
+// Engine: scripts/lib/mobile-geometry.js. Asserts at 360/380/414px AND
+// 1280/1440/1920px (desktop added with the shell-centering work):
+//
+// KNOWN PRE-EXISTING FAILURES (Aug 2026, deliberately not fixed in the
+// shell-centering pass): feed@1280/1440/1920 "nothing clipped" — every feed
+// .side-card's last child overhangs the card's overflow:hidden bottom by
+// 4-14px (cropped padding/descenders). Pre-dates the centered shell (fails
+// identically with it stashed); invisible to the mobile-only guard because
+// most rail cards are mobile-hidden.
+//
+// The full 6-width run exceeds a 5-minute shell window — run in halves:
+//   GEO_WIDTHS=mobile | desktop | <comma list, e.g. 360,380>.
 //   - no element overflows its clipping container (overflow:hidden clip)
 //   - no two text leaves' bounding boxes overlap
 //   - every button inside the viewport AND hit-testable
@@ -204,7 +215,7 @@ const PAGES = [
       // rail is reordered above the feed column. Exactly 1 visible card —
       // max guards the hidden-card contract (a regression re-showing the
       // other three cards must fail here, not just a missing streak).
-      { name: 'right rail (side-col)', sel: '.side-col', min: 1, max: 1 }
+      { name: 'right rail (side-col)', sel: '.side-col', min: 1, max: 1, mobileOnly: true }
     ] },
   { user: 'creator', name: 'challenges', path: '/challenges', waitFor: '#tab-mine .challenge-card', root: 'body',
     surfaces: [{ name: 'mine cards', sel: '#tab-mine', min: 2 }],
@@ -240,7 +251,7 @@ const PAGES = [
       // the collapsed body-grid is display:flex here, not grid). Exactly 1
       // visible card, same contract as the feed rail: a regression that adds
       // cards or re-hides the rail must fail, not pass silently.
-      { name: 'right rail (sidebar-col)', sel: '.sidebar-col', min: 1, max: 1 }
+      { name: 'right rail (sidebar-col)', sel: '.sidebar-col', min: 1, max: 1, mobileOnly: true }
     ],
     steps: [
       { name: 'modal-create-event', js: `document.getElementById('create-event-btn').click()`,

@@ -11,6 +11,10 @@ import { chromium } from 'playwright-core';
 import { execSync } from 'node:child_process';
 
 export const VIEWPORTS = [360, 380, 414];
+// Desktop widths — same clip/overlap/button/hscroll assertions. The guard was
+// desktop-blind until the shell-centering work; these make every future
+// desktop layout change measurable instead of screenshot-only.
+export const DESKTOP_VIEWPORTS = [1280, 1440, 1920];
 
 export function chromiumPath() {
   return process.env.CHROMIUM_BIN
@@ -152,19 +156,30 @@ export async function auditPage(context, base, cfg) {
   const results = [];
   const surfaceReport = []; // measured at EVERY viewport — a surface that
   // renders at 360px but collapses empty at 414px must not pass unnoticed.
-  for (const w of VIEWPORTS) {
-    await page.setViewportSize({ width: w, height: 840 });
+  // GEO_WIDTHS=mobile|desktop splits the run in half (the full 6-width run
+  // exceeds a 5-minute shell window; background runs have been killed
+  // mid-run). Default: all six widths.
+  const widths = process.env.GEO_WIDTHS === 'mobile' ? VIEWPORTS
+    : process.env.GEO_WIDTHS === 'desktop' ? DESKTOP_VIEWPORTS
+    : /^[\d,]+$/.test(process.env.GEO_WIDTHS || '') ? process.env.GEO_WIDTHS.split(',').map(Number)
+    : [...VIEWPORTS, ...DESKTOP_VIEWPORTS];
+  for (const w of widths) {
+    await page.setViewportSize({ width: w, height: w > 768 ? 900 : 840 });
     await page.goto(base + cfg.path, { waitUntil: 'networkidle' });
     if (cfg.waitFor) await page.waitForSelector(cfg.waitFor, { timeout: 20000 });
-    if (cfg.surfaces) surfaceReport.push(...(await page.evaluate(surfacesExpr(cfg.surfaces))).map((s) => ({ ...s, name: s.name + '@' + w + 'px' })));
+    // Surfaces flagged mobileOnly encode mobile-only contracts (e.g. the
+    // rails collapse to exactly 1 card on phones but hold many cards on
+    // desktop) — skip them above 768px.
+    const applicable = (list) => (list || []).filter((s) => !(w > 768 && s.mobileOnly));
+    if (cfg.surfaces) surfaceReport.push(...(await page.evaluate(surfacesExpr(applicable(cfg.surfaces)))).map((s) => ({ ...s, name: s.name + '@' + w + 'px' })));
     results.push({ tag: `${cfg.name}@${w}px`, audit: await page.evaluate(auditExpr(cfg.root || '.main', cfg.ignoreOverlap)),
       hscroll: await page.evaluate('document.documentElement.scrollWidth - window.innerWidth') });
     for (const step of cfg.steps || []) {
       await page.evaluate(step.js);
       if (step.waitFor) await page.waitForSelector(step.waitFor, { timeout: 15000 });
       await page.waitForTimeout(250);
-      if (step.surfaces) {
-        surfaceReport.push(...(await page.evaluate(surfacesExpr(step.surfaces))).map((s) => ({ ...s, name: s.name + '@' + w + 'px' })));
+      if (step.surfaces && applicable(step.surfaces).length) {
+        surfaceReport.push(...(await page.evaluate(surfacesExpr(applicable(step.surfaces)))).map((s) => ({ ...s, name: s.name + '@' + w + 'px' })));
       }
       results.push({ tag: `${cfg.name}:${step.name}@${w}px`, audit: await page.evaluate(auditExpr(step.root || cfg.root || '.main', cfg.ignoreOverlap)),
         hscroll: await page.evaluate('document.documentElement.scrollWidth - window.innerWidth') });

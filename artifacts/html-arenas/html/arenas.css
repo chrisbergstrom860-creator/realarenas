@@ -45,6 +45,10 @@
   --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
   --shadow-lg: 0 10px 40px rgba(0,0,0,0.12);
   --sidebar-w: 220px;
+  /* Shell centering (session 1): the BODY ROW (sidebar + main) is capped at
+     --shell-max and centered; the topbar stays a full-width band (T2 later).
+     220px sidebar + 1240px widest page content (club dashboard feed). */
+  --shell-max: 1460px;
 }
 
 body {
@@ -57,12 +61,24 @@ body {
   min-height: 100vh;
 }
 
+/* Four-column shell: fr gutters center the sidebar+main pair at --shell-max
+   while the topbar (grid-column:1/-1) still spans the full viewport — the
+   body row centers with NO markup change and no 100vw hacks. Below
+   --shell-max the gutters collapse to 0 and the layout is pixel-identical
+   to the old two-column shell. Per-page content widths are untouched: each
+   page's .main keeps its own max-width/centering inside the capped cell. */
 .app {
   display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-columns:
+    minmax(0, 1fr)
+    var(--sidebar-w)
+    minmax(0, calc(var(--shell-max) - var(--sidebar-w)))
+    minmax(0, 1fr);
   grid-template-rows: var(--topbar-h) 1fr;
   min-height: 100vh;
 }
+.sidebar { grid-column: 2; grid-row: 2; }
+.app > .main { grid-column: 3; grid-row: 2; }
 
 .topbar {
   grid-column: 1 / -1;
@@ -343,6 +359,10 @@ body {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: var(--topbar-h) 1fr;
   }
+  /* The desktop shell places .main in column 3 (centered 4-col shell) — on
+     the single-column mobile grid that placement would spawn implicit
+     columns, so reset it. */
+  body:has(.bottom-nav) .app > .main { grid-column: 1; }
   /* Phone tap target: the avatar must clear 44px (bell is 44px at all widths).
      High-specificity selector so per-page inline .user-av duplicates can't undercut it. */
   body:has(.bottom-nav) .topbar .topbar-actions .user-av { width: 44px; height: 44px; font-size: 16px; }
