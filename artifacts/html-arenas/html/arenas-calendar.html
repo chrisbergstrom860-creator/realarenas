@@ -648,7 +648,18 @@ button{font-family:var(--font)}
   // Plan actions: status transitions + delete are NEVER locked (mark-done rides
   // with free activity logging; delete is the ungated exit). Only Edit — a
   // content change — hides for locked viewers; the server enforces the same split.
+  var panelDeleteId = null; // plan id showing the series delete choice row
   function planActionsHtml(p) {
+    // A series member's Delete swaps to an explicit three-way choice — a
+    // confirm() can't offer "just this" vs "this and future" vs abort.
+    if (panelDeleteId === p.id) {
+      return '<div class="dp-act-row" style="align-items:center;flex-wrap:wrap">' +
+        '<span class="ag-meta" style="margin:0">Delete:</span>' +
+        '<button class="dp-btn danger" data-cal-action="plan-delete-one" data-id="' + esc(p.id) + '">Just this session</button>' +
+        '<button class="dp-btn danger" data-cal-action="plan-delete-future" data-id="' + esc(p.id) + '">This + all future</button>' +
+        '<button class="dp-btn" data-cal-action="plan-delete-cancel">Keep</button>' +
+        '</div>';
+    }
     var btns = [];
     if (p.status === 'planned') {
       btns.push('<button class="dp-btn primary" data-cal-action="plan-log" data-id="' + esc(p.id) + '">Log this</button>');
@@ -679,7 +690,7 @@ button{font-family:var(--font)}
       .filter(Boolean).join(' · ');
     return '<div class="' + cls + '">' +
       '<span class="ag-ic">' + sportIcon(p.sport) + '</span>' +
-      '<div class="ag-body"><div class="ag-title">' + esc(p.title || ('Planned ' + sportName(p.sport).toLowerCase())) + '</div>' +
+      '<div class="ag-body"><div class="ag-title">' + esc(p.title || ('Planned ' + sportName(p.sport).toLowerCase())) + (p.series_id ? ' <span title="Repeats" aria-label="Part of a repeating series" style="color:var(--gray-400);font-weight:400">\u21bb</span>' : '') + '</div>' +
       (meta ? '<div class="ag-meta">' + meta + '</div>' : '') +
       (p.notes ? '<div class="ag-meta">' + esc(p.notes) + '</div>' : '') +
       (withActions ? planActionsHtml(p) : '') + '</div>' +
@@ -844,9 +855,30 @@ button{font-family:var(--font)}
       return '<option value="' + esc(s.id) + '"' + (s.id === selSport ? ' selected' : '') + '>' +
         esc(s.emoji + ' ' + s.label) + '</option>';
     }).join('');
+    // Recurrence is CREATE-ONLY: an existing row is one occurrence; series
+    // shape never changes from the edit form (v1 — delete-and-recreate is the
+    // escape hatch). Editing a series member shows a plain "part of a series"
+    // note instead.
+    var repeatCtl = '';
+    if (!editing) {
+      repeatCtl =
+        '<div class="fi"><label for="dpf-repeat">Repeats</label><select id="dpf-repeat">' +
+        '<option value="none" selected>Does not repeat</option>' +
+        '<option value="daily">Every day</option>' +
+        '<option value="weekly">Every week</option>' +
+        '<option value="biweekly">Every 2 weeks</option>' +
+        '</select></div>' +
+        '<div id="dpf-repeat-more" style="display:none">' +
+        '<div class="fi"><label for="dpf-until">Until</label><input type="date" id="dpf-until"></div>' +
+        '<div id="dpf-repeat-summary" class="ag-meta" style="margin:-4px 0 10px"></div>' +
+        '</div>';
+    } else if (editing.series) {
+      repeatCtl = '<div class="ag-meta" style="margin:-2px 0 10px">↻ Part of a series — ' + esc(seriesLabel(editing.series)) + '. Changing the date takes this session out of the series.</div>';
+    }
     return '<div class="dp-form">' +
       '<div class="dp-form-err" id="dpf-err"></div>' +
       '<div class="fi"><label for="dpf-date">Date</label><input type="date" id="dpf-date" value="' + esc(editing ? editing.date : state.openYmd) + '"></div>' +
+      repeatCtl +
       '<div class="fi"><label for="dpf-sport">Sport</label><select id="dpf-sport">' + opts + '</select></div>' +
       '<div class="fi"><label for="dpf-title">Title <span class="opt">(optional)</span></label><input type="text" id="dpf-title" maxlength="120" placeholder="e.g. Tempo intervals" value="' + esc((editing && editing.title) || '') + '"></div>' +
       '<div class="fi"><label for="dpf-duration">Planned duration <span class="opt">(optional)</span></label><input type="text" id="dpf-duration" maxlength="20" placeholder="e.g. 45:00 or 1h 20m" value="' + esc((editing && editing.planned_duration) || '') + '"></div>' +
@@ -855,6 +887,56 @@ button{font-family:var(--font)}
       '<button class="dp-btn primary" data-cal-action="plan-save">' + (editing ? 'Save changes' : 'Add plan') + '</button>' +
       '<button class="dp-btn" data-cal-action="plan-cancel-form">Cancel</button>' +
       '</div></div>';
+  }
+
+  // ── Recurrence helpers (mirror the server's integer Y-M-D stepping) ──
+  function weekdayNameOf(ymd) {
+    return parseLocalYmd(ymd).toLocaleDateString('en-GB', { weekday: 'long' });
+  }
+  function fmtLongDate(ymd) {
+    return parseLocalYmd(ymd).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  function seriesLabel(s) {
+    var when = s.frequency === 'daily' ? 'every day'
+      : s.frequency === 'weekly' ? 'every ' + weekdayNameOf(s.start_date)
+      : 'every other ' + weekdayNameOf(s.start_date);
+    return when + ' through ' + fmtLongDate(s.end_date);
+  }
+  function ymdAddDays(ymd, days) {
+    var p = ymd.split('-').map(Number);
+    var dt = new Date(p[0], p[1] - 1, p[2] + days);
+    return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+  }
+  function countOccurrences(startYmd, frequency, untilYmd) {
+    var step = frequency === 'daily' ? 1 : frequency === 'weekly' ? 7 : 14;
+    var n = 0;
+    for (var d = startYmd; d <= untilYmd; d = ymdAddDays(d, step)) { n++; if (n > 100) break; }
+    return n;
+  }
+  // Live copy under the reveal row: the form must state plainly what it
+  // creates — "Creates 12 sessions — every Friday through 30 Oct 2026."
+  function updateRepeatUI() {
+    var repEl = document.getElementById('dpf-repeat');
+    var moreEl = document.getElementById('dpf-repeat-more');
+    if (!repEl || !moreEl) return;
+    var rep = repEl.value;
+    if (rep === 'none') { moreEl.style.display = 'none'; return; }
+    moreEl.style.display = '';
+    var untilEl = document.getElementById('dpf-until');
+    var date = (document.getElementById('dpf-date').value || '').trim();
+    // Default horizon: +8 weeks from the first session (set once per reveal).
+    if (untilEl && !untilEl.value && date) untilEl.value = ymdAddDays(date, 56);
+    var until = untilEl ? (untilEl.value || '').trim() : '';
+    var sumEl = document.getElementById('dpf-repeat-summary');
+    if (!sumEl) return;
+    if (!date || !until) { sumEl.textContent = 'Pick an end date to see how many sessions this creates.'; return; }
+    if (until <= date) { sumEl.textContent = 'The end date must be after the first session.'; return; }
+    var n = countOccurrences(date, rep, until);
+    if (n > 100) { sumEl.textContent = 'That would create more than 100 sessions — shorten the end date.'; return; }
+    var when = rep === 'daily' ? 'every day'
+      : rep === 'weekly' ? 'every ' + weekdayNameOf(date)
+      : 'every other ' + weekdayNameOf(date);
+    sumEl.textContent = 'Creates ' + n + ' session' + (n !== 1 ? 's' : '') + ' — ' + when + ' through ' + fmtLongDate(until) + '.';
   }
 
   function renderDayPanel() {
@@ -917,12 +999,15 @@ button{font-family:var(--font)}
       refresh();
     }).catch(function () { toast('Something went wrong — please try again.'); btn.disabled = false; });
   }
-  function deletePlan(id, btn) {
-    if (!window.confirm('Delete this planned session? This cannot be undone.')) return;
+  function deletePlan(id, btn, future) {
+    // The three-way choice row already IS the confirmation for series
+    // members; the confirm() stays for plain single sessions only.
+    if (panelDeleteId !== id && !window.confirm('Delete this planned session? This cannot be undone.')) return;
     btn.disabled = true;
-    api('DELETE', '/api/plans/' + encodeURIComponent(id)).then(function (r) {
+    api('DELETE', '/api/plans/' + encodeURIComponent(id) + (future ? '?scope=future' : '')).then(function (r) {
       if (!r.ok || r.json.error) { toast(errText(r)); btn.disabled = false; return; }
-      toast('Plan deleted');
+      panelDeleteId = null;
+      toast(future && r.json.deleted > 1 ? r.json.deleted + ' planned sessions deleted' : 'Plan deleted');
       refresh();
     }).catch(function () { toast('Something went wrong — please try again.'); btn.disabled = false; });
   }
@@ -937,8 +1022,18 @@ button{font-family:var(--font)}
     if (!date) return fail('Please pick a date.');
     if (!sport) return fail('Please pick a sport.');
     var wasEdit = panelForm && panelForm.mode === 'edit';
-    btn.disabled = true; btn.textContent = 'Saving…';
     var body = { date: date, sport: sport, title: title || null, planned_duration: duration || null, notes: notes || null };
+    var repEl = document.getElementById('dpf-repeat');
+    var rep = (!wasEdit && repEl) ? repEl.value : 'none';
+    var recurring = rep !== 'none';
+    if (recurring) {
+      var until = (document.getElementById('dpf-until').value || '').trim();
+      if (!until) return fail('Pick an end date for the repeating plan.');
+      if (until <= date) return fail('The end date must be after the first session.');
+      if (countOccurrences(date, rep, until) > 100) return fail('That would create more than 100 sessions — shorten the end date.');
+      body.recurrence = { frequency: rep, until: until };
+    }
+    btn.disabled = true; btn.textContent = 'Saving…';
     var req = wasEdit
       ? api('PATCH', '/api/plans/' + encodeURIComponent(panelForm.planId), body)
       : api('POST', '/api/plans', body);
@@ -949,7 +1044,15 @@ button{font-family:var(--font)}
         return;
       }
       panelForm = null;
-      toast(wasEdit ? '✓ Plan updated' : '✓ Session planned');
+      if (recurring && r.json.count) {
+        var s = r.json.series || {};
+        toast('✓ ' + r.json.count + ' sessions planned — ' + (s.end_date ? seriesLabel({ frequency: rep, start_date: date, end_date: s.end_date }) : 'series created') + '.');
+      } else if (wasEdit && r.json.detached) {
+        // Date change on a series member = honest, visible detachment.
+        toast('✓ Saved — the new date takes this session out of its series; series-wide deletes won\u2019t touch it.');
+      } else {
+        toast(wasEdit ? '✓ Plan updated' : '✓ Session planned');
+      }
       refresh();
     }).catch(function () {
       fail('Something went wrong — please try again.');
@@ -965,18 +1068,35 @@ button{font-family:var(--font)}
     }).catch(function () { toast('Something went wrong — please try again.'); btn.disabled = false; });
   }
 
+  // The plan form is injected HTML — repeat controls are wired by delegation.
+  ['change', 'input'].forEach(function (evt) {
+    document.getElementById('dp-body').addEventListener(evt, function (e) {
+      var id = e.target && e.target.id;
+      if (id === 'dpf-repeat' || id === 'dpf-until' || id === 'dpf-date') updateRepeatUI();
+    });
+  });
   document.getElementById('dp-body').addEventListener('click', function (e) {
     var btn = e.target.closest ? e.target.closest('[data-cal-action]') : null;
     if (!btn || btn.disabled) return;
     var act = btn.getAttribute('data-cal-action');
     var id = btn.getAttribute('data-id') || '';
-    if (act === 'plan-new') { panelForm = { mode: 'create' }; renderDayPanel(); }
-    else if (act === 'plan-edit') { panelForm = { mode: 'edit', planId: id }; renderDayPanel(); }
+    if (act === 'plan-new') { panelForm = { mode: 'create' }; panelDeleteId = null; renderDayPanel(); }
+    else if (act === 'plan-edit') { panelForm = { mode: 'edit', planId: id }; panelDeleteId = null; renderDayPanel(); }
     else if (act === 'plan-cancel-form') { panelForm = null; renderDayPanel(); }
     else if (act === 'plan-save') submitPlanForm(btn);
     else if (act === 'plan-done') patchPlanStatus(id, 'done', btn);
     else if (act === 'plan-skip') patchPlanStatus(id, 'skipped', btn);
-    else if (act === 'plan-delete') deletePlan(id, btn);
+    else if (act === 'plan-delete') {
+      // Series members get the explicit choice row; solo plans keep confirm().
+      var day = state.byDayWide[state.openYmd] || { plans: [] };
+      var target = null;
+      day.plans.forEach(function (p) { if (p.id === id) target = p; });
+      if (target && target.series_id) { panelDeleteId = id; renderDayPanel(); }
+      else deletePlan(id, btn, false);
+    }
+    else if (act === 'plan-delete-one') deletePlan(id, btn, false);
+    else if (act === 'plan-delete-future') deletePlan(id, btn, true);
+    else if (act === 'plan-delete-cancel') { panelDeleteId = null; renderDayPanel(); }
     else if (act === 'plan-log') { window.location.href = window.BASE + '/log?plan=' + encodeURIComponent(id); }
     else if (act === 'rsvp') rsvpFromPanel(id, btn.getAttribute('data-status'), btn);
   });

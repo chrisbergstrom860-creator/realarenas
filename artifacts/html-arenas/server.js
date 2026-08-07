@@ -7207,14 +7207,66 @@ app.get(BASE + '/api/plans', requireAuth, async (req, res) => {
       console.log('Plans list error (degrading to empty):', error.message);
       return res.json({ plans: [] });
     }
-    res.json({ plans: data || [] });
+    res.json({ plans: await attachPlanSeries(data || []) });
   } catch (err) {
     console.log('Plans list error:', err.message);
     res.json({ plans: [] });
   }
 });
 
+// ── Recurrence (plan_series + materialized occurrences) ──
+// A recurring plan is a plan_series rule row plus ordinary planned_sessions
+// rows materialized up front (one per occurrence, linked via series_id).
+// Materialize-not-expand: every existing read/complete/skip/log path works on
+// occurrences unchanged, and occurrence state (done/skipped/moved/linked)
+// lives where it always lived. The horizon is a REQUIRED end date, capped
+// server-side (the form's copy states the exact count being created).
+const PLAN_FREQUENCIES = ['daily', 'weekly', 'biweekly'];
+// All stepping is integer Y-M-D math on zone-less text dates (calendar
+// convention) — never timestamp addition, so DST can't skew biweekly parity.
+function planYmdAdd(ymd, days) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const dt = new Date(y, m - 1, d + days);
+  return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+}
+// Inclusive expansion; caller has validated both dates. Hard row cap keeps a
+// runaway range from mass-inserting (server truth — the form mirrors it).
+const PLAN_MAX_OCCURRENCES = 100;
+const PLAN_MAX_SPAN_DAYS = { daily: 92, weekly: 366, biweekly: 366 };
+function expandRecurrence(startYmd, frequency, untilYmd) {
+  const step = frequency === 'daily' ? 1 : frequency === 'weekly' ? 7 : 14;
+  const dates = [];
+  for (let d = startYmd; d <= untilYmd; d = planYmdAdd(d, step)) {
+    dates.push(d);
+    if (dates.length > PLAN_MAX_OCCURRENCES) break; // caller rejects; don't loop further
+  }
+  return dates;
+}
+function planSpanDays(startYmd, untilYmd) {
+  const p = s => { const [y, m, d] = s.split('-').map(Number); return Date.UTC(y, m - 1, d); };
+  return Math.round((p(untilYmd) - p(startYmd)) / 86400000);
+}
+
+// Attach series summaries to plan rows: strips nothing, adds `series:
+// {frequency, weekday, start_date, end_date}` when a row belongs to one (the
+// day panel's "Part of a series" line + client delete choice). Missing
+// plan_series table degrades to plain rows — never crashes a read.
+async function attachPlanSeries(plans) {
+  const ids = [...new Set((plans || []).map(p => p.series_id).filter(Boolean))];
+  if (!ids.length) return plans;
+  const { data, error } = await supabaseAdmin
+    .from('plan_series').select('id, frequency, weekday, start_date, end_date').in('id', ids);
+  if (error) { console.log('Plan series lookup (degrading):', error.message); return plans; }
+  const byId = {};
+  (data || []).forEach(s => { byId[s.id] = { frequency: s.frequency, weekday: s.weekday, start_date: s.start_date, end_date: s.end_date }; });
+  plans.forEach(p => { if (p.series_id && byId[p.series_id]) p.series = byId[p.series_id]; });
+  return plans;
+}
+
 // Create a plan — Pro-gated (dormant while PLAN_GATES_ENABLED is off).
+// Optional `recurrence: {frequency, until}` creates a series: ONE gated create
+// materializes every occurrence (single atomic batch insert; a failed batch
+// rolls the series row back — never a silent partial series).
 app.post(BASE + '/api/plans', requireAuth, requireProPlan('training_plan'), async (req, res) => {
   if (!supabaseAdmin) return res.status(503).json({ error: 'Server is not configured for plans' });
   try {
@@ -7229,13 +7281,65 @@ app.post(BASE + '/api/plans', requireAuth, requireProPlan('training_plan'), asyn
     };
     const invalid = validatePlanFields(fields);
     if (invalid) return res.status(400).json(invalid);
-    const { data: row, error } = await supabaseAdmin
-      .from('planned_sessions').insert({ user_id: req.user.id, ...fields }).select().single();
-    if (error) {
-      console.log('Plan create error:', error.message);
-      return res.status(500).json({ error: 'Could not create plan' });
+
+    const rec = b.recurrence;
+    if (rec == null || rec === 'none' || rec.frequency === 'none') {
+      const { data: row, error } = await supabaseAdmin
+        .from('planned_sessions').insert({ user_id: req.user.id, ...fields }).select().single();
+      if (error) {
+        console.log('Plan create error:', error.message);
+        return res.status(500).json({ error: 'Could not create plan' });
+      }
+      return res.json({ plan: row });
     }
-    res.json({ plan: row });
+
+    // ── Recurring create ──
+    if (typeof rec !== 'object' || !PLAN_FREQUENCIES.includes(rec.frequency)) {
+      return res.status(400).json({ error: 'invalid_recurrence', message: 'Repeat must be daily, weekly or biweekly.' });
+    }
+    const until = String(rec.until || '');
+    if (!PLAN_DATE_RE.test(until)) {
+      return res.status(400).json({ error: 'invalid_recurrence', message: 'A recurring plan needs an end date.' });
+    }
+    if (until <= fields.date) {
+      return res.status(400).json({ error: 'invalid_recurrence', message: 'The end date must be after the first session.' });
+    }
+    const span = planSpanDays(fields.date, until);
+    if (span > PLAN_MAX_SPAN_DAYS[rec.frequency]) {
+      return res.status(400).json({
+        error: 'recurrence_too_long',
+        message: rec.frequency === 'daily'
+          ? 'Daily plans can run at most 3 months — shorten the end date.'
+          : 'Recurring plans can run at most 12 months — shorten the end date.'
+      });
+    }
+    const dates = expandRecurrence(fields.date, rec.frequency, until);
+    if (dates.length > PLAN_MAX_OCCURRENCES) {
+      return res.status(400).json({ error: 'recurrence_too_long', message: 'That would create more than ' + PLAN_MAX_OCCURRENCES + ' sessions — shorten the end date.' });
+    }
+    // Weekday convention: 0=Mon..6=Sun (Monday-week rule app-wide); null for daily.
+    const [sy, sm, sd] = fields.date.split('-').map(Number);
+    const weekday = rec.frequency === 'daily' ? null : (new Date(sy, sm - 1, sd).getDay() + 6) % 7;
+    const { data: series, error: sErr } = await supabaseAdmin.from('plan_series').insert({
+      user_id: req.user.id, frequency: rec.frequency, weekday,
+      start_date: fields.date, end_date: until,
+      sport: fields.sport, title: fields.title,
+      planned_duration: fields.planned_duration, notes: fields.notes
+    }).select().single();
+    if (sErr) {
+      console.log('Plan series create error:', sErr.message);
+      return res.status(503).json({ error: 'recurrence_unavailable', message: 'Recurring plans are unavailable right now.' });
+    }
+    const { data: rows, error: oErr } = await supabaseAdmin.from('planned_sessions')
+      .insert(dates.map(d => ({ user_id: req.user.id, ...fields, date: d, series_id: series.id })))
+      .select();
+    if (oErr) {
+      console.log('Plan series occurrences error (rolling back series):', oErr.message);
+      const { error: rbErr } = await supabaseAdmin.from('plan_series').delete().eq('id', series.id);
+      if (rbErr) console.log('Plan series rollback error:', rbErr.message);
+      return res.status(500).json({ error: 'Could not create the recurring plan' });
+    }
+    res.json({ plans: rows, count: rows.length, series: { id: series.id, frequency: series.frequency, weekday: series.weekday, end_date: series.end_date } });
   } catch (err) {
     console.log('Plan create error:', err.message);
     res.status(500).json({ error: 'Could not create plan' });
@@ -7274,16 +7378,23 @@ app.patch(BASE + '/api/plans/:id', requireAuth, async (req, res) => {
     };
     const invalid = validatePlanFields(merged);
     if (invalid) return res.status(400).json(invalid);
+    // Detach ONLY on a date change: a moved occurrence genuinely no longer
+    // matches the series pattern. Content edits (title/sport/duration/notes/
+    // status) keep the row in its series — silent detachment there would make
+    // "this and all future" mysteriously spare an edited session.
+    const detached = !!(row.series_id && merged.date !== row.date);
+    const patch = { ...merged, updated_at: new Date().toISOString() };
+    if (detached) patch.series_id = null;
     const { data: updated, error } = await supabaseAdmin
       .from('planned_sessions')
-      .update({ ...merged, updated_at: new Date().toISOString() })
+      .update(patch)
       .eq('id', row.id).eq('user_id', req.user.id)
       .select().single();
     if (error) {
       console.log('Plan update error:', error.message);
       return res.status(500).json({ error: 'Could not update plan' });
     }
-    res.json({ plan: updated });
+    res.json(detached ? { plan: updated, detached: true } : { plan: updated });
   } catch (err) {
     console.log('Plan update error:', err.message);
     res.status(500).json({ error: 'Could not update plan' });
@@ -7292,18 +7403,60 @@ app.patch(BASE + '/api/plans/:id', requireAuth, async (req, res) => {
 
 // Delete a plan — self-only, NEVER Pro-gated (ungated-exit rule, same as
 // leaving a club: a lapsed user can always remove their own data).
+// `?scope=future` on a series occurrence also removes every LATER attached
+// occurrence that is still `planned` — done/skipped history is never
+// destroyed, and date-moved occurrences have already detached (series_id
+// null) so a future-delete can't touch them. When no attached rows remain,
+// the series rule row is tidied away too.
 app.delete(BASE + '/api/plans/:id', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.status(503).json({ error: 'Server is not configured for plans' });
   try {
     const row = await loadOwnPlan(req, res);
     if (!row) return;
-    const { error } = await supabaseAdmin
-      .from('planned_sessions').delete().eq('id', row.id).eq('user_id', req.user.id);
-    if (error) {
-      console.log('Plan delete error:', error.message);
-      return res.status(500).json({ error: 'Could not delete plan' });
+    const future = req.query.scope === 'future' && !!row.series_id;
+    let deleted = 0;
+    if (future) {
+      const { data: gone, error } = await supabaseAdmin
+        .from('planned_sessions').delete()
+        .eq('series_id', row.series_id).eq('user_id', req.user.id)
+        .gte('date', row.date).eq('status', 'planned')
+        .select('id');
+      if (error) {
+        console.log('Plan future-delete error:', error.message);
+        return res.status(500).json({ error: 'Could not delete plans' });
+      }
+      deleted = (gone || []).length;
+      // The anchor row itself might be done/skipped (user picked "this and
+      // future" from a closed occurrence) — it still goes, explicitly.
+      if (!(gone || []).some(g => g.id === row.id)) {
+        const { error: aErr } = await supabaseAdmin
+          .from('planned_sessions').delete().eq('id', row.id).eq('user_id', req.user.id);
+        if (aErr) {
+          console.log('Plan anchor-delete error:', aErr.message);
+          return res.status(500).json({ error: 'Could not delete plans' });
+        }
+        deleted += 1;
+      }
+    } else {
+      const { error } = await supabaseAdmin
+        .from('planned_sessions').delete().eq('id', row.id).eq('user_id', req.user.id);
+      if (error) {
+        console.log('Plan delete error:', error.message);
+        return res.status(500).json({ error: 'Could not delete plan' });
+      }
+      deleted = 1;
     }
-    res.json({ ok: true });
+    // Tidy the series rule when its last attached occurrence is gone
+    // (best-effort — an orphan rule row is harmless and swept on account delete).
+    if (row.series_id) {
+      const { data: left, error: cErr } = await supabaseAdmin
+        .from('planned_sessions').select('id').eq('series_id', row.series_id).limit(1);
+      if (!cErr && (left || []).length === 0) {
+        const { error: sErr } = await supabaseAdmin.from('plan_series').delete().eq('id', row.series_id);
+        if (sErr) console.log('Plan series tidy error:', sErr.message);
+      }
+    }
+    res.json({ ok: true, deleted });
   } catch (err) {
     console.log('Plan delete error:', err.message);
     res.status(500).json({ error: 'Could not delete plan' });
@@ -7424,7 +7577,7 @@ app.get(BASE + '/api/calendar/month', requireAuth, async (req, res) => {
       month: monthParam,
       events,
       activities: activitiesRes.data || [],
-      plans: plansRes.data || []
+      plans: await attachPlanSeries(plansRes.data || [])
     });
   } catch (err) {
     console.log('Calendar month error:', err.message);
@@ -7697,7 +7850,7 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
     const ownedClubIds = ownedClubs.map(c => c.id);
     const [
       activities, posts, postComments, postLikes,
-      following, followers, goals, plannedSessions, achievements,
+      following, followers, goals, plannedSessions, planSeries, achievements,
       notificationsReceived, notificationsTriggered,
       eventRsvps, eventsCreated, challengesCreated, challengeParticipations,
       memberships, clubInvitesSent, userSubs
@@ -7713,6 +7866,8 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
         'type, sport, target_value, unit, period, start_date, end_date, status, created_at, updated_at'),
       fetchAllRows('planned_sessions', q => q.eq('user_id', uid),
         'date, sport, title, planned_duration, notes, status, created_at, updated_at'),
+      fetchAllRows('plan_series', q => q.eq('user_id', uid),
+        'frequency, weekday, start_date, end_date, sport, title, planned_duration, notes, created_at'),
       fetchAllRows('achievements', q => q.eq('user_id', uid), 'badge_id, earned_at'),
       // Notification `link` is deliberately NOT selected: links embed entity
       // UUIDs (e.g. ?club=<id>), which would leak internal ids into the export.
@@ -7881,6 +8036,7 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
       },
       goals,
       planned_sessions: plannedSessions,
+      plan_series: planSeries,
       achievements,
       notifications: {
         received: notificationsReceived.map(r => ({
@@ -8173,6 +8329,7 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
     await del('activities', q => q.eq('user_id', uid));
     await del('goals', q => q.eq('user_id', uid));
     await del('planned_sessions', q => q.eq('user_id', uid));
+    await del('plan_series', q => q.eq('user_id', uid));
     await del('achievements', q => q.eq('user_id', uid));
     await del('event_rsvps', q => q.eq('user_id', uid));
     await del('challenge_participants', q => q.eq('user_id', uid));
