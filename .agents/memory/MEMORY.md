@@ -72,4 +72,5 @@
 - [html-arenas activity notes](html-arenas-activity-notes.md) — notes public everywhere by user decision (no per-activity privacy — don't re-propose); 500-char cap; desktop feed column needed minmax(0,1fr).
 - [html-arenas shell centering](html-arenas-shell-centering.md) — 4-col grid caps body row at 1460px (topbar full-width); mirror in club-invite; guard now desktop-aware, run in GEO_WIDTHS halves.
 - [html-arenas post images](html-arenas-post-images.md) — public bucket avatar model, atomic create w/ rollback (incl. thrown paths), no-crop + disclosed-trim pill, ONE shared fragment across 3 surfaces (watch field-dropping remaps).
+- [html-arenas post delete](html-arenas-post-delete.md) — author-only, zero-leak fetch-first 404 (activity route fixed too); required-row cascade incl. notifications before best-effort object; ONE shared delete fragment.
 - [html-arenas athlete directory](html-arenas-athlete-directory.md) — shared adc- card module + profile Athletes tab; follow-change event contract; /athletes?q= is THE search target; new shared JS needs its serve route.
