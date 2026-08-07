@@ -16,6 +16,7 @@
 //   node artifacts/html-arenas/scripts/verify-event-self-edit.js
 import { createClient } from '@supabase/supabase-js';
 import { launchBrowser } from './lib/mobile-geometry.js';
+import { mustWrite } from './lib/checked-writes.js';
 
 const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const DOMAIN = process.env.REPLIT_DEV_DOMAIN;
@@ -41,7 +42,7 @@ function check(name, ok, extra) {
   const { data: leftover } = await admin.auth.admin.listUsers({ perPage: 1000 });
   const emails = new Set(Object.values(EMAILS));
   for (const u of (leftover && leftover.users) || []) {
-    if (emails.has(u.email)) await admin.auth.admin.deleteUser(u.id);
+    if (emails.has(u.email)) await mustWrite('pre-cleanup deleteUser ' + u.email, admin.auth.admin.deleteUser(u.id));
   }
 }
 
@@ -72,7 +73,7 @@ const mkEvent = async (over) => {
 const evPub = await mkEvent({});
 const evPriv = await mkEvent({ title: 'Evself Secret Relay', visibility: 'private' });
 for (const [uid, status] of [[U.going, 'going'], [U.interested, 'interested'], [U.cancelled, 'cancelled'], [U.optout, 'going']]) {
-  await admin.from('event_rsvps').insert({ event_id: evPub.id, user_id: uid, status });
+  await mustWrite('rsvp seed ' + status + ' for ' + uid, admin.from('event_rsvps').insert({ event_id: evPub.id, user_id: uid, status }));
 }
 console.log('MANIFEST:', JSON.stringify({ users: U, events: [evPub.id, evPriv.id] }));
 
@@ -96,7 +97,7 @@ const notifCount = async (uid, entityId) => {
     .eq('user_id', uid).eq('entity_id', entityId).eq('type', 'event').eq('title', 'Event updated');
   return (data || []).length;
 };
-const clearNotifs = () => admin.from('notifications').delete().in('user_id', Object.values(U));
+const clearNotifs = () => mustWrite('clearNotifs', admin.from('notifications').delete().in('user_id', Object.values(U)));
 
 let browser = null;
 try {

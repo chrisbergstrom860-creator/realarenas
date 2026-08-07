@@ -6,6 +6,7 @@
 import { createClient } from '@supabase/supabase-js';
 import fs from 'fs';
 import { launchBrowser } from './lib/mobile-geometry.js';
+import { mustWrite, makeCleanup } from './lib/checked-writes.js';
 
 const LABEL = process.argv[2] || 'before';
 const OUT = '/tmp/shots';
@@ -19,8 +20,8 @@ const EMAIL = 'efshot-coach@arenas-test.dev';
 
 {
   const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
-  for (const u of (data && data.users) || []) if (u.email === EMAIL) await admin.auth.admin.deleteUser(u.id);
-  await admin.from('clubs').delete().eq('handle', 'efshot-club');
+  for (const u of (data && data.users) || []) if (u.email === EMAIL) await mustWrite('pre-cleanup deleteUser ' + u.email, admin.auth.admin.deleteUser(u.id));
+  await mustWrite('pre-cleanup club efshot-club', admin.from('clubs').delete().eq('handle', 'efshot-club'));
 }
 const { data: created, error: mkErr } = await admin.auth.admin.createUser({
   email: EMAIL, password: PW, email_confirm: true,
@@ -28,15 +29,15 @@ const { data: created, error: mkErr } = await admin.auth.admin.createUser({
 });
 if (mkErr) { console.error('FATAL createUser: ' + mkErr.message); process.exit(1); }
 const uid = created.user.id;
-const { data: club } = await admin.from('clubs')
-  .insert({ name: 'Efshot Club', handle: 'efshot-club', sport: 'running', owner_id: uid }).select().single();
-await admin.from('memberships').insert({ user_id: uid, club_id: club.id, role: 'coach' });
-const { data: ev } = await admin.from('events').insert({
+const club = await mustWrite('club seed', admin.from('clubs')
+  .insert({ name: 'Efshot Club', handle: 'efshot-club', sport: 'running', owner_id: uid }).select().single());
+await mustWrite('membership seed', admin.from('memberships').insert({ user_id: uid, club_id: club.id, role: 'coach' }));
+const ev = await mustWrite('event seed', admin.from('events').insert({
   title: 'Efshot Session', sport: 'running', event_type: 'Track session',
   date: new Date(Date.now() + 86400000).toISOString(), location: 'Efshot Track',
   distance: '5km', level: 'Intermediate', description: 'Shot fixture',
   visibility: 'club', club_id: club.id, created_by: uid
-}).select().single();
+}).select().single());
 console.log('MANIFEST:', JSON.stringify({ uid, club: club.id, event: ev.id }));
 
 let browser = null;
@@ -91,11 +92,13 @@ try {
   process.exitCode = 1;
 } finally {
   if (browser) await browser.close();
-  await admin.from('events').delete().eq('club_id', club.id);
-  await admin.from('notifications').delete().eq('user_id', uid);
-  await admin.from('notifications').delete().eq('actor_id', uid);
-  await admin.from('memberships').delete().eq('club_id', club.id);
-  await admin.from('clubs').delete().eq('id', club.id);
-  const { error: uErr } = await admin.auth.admin.deleteUser(uid);
-  console.log('cleanup ' + (uErr ? 'FAILED: ' + uErr.message : 'ok'));
+  const clean = makeCleanup();
+  await clean.cw('events', admin.from('events').delete().eq('club_id', club.id));
+  await clean.cw('notifications (user)', admin.from('notifications').delete().eq('user_id', uid));
+  await clean.cw('notifications (actor)', admin.from('notifications').delete().eq('actor_id', uid));
+  await clean.cw('memberships', admin.from('memberships').delete().eq('club_id', club.id));
+  await clean.cw('club', admin.from('clubs').delete().eq('id', club.id));
+  await clean.cw('auth user ' + uid, admin.auth.admin.deleteUser(uid));
+  if (clean.failed()) process.exitCode = 1;
+  console.log('cleanup ' + (clean.failed() ? clean.count() + ' FAILURE(S)' : 'ok'));
 }

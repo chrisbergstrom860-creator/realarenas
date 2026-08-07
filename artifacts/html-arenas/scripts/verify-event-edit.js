@@ -9,6 +9,7 @@
 //   node artifacts/html-arenas/scripts/verify-event-edit.js
 import { createClient } from '@supabase/supabase-js';
 import { launchBrowser } from './lib/mobile-geometry.js';
+import { mustWrite } from './lib/checked-writes.js';
 
 const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const DOMAIN = process.env.REPLIT_DEV_DOMAIN;
@@ -26,9 +27,9 @@ function check(name, ok, extra) {
 {
   const { data: leftover } = await admin.auth.admin.listUsers({ perPage: 1000 });
   for (const u of (leftover && leftover.users) || []) {
-    if (u.email === EMAIL) await admin.auth.admin.deleteUser(u.id);
+    if (u.email === EMAIL) await mustWrite('pre-cleanup deleteUser ' + u.email, admin.auth.admin.deleteUser(u.id));
   }
-  await admin.from('clubs').delete().eq('handle', 'evedit-club');
+  await mustWrite('pre-cleanup club evedit-club', admin.from('clubs').delete().eq('handle', 'evedit-club'));
 }
 
 const { data: created, error: mkErr } = await admin.auth.admin.createUser({
@@ -40,7 +41,7 @@ const coachId = created.user.id;
 const { data: club, error: clubErr } = await admin.from('clubs')
   .insert({ name: 'Evedit Club', handle: 'evedit-club', sport: 'running', owner_id: coachId }).select().single();
 if (clubErr) { console.error('FATAL: club: ' + clubErr.message); process.exit(1); }
-await admin.from('memberships').insert({ user_id: coachId, club_id: club.id, role: 'coach' });
+await mustWrite('membership seed', admin.from('memberships').insert({ user_id: coachId, club_id: club.id, role: 'coach' }));
 
 const origDate = new Date(Date.now() + 3 * 86400000);
 origDate.setHours(9, 30, 0, 0);

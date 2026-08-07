@@ -26,6 +26,7 @@
 // after any change to shell CSS, card renderers, or page templates.
 import { createClient } from '@supabase/supabase-js';
 import { launchBrowser, auditPage } from './lib/mobile-geometry.js';
+import { mustWrite, makeCleanup } from './lib/checked-writes.js';
 
 const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const DOMAIN = process.env.REPLIT_DEV_DOMAIN;
@@ -186,7 +187,7 @@ for (const evId of EVENTS) {
   const { error: imgErr } = await admin.storage.from('event-images')
     .upload(objectPath, coverWebp, { contentType: 'image/webp', upsert: false });
   if (imgErr) throw new Error('event image seed: ' + imgErr.message);
-  await admin.from('events').update({ image_path: objectPath }).eq('id', evId);
+  await mustWrite('event image pointer for event ' + evId, admin.from('events').update({ image_path: objectPath }).eq('id', evId));
 }
 // notifications for creator
 for (const [a, ty, ti] of [[M, 'like', 'New kudos'], [users.f0.id, 'follow', 'New follower'], [users.f1.id, 'comment', 'New comment']]) {
@@ -411,11 +412,8 @@ console.log('\nPER-PAGE SUMMARY:', JSON.stringify(summary, null, 1));
   if (process.argv.includes('--keep')) {
     console.log('cleanup: SKIPPED (--keep) — seeds left in place');
   } else {
-    let cleanupFails = 0;
-    const del = async (label, q) => {
-      const { error } = await q;
-      if (error) { cleanupFails++; console.log('CLEANUP FAIL', label, '→', error.message); }
-    };
+    const clean = makeCleanup();
+    const del = (label, q) => clean.cw(label, q);
     // Child rows keyed off tracked parents first, then the rows themselves
     // (reverse creation order so FK children go before parents).
     for (const r of [...createdRows].reverse()) {
@@ -452,10 +450,9 @@ console.log('\nPER-PAGE SUMMARY:', JSON.stringify(summary, null, 1));
       await del('notifications by actor', admin.from('notifications').delete().eq('actor_id', u));
     }
     for (const u of createdUsers) {
-      const { error } = await admin.auth.admin.deleteUser(u);
-      if (error) { cleanupFails++; console.log('CLEANUP FAIL auth user', u, '→', error.message); }
+      await del('auth user ' + u, admin.auth.admin.deleteUser(u));
     }
-    if (cleanupFails) { failures += cleanupFails; console.log(`cleanup: ${cleanupFails} FAILURE(S) — residue may remain, run scripts/test-data-sweep.js`); }
+    if (clean.failed()) { failures += clean.count(); console.log(`cleanup: ${clean.count()} FAILURE(S) — residue may remain, run scripts/test-data-sweep.js`); }
     else console.log(`cleanup: ${createdRows.length} rows + ${createdUsers.length} users removed`);
   }
 }

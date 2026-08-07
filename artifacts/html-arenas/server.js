@@ -601,7 +601,8 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
     });
     if (signInErr || !signInData || !signInData.session) {
       // Roll back the just-created account so the email can be retried.
-      await supabaseAdmin.auth.admin.deleteUser(userId);
+      const { error: rbErr } = await supabaseAdmin.auth.admin.deleteUser(userId);
+      if (rbErr) console.error('Club signup rollback FAILED — orphan auth user %s (%s) blocks email retry (manual remediation needed):', userId, email, rbErr.message);
       return res.redirect(BASE + '/for-clubs?error=confirm');
     }
 
@@ -613,7 +614,8 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
       .single();
     if (clubErr || !club) {
       // Roll back the just-created account so the email can be retried.
-      await supabaseAdmin.auth.admin.deleteUser(userId);
+      const { error: rbErr } = await supabaseAdmin.auth.admin.deleteUser(userId);
+      if (rbErr) console.error('Club signup rollback FAILED — orphan auth user %s (%s) blocks email retry (manual remediation needed):', userId, email, rbErr.message);
       // The DB's unique index on lower(handle) rejecting the insert is the
       // real duplicate gate — surface it as the friendly wizard error, not a
       // generic failure. Rollback above already ran: no half-created account.
@@ -629,8 +631,16 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
       .insert({ user_id: userId, club_id: club.id, role: 'admin' });
     if (memErr) {
       // Compensating cleanup so we don't leave an orphaned club or account.
-      await supabaseAdmin.from('clubs').delete().eq('id', club.id);
-      await supabaseAdmin.auth.admin.deleteUser(userId);
+      // Order matters (same rule as the invite rollback): only delete the
+      // auth user after the club rollback succeeds, or the club would be
+      // orphaned with a dangling owner_id.
+      const { error: rbClubErr } = await supabaseAdmin.from('clubs').delete().eq('id', club.id);
+      if (rbClubErr) {
+        console.error('Club signup rollback FAILED — orphan club %s owned by %s (%s) (manual remediation needed):', club.id, userId, email, rbClubErr.message);
+      } else {
+        const { error: rbUserErr } = await supabaseAdmin.auth.admin.deleteUser(userId);
+        if (rbUserErr) console.error('Club signup rollback FAILED — orphan auth user %s (%s) blocks email retry (manual remediation needed):', userId, email, rbUserErr.message);
+      }
       return res.redirect(BASE + '/for-clubs?error=membership');
     }
 
@@ -750,7 +760,8 @@ app.post(BASE + '/api/clubs/create', requireAuth, async (req, res) => {
       .insert({ user_id: req.user.id, club_id: club.id, role: 'admin' });
     if (memErr) {
       // Compensating cleanup — never leave an orphaned club row.
-      await supabaseAdmin.from('clubs').delete().eq('id', club.id);
+      const { error: rbErr } = await supabaseAdmin.from('clubs').delete().eq('id', club.id);
+      if (rbErr) console.error('Club create rollback FAILED — orphan club %s owned by %s (manual remediation needed):', club.id, req.user.id, rbErr.message);
       return res.status(500).json({ error: 'membership' });
     }
 
@@ -2119,17 +2130,26 @@ app.post(BASE + '/api/activities/create', requireAuth, async (req, res) => {
   // Close out the linked plan in the same request: set activity_id + done.
   // Self-only by construction (linkPlan ownership was verified above); the
   // .eq('user_id', …) filter is defense-in-depth.
+  // A failed link is reported, not hidden: the activity itself saved (rolling
+  // it back over a bookkeeping link would lose the user's data), but the
+  // response says planLinkFailed so the client can land the user where the
+  // still-pending plan is visible instead of silently pretending no link was
+  // requested.
   let planCompleted = false;
+  let planLinkFailed = false;
   if (linkPlan) {
     try {
       const { error: linkErr } = await supabaseAdmin
         .from('planned_sessions')
         .update({ activity_id: data.id, status: 'done', updated_at: new Date().toISOString() })
         .eq('id', linkPlan.id).eq('user_id', req.user.id);
-      if (linkErr) console.log('Plan link update error:', linkErr.message);
-      else planCompleted = true;
+      if (linkErr) {
+        planLinkFailed = true;
+        console.error('Plan link update FAILED (plan %s, activity %s, user %s) — activity saved but plan still pending:', linkPlan.id, data.id, req.user.id, linkErr.message);
+      } else planCompleted = true;
     } catch (err) {
-      console.log('Plan link update error:', err.message);
+      planLinkFailed = true;
+      console.error('Plan link update FAILED (plan %s, activity %s, user %s) — activity saved but plan still pending:', linkPlan.id, data.id, req.user.id, err.message);
     }
   }
   // Notify followers (best-effort). The actor name comes from auth metadata
@@ -2161,7 +2181,7 @@ app.post(BASE + '/api/activities/create', requireAuth, async (req, res) => {
   }
   // Award any newly earned badges (volume/distance/streak/feats) without blocking.
   checkAchievements(req.user.id, getUserTimezone(req.user)).catch(() => {});
-  res.json({ success: true, activity: data, planCompleted });
+  res.json({ success: true, activity: data, planCompleted, planLinkFailed });
 });
 
 // Recent activities for a given user (used by the profile Activities tab).
@@ -4455,8 +4475,17 @@ app.post(BASE + '/api/challenges/create', requireAuth, async (req, res) => {
       visibility: visibility || 'public'
     }).select().single();
   if (error) return res.json({ error: error.message });
-  // Auto-join the creator (best-effort).
-  await supabaseAdmin.from('challenge_participants').insert({ challenge_id: challenge.id, user_id: req.user.id });
+  // Auto-join the creator. MUST-BLOCK, not best-effort: a challenge whose
+  // creator is not a participant is broken (leaderboards, coach rollups and
+  // delete-aloneness all assume it), so a failed join rolls the challenge back.
+  const { error: joinErr } = await supabaseAdmin.from('challenge_participants')
+    .insert({ challenge_id: challenge.id, user_id: req.user.id });
+  if (joinErr) {
+    console.error('Challenge create: creator auto-join failed (challenge %s, user %s):', challenge.id, req.user.id, joinErr.message);
+    const { error: rbErr } = await supabaseAdmin.from('challenges').delete().eq('id', challenge.id);
+    if (rbErr) console.error('Challenge create rollback FAILED — orphan challenge %s without creator participant (manual remediation needed):', challenge.id, rbErr.message);
+    return res.status(500).json({ error: 'Could not create the challenge' });
+  }
   // Invite rails (private solo only). Validate against the creator's FOLLOWERS —
   // the picker offers exactly those, and followers opted in to hearing from the
   // creator (you can't follow someone in order to invite them; THEY follow YOU).
@@ -4823,7 +4852,15 @@ app.post(BASE + '/api/challenges/:id/duplicate', requireAuth, async (req, res) =
       visibility: challenge.visibility
     }).select().single();
   if (error) return res.json({ error: error.message });
-  await supabaseAdmin.from('challenge_participants').insert({ challenge_id: newChallenge.id, user_id: req.user.id });
+  // Same must-block rule as create: no creator participant → roll back.
+  const { error: joinErr } = await supabaseAdmin.from('challenge_participants')
+    .insert({ challenge_id: newChallenge.id, user_id: req.user.id });
+  if (joinErr) {
+    console.error('Challenge duplicate: creator auto-join failed (challenge %s, user %s):', newChallenge.id, req.user.id, joinErr.message);
+    const { error: rbErr } = await supabaseAdmin.from('challenges').delete().eq('id', newChallenge.id);
+    if (rbErr) console.error('Challenge duplicate rollback FAILED — orphan challenge %s without creator participant (manual remediation needed):', newChallenge.id, rbErr.message);
+    return res.status(500).json({ error: 'Could not duplicate the challenge' });
+  }
   res.json({ success: true, challenge: newChallenge });
 });
 
@@ -4871,16 +4908,37 @@ const challengeHasEnded = (ch) => new Date(ch.end_date).getTime() < Date.now();
 // they stay in, AND can leave and rejoin later. Rows are retained-on-accept by
 // design, so upsert-ignore is idempotent. No notifications: participants are
 // already in (pending = row ∧ ¬participant stays false — no dead pills).
+// Returns { error } — MUST-BLOCK for callers: if these invite rows are not
+// minted, existing non-creator participants of a now-private challenge lose
+// access (the zero-leak rule hands them "Challenge not found"). Callers revert
+// the visibility flip and fail the route rather than strand participants.
 async function mintGrandfatherInvites(ch) {
-  if (ch.club_id) return; // club visibility is governed by membership, not invites
-  const { data: parts } = await supabaseAdmin
+  if (ch.club_id) return {}; // club visibility is governed by membership, not invites
+  const { data: parts, error: pErr } = await supabaseAdmin
     .from('challenge_participants').select('user_id').eq('challenge_id', ch.id);
+  if (pErr) return { error: pErr };
   const rows = (parts || [])
     .filter((p) => p.user_id !== ch.created_by)
     .map((p) => ({ challenge_id: ch.id, invitee_id: p.user_id, inviter_id: ch.created_by }));
-  if (!rows.length) return;
-  await supabaseAdmin.from('challenge_invites')
+  if (!rows.length) return {};
+  const { error } = await supabaseAdmin.from('challenge_invites')
     .upsert(rows, { onConflict: 'challenge_id,invitee_id', ignoreDuplicates: true });
+  return { error };
+}
+
+// Mint-FIRST wrapper for the two public→private flips above the grandfather
+// rule: invites are minted while the challenge is STILL PUBLIC, so a failure
+// at either step can never strand participants — a failed mint aborts before
+// any visibility change, and a failed flip leaves the challenge public with
+// harmless extra invite rows (they only grant access the public state already
+// implies). No compensating write exists, so there is no revert to fail.
+// Returns true when the caller may proceed to flip visibility.
+async function mintGrandfatherOrFail(res, ch, label) {
+  const { error: gfErr } = await mintGrandfatherInvites(ch);
+  if (!gfErr) return true;
+  console.error('%s: grandfather-invite mint failed (challenge %s) — aborting BEFORE the visibility flip, challenge stays public:', label, ch.id, gfErr.message);
+  res.status(500).json({ error: 'Could not update the challenge' });
+  return false;
 }
 
 // Fan-out to every participant except the actor. Type 'challenge' — the
@@ -4958,13 +5016,15 @@ app.patch(BASE + '/api/challenges/:id', requireAuth, async (req, res) => {
 
   const materialChanged = MATERIAL.filter(
     (k) => k in updates && String(updates[k]) !== String(challenge[k] ?? ''));
+  // Mint-first: grandfather invites are written BEFORE the visibility flip
+  // (see mintGrandfatherOrFail), so no failure ordering can strand
+  // participants of a going-private challenge.
+  if (challenge.visibility === 'public' && updates.visibility === 'private') {
+    if (!(await mintGrandfatherOrFail(res, challenge, 'Challenge edit'))) return;
+  }
   const { data: updated, error } = await supabaseAdmin
     .from('challenges').update(updates).eq('id', challenge.id).select().single();
   if (error) return res.json({ error: error.message });
-
-  if (challenge.visibility === 'public' && updated.visibility === 'private') {
-    await mintGrandfatherInvites(updated);
-  }
   // Material pre-start edits notify OTHER participants (if any exist);
   // title/description edits notify nobody. That is the complete fan-out set.
   if (materialChanged.length) {
@@ -5004,10 +5064,12 @@ app.post(BASE + '/api/challenges/:id/remove-from-discover', requireAuth, async (
   const { challenge, fail } = await requireChallengeEditor(req.params.id, req.user.id);
   if (fail) return res.status(fail.status || 200).json({ error: fail.error });
   if (challenge.visibility !== 'public') return res.json({ error: 'already_private' });
+  // Mint-first (see mintGrandfatherOrFail): a failed mint aborts while still
+  // public; a failed flip leaves harmless invite rows on a public challenge.
+  if (!(await mintGrandfatherOrFail(res, challenge, 'Remove-from-discover'))) return;
   const { data: updated, error } = await supabaseAdmin
     .from('challenges').update({ visibility: 'private' }).eq('id', challenge.id).select().single();
   if (error) return res.json({ error: error.message });
-  await mintGrandfatherInvites(updated);
   res.json({ success: true, challenge: updated });
 });
 
@@ -5692,8 +5754,12 @@ app.post(BASE + '/api/events/create', requireAuth, async (req, res) => {
       visibility: vis
     }).select().single();
   if (error) return res.json({ error: error.message });
-  // Auto-RSVP the creator as going (best-effort).
-  await supabaseAdmin.from('event_rsvps').insert({ event_id: event.id, user_id: req.user.id, status: 'going' });
+  // Auto-RSVP the creator as going. SHOULD-LOG: an event without the
+  // creator's RSVP is degraded, not broken — they can RSVP from the event
+  // card — so the create still succeeds, but the failure is logged with ids.
+  const { error: rsvpErr } = await supabaseAdmin.from('event_rsvps')
+    .insert({ event_id: event.id, user_id: req.user.id, status: 'going' });
+  if (rsvpErr) console.error('Event create: creator auto-RSVP failed (event %s, user %s) — creator must RSVP manually:', event.id, req.user.id, rsvpErr.message);
 
   const actor = displayFromUser(req.user);
   const dateLabel = eventDate.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });

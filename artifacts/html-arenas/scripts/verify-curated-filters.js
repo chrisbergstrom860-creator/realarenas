@@ -13,6 +13,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { mustWrite, makeCleanup } from './lib/checked-writes.js';
 import { launchBrowser } from './lib/mobile-geometry.js';
 import { createClient } from '@supabase/supabase-js';
 
@@ -53,8 +54,8 @@ async function loginCookies(email) {
   try {
     const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
     for (const u of (data && data.users) || []) if (Object.values(EMAILS).includes(u.email)) {
-      await admin.from('memberships').delete().eq('user_id', u.id);
-      await admin.auth.admin.deleteUser(u.id);
+      await mustWrite('pre-cleanup memberships for ' + u.email, admin.from('memberships').delete().eq('user_id', u.id));
+      await mustWrite('pre-cleanup deleteUser ' + u.email, admin.auth.admin.deleteUser(u.id));
     }
     const mk = async (email, meta) => {
       const { data: c, error } = await admin.auth.admin.createUser({ email, password: PW, email_confirm: true, user_metadata: meta });
@@ -209,22 +210,24 @@ async function loginCookies(email) {
     console.log('  FAIL (exception) ' + e.message);
   } finally {
     if (browser) await browser.close().catch(() => {});
+    const clean = makeCleanup();
     for (const id of ids.challenges) {
-      await admin.from('challenge_participants').delete().eq('challenge_id', id);
-      await admin.from('challenges').delete().eq('id', id);
+      await clean.cw('participants for challenge ' + id, admin.from('challenge_participants').delete().eq('challenge_id', id));
+      await clean.cw('challenge ' + id, admin.from('challenges').delete().eq('id', id));
     }
     for (const id of ids.events) {
-      await admin.from('event_rsvps').delete().eq('event_id', id);
-      await admin.from('events').delete().eq('id', id);
+      await clean.cw('rsvps for event ' + id, admin.from('event_rsvps').delete().eq('event_id', id));
+      await clean.cw('event ' + id, admin.from('events').delete().eq('id', id));
     }
     if (ids.club) {
-      await admin.from('memberships').delete().eq('club_id', ids.club);
-      await admin.from('clubs').delete().eq('id', ids.club);
+      await clean.cw('memberships for club ' + ids.club, admin.from('memberships').delete().eq('club_id', ids.club));
+      await clean.cw('club ' + ids.club, admin.from('clubs').delete().eq('id', ids.club));
     }
     for (const uid of ids.users) {
-      await admin.from('activities').delete().eq('user_id', uid);
-      await admin.auth.admin.deleteUser(uid).catch(() => {});
+      await clean.cw('activities for ' + uid, admin.from('activities').delete().eq('user_id', uid));
+      await clean.cw('auth user ' + uid, admin.auth.admin.deleteUser(uid));
     }
+    if (clean.failed()) failures += clean.count();
   }
   console.log(failures === 0 ? 'ALL PASS' : failures + ' FAILURES');
   process.exit(failures === 0 ? 0 : 1);

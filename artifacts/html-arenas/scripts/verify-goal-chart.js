@@ -12,6 +12,7 @@
 //  - A user with activities but NO goals: no card at all.
 //  - Zero console errors everywhere. Cleanup in finally.
 import { launchBrowser } from './lib/mobile-geometry.js';
+import { mustWrite, makeCleanup } from './lib/checked-writes.js';
 import { createClient } from '@supabase/supabase-js';
 import { createRequire } from 'module';
 const { computeStreaks, dayKey, zoneMidnightUtc } = createRequire(import.meta.url)('../tzdate.js');
@@ -54,7 +55,7 @@ const localKey = (offsetDays) => {
   let uid = null, uid2 = null, uid3 = null; let browser = null;
   try {
     const { data } = await admin.auth.admin.listUsers({ perPage: 1000 });
-    for (const u of (data && data.users) || []) if ([EMAIL, EMAIL2, EMAIL3].includes(u.email)) await admin.auth.admin.deleteUser(u.id);
+    for (const u of (data && data.users) || []) if ([EMAIL, EMAIL2, EMAIL3].includes(u.email)) await mustWrite('pre-cleanup deleteUser ' + u.email, admin.auth.admin.deleteUser(u.id));
     const mk = async (email, name, handle, extraMeta) => {
       const { data: c, error } = await admin.auth.admin.createUser({
         email, password: PW, email_confirm: true,
@@ -81,7 +82,7 @@ const localKey = (offsetDays) => {
     const { error: aErr } = await admin.from('activities').insert(acts);
     if (aErr) throw new Error('activities: ' + aErr.message);
     // Activities for the no-goals user too (stats render, no card).
-    await admin.from('activities').insert({ user_id: uid2, sport: 'running', title: 'NG run', distance: '4 km', duration: '00:25:00', date: new Date().toISOString() });
+    await mustWrite('no-goals user activity seed', admin.from('activities').insert({ user_id: uid2, sport: 'running', title: 'NG run', distance: '4 km', duration: '00:25:00', date: new Date().toISOString() }));
 
     // 5 goals (the active cap): 3 weekly, 0 monthly (Monthly view must be
     // EMPTY), streak + custom (Overall-only).
@@ -336,7 +337,7 @@ const localKey = (offsetDays) => {
       await context.close();
 
       // ── Large target at 360px: fixed 14px squares WRAP, no shrink/overflow ──
-      await admin.from('goals').update({ target_value: 40 }).eq('id', by3['streak:running'].id);
+      await mustWrite('streak goal target update', admin.from('goals').update({ target_value: 40 }).eq('id', by3['streak:running'].id));
       const m = await openStats(360, EMAIL3);
       await m.page.waitForSelector('#gvw-card .gvw-heat-row', { timeout: 15000 });
       const wrap = await m.page.evaluate((gid) => {
@@ -395,12 +396,14 @@ const localKey = (offsetDays) => {
     console.log('  FAIL (exception) ' + e.message);
   } finally {
     if (browser) await browser.close().catch(() => {});
+    const clean = makeCleanup();
     for (const id of [uid, uid2, uid3]) {
       if (!id) continue;
-      await admin.from('goals').delete().eq('user_id', id);
-      await admin.from('activities').delete().eq('user_id', id);
-      await admin.auth.admin.deleteUser(id).catch(() => {});
+      await clean.cw('goals for ' + id, admin.from('goals').delete().eq('user_id', id));
+      await clean.cw('activities for ' + id, admin.from('activities').delete().eq('user_id', id));
+      await clean.cw('auth user ' + id, admin.auth.admin.deleteUser(id));
     }
+    if (clean.failed()) failures += clean.count();
   }
   console.log(failures === 0 ? 'ALL PASS' : failures + ' FAILURES');
   process.exit(failures === 0 ? 0 : 1);
