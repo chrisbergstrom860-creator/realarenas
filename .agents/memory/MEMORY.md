@@ -70,4 +70,5 @@
 - [html-arenas shared-CSS consolidation](html-arenas-css-consolidation.md) — linked = real <link> tag only (grep trap!); partial-coverage rules can't move; check demotion vs sibling `.btn`-style rules.
 - [html-arenas By-sport charts + accents](html-arenas-sport-charts.md) — shared arenas-sport-charts.js (3 charts + exact table; pie.js DELETED); colors.text is a data channel, ΔE≥20 guard verify-sport-colors.js.
 - [html-arenas activity notes](html-arenas-activity-notes.md) — notes public everywhere by user decision (no per-activity privacy — don't re-propose); 500-char cap; desktop feed column needed minmax(0,1fr).
+- [html-arenas shell centering](html-arenas-shell-centering.md) — 4-col grid caps body row at 1460px (topbar full-width); mirror in club-invite; guard now desktop-aware, run in GEO_WIDTHS halves.
 - [html-arenas athlete directory](html-arenas-athlete-directory.md) — shared adc- card module + profile Athletes tab; follow-change event contract; /athletes?q= is THE search target; new shared JS needs its serve route.
