@@ -1,4 +1,5 @@
 ---
+UPDATE Aug 2026: By-sport card layout is now pie-on-top (full-width panel, 300px pie, legend beside content-sized) + half-width Sessions/Time bar panels below (grid 1fr 1fr; pie cell grid-column:1/-1). DOM order pie→Sessions→Time, so mobile stack reads pie first. flex-wrap fallback removed. verify-sport-charts selects SVGs by aria-label (never DOM index; weekly-stack svg is also role="img" — anchor closest() on the PIE svg) and asserts gridCols===2 only >768px: the mobile-shell CSS rule `[style*="1fr 1fr"]→1fr !important` collapses the bar row ≤768, and the card's own stack threshold (chartsNarrow in arenas-my-profile.html) is ≤560px, not 480 — the 300px pie + 24 gap + nowrap legend needs ~470px and there is no flex-wrap fallback anymore. Overflow checks must use rect-escape, not scrollWidth (ellipsized legend spans overflow-hide by design).
 name: html-arenas By-sport charts + sport accent palette
 description: Redesigned Stats & PRs "By sport" card (3 charts + exact table via shared arenas-sport-charts.js) and the refreshed colors.text accent palette with its ΔE guard.
 ---
