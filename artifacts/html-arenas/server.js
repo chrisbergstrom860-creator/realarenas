@@ -1680,39 +1680,11 @@ app.post(BASE + '/api/posts/create', requireAuth, (req, res) => {
   });
 });
 
-app.get(BASE + '/api/posts', requireAuth, async (req, res) => {
-  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for posting' });
-  const limit = parseInt(req.query.limit) || 20;
-  const { data: posts, error } = await supabaseAdmin
-    .from('posts')
-    .select('*, post_likes (count), post_comments (count)')
-    .order('created_at', { ascending: false })
-    .limit(limit);
-  if (error) return res.json({ error: error.message });
-  // There is no `profiles` table in this project, so resolve author
-  // display info from the Supabase auth user metadata instead of a join.
-  const ids = [...new Set((posts || []).map(p => p.user_id).filter(Boolean))];
-  const profileMap = {};
-  await Promise.all(ids.map(async (id) => {
-    try {
-      const { data: u } = await supabaseAdmin.auth.admin.getUserById(id);
-      const user = u && u.user;
-      if (user) {
-        const meta = user.user_metadata || {};
-        const emailLocal = user.email ? user.email.split('@')[0] : null;
-        profileMap[id] = {
-          name: meta.name || emailLocal || 'Athlete',
-          handle: meta.handle || emailLocal || 'athlete',
-          avatar_url: meta.avatar_url || null
-        };
-      }
-    } catch (err) {
-      // Ignore individual lookup failures; the card will fall back to defaults.
-    }
-  }));
-  const enriched = (posts || []).map(p => ({ ...p, profiles: profileMap[p.user_id] || null }));
-  res.json({ posts: enriched });
-});
+// NOTE: there is deliberately NO "GET /api/posts" list route. A legacy one
+// served EVERY post to any authenticated user with no follower filter; it
+// was dead code (nothing called it — feed posts are server-injected via
+// buildFeedPosts, which scopes to follows + self) and was removed rather
+// than scoped. Do not reintroduce an unscoped post list.
 
 app.post(BASE + '/api/posts/:id/like', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for posting' });
