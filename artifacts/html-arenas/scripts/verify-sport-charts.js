@@ -116,13 +116,13 @@ function fixedCases() {
   });
 
   // Narrow flag: single column + slimmer 30px bar slots + legend BELOW a
-  // column-filling pie. Desktop keeps the legend BESIDE a fixed 230px pie,
+  // column-filling pie. Desktop keeps the legend BESIDE a fixed 300px pie,
   // sized to its content (no align-self:stretch).
   const hn = buildSportCharts(twelve, COLORS, true);
   check('narrow → single-column grid', hn.includes('grid-template-columns:1fr>') || hn.includes('grid-template-columns:1fr"'));
   check('narrow → 30px bar slots', hn.includes('width="30"') && !hn.includes('width="40"'));
   check('narrow → legend below column-filling pie', hn.includes('flex-direction:column;align-items:center;gap:12px') && hn.includes('max-width:300px'));
-  check('desktop → legend beside fixed 230px pie, content-sized', html.includes('width:230px;height:230px') && !html.includes('align-self:stretch'));
+  check('desktop → legend beside fixed 300px pie, content-sized', html.includes('width:300px;height:300px') && !html.includes('align-self:stretch'));
 
   // Rendered-color ΔE floor on the actual 12-sport output.
   const used = [...new Set(fills(h12))].filter((f) => f !== '#374151' && f !== '#FFFFFF'); // label ink isn't a sport channel
@@ -205,7 +205,10 @@ async function e2e() {
     return { name: pair.slice(0, i), value: pair.slice(i + 1), domain: DOMAIN, path: '/' };
   });
   browser = await launchBrowser();
-    for (const width of [1280, 414, 380, 360]) {
+    // 561/481 bracket the card's 560px stack threshold: the desktop pie row
+    // (300px pie + 24 gap + nowrap legend) needs ~470px, so 481–560 must use
+    // the stacked narrow layout or it clips (architect finding, Aug 2026).
+    for (const width of [1280, 561, 481, 414, 380, 360]) {
       const context = await browser.newContext({ viewport: { width, height: 1400 } });
       await context.addCookies(cookies);
       const page = await context.newPage();
@@ -218,23 +221,46 @@ async function e2e() {
 
       const got = await page.evaluate(() => {
         const svgs = [...document.querySelectorAll('#sp-stats-body svg[role="img"]')];
+        // Select charts by aria-label, not DOM order — the pie panel moved
+        // to the top of the card (pie → Sessions → Time).
+        const byLabel = (frag) => svgs.find((s) => (s.getAttribute('aria-label') || '').includes(frag)) || null;
+        const sessionsSvg = byLabel('Sessions per sport');
+        const timeSvg = byLabel('Hours per sport');
+        const pieSvg = byLabel('Share of sessions');
         const fillsOf = (svg) => [...svg.querySelectorAll('[fill]')].map((el) => el.getAttribute('fill').toUpperCase()).filter((f) => f.startsWith('#') && f !== '#374151' && f !== '#FFFFFF');
         const texts = (svg) => [...svg.querySelectorAll('text')].map((t) => t.textContent.trim());
-        const card = svgs[0] && svgs[0].closest('div[style*="border-radius"]');
-        const grid = svgs[0] && svgs[0].closest('div[style*="grid-template-columns"]');
+        // Anchor card/grid lookups on the PIE svg, not svgs[0]: the weekly
+        // stack chart is also svg[role="img"] inside #sp-stats-body, and
+        // closest() from it finds the outer stats layout grid, not the
+        // By-sport charts grid.
+        const card = pieSvg && pieSvg.closest('div[style*="border-radius"]');
+        const grid = pieSvg && pieSvg.closest('div[style*="grid-template-columns"]');
         return {
           svgCount: svgs.length,
-          sessionsLabels: svgs[0] ? texts(svgs[0]) : [],
-          timeLabels: svgs[1] ? texts(svgs[1]) : [],
-          pieFills: svgs[2] ? fillsOf(svgs[2]) : [],
-          pieTexts: svgs[2] ? texts(svgs[2]) : [],
-          sessionsFills: svgs[0] ? fillsOf(svgs[0]) : [],
-          timeFills: svgs[1] ? fillsOf(svgs[1]) : [],
+          sessionsLabels: sessionsSvg ? texts(sessionsSvg) : [],
+          timeLabels: timeSvg ? texts(timeSvg) : [],
+          pieFills: pieSvg ? fillsOf(pieSvg) : [],
+          pieTexts: pieSvg ? texts(pieSvg) : [],
+          sessionsFills: sessionsSvg ? fillsOf(sessionsSvg) : [],
+          timeFills: timeSvg ? fillsOf(timeSvg) : [],
           gridCols: grid ? getComputedStyle(grid).gridTemplateColumns.split(' ').length : 0,
           legendPctSum: [...document.querySelectorAll('#sp-stats-body span')]
             .map((el) => el.textContent.trim()).filter((t) => /^\d+%$/.test(t))
             .reduce((a, t) => a + parseInt(t, 10), 0),
-          cardText: card ? card.textContent : ''
+          cardText: card ? card.textContent : '',
+          // Visible spill only: an element's rect escaping the card's rect.
+          // scrollWidth > clientWidth alone is NOT a failure — ellipsized
+          // legend/table name spans overflow-hide by design.
+          cardOverflowX: card ? (() => {
+            const cr = card.getBoundingClientRect();
+            let worst = 0;
+            card.querySelectorAll('*').forEach((el) => {
+              const b = el.getBoundingClientRect();
+              if (b.width > 0) worst = Math.max(worst, b.right - cr.right, cr.left - b.left);
+            });
+            return Math.round(worst);
+          })() : -1,
+          docOverflowX: document.documentElement.scrollWidth - window.innerWidth
         };
       });
       const w = 'w' + width;
@@ -260,9 +286,16 @@ async function e2e() {
         check(w + ': ' + s.sport + ' ' + hex + ' consistent across all three SVGs', inAll,
           JSON.stringify({ s: got.sessionsFills, t: got.timeFills, p: got.pieFills }));
       }
-      // Layout: desktop 3 columns, mobile stacked single column.
-      check(w + ': ' + (width > 480 ? '3-column row' : 'stacked single column'),
-        width > 480 ? got.gridCols === 3 : got.gridCols === 1, String(got.gridCols));
+      // Layout: >768px (desktop shell) = pie full-width on top + 2-column
+      // bar row below. <=768px the mobile-shell CSS collapses inline
+      // "1fr 1fr" grids to one column (arenas.css bottom-nav block), and
+      // <=560px the builder itself renders the stacked narrow variant — so
+      // everything at or below 768 is a single column.
+      check(w + ': ' + (width > 768 ? '2-column bar row under full-width pie' : 'stacked single column'),
+        width > 768 ? got.gridCols === 2 : got.gridCols === 1, String(got.gridCols));
+      // No horizontal clipping anywhere in the card, and no page scroll.
+      check(w + ': card has no horizontal overflow', got.cardOverflowX <= 2, String(got.cardOverflowX));
+      check(w + ': no page-level horizontal scroll', got.docOverflowX <= 0, String(got.docOverflowX));
       await context.close();
     }
   } catch (e) {

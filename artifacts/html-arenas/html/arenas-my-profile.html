@@ -1935,8 +1935,13 @@ if (logHashMatch) {
       // charts, distance carried by the table. Recomputed on every period
       // switch because this whole renderer re-runs. Empty breakdown → '' (the
       // card itself is already hidden in that case).
+      // The By-sport card stacks (narrow) up to 560px, not 480: its desktop
+      // pie row is a non-shrinking 300px pie + 24px gap + content-sized
+      // nowrap legend (~470px min) — between 481 and ~560px the single-column
+      // mobile-shell card is too narrow for that row and it would clip.
+      var chartsNarrow = window.innerWidth <= 560;
       var sportCharts = typeof buildSportCharts === 'function'
-        ? buildSportCharts(r.sportBreakdown, sportColors, narrow)
+        ? buildSportCharts(r.sportBreakdown, sportColors, chartsNarrow)
         : '';
 
       var prCards = r.prs.map(function (pr) {

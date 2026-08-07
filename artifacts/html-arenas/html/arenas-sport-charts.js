@@ -132,27 +132,26 @@
         '<span style="overflow:hidden;text-overflow:ellipsis">' + sc.icon + ' ' + esc(sc.name || d.sport) + '</span>' +
         '<span style="font-family:var(--mono);color:var(--gray-500);margin-left:auto">' + d.pct + '%</span></div>';
     }).join('');
-    // Desktop: legend BESIDE the pie (right, stacked, sized to its content so
-    // percentages sit next to their names) — a panel-filling pie pushed the
-    // legend below, stretched it to the panel width, and made the card much
-    // taller. The pie is sized to what fits alongside (230px). The desktop
-    // row is flex-wrap:wrap: at the 1176px global shell cap the profile
-    // stats column can drop below the 390px the side-by-side row needs
-    // (230 pie + 16 gap + ~144 legend), so the content-sized legend wraps
-    // below the pie ONLY when it doesn't fit — everywhere wider it stays
-    // beside, and the legend never stretches (that was the old objection to
-    // legend-below-always). Narrow (the caller's <=480 flag, where the whole
+    // Desktop: the pie panel now spans the FULL card width (top row of the
+    // grid below), so there is always room for the legend BESIDE a larger
+    // pie — 300px pie + 16 gap + content-sized legend (~144px) needs ~460px
+    // and the full-width panel has ~920px at the 956px shell cell. The
+    // legend stays right of the pie, stacked, sized to its content (never
+    // stretched to the panel edge). The flex-wrap fallback from the
+    // shell-width pass is REMOVED: it existed because the pie shared a
+    // three-panel row whose ~326px column couldn't fit pie+legend; that row
+    // no longer exists. Narrow (the caller's <=480 flag, where the whole
     // grid stacks to one column): legend below a column-filling pie (capped
     // 300px) — beside it would squeeze the pie on a 360px viewport. viewBox
     // stays 200, so in-slice label fit is size-invariant.
     var svg = '<svg viewBox="0 0 200 200" style="' + (narrow
       ? 'width:100%;max-width:300px;height:auto'
-      : 'width:230px;height:230px;flex-shrink:0') + ';display:block" role="img" aria-label="Share of sessions by sport">' + parts.join('') + '</svg>';
+      : 'width:300px;height:300px;flex-shrink:0') + ';display:block" role="img" aria-label="Share of sessions by sport">' + parts.join('') + '</svg>';
     return (
       '<div style="display:flex;flex-direction:column;align-items:center;gap:12px;min-width:0">' +
       '<div style="display:flex;' + (narrow
         ? 'flex-direction:column;align-items:center;gap:12px'
-        : 'align-items:center;gap:16px;flex-wrap:wrap;justify-content:center') + ';min-width:0' + (narrow ? ';align-self:stretch' : '') + '">' +
+        : 'align-items:center;gap:24px') + ';min-width:0' + (narrow ? ';align-self:stretch' : '') + '">' +
       svg +
       '<div style="display:flex;flex-direction:column;gap:7px;min-width:0' + (narrow ? ';align-self:stretch' : '') + '">' + legend + '</div>' +
       '</div>' +
@@ -193,14 +192,21 @@
     }), colors, 'Time', 'Hours per sport', narrow);
     var pie = piePanel(rows, colors, narrow);
 
-    var cell = function (inner, last) {
-      return '<div style="padding:20px 16px;min-width:0;' +
-        (narrow ? (last ? '' : 'border-bottom:var(--border)') : (last ? '' : 'border-right:var(--border)')) +
-        '">' + inner + '</div>';
+    // Layout: the pie panel spans the full card width on top (at the 956px
+    // shell cell a three-panel row left the pie's panel far taller than the
+    // bars — wrapped legend — and dead space under the bars); the two bar
+    // charts sit side by side below it, each half width. Same panel chrome:
+    // 20/16 padding, var(--border) dividers, chartTitle captions. DOM order
+    // pie → Sessions → Time, so the narrow single-column stack reads pie
+    // first, then the bars.
+    var cell = function (inner, style) {
+      return '<div style="padding:20px 16px;min-width:0;' + (style || '') + '">' + inner + '</div>';
     };
     return (
-      '<div style="display:grid;grid-template-columns:' + (narrow ? '1fr' : '1fr 1fr 1.25fr') + '">' +
-      cell(sessions) + cell(time) + cell(pie, true) +
+      '<div style="display:grid;grid-template-columns:' + (narrow ? '1fr' : '1fr 1fr') + '">' +
+      cell(pie, narrow ? 'border-bottom:var(--border)' : 'grid-column:1/-1;border-bottom:var(--border)') +
+      cell(sessions, narrow ? 'border-bottom:var(--border)' : 'border-right:var(--border)') +
+      cell(time) +
       '</div>' +
       '<div style="border-top:var(--border)">' + exactTable(rows, colors) + '</div>'
     );
