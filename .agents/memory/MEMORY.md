@@ -74,4 +74,5 @@
 - [html-arenas post images](html-arenas-post-images.md) — public bucket avatar model, atomic create w/ rollback (incl. thrown paths), no-crop + disclosed-trim pill, ONE shared fragment across 3 surfaces (watch field-dropping remaps).
 - [html-arenas post delete](html-arenas-post-delete.md) — author-only, zero-leak fetch-first 404 (activity route fixed too); required-row cascade incl. notifications before best-effort object; ONE shared delete fragment.
 - [html-arenas delete honesty](html-arenas-delete-honesty.md) — DELETE routes use conditional delete().select(), empty→404 (race-free); fetch-first only when cascades need the row; unfollow stays idempotent.
+- [html-arenas fault injection](html-arenas-fault-injection.md) — local SUPABASE_URL proxy proves error paths fire; must-block audit closed (unlike/RSVP/leave/invite-marking/sweep); rollback order: membership before auth user.
 - [html-arenas athlete directory](html-arenas-athlete-directory.md) — shared adc- card module + profile Athletes tab; follow-change event contract; /athletes?q= is THE search target; new shared JS needs its serve route.
