@@ -47,12 +47,15 @@ button,select,input,textarea{font-family:var(--font)}
    past the viewport instead of wrapping. */
 /* Reading-measure cap: 656px track − 16px left gutter = 640px of post text
    (~45–75ch at 14–15px prose). Deliberately bites at 1280px too (744px was
-   already past a comfortable measure). justify-content:center floats the
-   feed+rail group in the freed space (same centered-column pattern as /log,
-   challenges, leaderboards); left-aligned left a /log-style dead void.
+   already past a comfortable measure). NO justify-content:center here: the
+   shared shell now caps and centers the whole body row (arenas.css
+   --shell-max), and a second, page-level centering mechanism floated the
+   feed+rail group mid-cell — the whole visual block ended up off-center on
+   the page (one centering mechanism, not two). The group sits flush against
+   the sidebar; cell slack falls to the right of the rail.
    Mobile unaffected: the shared shell collapses .main to one full-width
    column with !important at ≤768px. */
-.main{display:grid;grid-template-columns:minmax(0,656px) 300px;gap:0;align-items:start;justify-content:center}
+.main{display:grid;grid-template-columns:minmax(0,656px) 300px;gap:0;align-items:start}
 /* Symmetric gutters: the right gutter is the rail's 16px padding-left, so the
    feed column gets the same 16px on its left (desktop only — the column goes
    full-width when the shell collapses to one column on mobile). */
