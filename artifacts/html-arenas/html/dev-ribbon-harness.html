@@ -1,0 +1,56 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root{--gray-900:#111827;--gray-600:#4B5563;--gray-500:#6B7280;--gray-400:#9CA3AF;--gray-100:#F3F4F6;--gray-50:#F9FAFB;--border:1px solid #E5E7EB;--radius-lg:12px;--mono:ui-monospace,monospace;--yellow:#FFD21E;--yellow-dark:#D9AE00;}
+  body{margin:0;background:#F5F5F2;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:16px}
+  .col{max-width:916px;margin:0 auto 32px}
+  h3{font-size:13px;color:var(--gray-600);margin:18px 0 8px;font-family:var(--mono)}
+  .rib-a{width:100%;height:96px;object-fit:cover;display:block}
+  .rib-b{width:100%;aspect-ratio:6/1;object-fit:cover;display:block}
+  @media (max-width:480px){ .rib-a{height:80px} }
+</style></head><body>
+<div class="col" id="root"></div>
+<script>
+function card(ribbonHtml, label){
+  return `
+    <h3>${label}</h3>
+    <div class="challenge-card" style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:10px">
+      ${ribbonHtml}
+      <div style="padding:14px 16px;display:flex;align-items:flex-start;gap:10px">
+        <div style="width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;background:#FEF3C7;color:#92400E">🏃</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:3px">October Distance Challenge</div>
+          <div style="font-size:11px;color:var(--gray-500);display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span style="padding:1px 7px;border-radius:10px;font-size:10px;font-weight:500;background:#FEF3C7;color:#92400E">🏃 Running</span>
+            <span>·</span><span>Distance · 100 km</span><span>· You created this</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
+          <div style="font-size:11px;font-family:var(--mono);color:var(--gray-400)">12 days left</div>
+        </div>
+      </div>
+      <div style="padding:0 16px 14px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+          <span style="font-size:12px;color:var(--gray-500)">Your progress</span>
+          <span style="font-size:13px;font-weight:600;font-family:var(--mono);color:var(--gray-900)">42 / 100 km</span>
+        </div>
+        <div style="height:6px;background:var(--gray-100);border-radius:3px;overflow:hidden;margin-bottom:6px">
+          <div style="width:42%;height:100%;background:#F59E0B;border-radius:3px"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-400)">
+          <span>42% complete</span><span>8 participants</span>
+        </div>
+      </div>
+      <div style="padding:10px 16px;border-top:var(--border);display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <button style="padding:5px 12px;border-radius:7px;font-size:12px;font-weight:500;border:none;background:var(--gray-900);color:white">View leaderboard</button>
+        <button style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600)">Log activity →</button>
+      </div>
+    </div>`;
+}
+const B = '';
+document.getElementById('root').innerHTML =
+  card('<img class="rib-a" src="/html/dev-rib-3x1.webp" alt="">', 'VARIANT A — fixed height 96px desktop / 80px mobile (stored 3:1, cover-cropped again)') +
+  card('<img class="rib-b" src="/html/dev-rib-6x1.webp" alt="">', 'VARIANT B — fixed aspect 6:1 (stored 6:1, WYSIWYG; height scales with card width)') +
+  card('', 'NO IMAGE — unchanged geometry');
+</script>
+</body></html>

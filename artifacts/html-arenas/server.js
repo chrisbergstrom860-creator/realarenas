@@ -240,6 +240,10 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Shared app-shell stylesheet (public, no auth). Served at both the Replit
 // (/html) and Railway (root) base paths so the in-page href resolves in both.
+// TEMP dev-only ribbon harness (delete before commit)
+app.get(['/html/dev-ribbon-harness', '/dev-ribbon-harness', '/html/landing/dev-ribbon-harness'], (req, res) => res.sendFile(require('path').join(__dirname, 'html', 'dev-ribbon-harness.html')));
+app.get(['/html/dev-rib-3x1.webp', '/dev-rib-3x1.webp', '/html/landing/dev-rib-3x1.webp'], (req, res) => res.sendFile('/tmp/rib-3x1.webp'));
+app.get(['/html/dev-rib-6x1.webp', '/dev-rib-6x1.webp', '/html/landing/dev-rib-6x1.webp'], (req, res) => res.sendFile('/tmp/rib-6x1.webp'));
 app.get(['/html/arenas.css', '/arenas.css'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas.css'));
 });

@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "pth3RDUh4kYtW194yB07R"
+uri = "file://screenshots/ribbon-desktop.jpg"
+type = "image"
+title = "Ribbon variants — desktop (916px card)"
+description = "Variant A: fixed 96px (3:1 stored, cover-cropped to 9.5:1). Variant B: fixed 6:1 aspect (~153px, WYSIWYG). Plus no-image card."
+
+[[outputs]]
+id = "Mz21JT-UPRWZnp_lFhAyU"
+uri = "file://screenshots/ribbon-360.jpg"
+type = "image"
+title = "Ribbon variants — 360px (~332px card)"
+description = "Variant A: fixed 80px (4.15:1 displayed). Variant B: 6:1 (~55px). Plus no-image card."
