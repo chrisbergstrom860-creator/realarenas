@@ -25,11 +25,12 @@
  */
 'use strict';
 
-const VERSION = 'v6';
+const VERSION = 'v7';
 const RUNTIME_CACHE = 'arenas-runtime-' + VERSION;
 const AVATAR_CACHE = 'arenas-avatars-' + VERSION;
+const POST_IMAGE_CACHE = 'arenas-post-images-' + VERSION;
 const FONT_CACHE = 'arenas-fonts-' + VERSION;
-const KNOWN_CACHES = [RUNTIME_CACHE, AVATAR_CACHE, FONT_CACHE];
+const KNOWN_CACHES = [RUNTIME_CACHE, AVATAR_CACHE, POST_IMAGE_CACHE, FONT_CACHE];
 
 // Base path of the app: '' on realarenas.com (Railway, scope "/"),
 // '/html' on the Replit preview (scope "/html/"). Derived from where this
@@ -187,6 +188,14 @@ self.addEventListener('fetch', (event) => {
       url.pathname.indexOf('/storage/v1/object/public/avatars/') === 0
     ) {
       event.respondWith(cacheFirstVersioned(request, AVATAR_CACHE, 80));
+    } else if (
+      SUPABASE_HOST &&
+      url.hostname === SUPABASE_HOST &&
+      url.pathname.indexOf('/storage/v1/object/public/post-images/') === 0
+    ) {
+      // Post photos: same versioned-filename immutability as avatars
+      // (posts/{userId}/{ts}.webp — a new upload is a new URL).
+      event.respondWith(cacheFirstVersioned(request, POST_IMAGE_CACHE, 120));
     } else if (url.hostname === 'fonts.gstatic.com') {
       event.respondWith(cacheFirstVersioned(request, FONT_CACHE, 30));
     }

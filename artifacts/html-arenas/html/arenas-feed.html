@@ -30,6 +30,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <script src="/html/arenas-club-create.js"></script>
 <script src="/html/arenas-stat-tiles.js"></script>
 <script src="/html/arenas-activity-card.js"></script>
+<script src="/html/arenas-post-image.js"></script>
 <script src="/html/arenas-time.js"></script>
 <style>
 button,select,input,textarea{font-family:var(--font)}
@@ -272,6 +273,13 @@ button,select,input,textarea{font-family:var(--font)}
 .composer-post-btn{padding:6px 16px;border-radius:7px;font-size:13px;font-weight:600;background:var(--gray-900);color:white;border:none;cursor:pointer;transition:all .13s}
 .composer-post-btn:hover:not(:disabled){background:var(--gray-700)}
 .composer-post-btn:disabled{opacity:.4;cursor:default}
+.composer-photo-row{display:flex}
+.c-photo-chip{padding:4px 11px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer;transition:all .12s}
+.c-photo-chip:hover{border-color:var(--gray-400)}
+.composer-photo-preview{position:relative;margin-top:8px;max-width:220px}
+.composer-photo-preview img{display:block;width:100%;max-height:160px;object-fit:cover;border-radius:8px;border:var(--border)}
+.composer-photo-remove{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;border:none;background:rgba(17,24,39,.7);color:white;font-size:11px;line-height:1;cursor:pointer}
+.composer-photo-remove:hover{background:rgba(17,24,39,.9)}
 .post-note-card{background:white;padding:16px 20px;animation:fade-up .2s ease both}
 .pn-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .pn-av{width:38px;height:38px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--gray-900);flex-shrink:0}
@@ -419,6 +427,14 @@ button,select,input,textarea{font-family:var(--font)}
             <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'injured')">🤕 Injured</button>
             <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'motivated')">🔥 Motivated</button>
           </div>
+          <div class="composer-photo-row">
+            <button type="button" class="c-photo-chip" id="composer-photo-btn" onclick="document.getElementById('composer-photo-input').click()">📷 Photo</button>
+            <input type="file" id="composer-photo-input" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="composerPhotoPicked(this)">
+          </div>
+          <div class="composer-photo-preview" id="composer-photo-preview" style="display:none">
+            <img id="composer-photo-img" alt="Photo preview">
+            <button type="button" class="composer-photo-remove" onclick="removeComposerPhoto()" aria-label="Remove photo">✕</button>
+          </div>
         </div>
         <div class="composer-footer">
           <span class="char-count" id="char-count">280</span>
@@ -551,6 +567,49 @@ function showToast(msg) {
 const POSTS_API = window.BASE + '/api/posts';
 let composerSport = null;
 let composerFeeling = null;
+let composerImageFile = null;
+
+// ── COMPOSER PHOTO ──
+// Pick → local preview (object URL) with ✕ remove → Post sends multipart.
+// The 5 MB server cap is pre-checked client-side for a faster error; the
+// server remains the authority (413).
+function composerPhotoPicked(input) {
+  const file = input.files && input.files[0];
+  input.value = ''; // re-picking the same file must fire change again
+  if (!file) return;
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
+    showToast('That file is not a supported image — upload a JPG, PNG or WebP');
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    showToast('Image is too large — the maximum is 5 MB');
+    return;
+  }
+  if (composerImageFile) removeComposerPhoto();
+  composerImageFile = file;
+  const img = document.getElementById('composer-photo-img');
+  img.src = URL.createObjectURL(file);
+  document.getElementById('composer-photo-preview').style.display = 'block';
+  document.getElementById('composer-bottom').style.display = 'block';
+  syncComposerPostBtn();
+}
+
+function removeComposerPhoto() {
+  composerImageFile = null;
+  const img = document.getElementById('composer-photo-img');
+  if (img.src) { try { URL.revokeObjectURL(img.src); } catch (err) {} }
+  img.removeAttribute('src');
+  document.getElementById('composer-photo-preview').style.display = 'none';
+  syncComposerPostBtn();
+}
+
+// Post is enabled by text OR a chosen photo (image-without-text is a valid
+// post).
+function syncComposerPostBtn() {
+  const btn = document.getElementById('composer-post-btn');
+  const val = document.getElementById('composer-input').value;
+  btn.disabled = val.trim().length === 0 && !composerImageFile;
+}
 
 function escapeHtml(str) {
   return String(str)
@@ -567,8 +626,8 @@ function updateComposer(val) {
   const counter = document.getElementById('char-count');
   const remaining = 280 - val.length;
 
-  bottom.style.display = val.length > 0 ? 'block' : 'none';
-  btn.disabled = val.trim().length === 0;
+  bottom.style.display = (val.length > 0 || composerImageFile) ? 'block' : 'none';
+  btn.disabled = val.trim().length === 0 && !composerImageFile;
   counter.textContent = remaining;
   counter.className = 'char-count' + (remaining < 50 ? ' warning' : '') + (remaining < 20 ? ' danger' : '');
 
@@ -600,6 +659,7 @@ function selectFeeling(btn, feeling) {
 }
 
 function cancelPost() {
+  removeComposerPhoto();
   document.getElementById('composer-input').value = '';
   document.getElementById('composer-input').style.height = 'auto';
   document.getElementById('composer-bottom').style.display = 'none';
@@ -615,18 +675,33 @@ function cancelPost() {
 
 async function submitPost() {
   const content = document.getElementById('composer-input').value.trim();
-  if (!content) return;
+  if (!content && !composerImageFile) return;
 
   const btn = document.getElementById('composer-post-btn');
   btn.textContent = 'Posting…';
   btn.disabled = true;
 
   try {
-    const response = await fetch(POSTS_API + '/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content, sport: composerSport, feeling: composerFeeling })
-    });
+    // Text-only posts keep the original JSON contract; a photo switches the
+    // request to multipart (one atomic create — the server uploads the
+    // object first and rolls it back if the row insert fails, so there is
+    // never a post stuck waiting on a failed upload).
+    let request;
+    if (composerImageFile) {
+      const fd = new FormData();
+      fd.append('content', content);
+      if (composerSport) fd.append('sport', composerSport);
+      if (composerFeeling) fd.append('feeling', composerFeeling);
+      fd.append('image', composerImageFile);
+      request = { method: 'POST', body: fd };
+    } else {
+      request = {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, sport: composerSport, feeling: composerFeeling })
+      };
+    }
+    const response = await fetch(POSTS_API + '/create', request);
     const data = await response.json();
 
     if (data.error) {
@@ -677,7 +752,8 @@ function postCardHtml(post, opts) {
         ${post.sport ? `<div class="pn-sport-tag" style="${SPORT_COLORS[post.sport] || ''}">${SPORT_EMOJIS[post.sport] || ''}</div>` : ''}
       </div>
       ${post.feeling ? `<div class="pn-feeling">${FEELING_LABELS[post.feeling] || ''}</div>` : ''}
-      <div class="pn-content">${escapeHtml(post.content)}</div>
+      ${post.content ? `<div class="pn-content">${escapeHtml(post.content)}</div>` : ''}
+      ${window.postImageHtml(post)}
       <div class="pn-footer">
         <button class="pn-action${o.liked ? ' liked' : ''}" onclick="likePost(this,'${post.id}')">👍 ${o.likes || 0} kudos</button>
         <span style="margin-left:auto;font-size:11px;color:var(--gray-400)">Training note</span>

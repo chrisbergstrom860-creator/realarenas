@@ -49,6 +49,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <script src="/html/arenas-time.js"></script>
 <script src="/html/arenas-stat-tiles.js"></script>
 <script src="/html/arenas-activity-card.js"></script>
+<script src="/html/arenas-post-image.js"></script>
 <script src="/html/arenas-overlay.js"></script>
 <script src="/html/arenas-crop.js"></script>
 <script src="/html/arenas-event-form.js"></script>
@@ -3088,10 +3089,15 @@ document.addEventListener('DOMContentLoaded', function () {
         if (item.type === 'announcement') {
           badge = '<span style="margin-left:auto;font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;background:var(--yellow);color:var(--gray-900);border:0.5px solid var(--yellow-dark);flex-shrink:0">📣 Coach</span>';
           metaLabel = 'Club ' + esc(item.role || 'coach');
-          body = '<div style="padding:0 14px 10px;font-size:13px;color:var(--gray-900);line-height:1.6">' + esc(item.content) + '</div>';
+          // Shared post-image fragment (arenas-post-image.js) — same
+          // renderer as the main feed's post cards. The extra wrapper adds
+          // this flush card's 14px inset.
+          body = (item.content ? '<div style="padding:0 14px 10px;font-size:13px;color:var(--gray-900);line-height:1.6">' + esc(item.content) + '</div>' : '') +
+            (window.postImageHtml(item) ? '<div style="padding:0 14px 10px">' + window.postImageHtml(item) + '</div>' : '');
         } else if (item.type === 'post') {
           metaLabel = 'posted a note';
-          body = '<div style="padding:0 14px 10px;font-size:13px;color:var(--gray-900);line-height:1.6">' + esc(item.content) + '</div>';
+          body = (item.content ? '<div style="padding:0 14px 10px;font-size:13px;color:var(--gray-900);line-height:1.6">' + esc(item.content) + '</div>' : '') +
+            (window.postImageHtml(item) ? '<div style="padding:0 14px 10px">' + window.postImageHtml(item) + '</div>' : '');
         } else if (item.type === 'activity') {
           // xs = this card row's badge grammar (matches 📣 Coach / 🎟️ RSVP);
           // unknown sport now renders the neutral gray pill, not running's colors.

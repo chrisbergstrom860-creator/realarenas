@@ -278,6 +278,10 @@ app.get(['/html/arenas-activity-card.js', '/arenas-activity-card.js'], (req, res
   res.sendFile(path.join(HTML, 'arenas-activity-card.js'));
 });
 
+app.get(['/html/arenas-post-image.js', '/arenas-post-image.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-post-image.js'));
+});
+
 app.get(['/html/arenas-stat-tiles.js', '/arenas-stat-tiles.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-stat-tiles.js'));
 });
@@ -1591,27 +1595,89 @@ function injectNamedData(html, varName, dataObj) {
 // ── POSTS API (training notes) ──
 // Mounted under BASE so the shared proxy routes them to this artifact
 // (the separate api-server owns the bare "/api" path).
-app.post(BASE + '/api/posts/create', requireAuth, async (req, res) => {
-  const { content, sport, feeling } = req.body;
-  if (!content || content.trim().length === 0) {
-    return res.json({ error: 'Content is required' });
-  }
-  if (content.length > 280) {
-    return res.json({ error: 'Post must be 280 characters or less' });
-  }
-  if (!supabaseAdmin) return res.json({ error: 'Server is not configured for posting' });
-  const { data, error } = await supabaseAdmin
-    .from('posts')
-    .insert({
-      user_id: req.user.id,
-      content: content.trim(),
-      sport: sport || null,
-      feeling: feeling || null
-    })
-    .select()
-    .single();
-  if (error) return res.json({ error: error.message });
-  res.json({ success: true, post: data });
+// Create a post — accepts BOTH shapes through one route: JSON (text-only,
+// the original contract) and multipart/form-data with an optional 'image'
+// file. Atomic: the image is processed and uploaded FIRST, the row inserted
+// with image_url; if the insert fails the just-uploaded object is rolled
+// back. There is never a created post waiting on a failed upload, and never
+// an orphaned object referenced by nothing.
+app.post(BASE + '/api/posts/create', requireAuth, (req, res) => {
+  postImageUploadSingle(req, res, async () => {
+    const { content, sport, feeling } = req.body || {};
+    const text = (content || '').trim();
+    const hasImage = !!(req.file && req.file.buffer);
+    // Image-without-text is a valid post; empty-both is not.
+    if (!text && !hasImage) {
+      return res.json({ error: 'Content is required' });
+    }
+    if (text.length > 280) {
+      return res.json({ error: 'Post must be 280 characters or less' });
+    }
+    if (!supabaseAdmin) return res.json({ error: 'Server is not configured for posting' });
+
+    const lockKey = 'post:' + req.user.id;
+    if (hasImage && avatarUploadsInFlight.has(lockKey)) {
+      return res.status(429).json({ error: 'An upload is already in progress — give it a second' });
+    }
+    if (hasImage) avatarUploadsInFlight.add(lockKey);
+    let imageUrl = null;
+    let inserted = false;
+    try {
+      let objectPath = null;
+      if (hasImage) {
+        let meta;
+        try { meta = await sharp(req.file.buffer).metadata(); } catch (err) { meta = null; }
+        if (!meta || !['jpeg', 'png', 'webp'].includes(meta.format)) {
+          return res.status(400).json({ error: 'That file is not a supported image — upload a JPG, PNG or WebP' });
+        }
+        // .rotate() applies the EXIF orientation then Sharp drops ALL
+        // metadata on re-encode (EXIF/GPS stripped). fit:'inside' preserves
+        // the source aspect ratio — no crop, no upscale.
+        const webp = await sharp(req.file.buffer).rotate()
+          .resize(1440, 1440, { fit: 'inside', withoutEnlargement: true })
+          .webp({ quality: 82 }).toBuffer();
+        objectPath = 'posts/' + req.user.id + '/' + Date.now() + '.webp';
+        const { error: upErr } = await supabaseAdmin.storage
+          .from(POST_IMAGE_BUCKET)
+          .upload(objectPath, webp, { contentType: 'image/webp', upsert: false });
+        if (upErr) {
+          console.log('Post image storage upload error:', upErr.message);
+          return res.status(500).json({ error: 'Could not store the image — please try again' });
+        }
+        imageUrl = supabaseAdmin.storage.from(POST_IMAGE_BUCKET).getPublicUrl(objectPath).data.publicUrl;
+      }
+      const { data, error } = await supabaseAdmin
+        .from('posts')
+        .insert({
+          user_id: req.user.id,
+          content: text,
+          sport: sport || null,
+          feeling: feeling || null,
+          image_url: imageUrl
+        })
+        .select()
+        .single();
+      if (error) {
+        // Row insert failed after the object went up — roll the object back
+        // so it never becomes an orphan nobody references.
+        if (imageUrl) await deletePostImageObject(imageUrl, req.user.id);
+        return res.json({ error: error.message });
+      }
+      inserted = true;
+      res.json({ success: true, post: data });
+    } catch (err) {
+      console.log('Post create error:', err.message);
+      // Compensation must also cover THROWN failures after the upload (SDK
+      // or network exceptions), not just returned insert errors — otherwise
+      // the uploaded object is orphaned.
+      if (imageUrl && !inserted) {
+        try { await deletePostImageObject(imageUrl, req.user.id); } catch (e2) { /* best-effort */ }
+      }
+      res.status(500).json({ error: 'Could not create the post' });
+    } finally {
+      if (hasImage) avatarUploadsInFlight.delete(lockKey);
+    }
+  });
 });
 
 app.get(BASE + '/api/posts', requireAuth, async (req, res) => {
@@ -2919,7 +2985,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
     // post_likes has no `id` column — it is keyed by (post_id, user_id).
     const { data: posts } = await supabaseAdmin
       .from('posts')
-      .select('id, user_id, content, sport, created_at')
+      .select('id, user_id, content, sport, image_url, created_at')
       .in('user_id', safeIds)
       .order('created_at', { ascending: false })
       .limit(20);
@@ -2945,6 +3011,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
         role: roleMap[p.user_id],
         content: p.content,
         sport: p.sport,
+        image_url: p.image_url || null,
         likeCount: postLikes.length,
         likedByMe: postLikes.some((l) => l.user_id === req.user.id),
         timestamp: p.created_at
@@ -4981,7 +5048,7 @@ async function buildFeedPosts(limit, currentUserId) {
 
   const { data: posts, error } = await supabaseAdmin
     .from('posts')
-    .select('id, content, sport, feeling, created_at, user_id, post_likes (count), post_comments (count)')
+    .select('id, content, sport, feeling, image_url, created_at, user_id, post_likes (count), post_comments (count)')
     .in('user_id', feedUserIds)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -5019,6 +5086,7 @@ async function buildFeedPosts(limit, currentUserId) {
     content: p.content,
     sport: p.sport,
     feeling: p.feeling,
+    image_url: p.image_url || null,
     created_at: p.created_at,
     user_id: p.user_id,
     authorName: (profileMap[p.user_id] && profileMap[p.user_id].name) || 'Athlete',
@@ -7906,7 +7974,8 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
     }
 
     // 3c. User-owned rows everywhere else.
-    const { data: userPosts } = await supabaseAdmin.from('posts').select('id').eq('user_id', uid);
+    // Paged: accounts with >1000 posts must not leave rows/objects behind.
+    const userPosts = await fetchAllRows('posts', q => q.eq('user_id', uid), 'id, image_url');
     if (idsOf(userPosts).length) {
       await del('post_likes', q => q.in('post_id', idsOf(userPosts)));
       await del('post_comments', q => q.in('post_id', idsOf(userPosts)));
@@ -7914,6 +7983,11 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
     await del('post_likes', q => q.eq('user_id', uid));
     await del('post_comments', q => q.eq('user_id', uid));
     if (idsOf(userPosts).length) await del('posts', q => q.in('id', idsOf(userPosts)));
+    // Rows first, storage objects second — best-effort, never blocking
+    // (same order as event covers).
+    for (const p of (userPosts || [])) {
+      if (p.image_url) await deletePostImageObject(p.image_url, uid);
+    }
 
     const { data: userEvents } = await supabaseAdmin.from('events').select('id, image_path').eq('created_by', uid);
     if (idsOf(userEvents).length) {
@@ -8025,6 +8099,74 @@ const EVENT_IMAGE_BUCKET = 'event-images';
     console.log('Event image bucket setup error:', err.message);
   }
 })();
+
+// ── POST IMAGES (Supabase Storage, PUBLIC bucket) ──
+// Feed post photos use the AVATAR model, not the event model: posts have no
+// per-post visibility gate (followers see them in the feed, club-mates in
+// club feeds), so there is nothing to enforce at the object layer. Public
+// bucket, CDN-served public URL stored in posts.image_url, timestamped
+// unguessable filenames posts/{userId}/{ts}.webp, SW cache-first on the
+// versioned path. Unlike event covers (banner slots, 3:1 cover-crop), a post
+// photo is content: fit:'inside' preserves the source aspect ratio — the
+// stored file is NEVER cropped.
+const POST_IMAGE_BUCKET = 'post-images';
+(async () => {
+  if (!supabaseAdmin) return;
+  try {
+    const { error } = await supabaseAdmin.storage.createBucket(POST_IMAGE_BUCKET, { public: true });
+    if (error && !/already exists|duplicate/i.test(error.message || '')) {
+      console.log('Post image bucket setup error:', error.message);
+    }
+  } catch (err) {
+    console.log('Post image bucket setup error:', err.message);
+  }
+})();
+
+// Public URL → object path, prefix-checked against the owning user (defense
+// in depth: a corrupted pointer can never delete another user's object).
+function postImagePathFromUrl(url, userId) {
+  if (!url || typeof url !== 'string') return null;
+  const marker = `/storage/v1/object/public/${POST_IMAGE_BUCKET}/`;
+  const i = url.indexOf(marker);
+  if (i === -1) return null;
+  let p;
+  try {
+    p = decodeURIComponent(url.slice(i + marker.length).split('?')[0]);
+  } catch (err) {
+    return null;
+  }
+  return p.startsWith('posts/' + userId + '/') ? p : null;
+}
+
+// Best-effort object cleanup — never blocks or fails the request running it.
+async function deletePostImageObject(imageUrl, userId) {
+  if (!supabaseAdmin) return;
+  const objectPath = postImagePathFromUrl(imageUrl, userId);
+  if (!objectPath) return;
+  try {
+    const { error } = await supabaseAdmin.storage.from(POST_IMAGE_BUCKET).remove([objectPath]);
+    if (error) console.log('Post image cleanup failed (ignored):', error.message);
+  } catch (err) {
+    console.log('Post image cleanup failed (ignored):', err.message);
+  }
+}
+
+// Multer stage for post images: same memory storage + 5 MiB cap + 413/400
+// mapping as avatars, field name 'image'. Multer only parses
+// multipart/form-data — a JSON create request passes straight through with
+// req.body already parsed by express.json, so ONE route serves both shapes.
+function postImageUploadSingle(req, res, next) {
+  avatarUpload.single('image')(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: 'Image is too large — the maximum is 5 MB' });
+      }
+      console.log('Post image upload parse error:', err.message);
+      return res.status(400).json({ error: 'Could not read the uploaded file' });
+    }
+    next();
+  });
+}
 
 // The version token clients see: the timestamp segment of the stored object
 // path. Same versioned-filename cache logic the avatars rely on — replacing
@@ -9016,7 +9158,7 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
     const coachIds = memberRows.filter((m) => m.role === 'admin' || m.role === 'coach').map((m) => m.user_id);
     const { data: announcements } = await supabaseAdmin
       .from('posts')
-      .select('id, user_id, content, created_at')
+      .select('id, user_id, content, image_url, created_at')
       .in('user_id', coachIds.length ? coachIds : [PLACEHOLDER])
       .order('created_at', { ascending: false })
       .limit(5);
@@ -9035,6 +9177,7 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
         coachAvatarUrl: (profileMap[a.user_id] && profileMap[a.user_id].avatar_url) || null,
         role: roleOf(a.user_id),
         content: a.content,
+        image_url: a.image_url || null,
         createdAt: a.created_at,
         likeCount: likes.length,
         likedByMe: likes.some((l) => l.user_id === userId)
