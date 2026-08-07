@@ -2925,6 +2925,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var cfFilter = 'all';
     var cfFeedItems = [];
+    var cfViewerId = null;
 
     window.setCfFilter = function (el, type) {
       var chips = document.querySelectorAll('.cf-filter');
@@ -3012,6 +3013,7 @@ document.addEventListener('DOMContentLoaded', function () {
           return;
         }
         cfFeedItems = result.feed || [];
+        cfViewerId = result.viewerId || null;
         renderCfSidebar(result.memberCount != null ? result.memberCount : data.memberCount);
         renderClubFeed();
       } catch (err) {
@@ -3133,16 +3135,23 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         var canLike = item.type === 'post' || item.type === 'announcement';
+        // Shared author-only delete (arenas-post-image.js) — same fragment as
+        // the main feed, no second implementation. Badge already sits at
+        // margin-left:auto; push right only when there is no badge.
+        var delBtn = canLike
+          ? window.postDeleteButtonHtml(item, cfViewerId, { pushRight: !badge })
+          : '';
         var likeBtn = canLike
           ? '<button onclick="toggleClubFeedLike(\'' + esc(item.id) + '\',this)" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:7px;font-size:12px;border:' + (item.likedByMe ? '0.5px solid #E6B800' : 'var(--border)') + ';background:' + (item.likedByMe ? 'var(--yellow-light)' : 'white') + ';color:' + (item.likedByMe ? '#633806' : 'var(--gray-600)') + ';cursor:pointer">👍 <span>' + (parseInt(item.likeCount, 10) || 0) + '</span></button>'
           : '';
 
-        return '<div class="cf-card" style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:0 0 10px;overflow:hidden">'
+        return '<div class="cf-card"' + (delBtn ? ' data-post-root' : '') + ' style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:0 0 10px;overflow:hidden">'
           + '<div style="display:flex;align-items:center;gap:10px;padding:12px 14px 8px">'
           + window.avatarHtml(item.avatarUrl || null, item.name || 'Member', '', 'width:36px;height:36px;border-radius:50%;' + avStyle + ';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;overflow:hidden')
           + '<div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">' + safeName + '</div>'
           + '<div style="font-size:11px;color:var(--gray-400)">' + metaLabel + '</div></div>'
           + badge
+          + delBtn
           + '</div>'
           + body
           + '<div style="padding:8px 14px;border-top:var(--border);display:flex;align-items:center;gap:6px">'

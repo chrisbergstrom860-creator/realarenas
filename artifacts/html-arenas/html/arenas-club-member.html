@@ -534,12 +534,13 @@ function showToast(msg) {
             '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);font-size:12px;font-weight:600">📣 Coach announcements</div>' +
             r.announcements.map(function(a) {
               return '' +
-                '<div style="padding:12px 14px;border-bottom:var(--border)">' +
+                '<div data-post-root style="padding:12px 14px;border-bottom:var(--border)">' +
                   '<div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">' +
                     window.avatarHtml(a.coachAvatarUrl || null, a.coachName || 'Coach', '', 'width:32px;height:32px;border-radius:50%;background:var(--yellow);color:var(--gray-900);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0') +
                     '<div style="font-size:12px;font-weight:600">' + esc(a.coachName) + '</div>' +
                     '<div style="font-size:9px;font-weight:600;padding:2px 8px;border-radius:20px;background:var(--yellow);color:var(--gray-900);border:0.5px solid var(--yellow-dark)">' + (a.role === 'admin' ? 'Admin' : 'Coach') + '</div>' +
                     '<div style="font-size:10px;color:var(--gray-400);margin-left:auto">' + timeAgo(a.createdAt) + '</div>' +
+                    window.postDeleteButtonHtml(a, r.viewerId) +
                   '</div>' +
                   (a.content ? '<div style="font-size:13px;color:var(--gray-900);line-height:1.6;margin-bottom:8px">' + esc(a.content) + '</div>' : '') +
                   window.postImageHtml(a) +

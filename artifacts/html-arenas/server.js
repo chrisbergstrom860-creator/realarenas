@@ -1775,6 +1775,50 @@ app.post(BASE + '/api/posts/:id/comment', requireAuth, async (req, res) => {
   res.json({ success: true, comment: data });
 });
 
+// Delete one of the viewer's own posts. Author only — posts have no club_id,
+// so there is no club context giving a manager authority (matches the
+// activity rule, not the event one).
+// Zero-leak: the row is fetched first and a non-author answers byte-identically
+// to a nonexistent id (404 "Post not found") — NOT the filtered-delete-
+// returns-success shape.
+// Cascade order: likes → comments → notifications → post row → image object.
+// Row before object, best-effort object cleanup (same as avatars/events), so
+// a storage failure can never block the delete.
+app.delete(BASE + '/api/posts/:id', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server is not configured for posting' });
+  try {
+    const { data: post } = await supabaseAdmin
+      .from('posts')
+      .select('id, user_id, image_url')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    if (!post || post.user_id !== req.user.id) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    const { error: likeErr } = await supabaseAdmin.from('post_likes').delete().eq('post_id', post.id);
+    if (likeErr) return res.status(500).json({ error: 'Could not delete the post' });
+    const { error: comErr } = await supabaseAdmin.from('post_comments').delete().eq('post_id', post.id);
+    if (comErr) return res.status(500).json({ error: 'Could not delete the post' });
+    // Like/comment notifications reference the post via entity_id. This is a
+    // required row cascade like likes/comments — a returned error blocks the
+    // delete (only the storage object cleanup below is best-effort).
+    const { error: notifErr } = await supabaseAdmin.from('notifications').delete()
+      .eq('entity_id', post.id)
+      .in('type', ['like', 'comment']);
+    if (notifErr) {
+      console.log('Post notification sweep failed:', notifErr.message);
+      return res.status(500).json({ error: 'Could not delete the post' });
+    }
+    const { error } = await supabaseAdmin.from('posts').delete().eq('id', post.id);
+    if (error) return res.status(500).json({ error: 'Could not delete the post' });
+    if (post.image_url) await deletePostImageObject(post.image_url, req.user.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.log('Post delete error:', err.message);
+    res.status(500).json({ error: 'Could not delete the post' });
+  }
+});
+
 // ── FOLLOWS API ──
 // Follow a user. Idempotent — a duplicate follow (unique-constraint 23505) is
 // treated as success so the button stays consistent.
@@ -2199,14 +2243,24 @@ app.post(BASE + '/api/activities/:id/like', requireAuth, async (req, res) => {
   res.json({ liked: true });
 });
 
-// Delete one of the viewer's own activities (the user_id filter enforces
-// ownership even though service role bypasses RLS).
+// Delete one of the viewer's own activities. Zero-leak: fetch first — a
+// non-author and a nonexistent id answer byte-identically (404 "Activity not
+// found"). The old shape (filtered delete + unconditional success) told a
+// non-author their delete worked when zero rows matched.
 app.delete(BASE + '/api/activities/:id', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured' });
+  const { data: row } = await supabaseAdmin
+    .from('activities')
+    .select('id, user_id')
+    .eq('id', req.params.id)
+    .maybeSingle();
+  if (!row || row.user_id !== req.user.id) {
+    return res.status(404).json({ error: 'Activity not found' });
+  }
   const { error } = await supabaseAdmin
     .from('activities')
     .delete()
-    .eq('id', req.params.id)
+    .eq('id', row.id)
     .eq('user_id', req.user.id);
   if (error) return res.json({ error: error.message });
   res.json({ success: true });
@@ -2963,12 +3017,18 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
       .limit(20);
     const postIds = (posts || []).map((p) => p.id);
     let likes = [];
+    let commentRows = [];
     if (postIds.length) {
       const { data: likeRows } = await supabaseAdmin
         .from('post_likes')
         .select('post_id, user_id')
         .in('post_id', postIds);
       likes = likeRows || [];
+      const { data: comRows } = await supabaseAdmin
+        .from('post_comments')
+        .select('post_id')
+        .in('post_id', postIds);
+      commentRows = comRows || [];
     }
     (posts || []).forEach((p) => {
       const postLikes = likes.filter((l) => l.post_id === p.id);
@@ -2985,6 +3045,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
         sport: p.sport,
         image_url: p.image_url || null,
         likeCount: postLikes.length,
+        commentCount: commentRows.filter((c) => c.post_id === p.id).length,
         likedByMe: postLikes.some((l) => l.user_id === req.user.id),
         timestamp: p.created_at
       });
@@ -3130,7 +3191,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
     }
 
     feed.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    res.json({ feed: feed.slice(0, 30), memberCount: (members || []).length });
+    res.json({ feed: feed.slice(0, 30), memberCount: (members || []).length, viewerId: req.user.id });
   } catch (err) {
     console.log('Club feed error:', err.message);
     res.json({ feed: [], memberCount: 0 });
@@ -9141,10 +9202,16 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
       .select('post_id, user_id')
       .in('post_id', annIds.length ? annIds : [PLACEHOLDER]);
     const likeRows = annLikes || [];
+    const { data: annComments } = await supabaseAdmin
+      .from('post_comments')
+      .select('post_id')
+      .in('post_id', annIds.length ? annIds : [PLACEHOLDER]);
+    const annCommentRows = annComments || [];
     const announcementsOut = annRows.map((a) => {
       const likes = likeRows.filter((l) => l.post_id === a.id);
       return {
         id: a.id,
+        userId: a.user_id,
         coachName: nameOf(a.user_id),
         coachAvatarUrl: (profileMap[a.user_id] && profileMap[a.user_id].avatar_url) || null,
         role: roleOf(a.user_id),
@@ -9152,6 +9219,7 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
         image_url: a.image_url || null,
         createdAt: a.created_at,
         likeCount: likes.length,
+        commentCount: annCommentRows.filter((c) => c.post_id === a.id).length,
         likedByMe: likes.some((l) => l.user_id === userId)
       };
     });
@@ -9281,7 +9349,8 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
       events: eventsOut,
       challenges: challengesOut,
       roster,
-      myRole: myMembership.role
+      myRole: myMembership.role,
+      viewerId: userId
     });
   } catch (err) {
     console.log('Club member-home error:', err.message);

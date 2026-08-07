@@ -741,8 +741,9 @@ function postCardHtml(post, opts) {
   const avatarUrl = ('avatarUrl' in o) ? o.avatarUrl : (self.avatar_url || null);
   const avStyle = o.avStyle || '';
   const meta = o.meta || 'Just now';
+  const viewerId = (window.ARENAS_DATA && window.ARENAS_DATA.userId) || null;
   return `
-    <div class="post-note-card">
+    <div class="post-note-card" data-post-root>
       <div class="pn-head">
         ${window.avatarHtml(avatarUrl, name, 'pn-av', avStyle)}
         <div>
@@ -750,6 +751,7 @@ function postCardHtml(post, opts) {
           <div class="pn-meta">${escapeHtml(meta)}</div>
         </div>
         ${post.sport ? `<div class="pn-sport-tag" style="${SPORT_COLORS[post.sport] || ''}">${SPORT_EMOJIS[post.sport] || ''}</div>` : ''}
+        ${window.postDeleteButtonHtml(post, viewerId, { pushRight: !post.sport })}
       </div>
       ${post.feeling ? `<div class="pn-feeling">${FEELING_LABELS[post.feeling] || ''}</div>` : ''}
       ${post.content ? `<div class="pn-content">${escapeHtml(post.content)}</div>` : ''}
