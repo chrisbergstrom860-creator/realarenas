@@ -12,7 +12,9 @@ The app shell body row (sidebar + main) is capped and centered via a 4-column gr
 **How to apply:**
 - Mobile collapse (`body:has(.bottom-nav)` ≤768px) must reset `.app > .main{grid-column:1}` — column-3 placement on a 1-col grid spawns implicit columns.
 - club-invite carries an inline shell copy that overrides the linked arenas.css by cascade order — mirror any shell change there (incl. its own 768px reset and `--shell-max` in its `:root`; verify-css-vars demands the var be defined in-page).
-- Pages that put max-width on `.main` itself (log/billing 820, challenges) center INSIDE the capped cell — that's per-page width, not a bug.
+- Pages that put max-width on `.main` itself (log/billing 820, challenges) center INSIDE the capped cell — that's per-page width, not a bug (user may still decide to left-anchor them; measured report delivered Aug 2026).
+- **One centering mechanism only**: feed's `justify-content:center` on `.main` was REMOVED (Aug 2026) — page-level centering inside the centered shell cell stacked two mechanisms and floated the group mid-cell (right void ~2x left at 1920). Feed group now sits flush against the sidebar; cell slack falls right of the rail (230 left vs 514 right at 1920 — accepted, no compensating offset). Don't re-add page-level centering to full-cell grid pages.
+- Events rail's 16px `.sidebar-col` padding makes its right void LOOK bigger (246 vs 230 at 1920) — optical, not structural; shell gutters are exactly symmetric.
 
 ## Deferred (user-accepted)
 - **Topbar seam**: `.topbar-logo` border-right sits at x=220 while the centered sidebar starts at the gutter (x=230 @1920) — 10px misalignment, plus sidebar's right border no longer aligns with anything in the topbar. Session 2 = topbar inner centering.
