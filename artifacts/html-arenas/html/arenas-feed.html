@@ -258,7 +258,13 @@ button,select,input,textarea{font-family:var(--font)}
 .composer-input:focus{border-color:var(--gray-400);box-shadow:0 0 0 3px rgba(107,114,128,.08);min-height:80px}
 .composer-input::placeholder{color:var(--gray-400)}
 .composer-bottom{margin-top:10px;padding-top:10px;border-top:1px solid #F0DE96}
-.composer-options{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.composer-options{display:flex;flex-direction:column;margin-bottom:10px}
+/* Section dividers reuse the textarea rule verbatim (.composer-bottom):
+   1px solid #F0DE96, 10px margin above + 10px padding below the line. */
+.composer-sec+.composer-sec{border-top:1px solid #F0DE96;margin-top:10px;padding-top:10px}
+/* Section labels match the log form's quiet field-label register
+   (11px / 600 / var(--gray-600)) so they don't compete with the chips. */
+.composer-sec-label{font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:6px}
 .composer-sport-chips,.composer-feelings{display:flex;gap:5px;flex-wrap:wrap}
 .c-sport-chip,.c-feel-chip{padding:4px 11px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer;transition:all .12s}
 .c-sport-chip:hover,.c-feel-chip:hover{border-color:var(--gray-400)}
@@ -400,7 +406,9 @@ button,select,input,textarea{font-family:var(--font)}
       </div>
       <div class="composer-bottom" id="composer-bottom" style="display:none">
         <div class="composer-options">
-          <div class="composer-sport-chips" id="composer-sports"></div>
+          <div class="composer-sec">
+            <div class="composer-sec-label">Sport</div>
+            <div class="composer-sport-chips" id="composer-sports"></div>
           <script>
           // Composer sport chips rendered from the sports registry. Session ②:
           // like the filter pills, the chips are the viewer's own profile
@@ -421,12 +429,19 @@ button,select,input,textarea{font-family:var(--font)}
             }).join('');
           })();
           </script>
-          <div class="composer-feelings">
-            <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'great')">💪 Feeling great</button>
-            <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'tired')">😴 Tired</button>
-            <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'injured')">🤕 Injured</button>
-            <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'motivated')">🔥 Motivated</button>
           </div>
+          <div class="composer-sec">
+            <div class="composer-sec-label">Feeling</div>
+            <div class="composer-feelings">
+              <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'great')">💪 Feeling great</button>
+              <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'tired')">😴 Tired</button>
+              <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'injured')">🤕 Injured</button>
+              <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'motivated')">🔥 Motivated</button>
+            </div>
+          </div>
+          <!-- No section label here: the button is its own label ("📷 Photo")
+               and a header above a single control read redundant on review. -->
+          <div class="composer-sec">
           <div class="composer-photo-row">
             <button type="button" class="c-photo-chip" id="composer-photo-btn" onclick="document.getElementById('composer-photo-input').click()">📷 Photo</button>
             <input type="file" id="composer-photo-input" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="composerPhotoPicked(this)">
@@ -434,6 +449,7 @@ button,select,input,textarea{font-family:var(--font)}
           <div class="composer-photo-preview" id="composer-photo-preview" style="display:none">
             <img id="composer-photo-img" alt="Photo preview">
             <button type="button" class="composer-photo-remove" onclick="removeComposerPhoto()" aria-label="Remove photo">✕</button>
+          </div>
           </div>
         </div>
         <div class="composer-footer">
