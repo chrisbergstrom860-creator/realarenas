@@ -12,9 +12,17 @@ To prove an error path fires (the project has been bitten by fixes that were nev
 - Strip `host`/`content-length` on forward and `content-encoding`/`transfer-encoding`/`content-length` on response (Node fetch auto-decompresses).
 - Seed NOT NULLs: `events.location`, `challenges.goal_unit`, `notifications.title/body`.
 
+# Ordering rule: mint-first beats revert
+
+When a state flip needs companion rows (public→private challenge needs grandfather invites), write the companion rows BEFORE the flip. A failed mint aborts with nothing changed; a failed flip leaves harmless extra rows. Compensating "revert on failure" writes can themselves fail and strand the bad state — architect rejected the revert version for exactly that.
+
+# scripts/lib/checked-writes.js (shared helper)
+
+All verify/shot scripts route DB writes through it: `mustWrite(label, query)` throws on returned error (seeds/pre-cleanup — never assert against fixtures you didn't create); `makeCleanup().cw(label, query)` logs `CLEANUP FAILED <label>` and counts, `failed()`/`count()` drive non-zero exit (silent teardown residue broke runs twice). Never add per-call-site error checks in scripts again.
+
 # Must-block audit closure (all fixed + proven by injection)
 
 - unlike toggles (post/activity), challenge leave, all three RSVP writes (checked BEFORE notification fan-out), invite accepted-marking in both `/auth/join/:token` flows, sweep club-logo storage remove (now via checkErr → an injected failure produces `DELETE FAILED` + non-clean verdict).
 - Invite rollback order (architect-reviewed): membership rollback FIRST; only delete the just-created auth user if it succeeded — deleting the user regardless orphans the membership, the exact half-state the rollback prevents. Double-failure injection proves user+membership survive and invite stays pending for remediation.
 - **Why:** supabase-js returns errors instead of throwing; try/catch alone silently swallows failed writes.
-- Still open (user will scope separately): the should-log sites (creator auto-join/auto-RSVP inserts, grandfather invite upsert, signup/club-create compensation deletes, plan-link update) and the verify-script cleanup/seed sites.
+- Second pass CLOSED the rest: creator auto-join reclassified must-block (rollback challenge + 500); grandfather mint is mint-first must-block; auto-RSVP + compensation deletes = loud logs w/ ids; plan-link failure surfaces `planLinkFailed:true` (client lands on /calendar where the pending plan is visible — activity kept, never rolled back over bookkeeping). No unchecked supabase writes remain in server.js or scripts.
