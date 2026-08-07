@@ -25,7 +25,7 @@
 // passing. Runs alongside verify-points-page.js / verify-km-consistency.js
 // after any change to shell CSS, card renderers, or page templates.
 import { createClient } from '@supabase/supabase-js';
-import { launchBrowser, auditPage, VIEWPORTS } from './lib/mobile-geometry.js';
+import { launchBrowser, auditPage } from './lib/mobile-geometry.js';
 
 const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const DOMAIN = process.env.REPLIT_DEV_DOMAIN;
