@@ -76,3 +76,4 @@
 - [html-arenas delete honesty](html-arenas-delete-honesty.md) — DELETE routes use conditional delete().select(), empty→404 (race-free); fetch-first only when cascades need the row; unfollow stays idempotent.
 - [html-arenas fault injection](html-arenas-fault-injection.md) — SUPABASE_URL proxy proves error paths fire; ALL unchecked-write sites closed; mint-first beats revert; scripts use shared checked-writes helper.
 - [html-arenas athlete directory](html-arenas-athlete-directory.md) — shared adc- card module + profile Athletes tab; follow-change event contract; /athletes?q= is THE search target; new shared JS needs its serve route.
+- [html-arenas challenge images + canUserSeeChallenge](html-arenas-challenge-images.md) — 6:1 ribbon, private bucket, version tokens; canonical gate closed the private-club join/leaderboard hole; invite_required oracle retired.
