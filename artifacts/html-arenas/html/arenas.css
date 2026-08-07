@@ -45,10 +45,13 @@
   --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
   --shadow-lg: 0 10px 40px rgba(0,0,0,0.12);
   --sidebar-w: 220px;
-  /* Shell centering (session 1): the BODY ROW (sidebar + main) is capped at
-     --shell-max and centered; the topbar stays a full-width band (T2 later).
-     220px sidebar + 1240px widest page content (club dashboard feed). */
-  --shell-max: 1460px;
+  /* Shell centering: the BODY ROW (sidebar + main) is capped at --shell-max
+     and centered; the topbar stays a full-width band. ONE GLOBAL value, no
+     per-page variation — the sidebar must sit at the same x on every page
+     when navigating. 220px sidebar + 956px content (the feed's 656px column
+     + 300px rail); wider pages (club dashboard, events) accept the tighter
+     956px cell as the cost of a stable sidebar. */
+  --shell-max: 1176px;
 }
 
 body {

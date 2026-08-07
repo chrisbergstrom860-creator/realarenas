@@ -135,11 +135,16 @@
     // Desktop: legend BESIDE the pie (right, stacked, sized to its content so
     // percentages sit next to their names) — a panel-filling pie pushed the
     // legend below, stretched it to the panel width, and made the card much
-    // taller. The pie is sized to what fits alongside (230px). Narrow (the
-    // caller's <=480 flag, where the whole grid stacks to one column): legend
-    // below a column-filling pie (capped 300px) — beside it would squeeze the
-    // pie on a 360px viewport. viewBox stays 200, so in-slice label fit is
-    // size-invariant.
+    // taller. The pie is sized to what fits alongside (230px). The desktop
+    // row is flex-wrap:wrap: at the 1176px global shell cap the profile
+    // stats column can drop below the 390px the side-by-side row needs
+    // (230 pie + 16 gap + ~144 legend), so the content-sized legend wraps
+    // below the pie ONLY when it doesn't fit — everywhere wider it stays
+    // beside, and the legend never stretches (that was the old objection to
+    // legend-below-always). Narrow (the caller's <=480 flag, where the whole
+    // grid stacks to one column): legend below a column-filling pie (capped
+    // 300px) — beside it would squeeze the pie on a 360px viewport. viewBox
+    // stays 200, so in-slice label fit is size-invariant.
     var svg = '<svg viewBox="0 0 200 200" style="' + (narrow
       ? 'width:100%;max-width:300px;height:auto'
       : 'width:230px;height:230px;flex-shrink:0') + ';display:block" role="img" aria-label="Share of sessions by sport">' + parts.join('') + '</svg>';
@@ -147,7 +152,7 @@
       '<div style="display:flex;flex-direction:column;align-items:center;gap:12px;min-width:0">' +
       '<div style="display:flex;' + (narrow
         ? 'flex-direction:column;align-items:center;gap:12px'
-        : 'align-items:center;gap:16px') + ';min-width:0' + (narrow ? ';align-self:stretch' : '') + '">' +
+        : 'align-items:center;gap:16px;flex-wrap:wrap;justify-content:center') + ';min-width:0' + (narrow ? ';align-self:stretch' : '') + '">' +
       svg +
       '<div style="display:flex;flex-direction:column;gap:7px;min-width:0' + (narrow ? ';align-self:stretch' : '') + '">' + legend + '</div>' +
       '</div>' +

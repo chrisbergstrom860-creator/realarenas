@@ -56,13 +56,13 @@ document.addEventListener('DOMContentLoaded', function(){
   --shadow-md:0 4px 12px rgba(0,0,0,0.08);
   --shadow-lg:0 10px 40px rgba(0,0,0,0.12);
   --sidebar-w:220px;
-  --shell-max:1460px; /* mirrors arenas.css shell centering cap */
+  --shell-max:1176px; /* mirrors arenas.css shell centering cap */
 }
 body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);font-size:14px;line-height:1.5;overflow-x:hidden}
 button,select,input,textarea{font-family:var(--font)}
 /* Mirrors the shared shell's centered 4-col body row (arenas.css) — this page
    carries an inline shell copy that would otherwise override the link. */
-.app{display:grid;grid-template-columns:minmax(0,1fr) var(--sidebar-w) minmax(0,calc(var(--shell-max,1460px) - var(--sidebar-w))) minmax(0,1fr);grid-template-rows:var(--topbar-h) 1fr;min-height:100vh}
+.app{display:grid;grid-template-columns:minmax(0,1fr) var(--sidebar-w) minmax(0,calc(var(--shell-max,1176px) - var(--sidebar-w))) minmax(0,1fr);grid-template-rows:var(--topbar-h) 1fr;min-height:100vh}
 .sidebar{grid-column:2;grid-row:2}
 .app > .main{grid-column:3;grid-row:2}
 .topbar{grid-column:1/-1;background:white;border-bottom:var(--border);display:flex;align-items:center;padding:0 20px 0 0;position:sticky;top:0;z-index:200}
