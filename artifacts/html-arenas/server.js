@@ -10325,22 +10325,17 @@ app.delete(BASE + '/api/clubs/:clubId/members/:userId', requireAuth, async (req,
   if (!requester || requester.role !== 'admin') return res.status(403).json({ error: 'Only admins can remove members' });
   if (userId === req.user.id) return res.status(400).json({ error: 'You cannot remove yourself from the club' });
   try {
-    // Fetch first: "removing" a non-member must not report success. A made-up
-    // user id and a real non-member answer byte-identically.
-    const { data: membership, error: fetchErr } = await supabaseAdmin
-      .from('memberships')
-      .select('user_id')
-      .eq('user_id', userId)
-      .eq('club_id', clubId)
-      .maybeSingle();
-    if (fetchErr) return res.status(500).json({ error: 'Could not remove member' });
-    if (!membership) return res.status(404).json({ error: 'Member not found' });
-    const { error } = await supabaseAdmin
+    // Conditional delete that returns the deleted row: success requires an
+    // actual membership row to have been removed, so "removing" someone who
+    // isn't a member reports an honest 404 (race-free — no separate fetch).
+    const { data: deleted, error } = await supabaseAdmin
       .from('memberships')
       .delete()
       .eq('user_id', userId)
-      .eq('club_id', clubId);
+      .eq('club_id', clubId)
+      .select('user_id');
     if (error) return res.status(500).json({ error: 'Could not remove member' });
+    if (!deleted || deleted.length === 0) return res.status(404).json({ error: 'Member not found' });
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: 'Could not remove member' });
@@ -10715,25 +10710,20 @@ app.post(BASE + '/api/notifications/read-all', requireAuth, async (req, res) => 
 // answer byte-identically, so the route is not an existence oracle.
 app.delete(BASE + '/api/notifications/:id', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
-  try {
-    const { data: notif, error: fetchErr } = await supabaseAdmin
-      .from('notifications')
-      .select('id, user_id')
-      .eq('id', req.params.id)
-      .maybeSingle();
-    if (fetchErr) return res.status(500).json({ error: 'Could not dismiss notification' });
-    if (!notif || notif.user_id !== req.user.id) {
-      return res.status(404).json({ error: 'Notification not found' });
-    }
-    const { error } = await supabaseAdmin
-      .from('notifications')
-      .delete()
-      .eq('id', notif.id);
-    if (error) return res.status(500).json({ error: 'Could not dismiss notification' });
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Could not dismiss notification' });
+  // Conditional delete that returns the deleted rows: the owner predicate is
+  // enforced at the write boundary, and success is defined by an actual row
+  // being deleted (no fetch/delete race, no phantom success).
+  const { data: deleted, error } = await supabaseAdmin
+    .from('notifications')
+    .delete()
+    .eq('id', req.params.id)
+    .eq('user_id', req.user.id)
+    .select('id');
+  if (error) return res.status(500).json({ error: 'Could not dismiss the notification' });
+  if (!deleted || deleted.length === 0) {
+    return res.status(404).json({ error: 'Notification not found' });
   }
+  res.json({ success: true });
 });
 
 // The standalone notifications page is retired — the bell now opens an in-place
