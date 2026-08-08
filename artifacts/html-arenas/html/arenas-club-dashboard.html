@@ -1718,10 +1718,13 @@ document.addEventListener('DOMContentLoaded', function () {
     { bg: '#ECFDF5', c: '#065F46' }, { bg: '#FAEEDA', c: '#633806' }
   ];
 
+  function goalTypeLabel(t) {
+    return { distance: 'Distance', duration: 'Duration', sessions: 'Sessions', streak: 'Active days' }[t] || cap(t || '');
+  }
   function goalLabel(ch) {
     var unit = ch.goal_unit || '';
-    var icons = { distance: '📍', sessions: '📋', streak: '🔥', duration: '⏱' };
-    return (icons[ch.goal_type] || '🎯') + ' ' + cap(ch.goal_type) + ' · ' + ch.goal_target + ' ' + unit;
+    var icons = { distance: '📍', sessions: '📋', streak: '📆', duration: '⏱' };
+    return (icons[ch.goal_type] || '🎯') + ' ' + goalTypeLabel(ch.goal_type) + ' · ' + ch.goal_target + ' ' + unit;
   }
   function fmtDate(s) {
     return new Date(s).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
@@ -1794,7 +1797,7 @@ document.addEventListener('DOMContentLoaded', function () {
             '<div style="font-size:11px;color:var(--gray-500);margin-bottom:6px">' + esc(goalLabel(ch)) + ' · ' + esc(fmtDate(ch.start_date)) + ' → ' + esc(fmtDate(ch.end_date)) + '</div>' +
             '<div style="display:flex;gap:5px;flex-wrap:wrap">' +
               '<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:' + sc.bg + ';color:' + sc.color + ';border:0.5px solid ' + sc.border + '">' + sc.icon + ' ' + esc(sportLabel) + '</span>' +
-              '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:var(--gray-100);color:var(--gray-600);border:var(--border)">' + esc(cap(ch.goal_type)) + '</span>' +
+              '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:var(--gray-100);color:var(--gray-600);border:var(--border)">' + esc(goalTypeLabel(ch.goal_type)) + '</span>' +
               '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:var(--gray-100);color:var(--gray-600);border:var(--border)">Individual goal</span>' +
             '</div>' +
           '</div>' +
@@ -1976,10 +1979,13 @@ document.addEventListener('DOMContentLoaded', function () {
   // ── Create challenge modal ──
   // 'any' + registry ids (registry order — the single source of truth).
   var SPORTS = ['any'].concat((window.ARENAS_SPORTS || []).map(function (s) { return s.id; }));
+  // Stored goal_type values are frozen — 'streak' is displayed as "Active
+  // days" (it has always counted distinct active days, not consecutive ones).
   var GOALS = [
     { type: 'distance', label: 'Distance', unit: 'km', icon: '📍' },
+    { type: 'duration', label: 'Duration', unit: 'hours', icon: '⏱️' },
     { type: 'sessions', label: 'Sessions', unit: 'sessions', icon: '📋' },
-    { type: 'streak', label: 'Streak', unit: 'days', icon: '🔥' }
+    { type: 'streak', label: 'Active days', unit: 'days', icon: '📆' }
   ];
 
   window.selectCchSport = function (btn) {

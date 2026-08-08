@@ -795,20 +795,15 @@ document.addEventListener('DOMContentLoaded', function(){
     listEl.innerHTML = items.map(function (c) {
       var st = sportStyle[c.sport] || DEFAULT_STYLE;
       var unit = c.goal_unit ? (' ' + esc(c.goal_unit)) : '';
-      var isDuration = c.goal_type === 'duration';
+      // Duration progress is computed server-side now (sums logged activity
+      // durations in the window), so it gets the same bar as every other type.
       var pct = Math.max(0, Math.min(100, Number(c.pct) || 0));
-      var sub, bar;
-      if (isDuration) {
-        bar = '';
-        sub = num(c.goal_target) + unit + ' goal · ' + daysLeftText(c.daysLeft);
-      } else {
-        bar =
-          '<div class="ch-bar-row">' +
-            '<div class="ch-bar"><div class="ch-bar-fill" style="width:' + pct + '%;background:' + st.bar + '"></div></div>' +
-            '<span class="ch-pct">' + pct + '%</span>' +
-          '</div>';
-        sub = num(c.progress) + ' / ' + num(c.goal_target) + unit + ' · ' + daysLeftText(c.daysLeft);
-      }
+      var bar =
+        '<div class="ch-bar-row">' +
+          '<div class="ch-bar"><div class="ch-bar-fill" style="width:' + pct + '%;background:' + st.bar + '"></div></div>' +
+          '<span class="ch-pct">' + pct + '%</span>' +
+        '</div>';
+      var sub = num(c.progress) + ' / ' + num(c.goal_target) + unit + ' · ' + daysLeftText(c.daysLeft);
       return '' +
         '<div class="challenge-row" onclick="nav(\'/challenges\')">' +
           (c.image

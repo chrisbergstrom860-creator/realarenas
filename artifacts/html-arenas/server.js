@@ -3177,7 +3177,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
         const range = challengeFetchRange(challenge);
         const { data: rawActs } = await supabaseAdmin
           .from('activities')
-          .select('sport, distance, date')
+          .select('sport, distance, duration, date')
           .eq('user_id', participant.user_id)
           .gte('date', range.gteIso)
           .lte('date', range.lteIso)
@@ -3185,12 +3185,22 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
         const acts = actsInChallengeWindow(rawActs, challenge, memberZone(prof(participant.user_id)));
         let progress = 0;
         let completedAt = null;
+        // Streak ("Active days") must count DISTINCT days here exactly like
+        // computeChallengeProgress — one-per-activity would announce
+        // milestones early for multi-activity days.
+        const zone = memberZone(prof(participant.user_id));
+        const seenDays = new Set();
         for (const a of (acts || [])) {
           if (challenge.sport !== 'any' && a.sport !== challenge.sport) continue;
           if (challenge.goal_type === 'distance') {
             const dist = parseDistanceKmUnitAware(a.distance);
             if (!isNaN(dist)) progress += dist;
-          } else if (challenge.goal_type === 'sessions' || challenge.goal_type === 'streak') {
+          } else if (challenge.goal_type === 'duration') {
+            progress += parseDurationHours(a.duration);
+          } else if (challenge.goal_type === 'streak') {
+            seenDays.add(dayKey(a.date, zone));
+            progress = seenDays.size;
+          } else {
             progress += 1;
           }
           if (challenge.goal_target > 0 && progress >= challenge.goal_target && !completedAt) completedAt = a.date;
@@ -3496,21 +3506,15 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
           const range = challengeFetchRange(ch);
           const { data: rawActs } = await supabaseAdmin
             .from('activities')
-            .select('sport, distance, date')
+            .select('sport, distance, duration, date')
             .eq('user_id', p.user_id)
             .gte('date', range.gteIso)
             .lte('date', range.lteIso);
-          const acts = actsInChallengeWindow(rawActs, ch, memberZone(profileMap[p.user_id]));
-          let progress = 0;
-          (acts || []).forEach(a => {
-            if (ch.sport !== 'any' && a.sport !== ch.sport) return;
-            if (ch.goal_type === 'distance') {
-              const dist = parseDistanceKmUnitAware(a.distance);
-              if (!isNaN(dist)) progress += dist;
-            } else {
-              progress += 1;
-            }
-          });
+          const pZone = memberZone(profileMap[p.user_id]);
+          const acts = actsInChallengeWindow(rawActs, ch, pZone);
+          // Shared helper: keeps all four goal types (incl. duration hours and
+          // distinct-active-day streaks) consistent with every other surface.
+          const progress = computeChallengeProgress(ch, acts, pZone);
           // Guard against legacy challenges with a 0/null target, which would
           // otherwise count as "completed" for every participant.
           if (ch.goal_target > 0 && progress >= ch.goal_target) completed++;
@@ -3741,6 +3745,20 @@ function challengeFetchRange(challenge) {
   };
 }
 
+// Challenge goal types. Stored values are FROZEN ('streak' rows keep working
+// untouched) — 'streak' is presented as "Active days" everywhere, because
+// that is what the computation has always measured (distinct active days in
+// the window, no consecutiveness check).
+const CHALLENGE_GOAL_TYPES = ['distance', 'duration', 'sessions', 'streak'];
+function challengeGoalPhrase(ch) {
+  const t = Number(ch.goal_target) || ch.goal_target;
+  if (ch.goal_type === 'distance') return `${t} ${ch.goal_unit || 'km'}`;
+  if (ch.goal_type === 'duration') return `${t} hours`;
+  if (ch.goal_type === 'sessions') return `${t} sessions`;
+  if (ch.goal_type === 'streak') return `${t} active days`;
+  return `${t} ${ch.goal_unit || ''} ${ch.goal_type}`.trim();
+}
+
 function computeChallengeProgress(challenge, activities, tz) {
   const acts = activities || [];
   const zone = tz || 'UTC';
@@ -3751,6 +3769,10 @@ function computeChallengeProgress(challenge, activities, tz) {
       if (!matches(a)) return;
       const dist = parseDistanceKmUnitAware(a.distance);
       if (!isNaN(dist)) progress += dist;
+    });
+  } else if (challenge.goal_type === 'duration') {
+    acts.forEach((a) => {
+      if (matches(a)) progress += parseDurationHours(a.duration);
     });
   } else if (challenge.goal_type === 'sessions') {
     progress = acts.filter(matches).length;
@@ -4070,7 +4092,7 @@ app.get(BASE + '/api/profile/overview', requireAuth, async (req, res) => {
         if (pct >= 100) { statusText = 'Goal achieved ✓'; statusColor = '#10B981'; }
         else if (ch.goal_type === 'streak') {
           const remaining = target - progress;
-          statusText = remaining <= 2 ? `${remaining} more day${remaining !== 1 ? 's' : ''} — don't break it!` : `${remaining} days to go`;
+          statusText = `${remaining} more active day${remaining !== 1 ? 's' : ''} to go`;
           statusColor = '#854D0E';
         }
         else if (pct >= expectedPct) { statusText = 'On pace'; statusColor = '#10B981'; }
@@ -4285,6 +4307,7 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
     }
 
     const now = Date.now();
+    const viewerTzEnrich = getUserTimezone(req.user);
     const enrich = (list) => (list || []).map((c) => {
       const end = new Date(c.end_date).getTime();
       const goalTarget = parseFloat(c.goal_target) || 0;
@@ -4302,7 +4325,7 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
         progress,
         pct,
         daysLeft: Math.max(0, Math.ceil((end - now) / (1000 * 60 * 60 * 24))),
-        isExpired: end < now,
+        isExpired: challengeHasEnded(c, viewerTzEnrich),
         // Only complete when there's a real positive target that's been reached.
         isComplete: goalTarget > 0 && progress >= goalTarget,
         isOwner: c.created_by === userId,
@@ -4458,6 +4481,11 @@ app.post(BASE + '/api/challenges/create', requireAuth, async (req, res) => {
   if (!title || !goal_type || !goal_target || !start_date || !end_date) {
     return res.json({ error: 'Missing required fields' });
   }
+  // Exactly the four supported types — anything else is a 400, not a stored
+  // mystery value ('streak' remains the stored spelling of "Active days").
+  if (!CHALLENGE_GOAL_TYPES.includes(goal_type)) {
+    return res.status(400).json({ error: 'invalid_goal_type', message: 'Goal type must be distance, duration, sessions or active days.' });
+  }
   console.log('Creating challenge with goal_target:', goal_target, typeof goal_target);
   const goalTargetNum = parseFloat(goal_target) || 0;
   // Reject malformed/non-positive targets so we never store 0/NaN (which would
@@ -4522,7 +4550,7 @@ app.post(BASE + '/api/challenges/create', requireAuth, async (req, res) => {
             userId: inviteeId,
             type: 'challenge_invite',
             title: 'Challenge invite',
-            body: `${actor.name} invited you to a challenge: "${challenge.title}" — ${goal_target} ${goal_unit || ''} ${goal_type}`.replace(/\s+/g, ' ').trim(),
+            body: `${actor.name} invited you to a challenge: "${challenge.title}" — ${challengeGoalPhrase(challenge)}`.replace(/\s+/g, ' ').trim(),
             link: '/challenges#friends',
             actorId: req.user.id,
             entityId: challenge.id
@@ -4634,7 +4662,7 @@ app.post(BASE + '/api/challenges/:id/invites', requireAuth, async (req, res) => 
     .eq('id', req.params.id).maybeSingle();
   if (!ch || ch.created_by !== req.user.id) return res.json({ error: 'Challenge not found' });
   if (!(ch.visibility === 'private' && !ch.club_id)) return res.json({ error: 'Only private challenges use invites' });
-  if (ch.end_date && new Date(ch.end_date).getTime() < Date.now()) return res.json({ error: 'This challenge has ended' });
+  if (ch.end_date && challengeHasEnded(ch)) return res.json({ error: 'This challenge has ended' });
   const { data: followRows } = await supabaseAdmin
     .from('follows').select('follower_id').eq('following_id', req.user.id);
   const followerSet = new Set((followRows || []).map((f) => f.follower_id));
@@ -4666,7 +4694,7 @@ app.post(BASE + '/api/challenges/:id/invites', requireAuth, async (req, res) => 
         userId: row.invitee_id,
         type: 'challenge_invite',
         title: 'Challenge invite',
-        body: `${actor.name} invited you to a challenge: "${ch.title}" — ${ch.goal_target} ${ch.goal_unit || ''} ${ch.goal_type}`.replace(/\s+/g, ' ').trim(),
+        body: `${actor.name} invited you to a challenge: "${ch.title}" — ${challengeGoalPhrase(ch)}`.replace(/\s+/g, ' ').trim(),
         link: '/challenges#friends',
         actorId: req.user.id,
         entityId: ch.id
@@ -4799,7 +4827,7 @@ app.post(BASE + '/api/challenges/:id/post-to-feed', requireAuth, async (req, res
   const daysLeft = Math.max(0, Math.ceil((new Date(challenge.end_date) - new Date()) / (1000 * 60 * 60 * 24)));
   const { error: postErr } = await supabaseAdmin.from('posts').insert({
     user_id: req.user.id,
-    content: `⚡ Club challenge: ${challenge.title} — ${challenge.goal_target} ${challenge.goal_unit || ''} ${challenge.goal_type} goal. ${daysLeft} days left to join! Find it in the Challenges tab.`.replace(/\s+/g, ' ').trim(),
+    content: `⚡ Club challenge: ${challenge.title} — ${challengeGoalPhrase(challenge)} goal. ${daysLeft} days left to join! Find it in the Challenges tab.`.replace(/\s+/g, ' ').trim(),
     sport: challenge.sport === 'any' ? null : challenge.sport
   });
   if (postErr) return res.json({ error: postErr.message });
@@ -4929,7 +4957,15 @@ async function canUserSeeChallenge(userId, ch) {
 // challenge) is fully served by the challenge-level check, since end_date is
 // the only extendable field.
 const challengeStarted = (ch) => new Date(ch.start_date).getTime() <= Date.now();
-const challengeHasEnded = (ch) => new Date(ch.end_date).getTime() < Date.now();
+// Ended = the end DAY is fully over, compared as day keys — the same boundary
+// family the progress window uses (which admits activities dated on the end
+// day). The old raw `new Date(end_date) < now` flipped "Ended" at the START
+// of the end day, while end-day activities still counted. Authorization
+// callers use the UTC day key (challenge-level, identical for every user);
+// display paths may pass a viewer zone so the badge flips at the viewer's
+// own midnight.
+const challengeHasEnded = (ch, tz) =>
+  dayKey(new Date().toISOString(), tz || 'UTC') > dayKey(ch.end_date, 'UTC');
 
 // Grandfather existing non-creator participants when a solo challenge goes
 // public→private: mint invite rows so the private join gate recognizes them —
@@ -5016,7 +5052,7 @@ app.patch(BASE + '/api/challenges/:id', requireAuth, async (req, res) => {
   if (!started) {
     if ('sport' in b) updates.sport = b.sport || 'any';
     if ('goal_type' in b) {
-      if (!['distance', 'streak', 'sessions', 'duration'].includes(b.goal_type)) {
+      if (!CHALLENGE_GOAL_TYPES.includes(b.goal_type)) {
         return res.json({ error: 'Invalid goal type' });
       }
       updates.goal_type = b.goal_type;
@@ -9443,7 +9479,7 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
             top3: leaderboard.slice(0, 3),
             achievedCount,
             successRate: participantCount > 0 ? Math.round((achievedCount / participantCount) * 100) : 0,
-            isPast: endMs < nowMs,
+            isPast: challengeHasEnded(challenge),
             daysLeft: Math.max(0, Math.ceil((endMs - nowMs) / (1000 * 60 * 60 * 24))),
             participationPct: memberCount > 0 ? Math.round((participantCount / memberCount) * 100) : 0
           });
@@ -9717,6 +9753,7 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
         if (t < chWin.startMs || t > chWin.endMs) return;
         if (ch.sport !== 'any' && a.sport !== ch.sport) return;
         if (ch.goal_type === 'distance') progress += parseDistanceKmUnitAware(a.distance);
+        else if (ch.goal_type === 'duration') progress += parseDurationHours(a.duration);
         else if (ch.goal_type === 'streak') streakDays.add(dayKey(a.date, viewerTz));
         else progress += 1;
       });
@@ -9734,7 +9771,7 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
       else if (ch.goal_target > 0 && pct >= 100) { statusText = 'Goal achieved ✓'; statusColor = '#10B981'; }
       else if (ch.goal_type === 'streak') {
         const rem = Math.max(0, (ch.goal_target || 0) - progress);
-        statusText = rem <= 2 ? `${rem} more day${rem !== 1 ? 's' : ''} — don't break it!` : `${rem} days to go`;
+        statusText = `${rem} more active day${rem !== 1 ? 's' : ''} to go`;
         statusColor = '#854D0E';
       }
       else if (pct >= expectedPct) { statusText = 'On pace'; statusColor = '#10B981'; }

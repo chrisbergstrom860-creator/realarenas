@@ -607,6 +607,10 @@ function showToast(msg) {
   const sportColor = s => SPORT_COLORS[s] || SPORT_COLORS.any;
   const progressColor = s => PROGRESS_COLORS[s] || '#6B7280';
 
+  // Display names for stored goal_type values ('streak' stays stored as-is).
+  function goalTypeLabel(t) {
+    return { distance: 'Distance', duration: 'Duration', sessions: 'Sessions', streak: 'Active days' }[t] || cap(t || '');
+  }
   function daysLeftLabel(endDate) {
     const days = Math.max(0, Math.ceil((new Date(endDate) - new Date()) / (1000 * 60 * 60 * 24)));
     if (days === 0) return 'Ends today';
@@ -628,6 +632,9 @@ function showToast(msg) {
     const color = progressColor(c.sport);
     const sColor = sportColor(c.sport);
     const icon = sportIcon(c.sport);
+    // Completed-tab membership stays (isExpired || isComplete), but the card
+    // chrome distinguishes them: only a genuinely ended challenge says
+    // "Ended"/dims; a goal-met-but-live one stays bright with the live label.
     const isCompleted = c.isExpired || c.isComplete;
     const sportLabel = c.sport === 'any' ? 'Any sport' : cap(c.sport);
     const isInvited = c.myInviteState === 'invited';
@@ -643,7 +650,7 @@ function showToast(msg) {
       : '';
     const unit = esc(c.goal_unit || '');
     return `
-      <div class="challenge-card" id="challenge-${esc(c.id)}" style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:10px;${isCompleted ? 'opacity:.75' : ''}">
+      <div class="challenge-card" id="challenge-${esc(c.id)}" style="background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:10px;${c.isExpired ? 'opacity:.75' : ''}">
         ${c.image ? `<img src="${B}/api/challenges/${encodeURIComponent(c.id)}/image?v=${encodeURIComponent(c.image)}" alt="" style="display:block;width:100%;aspect-ratio:6/1;object-fit:cover">` : ''}
         <div style="padding:14px 16px;display:flex;align-items:flex-start;gap:10px">
           <div style="width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;${sColor}">${icon}</div>
@@ -653,13 +660,13 @@ function showToast(msg) {
               <span style="padding:1px 7px;border-radius:10px;font-size:10px;font-weight:500;${sColor}">${icon} ${esc(sportLabel)}</span>
               ${privateTag}
               <span>·</span>
-              <span>${esc(cap(c.goal_type))} · ${esc(c.goal_target)} ${unit}</span>
+              <span>${esc(goalTypeLabel(c.goal_type))} · ${esc(c.goal_target)} ${unit}</span>
               ${byLine}
               ${c.clubName ? '<span>· ' + esc(c.clubName) + '</span>' : ''}
             </div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0">
-            <div style="font-size:11px;font-family:var(--mono);color:var(--gray-400)">${isCompleted ? 'Ended' : esc(daysLeftLabel(c.end_date))}</div>
+            <div style="font-size:11px;font-family:var(--mono);color:var(--gray-400)">${c.isExpired ? 'Ended' : esc((c.isComplete ? 'Goal reached · ' : '') + daysLeftLabel(c.end_date))}</div>
           </div>
         </div>
         ${c.isJoined ? `
@@ -685,7 +692,7 @@ function showToast(msg) {
           ${c.isJoined ? `
             <button onclick="viewLeaderboard('${esc(c.id)}')" style="padding:5px 12px;border-radius:7px;font-size:12px;font-weight:500;border:none;background:var(--gray-900);color:white;cursor:pointer">View leaderboard</button>
             <button onclick="window.location.href=window.BASE + '/log'" style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Log activity →</button>
-            ${(c.isOwner && c.visibility === 'private' && !c.club_id && !isCompleted) ? `<button onclick="openInviteManager('${esc(c.id)}')" style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Invites${c.pendingInvites ? ' · ' + c.pendingInvites + ' pending' : ''}</button>` : ''}
+            ${(c.isOwner && c.visibility === 'private' && !c.club_id && !c.isExpired) ? `<button onclick="openInviteManager('${esc(c.id)}')" style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Invites${c.pendingInvites ? ' · ' + c.pendingInvites + ' pending' : ''}</button>` : ''}
             ${(c.isOwner && !c.isExpired) ? `<button onclick="openEditChallenge('${esc(c.id)}')" style="padding:5px 12px;border-radius:7px;font-size:12px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Edit</button>` : ''}
             ${c.isOwner ? `<button onclick="openDeleteChallenge('${esc(c.id)}')" style="padding:5px 12px;border-radius:7px;font-size:12px;border:1px solid #FECACA;background:var(--red-light);color:#A32D2D;cursor:pointer;margin-left:auto">Delete…</button>` : ''}
             ${!c.isOwner ? `<button onclick="leaveChallenge('${esc(c.id)}',this)" style="padding:5px 12px;border-radius:7px;font-size:12px;border:1px solid #FECACA;background:var(--red-light);color:#A32D2D;cursor:pointer;margin-left:auto">Leave</button>` : ''}
@@ -1451,18 +1458,25 @@ function showToast(msg) {
           </div>
           <div style="margin-bottom:14px">
             <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:8px">Goal type *</div>
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px" id="ch-goal-types">
+            <!-- Stored goal_type values are frozen: "Active days" is the
+                 display name for the stored value 'streak' (it has always
+                 counted distinct active days, not consecutive ones). -->
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px" id="ch-goal-types">
               <div class="ch-goal-type selected" data-type="distance" onclick="selectGoalType(this)" style="border:var(--border);border-radius:8px;padding:10px;text-align:center;cursor:pointer">
                 <div style="font-size:18px;margin-bottom:4px">📍</div>
                 <div style="font-size:11px;color:var(--gray-600)">Distance</div>
               </div>
-              <div class="ch-goal-type" data-type="streak" onclick="selectGoalType(this)" style="border:var(--border);border-radius:8px;padding:10px;text-align:center;cursor:pointer">
-                <div style="font-size:18px;margin-bottom:4px">🔥</div>
-                <div style="font-size:11px;color:var(--gray-600)">Streak</div>
+              <div class="ch-goal-type" data-type="duration" onclick="selectGoalType(this)" style="border:var(--border);border-radius:8px;padding:10px;text-align:center;cursor:pointer">
+                <div style="font-size:18px;margin-bottom:4px">⏱️</div>
+                <div style="font-size:11px;color:var(--gray-600)">Duration</div>
               </div>
               <div class="ch-goal-type" data-type="sessions" onclick="selectGoalType(this)" style="border:var(--border);border-radius:8px;padding:10px;text-align:center;cursor:pointer">
                 <div style="font-size:18px;margin-bottom:4px">📋</div>
                 <div style="font-size:11px;color:var(--gray-600)">Sessions</div>
+              </div>
+              <div class="ch-goal-type" data-type="streak" onclick="selectGoalType(this)" style="border:var(--border);border-radius:8px;padding:10px;text-align:center;cursor:pointer">
+                <div style="font-size:18px;margin-bottom:4px">📆</div>
+                <div style="font-size:11px;color:var(--gray-600)">Active days</div>
               </div>
             </div>
           </div>
@@ -1473,6 +1487,7 @@ function showToast(msg) {
               <select class="form-select" id="ch-unit">
                 <option value="km">km</option>
                 <option value="miles">miles</option>
+                <option value="hours">hours</option>
                 <option value="sessions">sessions</option>
                 <option value="days">days</option>
               </select>
@@ -1529,6 +1544,12 @@ function showToast(msg) {
     el.classList.add('selected');
     el.style.background = 'var(--yellow-light)';
     el.style.borderColor = 'var(--yellow-dark)';
+    // Snap the unit to the type's natural unit (still user-changeable for
+    // distance km/miles; duration/sessions/active-days have one honest unit).
+    const natural = { duration: 'hours', sessions: 'sessions', streak: 'days' }[el.dataset.type];
+    const unitEl = document.getElementById('ch-unit');
+    if (unitEl && natural) unitEl.value = natural;
+    else if (unitEl && el.dataset.type === 'distance' && ['hours', 'sessions', 'days'].includes(unitEl.value)) unitEl.value = 'km';
   };
   window.selectVis = function (el) {
     document.querySelectorAll('.ch-vis-opt').forEach(v => {
