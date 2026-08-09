@@ -18,6 +18,7 @@ description: /clubs directory + request-and-approve joining; visibility model, j
 - Account delete: rows swept by user_id AND per dying club by club_id (architect caught the dying-club gap).
 
 ## Surfaces
+- ccd- cards are now FLOATING cards matching events' .evx-card (radius var(--radius-lg), 12px grid gap, grid padding 16px 20px / 12px 14px mobile, full border) — the old edge-to-edge border-right/nth-child tile machinery is retired; don't reintroduce it. Note: events .evx-card is itself flush-left (0 gutter) — its "inset" look is the floating treatment, not padding.
 - `/clubs` page (arenas-clubs.html) + shared `arenas-club-cards.js` (ccd- classes, two-tier yellow buttons); sidebar "Clubs" link on all shell pages; dashboard: join-requests queue in Members tab + admin-only settings card in Overview (settings card must live INSIDE #tab-overview or it shows on every tab).
 - Empty-state copy is user-approved verbatim ("Clubs choose to be listed…") + Create-club CTA via ArenasClubCreate.open().
 - Geometry guard now seeds the club public w/ long description and covers /clubs; sweep covers club_join_requests both keys.
