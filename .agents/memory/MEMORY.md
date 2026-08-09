@@ -80,3 +80,4 @@
 - [html-arenas recurring plans](html-arenas-recurring-plans.md) — plan_series + materialized occurrences; detach ONLY on date change; scope=future spares done/skipped/detached; caps are server truth.
 - [html-arenas challenge goal types](html-arenas-challenge-goal-types.md) — 4 types, 'streak' stored/frozen but shown "Active days"; duration sums hours; selects MUST include duration; ended = end DAY over (day keys).
 - [html-arenas challenge images + canUserSeeChallenge](html-arenas-challenge-images.md) — 6:1 ribbon, private bucket, version tokens; canonical gate closed the private-club join/leaderboard hole; invite_required oracle retired.
+- [html-arenas club directory](html-arenas-club-directory.md) — /clubs public-listing + request-and-approve; quiet decline w/ 7-day cooldown same-row flip; zero-leak getPublicClub; admin-only settings.
