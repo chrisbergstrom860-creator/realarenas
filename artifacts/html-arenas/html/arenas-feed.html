@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <script src="/html/arenas-stat-tiles.js"></script>
 <script src="/html/arenas-activity-card.js"></script>
 <script src="/html/arenas-post-image.js"></script>
+<script src="/html/arenas-club-post-header.js"></script>
 <script src="/html/arenas-time.js"></script>
 <style>
 button,select,input,textarea{font-family:var(--font)}
@@ -758,14 +759,20 @@ function postCardHtml(post, opts) {
   const avStyle = o.avStyle || '';
   const meta = o.meta || 'Just now';
   const viewerId = (window.ARENAS_DATA && window.ARENAS_DATA.userId) || null;
-  return `
-    <div class="post-note-card" data-post-root>
-      <div class="pn-head">
-        ${window.avatarHtml(avatarUrl, name, 'pn-av', avStyle)}
+  // Club announcements (posts carrying clubId) lead with the CLUB identity —
+  // shared header renderer (arenas-club-post-header.js), club logo tile +
+  // "posted by <author>" secondary. Personal posts are unchanged.
+  const head = post.clubId
+    ? window.clubPostHeaderHtml(post, { timeText: meta, tileSize: 34 })
+    : `${window.avatarHtml(avatarUrl, name, 'pn-av', avStyle)}
         <div>
           <div class="pn-name">${escapeHtml(name)}</div>
           <div class="pn-meta">${escapeHtml(meta)}</div>
-        </div>
+        </div>`;
+  return `
+    <div class="post-note-card" data-post-root>
+      <div class="pn-head">
+        ${head}
         ${post.sport ? `<div class="pn-sport-tag" style="${SPORT_COLORS[post.sport] || ''}">${SPORT_EMOJIS[post.sport] || ''}</div>` : ''}
         ${window.postDeleteButtonHtml(post, viewerId, { pushRight: !post.sport })}
       </div>
@@ -774,7 +781,7 @@ function postCardHtml(post, opts) {
       ${window.postImageHtml(post)}
       <div class="pn-footer">
         <button class="pn-action${o.liked ? ' liked' : ''}" onclick="likePost(this,'${post.id}')">👍 ${o.likes || 0} kudos</button>
-        <span style="margin-left:auto;font-size:11px;color:var(--gray-400)">Training note</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--gray-400)">${post.clubId ? 'Club announcement' : 'Training note'}</span>
       </div>
     </div>`;
 }

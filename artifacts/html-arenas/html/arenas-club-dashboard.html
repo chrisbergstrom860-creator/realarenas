@@ -48,6 +48,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <link rel="stylesheet" href="/html/arenas.css">
 <script src="/html/arenas-time.js"></script>
 <script src="/html/arenas-stat-tiles.js"></script>
+<script src="/html/arenas-club-post-header.js"></script>
 <script src="/html/arenas-activity-card.js"></script>
 <script src="/html/arenas-post-image.js"></script>
 <script src="/html/arenas-overlay.js"></script>
@@ -3099,8 +3100,8 @@ document.addEventListener('DOMContentLoaded', function () {
         var metaLabel = '';
 
         if (item.type === 'announcement') {
-          badge = '<span style="margin-left:auto;font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;background:var(--yellow);color:var(--gray-900);border:0.5px solid var(--yellow-dark);flex-shrink:0">📣 Coach</span>';
-          metaLabel = 'Club ' + esc(item.role || 'coach');
+          badge = '<span style="margin-left:auto;font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;background:var(--yellow);color:var(--gray-900);border:0.5px solid var(--yellow-dark);flex-shrink:0">📣 Announcement</span>';
+          metaLabel = '';
           // Shared post-image fragment (arenas-post-image.js) — same
           // renderer as the main feed's post cards. The extra wrapper adds
           // this flush card's 14px inset.
@@ -3155,11 +3156,18 @@ document.addEventListener('DOMContentLoaded', function () {
           ? '<button onclick="toggleClubFeedLike(\'' + esc(item.id) + '\',this)" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:7px;font-size:12px;border:' + (item.likedByMe ? '0.5px solid #E6B800' : 'var(--border)') + ';background:' + (item.likedByMe ? 'var(--yellow-light)' : 'white') + ';color:' + (item.likedByMe ? '#633806' : 'var(--gray-600)') + ';cursor:pointer">👍 <span>' + (parseInt(item.likeCount, 10) || 0) + '</span></button>'
           : '';
 
+        // Club announcements lead with the CLUB identity via the shared
+        // header renderer (arenas-club-post-header.js); the author demotes to
+        // "posted by". Personal posts (incl. an admin's own notes) keep the
+        // member avatar + name — the two are distinct at a glance.
+        var headHtml = item.type === 'announcement'
+          ? window.clubPostHeaderHtml(item, { tileSize: 36 })
+          : window.avatarHtml(item.avatarUrl || null, item.name || 'Member', '', 'width:36px;height:36px;border-radius:50%;' + avStyle + ';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;overflow:hidden')
+            + '<div style="min-width:0"><div style="font-size:13px;font-weight:600;color:var(--gray-900)">' + safeName + '</div>'
+            + '<div style="font-size:11px;color:var(--gray-400)">' + metaLabel + '</div></div>';
         return '<div class="cf-card"' + (delBtn ? ' data-post-root' : '') + ' style="background:white;border:var(--border);border-radius:var(--radius-lg);margin:0 0 10px;overflow:hidden">'
           + '<div style="display:flex;align-items:center;gap:10px;padding:12px 14px 8px">'
-          + window.avatarHtml(item.avatarUrl || null, item.name || 'Member', '', 'width:36px;height:36px;border-radius:50%;' + avStyle + ';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;overflow:hidden')
-          + '<div><div style="font-size:13px;font-weight:600;color:var(--gray-900)">' + safeName + '</div>'
-          + '<div style="font-size:11px;color:var(--gray-400)">' + metaLabel + '</div></div>'
+          + headHtml
           + badge
           + delBtn
           + '</div>'

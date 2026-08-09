@@ -285,6 +285,9 @@ app.get(['/html/arenas-post-image.js', '/arenas-post-image.js'], (req, res) => {
 app.get(['/html/arenas-stat-tiles.js', '/arenas-stat-tiles.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-stat-tiles.js'));
 });
+app.get(['/html/arenas-club-post-header.js', '/arenas-club-post-header.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-club-post-header.js'));
+});
 
 // Shared "By sport" three-chart builder (Stats & PRs tab + verify harness).
 // Dual-path as above. (Replaced arenas-pie.js — its arc + largest-remainder
@@ -1787,7 +1790,10 @@ app.post(BASE + '/api/posts/:id/comment', requireAuth, async (req, res) => {
   res.json({ success: true, comment: data });
 });
 
-// Delete one of the viewer's own posts. Author only — posts have no club_id,
+// Delete one of the viewer's own posts. Author only — club announcements also
+// delete this way (author-owned), and club deletion cascades posts via the
+// club_id FK (ON DELETE CASCADE) — the app never double-handles that.
+// Historical note (pre club_id):
 // so there is no club context giving a manager authority (matches the
 // activity rule, not the event one).
 // Zero-leak: the row is fetched first and a non-author answers byte-identically
@@ -3029,14 +3035,39 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
 
     const feed = [];
 
-    // 1. Posts from members (with like counts + whether the viewer liked each).
+    // Club identity for announcement cards (logo + name are the PRIMARY
+    // identity on club-owned posts; sport drives the no-logo tile fallback).
+    const { data: clubRow } = await supabaseAdmin
+      .from('clubs').select('id, name, sport, logo_url').eq('id', clubId).maybeSingle();
+
+    // 1a. Personal posts from current members (club_id NULL — a coach's
+    //     personal post is a personal post; classification is the stored
+    //     club_id, never the author's role).
     // post_likes has no `id` column — it is keyed by (post_id, user_id).
-    const { data: posts } = await supabaseAdmin
+    const { data: personalPosts } = await supabaseAdmin
       .from('posts')
-      .select('id, user_id, content, sport, image_url, created_at')
+      .select('id, user_id, club_id, content, sport, image_url, created_at')
+      .is('club_id', null)
       .in('user_id', safeIds)
       .order('created_at', { ascending: false })
       .limit(20);
+    // 1b. This club's announcements — by club_id, NOT author roster, so
+    //     club-owned speech survives the author leaving or changing roles.
+    const { data: annPosts } = await supabaseAdmin
+      .from('posts')
+      .select('id, user_id, club_id, content, sport, image_url, created_at')
+      .eq('club_id', clubId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    const posts = [...(personalPosts || []), ...(annPosts || [])]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 20);
+    // Departed announcement authors are not in the roster profile map.
+    const extraAuthorIds = [...new Set((annPosts || []).map((p) => p.user_id))]
+      .filter((id) => id && !profileMap[id]);
+    if (extraAuthorIds.length) {
+      Object.assign(profileMap, await buildUserProfileMap(extraAuthorIds));
+    }
     const postIds = (posts || []).map((p) => p.id);
     let likes = [];
     let commentRows = [];
@@ -3054,15 +3085,19 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
     }
     (posts || []).forEach((p) => {
       const postLikes = likes.filter((l) => l.post_id === p.id);
-      const isCoach = roleMap[p.user_id] === 'admin' || roleMap[p.user_id] === 'coach';
+      const isAnnouncement = p.club_id === clubId;
       feed.push({
-        type: isCoach ? 'announcement' : 'post',
+        type: isAnnouncement ? 'announcement' : 'post',
         id: p.id,
         userId: p.user_id,
         name: prof(p.user_id).name || 'Member',
         handle: prof(p.user_id).handle || 'member',
         avatarUrl: prof(p.user_id).avatar_url || null,
-        role: roleMap[p.user_id],
+        role: roleMap[p.user_id] || null,
+        clubId: isAnnouncement ? clubId : null,
+        clubName: isAnnouncement ? ((clubRow && clubRow.name) || 'Club') : null,
+        clubLogoUrl: isAnnouncement ? ((clubRow && clubRow.logo_url) || null) : null,
+        clubSport: isAnnouncement ? ((clubRow && clubRow.sport) || null) : null,
         content: p.content,
         sport: p.sport,
         image_url: p.image_url || null,
@@ -3632,8 +3667,11 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
 });
 
 // Coach/admin posts an announcement to the whole club. The announcement is a
-// normal `posts` row (it renders with a Coach badge in the feed because the
-// author's club role is admin/coach), and every other member is notified.
+// `posts` row with `club_id` set — THE durable signal that this is club-owned
+// speech (renderers show the club logo + name as the primary identity, with
+// the author secondary). Personal posts never carry a club_id. The old
+// author-role inference is retired: role changes no longer retroactively
+// reclassify posts. Every other member is notified.
 app.post(BASE + '/api/clubs/:clubId/announce', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for posting' });
   const clubId = req.params.clubId;
@@ -3652,10 +3690,13 @@ app.post(BASE + '/api/clubs/:clubId/announce', requireAuth, async (req, res) => 
   const content = raw.trim().slice(0, 280);
   const { data: post, error } = await supabaseAdmin
     .from('posts')
-    .insert({ user_id: req.user.id, content })
+    .insert({ user_id: req.user.id, content, club_id: clubId })
     .select()
     .single();
   if (error) return res.json({ error: error.message });
+
+  const { data: annClub } = await supabaseAdmin
+    .from('clubs').select('name').eq('id', clubId).maybeSingle();
 
   // Notify every other club member. Actor name from auth metadata (no profiles).
   try {
@@ -3669,8 +3710,8 @@ app.post(BASE + '/api/clubs/:clubId/announce', requireAuth, async (req, res) => 
       await createNotification({
         userId: m.user_id,
         type: 'club',
-        title: 'Coach announcement',
-        body: `${actor.name}: ${content.slice(0, 120)}${content.length > 120 ? '…' : ''}`,
+        title: 'Club announcement',
+        body: `${annClub && annClub.name ? annClub.name + ' · ' : ''}${actor.name}: ${content.slice(0, 120)}${content.length > 120 ? '…' : ''}`,
         link: '/feed',
         actorId: req.user.id,
         entityId: post.id
@@ -5210,13 +5251,38 @@ async function buildFeedPosts(limit, currentUserId) {
   const feedUserIds = [...new Set([...followingIds, currentUserId].filter(Boolean))];
   if (!feedUserIds.length) return { posts: [], followsNobody };
 
-  const { data: posts, error } = await supabaseAdmin
-    .from('posts')
-    .select('id, content, sport, feeling, image_url, created_at, user_id, post_likes (count), post_comments (count)')
-    .in('user_id', feedUserIds)
-    .order('created_at', { ascending: false })
-    .limit(limit);
-  if (error || !posts) return { posts: [], followsNobody };
+  // Two eligible sets, merged newest-first:
+  //   1. PERSONAL posts (club_id IS NULL) from followed authors + self.
+  //   2. Club ANNOUNCEMENTS from clubs the VIEWER belongs to — club-owned
+  //      speech is scoped by the viewer's membership, never by following the
+  //      author. A non-member following a coach must NOT receive club
+  //      announcements through /feed.
+  const { data: myClubRows } = await supabaseAdmin
+    .from('memberships')
+    .select('club_id')
+    .eq('user_id', currentUserId || '00000000-0000-0000-0000-000000000000');
+  const myClubIds = [...new Set((myClubRows || []).map((m) => m.club_id).filter(Boolean))];
+  const [personalRes, annRes] = await Promise.all([
+    supabaseAdmin
+      .from('posts')
+      .select('id, content, sport, feeling, image_url, created_at, user_id, club_id, post_likes (count), post_comments (count)')
+      .is('club_id', null)
+      .in('user_id', feedUserIds)
+      .order('created_at', { ascending: false })
+      .limit(limit),
+    myClubIds.length
+      ? supabaseAdmin
+          .from('posts')
+          .select('id, content, sport, feeling, image_url, created_at, user_id, club_id, post_likes (count), post_comments (count)')
+          .in('club_id', myClubIds)
+          .order('created_at', { ascending: false })
+          .limit(limit)
+      : Promise.resolve({ data: [], error: null })
+  ]);
+  if (personalRes.error || !personalRes.data) return { posts: [], followsNobody };
+  const posts = [...personalRes.data, ...((annRes && annRes.data) || [])]
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, limit);
   const ids = [...new Set(posts.map(p => p.user_id).filter(Boolean))];
   const profileMap = {};
   await Promise.all(ids.map(async (id) => {
@@ -5245,6 +5311,15 @@ async function buildFeedPosts(limit, currentUserId) {
       .in('post_id', posts.map(p => p.id));
     likedSet = new Set((myLikes || []).map(l => l.post_id));
   }
+  // Club identity for announcements (posts carrying a club_id): logo + name
+  // render as the primary identity, author demotes to "posted by".
+  const clubIds = [...new Set(posts.map(p => p.club_id).filter(Boolean))];
+  const clubMap = {};
+  if (clubIds.length) {
+    const { data: clubRows } = await supabaseAdmin
+      .from('clubs').select('id, name, sport, logo_url').in('id', clubIds);
+    (clubRows || []).forEach((c) => { clubMap[c.id] = c; });
+  }
   const enriched = posts.map(p => ({
     id: p.id,
     content: p.content,
@@ -5256,6 +5331,10 @@ async function buildFeedPosts(limit, currentUserId) {
     authorName: (profileMap[p.user_id] && profileMap[p.user_id].name) || 'Athlete',
     authorHandle: (profileMap[p.user_id] && profileMap[p.user_id].handle) || 'athlete',
     authorAvatarUrl: (profileMap[p.user_id] && profileMap[p.user_id].avatar_url) || null,
+    clubId: p.club_id || null,
+    clubName: (p.club_id && clubMap[p.club_id] && clubMap[p.club_id].name) || null,
+    clubLogoUrl: (p.club_id && clubMap[p.club_id] && clubMap[p.club_id].logo_url) || null,
+    clubSport: (p.club_id && clubMap[p.club_id] && clubMap[p.club_id].sport) || null,
     likeCount: (p.post_likes && p.post_likes[0] && p.post_likes[0].count) || 0,
     commentCount: (p.post_comments && p.post_comments[0] && p.post_comments[0].count) || 0,
     userLiked: likedSet.has(p.id)
@@ -9639,7 +9718,6 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
     const profileMap = await buildUserProfileMap(memberIds);
     const nameOf = (id) => (profileMap[id] && profileMap[id].name) || 'Member';
     const handleOf = (id) => (profileMap[id] && profileMap[id].handle) || 'member';
-    const roleOf = (id) => (memberRows.find((m) => m.user_id === id) || {}).role || 'coach';
 
     // Roster: admins, then coaches, then members alphabetically.
     const roleOrder = { admin: 0, coach: 1, member: 2 };
@@ -9652,15 +9730,22 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
       isMe: m.user_id === userId
     })).sort((a, b) => ((roleOrder[a.role] ?? 3) - (roleOrder[b.role] ?? 3)) || a.name.localeCompare(b.name));
 
-    // Coach announcements — recent posts by this club's admins/coaches.
-    const coachIds = memberRows.filter((m) => m.role === 'admin' || m.role === 'coach').map((m) => m.user_id);
+    // Club announcements — by the post's stored club_id (the durable signal),
+    // never the author's current role. Announcements are club-owned speech:
+    // they stay if the author leaves the club or changes roles.
     const { data: announcements } = await supabaseAdmin
       .from('posts')
       .select('id, user_id, content, image_url, created_at')
-      .in('user_id', coachIds.length ? coachIds : [PLACEHOLDER])
+      .eq('club_id', clubId)
       .order('created_at', { ascending: false })
       .limit(5);
     const annRows = announcements || [];
+    // Departed authors are outside the roster profile map — fetch them too.
+    const missingAnnAuthors = [...new Set(annRows.map((a) => a.user_id))]
+      .filter((id) => id && !profileMap[id]);
+    if (missingAnnAuthors.length) {
+      Object.assign(profileMap, await buildUserProfileMap(missingAnnAuthors));
+    }
     const annIds = annRows.map((a) => a.id);
     const { data: annLikes } = await supabaseAdmin
       .from('post_likes')
@@ -9679,7 +9764,9 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
         userId: a.user_id,
         coachName: nameOf(a.user_id),
         coachAvatarUrl: (profileMap[a.user_id] && profileMap[a.user_id].avatar_url) || null,
-        role: roleOf(a.user_id),
+        // Display role only if the author is still on the roster — a departed
+        // author gets no role badge, but keeps honest "posted by" attribution.
+        role: (memberRows.find((m) => m.user_id === a.user_id) || {}).role || null,
         content: a.content,
         image_url: a.image_url || null,
         createdAt: a.created_at,
