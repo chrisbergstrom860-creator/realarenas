@@ -23,7 +23,12 @@ const { createClient } = require('@supabase/supabase-js');
 const BASE_URL = 'http://localhost:80/html';
 const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const PW = 'ArenasTest!234';
-const emails = { coach: 'clubattr-coach@arenas-test.dev', member: 'clubattr-member@arenas-test.dev' };
+const emails = {
+  coach: 'clubattr-coach@arenas-test.dev',
+  member: 'clubattr-member@arenas-test.dev',
+  coach2: 'clubattr-coach2@arenas-test.dev',
+  outsider: 'clubattr-outsider@arenas-test.dev'
+};
 
 let failures = 0;
 function check(name, ok, detail) {
@@ -66,8 +71,10 @@ async function api(k, method, path, body) {
 async function main() {
   await mkUser('coach', 'Attr Coach', 'attr_coach');
   await mkUser('member', 'Attr Member', 'attr_member');
-  for (const k of ['coach', 'member']) await login(k);
-  console.log('MANIFEST users:', JSON.stringify({ coach: users.coach.id, member: users.member.id }));
+  await mkUser('coach2', 'Attr CoachTwo', 'attr_coach2');
+  await mkUser('outsider', 'Attr Outsider', 'attr_outsider');
+  for (const k of ['coach', 'member', 'coach2', 'outsider']) await login(k);
+  console.log('MANIFEST users:', JSON.stringify(Object.fromEntries(Object.keys(users).map(k => [k, users[k].id]))));
 
   // Club (no logo → fallback path exercised), coach = admin, member joins.
   let r = await api('coach', 'POST', '/clubs/create', { name: 'Attr Test Club', handle: 'attrclub', sport: 'running', city: '' });
@@ -156,16 +163,114 @@ async function main() {
   ann = ((r.body && r.body.announcements) || []).find(a => a.id === annId);
   check('member-home keeps departed-author announcement, role null', ann && ann.role === null && ann.coachName === 'Attr Coach', ann);
 
+  // ── 6b. Manager delete of announcements ──
+  // Roster now: coach has LEFT the club (departed author), member is a plain
+  // member. Add coach2 as a coach of this club; outsider manages a DIFFERENT
+  // club. Their old announcement (annId) is the departed-coach target.
+  await admin.from('memberships').insert({ user_id: users.coach2.id, club_id: clubId, role: 'coach' });
+  r = await api('outsider', 'POST', '/clubs/create', { name: 'Attr Other Club', handle: 'attrother', sport: 'cycling', city: '' });
+  const otherClubId = ((r.body && r.body.redirect) || '').split('club=')[1];
+  check('second club created (outsider is admin)', !!otherClubId, r.body);
+
+  // Zero-leak baseline: DELETE on a nonexistent id.
+  const ghost = await api('member', 'DELETE', '/posts/00000000-0000-0000-0000-00000000dead');
+  // Plain member (neither author nor manager) → byte-identical not-found.
+  let denied = await api('member', 'DELETE', '/posts/' + annId);
+  check('plain member denied: byte-identical not-found', denied.status === ghost.status && JSON.stringify(denied.body) === JSON.stringify(ghost.body), { denied, ghost });
+  // Manager of a DIFFERENT club → same byte-identical not-found.
+  denied = await api('outsider', 'DELETE', '/posts/' + annId);
+  check('other-club manager denied: byte-identical not-found', denied.status === ghost.status && JSON.stringify(denied.body) === JSON.stringify(ghost.body), { denied, ghost });
+  const { data: stillThere } = await admin.from('posts').select('id').eq('id', annId);
+  check('announcement untouched by denied attempts', stillThere && stillThere.length === 1, stillThere);
+
+  // Personal posts stay author-only even for a club manager: coach2 (manager)
+  // cannot delete member's personal post.
+  r = await api('member', 'POST', '/posts/create', { content: 'Member personal note', sport: 'running' });
+  const memberPostId = r.body && r.body.post && r.body.post.id;
+  denied = await api('coach2', 'DELETE', '/posts/' + memberPostId);
+  check('personal post: manager denied, byte-identical not-found', denied.status === ghost.status && JSON.stringify(denied.body) === JSON.stringify(ghost.body), denied);
+  r = await api('member', 'DELETE', '/posts/' + memberPostId);
+  check('personal post: author delete works', r.body && r.body.success, r.body);
+
+  // Coach2 posts an announcement WITH an image; author deletes own → OK.
+  r = await api('coach2', 'POST', '/clubs/' + clubId + '/announce', { content: 'Coach2 own announcement' });
+  const ownAnnId = r.body && r.body.post && r.body.post.id;
+  r = await api('coach2', 'DELETE', '/posts/' + ownAnnId);
+  check('author deletes own announcement', r.body && r.body.success, r.body);
+
+  // canDelete flags: coach2 (manager) sees canDelete on the departed coach's
+  // announcement in club feed + member-home; plain member does not.
+  r = await api('coach2', 'GET', '/clubs/' + clubId + '/feed');
+  let flagged = (r.body.feed || []).find(f => f.id === annId);
+  check('club feed: manager gets canDelete=true', flagged && flagged.canDelete === true, flagged);
+  r = await api('member', 'GET', '/clubs/' + clubId + '/feed');
+  flagged = (r.body.feed || []).find(f => f.id === annId);
+  check('club feed: plain member gets canDelete=false', flagged && flagged.canDelete === false, flagged);
+  r = await api('coach2', 'GET', '/clubs/' + clubId + '/member-home');
+  flagged = ((r.body && r.body.announcements) || []).find(a => a.id === annId);
+  check('member-home: manager gets canDelete=true', flagged && flagged.canDelete === true, flagged);
+
+  // A COACH (not admin) deletes another (departed) coach's announcement.
+  r = await api('coach2', 'DELETE', '/posts/' + annId);
+  check("coach deletes another coach's announcement", r.body && r.body.success, r.body);
+
+  // Departed coach's announcement with image + kudos + notification, then a
+  // COACH (coach2) deletes it: full cascade incl. the image object stored
+  // under the AUTHOR's uid.
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  // The announce composer is text-only; build an image-bearing announcement
+  // by creating an image post then stamping club_id (same row shape).
+  const fd = new FormData();
+  fd.append('content', 'Departed-style announcement with image');
+  fd.append('image', new Blob([png], { type: 'image/png' }), 'a.png');
+  const upRes = await fetch(BASE_URL + '/api/posts/create', { method: 'POST', headers: { Cookie: users.coach2.cookie }, body: fd });
+  const upBody = await upRes.json();
+  const imgAnnId = upBody && upBody.post && upBody.post.id;
+  const imgUrl = upBody && upBody.post && upBody.post.image_url;
+  check('image post created', !!imgAnnId && !!imgUrl, upBody);
+  const { error: stampErr } = await admin.from('posts').update({ club_id: clubId }).eq('id', imgAnnId);
+  check('stamped as announcement', !stampErr, stampErr && stampErr.message);
+  // coach2 departs; the announcement stays; then re-add coach2? No — instead
+  // member likes it and coach (original, now outside) can't. Use coach2 →
+  // departed by removing membership AFTER, so deleting manager is coach? coach
+  // left earlier. Simplest: member likes it, then remove coach2 from club and
+  // make MEMBER an admin — admin deletes departed coach2's announcement.
+  await api('member', 'POST', '/posts/' + imgAnnId + '/like');
+  await admin.from('memberships').delete().eq('user_id', users.coach2.id).eq('club_id', clubId);
+  await admin.from('memberships').update({ role: 'admin' }).eq('user_id', users.member.id).eq('club_id', clubId);
+  r = await api('member', 'DELETE', '/posts/' + imgAnnId);
+  check("admin deletes departed coach's announcement", r.body && r.body.success, r.body);
+  const { data: annRow2 } = await admin.from('posts').select('id').eq('id', imgAnnId);
+  const { data: likeRows } = await admin.from('post_likes').select('post_id').eq('post_id', imgAnnId);
+  const { data: notifRows } = await admin.from('notifications').select('id').eq('entity_id', imgAnnId).in('type', ['like', 'comment']);
+  check('cascade: row, likes, like/comment notifs gone', annRow2.length === 0 && likeRows.length === 0 && notifRows.length === 0, { annRow2, likeRows, notifRows });
+  const objectPath = imgUrl.split('/post-images/')[1] && imgUrl.split('/post-images/')[1].split('?')[0];
+  if (objectPath) {
+    const dir = objectPath.split('/').slice(0, -1).join('/');
+    const fileName = objectPath.split('/').pop();
+    const { data: objs } = await admin.storage.from('post-images').list(dir);
+    check('cascade: image object gone (author-keyed path)', !(objs || []).some(o => o.name === fileName), (objs || []).map(o => o.name));
+  } else {
+    check('cascade: image object path parseable', false, imgUrl);
+  }
+  // restore member role for remaining sections
+  await admin.from('memberships').update({ role: 'member' }).eq('user_id', users.member.id).eq('club_id', clubId);
+  // clean up outsider's club
+  await admin.from('clubs').delete().eq('id', otherClubId);
+
   // ── 7. Club deletion → FK cascade removes announcements (no app double-handling) ──
+  const { data: cascAnn } = await admin.from('posts')
+    .insert({ user_id: users.member.id, club_id: clubId, content: 'cascade probe' })
+    .select('id').single();
   const { error: delErr } = await admin.from('clubs').delete().eq('id', clubId);
   check('club deleted', !delErr, delErr && delErr.message);
-  const { data: annAfter } = await admin.from('posts').select('id').eq('id', annId);
+  const { data: annAfter } = await admin.from('posts').select('id').eq('id', cascAnn.id);
   check('announcement cascaded away with the club', annAfter && annAfter.length === 0, annAfter);
   const { data: persAfter } = await admin.from('posts').select('id').is('club_id', null).eq('user_id', users.coach.id);
   check('personal post untouched by club deletion', persAfter && persAfter.length === 1, persAfter);
 
   // ── Cleanup ──
-  for (const k of ['coach', 'member']) {
+  for (const k of ['coach', 'member', 'coach2', 'outsider']) {
     await admin.from('posts').delete().eq('user_id', users[k].id);
     await admin.from('notifications').delete().eq('user_id', users[k].id);
     await admin.from('notifications').delete().eq('actor_id', users[k].id);

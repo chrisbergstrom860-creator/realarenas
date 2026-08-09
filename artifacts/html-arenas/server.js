@@ -1790,9 +1790,11 @@ app.post(BASE + '/api/posts/:id/comment', requireAuth, async (req, res) => {
   res.json({ success: true, comment: data });
 });
 
-// Delete one of the viewer's own posts. Author only — club announcements also
-// delete this way (author-owned), and club deletion cascades posts via the
-// club_id FK (ON DELETE CASCADE) — the app never double-handles that.
+// Delete a post. Authorization = canManagePost: the author always; for a club
+// announcement (club_id set) ALSO a current admin/coach of that club — the
+// club owns that speech, matching who may announce. Personal posts stay
+// author-only. Club deletion cascades posts via the club_id FK
+// (ON DELETE CASCADE) — the app never double-handles that.
 // Historical note (pre club_id):
 // so there is no club context giving a manager authority (matches the
 // activity rule, not the event one).
@@ -1807,10 +1809,12 @@ app.delete(BASE + '/api/posts/:id', requireAuth, async (req, res) => {
   try {
     const { data: post } = await supabaseAdmin
       .from('posts')
-      .select('id, user_id, image_url')
+      .select('id, user_id, club_id, image_url')
       .eq('id', req.params.id)
       .maybeSingle();
-    if (!post || post.user_id !== req.user.id) {
+    // Zero-leak: denial is byte-identical to a nonexistent id (no existence
+    // oracle). canManagePost = author, or admin/coach of the announcement's club.
+    if (!post || !(await canManagePost(post, req.user.id))) {
       return res.status(404).json({ error: 'Post not found' });
     }
     const { error: likeErr } = await supabaseAdmin.from('post_likes').delete().eq('post_id', post.id);
@@ -1829,7 +1833,7 @@ app.delete(BASE + '/api/posts/:id', requireAuth, async (req, res) => {
     }
     const { error } = await supabaseAdmin.from('posts').delete().eq('id', post.id);
     if (error) return res.status(500).json({ error: 'Could not delete the post' });
-    if (post.image_url) await deletePostImageObject(post.image_url, req.user.id);
+    if (post.image_url) await deletePostImageObject(post.image_url, post.user_id);
     res.json({ success: true });
   } catch (err) {
     console.log('Post delete error:', err.message);
@@ -3083,10 +3087,15 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
         .in('post_id', postIds);
       commentRows = comRows || [];
     }
+    const viewerIsMgr = roleMap[req.user.id] === 'admin' || roleMap[req.user.id] === 'coach';
     (posts || []).forEach((p) => {
       const postLikes = likes.filter((l) => l.post_id === p.id);
       const isAnnouncement = p.club_id === clubId;
       feed.push({
+        // Manager delete affordance — server-decided so the shared delete
+        // fragment never guesses roles. Announcements only; the author case
+        // stays the client-side owner check. Server re-enforces regardless.
+        canDelete: isAnnouncement && viewerIsMgr,
         type: isAnnouncement ? 'announcement' : 'post',
         id: p.id,
         userId: p.user_id,
@@ -5259,9 +5268,12 @@ async function buildFeedPosts(limit, currentUserId) {
   //      announcements through /feed.
   const { data: myClubRows } = await supabaseAdmin
     .from('memberships')
-    .select('club_id')
+    .select('club_id, role')
     .eq('user_id', currentUserId || '00000000-0000-0000-0000-000000000000');
   const myClubIds = [...new Set((myClubRows || []).map((m) => m.club_id).filter(Boolean))];
+  const managedClubIds = new Set((myClubRows || [])
+    .filter((m) => m.role === 'admin' || m.role === 'coach')
+    .map((m) => m.club_id));
   const [personalRes, annRes] = await Promise.all([
     supabaseAdmin
       .from('posts')
@@ -5332,6 +5344,7 @@ async function buildFeedPosts(limit, currentUserId) {
     authorHandle: (profileMap[p.user_id] && profileMap[p.user_id].handle) || 'athlete',
     authorAvatarUrl: (profileMap[p.user_id] && profileMap[p.user_id].avatar_url) || null,
     clubId: p.club_id || null,
+    canDelete: !!(p.club_id && managedClubIds.has(p.club_id)),
     clubName: (p.club_id && clubMap[p.club_id] && clubMap[p.club_id].name) || null,
     clubLogoUrl: (p.club_id && clubMap[p.club_id] && clubMap[p.club_id].logo_url) || null,
     clubSport: (p.club_id && clubMap[p.club_id] && clubMap[p.club_id].sport) || null,
@@ -5698,15 +5711,34 @@ async function visibleEventsFilter(userId, events) {
 // four and five inline copies of checks that were meant to be identical).
 // Response shape stays per-route: PATCH/DELETE give a visible caller a
 // distinct permission message, image routes answer byte-identical not-found.
+// THE membership manager check — is userId currently an admin or coach of
+// clubId? Shared by canManageEvent and the club-announcement delete rule
+// (canManagePost); never re-inline this membership query.
+async function isClubManager(clubId, userId) {
+  if (!clubId || !userId) return false;
+  const { data: mgr } = await supabaseAdmin
+    .from('memberships').select('role')
+    .eq('club_id', clubId).eq('user_id', userId)
+    .in('role', ['admin', 'coach']).maybeSingle();
+  return !!mgr;
+}
+
+// Delete rule for posts: the author always; for a club announcement
+// (club_id set) ALSO a current admin/coach of that club — the club owns that
+// speech, and this matches exactly who may post announcements. Personal posts
+// (club_id null) remain author-only. Mirrors the canManageEvent shape.
+async function canManagePost(post, userId) {
+  if (!post) return false;
+  if (post.user_id === userId) return true;
+  if (!post.club_id) return false;
+  return isClubManager(post.club_id, userId);
+}
+
 async function canManageEvent(event, userId) {
   if (!event) return false;
   if (event.created_by === userId) return true;
   if (!event.club_id) return false;
-  const { data: mgr } = await supabaseAdmin
-    .from('memberships').select('role')
-    .eq('club_id', event.club_id).eq('user_id', userId)
-    .in('role', ['admin', 'coach']).maybeSingle();
-  return !!mgr;
+  return isClubManager(event.club_id, userId);
 }
 
 // Single-event read gate. Returns the event row when userId may see it, and
@@ -9697,6 +9729,7 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
       .eq('user_id', userId)
       .eq('club_id', clubId)
       .maybeSingle();
+    const viewerIsClubManager = !!myMembership && (myMembership.role === 'admin' || myMembership.role === 'coach');
     if (!myMembership) return res.json({ error: 'Not a member of this club' });
 
     // Club details.
@@ -9762,6 +9795,7 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
       return {
         id: a.id,
         userId: a.user_id,
+        canDelete: viewerIsClubManager,
         coachName: nameOf(a.user_id),
         coachAvatarUrl: (profileMap[a.user_id] && profileMap[a.user_id].avatar_url) || null,
         // Display role only if the author is still on the roster — a departed

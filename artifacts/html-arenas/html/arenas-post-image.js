@@ -43,38 +43,52 @@
       '</figure>';
   };
 
-  // ── Delete affordance (shared) ── the ONE renderer + handler for the
-  // author-only post delete, used by every surface that renders a post card
-  // (main feed, club dashboard Feed tab post/announcement branches, club
-  // member-home coach announcements). Rendered ONLY when the viewer is the
-  // author; the server enforces authorship regardless (zero-leak 404).
+  // ── Delete affordance (shared) ── the ONE renderer + handler for post
+  // delete, used by every surface that renders a post card (main feed, club
+  // dashboard Feed tab post/announcement branches, club member-home
+  // announcements). Rendered when the viewer is the author, OR when the
+  // server marked the item deletable (`canDelete`: current admin/coach of a
+  // club announcement's club — server-decided, the client never guesses
+  // roles). The server re-enforces the rule regardless (zero-leak 404).
   // opts.pushRight adds margin-left:auto for heads with no right-aligned
   // sibling before the button.
   window.postDeleteButtonHtml = function (post, viewerId, opts) {
     var owner = post && (post.user_id || post.userId);
-    if (!owner || !viewerId || owner !== viewerId || !post.id) return '';
+    if (!post || !post.id) return '';
+    var isOwn = !!(owner && viewerId && owner === viewerId);
+    if (!isOwn && !post.canDelete) return '';
     var kudos = parseInt(post.likeCount, 10) || 0;
     var comments = parseInt(post.commentCount, 10) || 0;
     var hasPhoto = !!safeUrl(post.image_url);
     var style = (opts && opts.pushRight) ? ' style="margin-left:auto"' : '';
-    return '<button class="pi-del" title="Delete post"' + style +
+    var author = post.authorName || post.name || post.coachName || '';
+    return '<button class="pi-del" title="' + (isOwn ? 'Delete post' : 'Remove announcement') + '"' + style +
       ' onclick="window.deletePost(this,\'' + escAttr(post.id) + '\',' +
-      (hasPhoto ? 1 : 0) + ',' + kudos + ',' + comments + ')">\u2715</button>';
+      (hasPhoto ? 1 : 0) + ',' + kudos + ',' + comments + ',' +
+      (isOwn ? 1 : 0) + ',\'' + escAttr(author) + '\')">\u2715</button>';
   };
 
   // Confirmation copy names the photo, kudos and comments ONLY when present;
-  // a bare post gets the short form.
-  window.deletePost = function (btn, postId, hasPhoto, kudos, comments) {
+  // a bare post gets the short form. Removing SOMEONE ELSE's club
+  // announcement (isOwn=0, manager path) is a different action from deleting
+  // your own post — the copy says whose announcement it is and that it goes
+  // away for the whole club.
+  window.deletePost = function (btn, postId, hasPhoto, kudos, comments, isOwn, authorName) {
+    if (isOwn === undefined) isOwn = 1;
     var parts = [];
     if (hasPhoto) parts.push('its photo');
     if (kudos > 0) parts.push(kudos + ' kudos');
     if (comments > 0) parts.push(comments + ' comment' + (comments === 1 ? '' : 's'));
+    var noun = isOwn ? 'the post' : 'the announcement for the whole club';
     var what = parts.length
-      ? 'This removes the post, ' + (parts.length > 1
+      ? 'This removes ' + noun + ', ' + (parts.length > 1
           ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1]
           : parts[0]) + '.'
-      : 'This removes the post.';
-    if (!confirm('Delete this post? ' + what + ' This can\u2019t be undone.')) return;
+      : 'This removes ' + noun + '.';
+    var lead = isOwn
+      ? 'Delete this post? '
+      : 'Remove this club announcement' + (authorName ? ' posted by ' + authorName : '') + '? ';
+    if (!confirm(lead + what + ' This can\u2019t be undone.')) return;
     btn.disabled = true;
     var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
     fetch(B + '/api/posts/' + encodeURIComponent(postId), { method: 'DELETE' })
