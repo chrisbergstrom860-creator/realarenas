@@ -315,6 +315,12 @@ app.get(['/html/arenas-athlete-cards.js', '/arenas-athlete-cards.js'], (req, res
   res.sendFile(path.join(HTML, 'arenas-athlete-cards.js'));
 });
 
+// Shared club-directory card renderer + request controller — /clubs page
+// (component CSS in arenas.css under the ccd- prefix). Dual-path as above.
+app.get(['/html/arenas-club-cards.js', '/arenas-club-cards.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-club-cards.js'));
+});
+
 // for the rounding-regression verification. Remove after that round.
 
 // Shared club-creation contract layer + in-app club-setup modal. The
@@ -1062,7 +1068,7 @@ function athleteBottomNav(activeKey) {
     + bnItem(activeKey, 'profile', "nav('/profile')", '👤', 'Profile', false)
     + '</nav>';
 }
-const ATHLETE_NAV_ACTIVE = { feed: 'feed', profile: 'profile', events: 'events', log: 'log', calendar: 'calendar', leaderboards: 'ranks', challenges: null, athletes: null, notifications: null, billing: null };
+const ATHLETE_NAV_ACTIVE = { feed: 'feed', profile: 'profile', events: 'events', log: 'log', calendar: 'calendar', leaderboards: 'ranks', challenges: null, athletes: null, clubs: null, notifications: null, billing: null };
 
 // Club pages (coach dashboard + member home) navigate by switching tabs/sections
 // in place via setTab(), not by loading a new URL, so their bottom nav calls
@@ -5645,6 +5651,359 @@ app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
     sendPageError(res);
   }
 });
+// ── CLUB DIRECTORY ──────────────────────────────────────────────────────────
+// Public-club discovery + request-and-approve join flow.
+//   - Only clubs with visibility='public' are EVER listed or reachable through
+//     the request endpoints. Private clubs return the byte-identical
+//     404 {error:'Club not found'} used for nonexistent ids (zero-leak, same
+//     standard as events/challenges).
+//   - Decline → 7-day cooldown (server-enforced from resolved_at) before the
+//     same user may re-request; re-request reuses the same row (PK club+user).
+//   - Club going private deletes its pending requests (checked write).
+//   - Direct invite acceptance deletes any pending request for that club/user.
+const JOIN_REQUEST_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+const CLUB_NOT_FOUND = { error: 'Club not found' };
+
+function joinRequestCooldownUntil(row) {
+  if (!row || row.status !== 'declined' || !row.resolved_at) return null;
+  const until = new Date(row.resolved_at).getTime() + JOIN_REQUEST_COOLDOWN_MS;
+  return until > Date.now() ? new Date(until).toISOString() : null;
+}
+
+// Fetch a club ONLY if it is publicly listed. Returns null for both
+// "does not exist" and "exists but private" — callers must respond
+// identically for the two cases.
+async function getPublicClub(clubId) {
+  if (!supabaseAdmin || !clubId) return null;
+  const { data } = await supabaseAdmin
+    .from('clubs')
+    .select('id, name, handle, sport, city, logo_url, description, visibility, created_at')
+    .eq('id', clubId)
+    .eq('visibility', 'public')
+    .maybeSingle();
+  return data || null;
+}
+
+async function buildClubDirectory(viewerId) {
+  if (!supabaseAdmin) return { clubs: [] };
+  const { data: clubRows, error } = await supabaseAdmin
+    .from('clubs')
+    .select('id, name, handle, sport, city, logo_url, description, created_at')
+    .eq('visibility', 'public')
+    .order('name', { ascending: true })
+    .limit(100);
+  if (error) throw new Error('club directory: ' + error.message);
+  const clubs = clubRows || [];
+  const clubIds = clubs.map(c => c.id);
+
+  let countRows = [];
+  let myMemberships = [];
+  let myRequests = [];
+  if (clubIds.length) {
+    const [mc, mm, mr] = await Promise.all([
+      supabaseAdmin.from('memberships').select('club_id').in('club_id', clubIds),
+      supabaseAdmin.from('memberships').select('club_id, role').eq('user_id', viewerId).in('club_id', clubIds),
+      supabaseAdmin.from('club_join_requests').select('club_id, status, resolved_at').eq('user_id', viewerId).in('club_id', clubIds)
+    ]);
+    countRows = mc.data || [];
+    myMemberships = mm.data || [];
+    myRequests = mr.data || [];
+  }
+  const roleByClub = {};
+  for (const m of myMemberships) roleByClub[m.club_id] = m.role;
+  const reqByClub = {};
+  for (const r of myRequests) reqByClub[r.club_id] = r;
+
+  const out = [];
+  for (const c of clubs) {
+    const req = reqByClub[c.id] || null;
+    const cooldownUntil = joinRequestCooldownUntil(req);
+    // Server-decided viewer state — the client renders it, never re-derives.
+    let viewerState = 'none';
+    if (roleByClub[c.id]) viewerState = 'member';
+    else if (req && req.status === 'pending') viewerState = 'pending';
+    else if (cooldownUntil) viewerState = 'cooldown';
+    out.push({
+      id: c.id,
+      name: c.name,
+      handle: c.handle,
+      sport: c.sport,
+      city: c.city || null,
+      logo_url: c.logo_url || null,
+      description: c.description || null,
+      createdAt: c.created_at || null,
+      memberCount: countRows.filter(m => m.club_id === c.id).length,
+      plan: (await getClubPlan(c.id)) === 'club_pro' ? 'club_pro' : undefined,
+      viewerState,
+      viewerRole: roleByClub[c.id] || null,
+      cooldownUntil
+    });
+  }
+  return { clubs: out };
+}
+
+app.get(BASE + '/api/clubs/directory', requireAuth, async (req, res) => {
+  try {
+    const dir = await buildClubDirectory(req.user.id);
+    res.json({ clubs: dir.clubs });
+  } catch (err) {
+    console.log('Club directory error:', err.message);
+    res.status(500).json({ error: 'Could not load clubs' });
+  }
+});
+
+app.get(BASE + '/clubs', requirePageAuth, async (req, res) => {
+  let pageData = {
+    clubsDirectory: [],
+    profile: displayFromUser(req.user),
+    userId: req.user.id,
+    clubs: []
+  };
+  try {
+    if (supabaseAdmin) {
+      const dir = await buildClubDirectory(req.user.id);
+      pageData.clubsDirectory = dir.clubs;
+      pageData.clubs = await getSidebarClubs(req.user.id);
+    }
+  } catch (err) {
+    console.log('Clubs page data error:', err.message);
+  }
+  try {
+    const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-clubs.html'), 'utf8'), pageData), 'clubs'), (await getUserPlan(req.user.id)) === 'pro');
+    res.type('html').send(html);
+  } catch (err) {
+    console.log('Clubs page render error:', err.message);
+    sendPageError(res);
+  }
+});
+
+// Request to join a public club. Zero-leak: private/nonexistent ids are
+// indistinguishable. Re-request reuses the existing row.
+app.post(BASE + '/api/clubs/:clubId/join-request', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  try {
+    const club = await getPublicClub(req.params.clubId);
+    if (!club) return res.status(404).json(CLUB_NOT_FOUND);
+
+    const existingRole = await getClubRole(req.user.id, club.id);
+    if (existingRole) return res.status(409).json({ error: 'already_member' });
+
+    const { data: existing } = await supabaseAdmin
+      .from('club_join_requests')
+      .select('club_id, user_id, status, resolved_at')
+      .eq('club_id', club.id)
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+
+    if (existing && existing.status === 'pending') {
+      return res.status(409).json({ error: 'request_pending' });
+    }
+    const cooldownUntil = joinRequestCooldownUntil(existing);
+    if (cooldownUntil) {
+      return res.status(409).json({ error: 'request_cooldown', retryAt: cooldownUntil });
+    }
+
+    if (existing) {
+      // Declined past cooldown, or a stale 'approved' row after the user left
+      // the club — flip the same row back to pending.
+      const { error } = await supabaseAdmin
+        .from('club_join_requests')
+        .update({ status: 'pending', created_at: new Date().toISOString(), resolved_at: null, resolved_by: null })
+        .eq('club_id', club.id)
+        .eq('user_id', req.user.id);
+      if (error) return res.status(500).json({ error: 'Could not send request' });
+    } else {
+      const { error } = await supabaseAdmin
+        .from('club_join_requests')
+        .insert({ club_id: club.id, user_id: req.user.id, status: 'pending' });
+      if (error) return res.status(500).json({ error: 'Could not send request' });
+    }
+
+    // Notify the club's managers (admins + coaches — the same set that can
+    // approve). Best-effort, like every other notification fan-out.
+    try {
+      const { data: mgrs } = await supabaseAdmin
+        .from('memberships').select('user_id').eq('club_id', club.id).in('role', ['admin', 'coach']);
+      const requester = displayFromUser(req.user);
+      await Promise.all((mgrs || []).map(m => createNotification({
+        userId: m.user_id,
+        type: 'join_request',
+        title: 'New join request',
+        body: `${requester.name} requested to join ${club.name}`,
+        link: '/clubs/dashboard?club=' + club.id,
+        actorId: req.user.id,
+        entityId: club.id
+      })));
+    } catch (err) {
+      console.log('Join request notification error:', err.message);
+    }
+
+    res.json({ success: true, status: 'pending' });
+  } catch (err) {
+    console.log('Join request error:', err.message);
+    res.status(500).json({ error: 'Could not send request' });
+  }
+});
+
+// Cancel the caller's own pending request. Conditional delete → empty result
+// means "nothing to cancel" (race-free honesty, same rule as other DELETEs).
+app.delete(BASE + '/api/clubs/:clubId/join-request', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  try {
+    const { data: gone, error } = await supabaseAdmin
+      .from('club_join_requests')
+      .delete()
+      .eq('club_id', req.params.clubId)
+      .eq('user_id', req.user.id)
+      .eq('status', 'pending')
+      .select('club_id');
+    if (error) return res.status(500).json({ error: 'Could not cancel request' });
+    if (!gone || !gone.length) return res.status(404).json({ error: 'Request not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.log('Join request cancel error:', err.message);
+    res.status(500).json({ error: 'Could not cancel request' });
+  }
+});
+
+// Approve / decline a pending request. Manager-gated via isClubManager (the
+// same authority set as invites). Non-managers and nonexistent clubs get the
+// byte-identical 404.
+async function resolveJoinRequestRoute(req, res, action) {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  const { clubId, userId } = req.params;
+  try {
+    if (!(await isClubManager(clubId, req.user.id))) {
+      return res.status(404).json(CLUB_NOT_FOUND);
+    }
+    const { data: row } = await supabaseAdmin
+      .from('club_join_requests')
+      .select('club_id, user_id, status')
+      .eq('club_id', clubId)
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .maybeSingle();
+    if (!row) return res.status(404).json({ error: 'Request not found' });
+
+    if (action === 'approve') {
+      // Already a member (e.g. accepted an invite in a race) → just resolve
+      // the row; otherwise create the membership first.
+      const already = await getClubRole(userId, clubId);
+      if (!already) {
+        const { error: memErr } = await supabaseAdmin
+          .from('memberships')
+          .insert({ user_id: userId, club_id: clubId, role: 'member' });
+        if (memErr) return res.status(500).json({ error: 'Could not approve request' });
+      }
+      const { error: markErr } = await supabaseAdmin
+        .from('club_join_requests')
+        .update({ status: 'approved', resolved_at: new Date().toISOString(), resolved_by: req.user.id })
+        .eq('club_id', clubId)
+        .eq('user_id', userId)
+        .eq('status', 'pending');
+      if (markErr) {
+        // Membership without a resolved row would let the same request be
+        // approved twice — roll the membership back (mirror invite-accept).
+        if (!already) {
+          const { error: rbErr } = await supabaseAdmin.from('memberships').delete()
+            .eq('user_id', userId).eq('club_id', clubId);
+          if (rbErr) console.log('Join approve rollback failed:', rbErr.message);
+        }
+        return res.status(500).json({ error: 'Could not approve request' });
+      }
+      try {
+        const { data: clubRow } = await supabaseAdmin.from('clubs').select('name').eq('id', clubId).maybeSingle();
+        await createNotification({
+          userId,
+          type: 'join_request',
+          title: 'Request approved',
+          body: `You're in — welcome to ${(clubRow && clubRow.name) || 'the club'}`,
+          link: '/clubs/member/' + clubId,
+          actorId: req.user.id,
+          entityId: clubId
+        });
+      } catch (err) {
+        console.log('Join approve notification error:', err.message);
+      }
+      return res.json({ success: true, status: 'approved' });
+    }
+
+    // Decline: quiet (no notification — the requester sees the cooldown state
+    // in the directory). Starts the 7-day cooldown via resolved_at.
+    const { error } = await supabaseAdmin
+      .from('club_join_requests')
+      .update({ status: 'declined', resolved_at: new Date().toISOString(), resolved_by: req.user.id })
+      .eq('club_id', clubId)
+      .eq('user_id', userId)
+      .eq('status', 'pending');
+    if (error) return res.status(500).json({ error: 'Could not decline request' });
+    res.json({ success: true, status: 'declined' });
+  } catch (err) {
+    console.log('Join request resolve error:', err.message);
+    res.status(500).json({ error: 'Could not update request' });
+  }
+}
+app.post(BASE + '/api/clubs/:clubId/join-requests/:userId/approve', requireAuth, (req, res) => resolveJoinRequestRoute(req, res, 'approve'));
+app.post(BASE + '/api/clubs/:clubId/join-requests/:userId/decline', requireAuth, (req, res) => resolveJoinRequestRoute(req, res, 'decline'));
+
+// Club directory settings (visibility + description). Admin-only — listing a
+// club publicly is an owner-level decision, stricter than the manager set
+// that handles requests. Zero-leak 404 for non-admins/nonexistent clubs.
+app.patch(BASE + '/api/clubs/:clubId/settings', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  try {
+    const role = await getClubRole(req.user.id, req.params.clubId);
+    if (!role || role.role !== 'admin') return res.status(404).json(CLUB_NOT_FOUND);
+
+    const body = req.body || {};
+    const update = {};
+    if (body.visibility !== undefined) {
+      if (body.visibility !== 'public' && body.visibility !== 'private') {
+        return res.status(400).json({ error: 'invalid_visibility' });
+      }
+      update.visibility = body.visibility;
+    }
+    if (body.description !== undefined) {
+      const desc = String(body.description || '').trim();
+      if (desc.length > 500) return res.status(400).json({ error: 'description_too_long', max: 500 });
+      update.description = desc || null;
+    }
+    if (!Object.keys(update).length) return res.status(400).json({ error: 'nothing_to_update' });
+
+    const { data: updated, error } = await supabaseAdmin
+      .from('clubs')
+      .update(update)
+      .eq('id', req.params.clubId)
+      .select('id, visibility, description');
+    if (error || !updated || !updated.length) {
+      return res.status(500).json({ error: 'Could not save settings' });
+    }
+
+    // Going private voids pending requests — the club is no longer
+    // discoverable, so a pending request would dangle unanswerable. Checked
+    // write: a failure here must fail the route so state can't silently
+    // diverge (the visibility change itself stands — safe direction: club is
+    // hidden, and any surviving pending rows are unreachable via the
+    // manager UI only until this is retried).
+    if (update.visibility === 'private') {
+      const { error: prErr } = await supabaseAdmin
+        .from('club_join_requests')
+        .delete()
+        .eq('club_id', req.params.clubId)
+        .eq('status', 'pending');
+      if (prErr) {
+        console.log('Pending request purge failed:', prErr.message);
+        return res.status(500).json({ error: 'saved_but_requests_not_cleared', message: 'Visibility saved, but pending requests could not be cleared. Save again to retry.' });
+      }
+    }
+
+    res.json({ success: true, visibility: updated[0].visibility, description: updated[0].description });
+  } catch (err) {
+    console.log('Club settings error:', err.message);
+    res.status(500).json({ error: 'Could not save settings' });
+  }
+});
+
 // ── EVENTS API ──
 // Mounted under BASE so the shared proxy routes them here (the separate
 // api-server owns the bare "/api"). Display names come from auth metadata (no
@@ -8385,6 +8744,7 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
       // (posts are user-scoped — no club_id column; the club feed derives
       // from member activity — so there is no club-posts table to sweep)
       await del('club_invites', q => q.eq('club_id', cid));
+      await del('club_join_requests', q => q.eq('club_id', cid));
       await del('memberships', q => q.eq('club_id', cid));
       await del('subscriptions', q => q.eq('owner_type', 'club').eq('owner_id', cid));
       if (club.logo_url) await deleteAvatarObject(club.logo_url, 'clubs/' + cid);
@@ -8481,6 +8841,7 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
     await del('event_rsvps', q => q.eq('user_id', uid));
     await del('challenge_participants', q => q.eq('user_id', uid));
     await del('memberships', q => q.eq('user_id', uid));
+    await del('club_join_requests', q => q.eq('user_id', uid));
     await del('club_invites', q => q.eq('invited_by', uid));
     if (email) await del('club_invites', q => q.eq('email', email));
     await del('subscriptions', q => q.eq('owner_type', 'user').eq('owner_id', uid));
@@ -9355,7 +9716,7 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
     const pickManagedMembership = async (clubFilter) => {
       let q = supabaseAdmin
         .from('memberships')
-        .select('club_id, role, clubs (id, name, handle, sport, city, logo_url)')
+        .select('club_id, role, clubs (id, name, handle, sport, city, logo_url, visibility, description)')
         .eq('user_id', req.user.id)
         .in('role', ['admin', 'coach']);
       if (clubFilter) q = q.eq('club_id', clubFilter);
@@ -9615,8 +9976,34 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
       }
     }
 
+    // Pending directory join requests for the Members tab queue. Names come
+    // from auth metadata (no profiles table), same as the members list.
+    let joinRequests = [];
+    if (clubId) {
+      try {
+        const { data: jrRows } = await supabaseAdmin
+          .from('club_join_requests')
+          .select('user_id, created_at')
+          .eq('club_id', clubId)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: true });
+        joinRequests = await Promise.all((jrRows || []).map(async (r) => {
+          let display = { name: 'Athlete', handle: 'athlete' };
+          try {
+            const { data: u } = await supabaseAdmin.auth.admin.getUserById(r.user_id);
+            if (u && u.user) display = displayFromUser(u.user);
+          } catch (err) { /* fall back to defaults */ }
+          return { user_id: r.user_id, created_at: r.created_at, name: display.name, handle: display.handle, avatar_url: display.avatar_url || null };
+        }));
+      } catch (e) {
+        // Non-fatal: dashboard renders without the request queue.
+      }
+    }
+
     const clubData = {
       club: (membership && membership.clubs) || null,
+      viewerRole: membership && membership.role,
+      joinRequests,
       profile: displayFromUser(req.user),
       // The viewer's full membership list (with role) powers the "Clubs you
       // manage" section of the avatar dropdown on this page too, so multi-club
@@ -9963,7 +10350,7 @@ app.get(BASE + '/clubs/invite', requirePageAuth, async (req, res) => {
     const pickManagedMembership = async (clubFilter) => {
       let q = supabaseAdmin
         .from('memberships')
-        .select('club_id, role, clubs (id, name, handle, sport, city, logo_url)')
+        .select('club_id, role, clubs (id, name, handle, sport, city, logo_url, visibility, description)')
         .eq('user_id', req.user.id)
         .in('role', ['admin', 'coach']);
       if (clubFilter) q = q.eq('club_id', clubFilter);
@@ -11154,6 +11541,21 @@ app.post(BASE + '/auth/join/:token/existing', requireAuth, async (req, res) => {
         if (rbErr) console.log('Invite join rollback: membership delete failed:', rbErr.message);
         return res.status(500).json({ error: 'Could not join club' });
       }
+    }
+
+    // A pending directory join request for this club is now moot — the user
+    // got in via a direct invite. Remove it so the club's request queue and
+    // the requester's directory state stay honest. Non-fatal: a leftover row
+    // self-heals (approve route treats already-member as resolve-only, and
+    // re-request flips the same row).
+    {
+      const { error: jrErr } = await supabaseAdmin
+        .from('club_join_requests')
+        .delete()
+        .eq('club_id', invite.club_id)
+        .eq('user_id', req.user.id)
+        .eq('status', 'pending');
+      if (jrErr) console.log('Invite join: pending request cleanup failed:', jrErr.message);
     }
 
     try {

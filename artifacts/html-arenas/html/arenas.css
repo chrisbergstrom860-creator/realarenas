@@ -573,6 +573,45 @@ body {
   body:has(.bottom-nav) .adc-card{border-right:none}
 }
 
+/* ── CLUB DIRECTORY CARDS (ccd-) ──
+   Shared component for arenas-club-cards.js (the /clubs directory page).
+   Mirrors the adc- athlete-directory conventions. */
+@keyframes ccd-fade-up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.ccd-grid{display:grid;gap:0}
+.ccd-grid.ccd-grid-2{grid-template-columns:1fr 1fr}
+.ccd-card{background:white;border-bottom:var(--border);border-right:var(--border);padding:16px;display:flex;flex-direction:column;gap:10px;animation:ccd-fade-up .2s ease both;min-width:0}
+.ccd-grid-2 .ccd-card:nth-child(even){border-right:none}
+.ccd-head{display:flex;align-items:center;gap:10px}
+.ccd-head-main{flex:1;min-width:0}
+.ccd-tile{width:42px;height:42px;border-radius:9px;background:var(--gray-100);border:var(--border);display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;overflow:hidden}
+.ccd-tile img{width:100%;height:100%;object-fit:cover}
+.ccd-name{font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ccd-sub{font-size:11px;color:var(--gray-400);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ccd-tags{display:flex;gap:4px;flex-wrap:wrap}
+.ccd-pill{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid transparent;white-space:nowrap;display:inline-block;background:var(--gray-100);color:var(--gray-600)}
+.ccd-desc{font-size:12px;color:var(--gray-600);line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ccd-foot{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding-top:4px;border-top:var(--border)}
+.ccd-btn{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;transition:all .13s;flex-shrink:0;border:1px solid transparent;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ccd-btn-request{background:var(--yellow);border-color:var(--yellow-dark);color:var(--gray-900)}
+.ccd-btn-request:hover{background:var(--yellow-dark)}
+/* Pale + stroke = tentative (pending), per the two-tier yellow grammar. */
+.ccd-btn-pending{background:var(--yellow-light);border-color:#fde68a;color:#7a5c00}
+.ccd-btn-pending:hover{background:var(--red-light);border-color:#FECACA;color:#A32D2D}
+.ccd-btn-cooldown{background:var(--gray-50);border-color:var(--gray-200);color:var(--gray-400);cursor:default}
+.ccd-btn-member{background:var(--gray-100);border-color:var(--gray-200);color:var(--gray-600)}
+.ccd-btn-member:hover{background:var(--gray-200)}
+.ccd-empty{background:white;text-align:center;padding:56px 24px}
+.ccd-empty-t{font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:5px}
+.ccd-empty-s{font-size:12.5px;color:var(--gray-500);max-width:420px;margin:0 auto;line-height:1.5}
+.ccd-empty .ccd-empty-cta{margin-top:14px}
+@media (max-width:768px){
+  /* Mobile: single-column stacked cards, full-width action button. */
+  body:has(.bottom-nav) .ccd-grid.ccd-grid-2{grid-template-columns:1fr}
+  body:has(.bottom-nav) .ccd-card{border-right:none}
+  body:has(.bottom-nav) .ccd-foot{justify-content:stretch}
+  body:has(.bottom-nav) .ccd-btn{flex:1;text-align:center}
+}
+
 /* ── SHARED EVENT FORM (arenas-event-form.js) ──
    Promoted from the events page's inline evx-* rules per the shared-CSS
    consolidation rule: the form now renders on the events page AND the club

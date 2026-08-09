@@ -42,11 +42,12 @@ const USER_REFS = [
   ['goals', 'user_id'], ['achievements', 'user_id'], ['planned_sessions', 'user_id'],
   ['profiles', 'id'], ['events', 'created_by'], ['challenges', 'created_by'],
   ['club_invites', 'invited_by'],
+  ['club_join_requests', 'user_id'],
   ['challenge_invites', 'invitee_id'], ['challenge_invites', 'inviter_id'],
 ];
 // Tables without an `id` PK — deletions match on their composite ref columns only
 // (never on full rows: null-valued columns would become eq.null and match nothing).
-const COMPOSITE_KEYS = { follows: ['follower_id', 'following_id'], post_likes: ['post_id', 'user_id'], activity_likes: ['activity_id', 'user_id'], challenge_invites: ['challenge_id', 'invitee_id'] };
+const COMPOSITE_KEYS = { follows: ['follower_id', 'following_id'], post_likes: ['post_id', 'user_id'], activity_likes: ['activity_id', 'user_id'], challenge_invites: ['challenge_id', 'invitee_id'], club_join_requests: ['club_id', 'user_id'] };
 
 let failures = 0;
 function checkErr(label, error) {
@@ -135,7 +136,7 @@ async function deleteUserStorage(uid) {
         console.log(`  SKIPPED club "${club.name}" (${club.id}): has other members — transfer ownership manually, auth user NOT deleted`);
         continue;
       }
-      for (const [t, c] of [['memberships', 'club_id'], ['club_invites', 'club_id'], ['events', 'club_id'], ['challenges', 'club_id'], ['subscriptions', 'owner_id']]) {
+      for (const [t, c] of [['memberships', 'club_id'], ['club_invites', 'club_id'], ['club_join_requests', 'club_id'], ['events', 'club_id'], ['challenges', 'club_id'], ['subscriptions', 'owner_id']]) {
         const { error } = await admin.from(t).delete().eq(c, club.id);
         checkErr(`${t} for club ${club.id}`, error);
       }

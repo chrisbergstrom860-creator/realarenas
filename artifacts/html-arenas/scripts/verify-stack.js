@@ -60,7 +60,7 @@ function fixedCases() {
   check('tiny 0.1h segment renders at true 1.667%', html.includes('flex:0 0 1.667%'));
 
   // Registry colors + tooltips.
-  check('running segment uses #9A3412 with tooltip', html.includes('title="Running · 4h"') && html.includes('background:#9A3412'));
+  check('running segment uses #C2410C with tooltip', html.includes('title="Running · 4h"') && html.includes('background:#C2410C'));
   check('cycling segment uses #1E40AF with tooltip', html.includes('title="Cycling · 1.9h"') && html.includes('background:#1E40AF'));
 
   // Total label unchanged (labels the whole stack), zero week honest.

@@ -102,7 +102,11 @@ console.log('MANIFEST users:', JSON.stringify(Object.fromEntries(Object.entries(
 const LONG = 'Late Autumn Ultra-Distance Trail Running Consistency and Elevation Gain Challenge';
 const club = await ins('clubs', {
   name: 'Trans-Scandinavian Endurance and Alpine Expedition Society',
-  handle: 'geoclub', sport: 'running', city: 'Ytre Snillfjordsbotn', owner_id: C
+  handle: 'geoclub', sport: 'running', city: 'Ytre Snillfjordsbotn', owner_id: C,
+  // Listed in the /clubs directory so the clubs page renders a worst-case
+  // long-name + long-description card for the geometry pass.
+  visibility: 'public',
+  description: 'A club for extraordinarily committed long-distance mountain athletes crossing the Scandinavian ranges in all four seasons, with weekly structured sessions and an annual expedition.'
 });
 await ins('memberships', { user_id: C, club_id: club.id, role: 'admin' });
 await ins('memberships', { user_id: M, club_id: club.id, role: 'member' });
@@ -337,6 +341,8 @@ const PAGES = [
       { name: 'modal-athlete-profile', js: `document.querySelector('#athlete-grid .adc-card[data-clickable]').click()`,
         waitFor: '#modal-profile.open', root: '#modal-profile' }
     ] },
+  { user: 'member', name: 'clubs-directory', path: '/clubs', waitFor: '#club-grid > *', root: 'body',
+    surfaces: [{ name: 'club cards', sel: '#club-grid', min: 1 }] },
   { user: 'creator', name: 'log', path: '/log', waitFor: 'form, #act-form, .main', root: 'body',
     surfaces: [{ name: 'log form', sel: '.main', min: 1 }] },
   { user: 'creator', name: 'billing', path: '/billing', waitFor: '.main', root: 'body',

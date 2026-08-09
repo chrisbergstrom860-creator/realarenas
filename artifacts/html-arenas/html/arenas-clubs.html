@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+window.BASE = window.location.pathname.startsWith('/html') ? '/html' : '';
+window.nav = function(path){ window.location.href = window.BASE + path; };
+document.addEventListener('DOMContentLoaded', function(){
+  if (window.BASE === '') {
+    document.querySelectorAll('[href^="/html/"]').forEach(function(el){ el.setAttribute('href', el.getAttribute('href').slice(5)); });
+    document.querySelectorAll('[action^="/html/"]').forEach(function(el){ el.setAttribute('action', el.getAttribute('action').slice(5)); });
+  }
+});
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/html/manifest.webmanifest">
+<meta name="theme-color" content="#FFD21E">
+<link rel="icon" href="/html/favicon.ico" sizes="48x48">
+<link rel="icon" href="/html/arenas-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/html/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Arenas">
+<script src="/html/arenas-pwa.js" defer></script>
+<title>Arenas — Clubs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/html/arenas.css">
+<script src="/html/arenas-club-create.js"></script>
+<script src="/html/arenas-club-cards.js"></script>
+<style>
+button,select,input,textarea{font-family:var(--font)}
+@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.8)}}
+/* ── TOPBAR ── */
+.topbar-search{display:flex;align-items:center;gap:8px;background:var(--gray-50);border:var(--border);border-radius:7px;padding:6px 12px;width:300px;transition:border-color .15s,box-shadow .15s}
+.topbar-search:focus-within{border-color:var(--gray-400);box-shadow:0 0 0 3px rgba(107,114,128,.08)}
+.topbar-search input{background:none;border:none;outline:none;font-size:13px;color:var(--gray-700);width:100%}
+.topbar-search input::placeholder{color:var(--gray-400)}
+.icon-btn{width:44px;height:44px;border-radius:8px;border:var(--border);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:19px;position:relative;transition:background .1s}
+.icon-btn:hover{background:var(--gray-50)}
+/* ── MAIN ── */
+.main{display:flex;flex-direction:column;overflow:hidden;min-height:calc(100vh - var(--topbar-h))}
+.body-grid{display:grid;grid-template-columns:1fr;flex:1;overflow:hidden}
+.clubs-col{overflow-y:auto}
+.clubs-col::-webkit-scrollbar{width:4px}
+.clubs-col::-webkit-scrollbar-thumb{background:var(--gray-200);border-radius:2px}
+/* ── FILTER BAR ── */
+.filter-zone{background:white;border-bottom:var(--border);position:sticky;top:0;z-index:150;padding:10px 20px;display:flex;flex-direction:column;gap:7px}
+.filter-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.f-group-label{font-size:11px;font-weight:600;color:var(--gray-500);flex-shrink:0;text-transform:uppercase;letter-spacing:.05em;margin-right:2px}
+.f-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.club-count{font-size:12px;color:var(--gray-500);white-space:nowrap}
+.sort-select,.sport-select{padding:5px 10px;border:var(--border);border-radius:7px;font-size:12px;background:white;color:var(--gray-600);outline:none;cursor:pointer}
+.page-intro{padding:14px 20px;border-bottom:var(--border);background:white}
+.page-intro h1{font-size:16px;font-weight:700;color:var(--gray-900)}
+.page-intro p{font-size:12px;color:var(--gray-400);margin-top:2px}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="topbar-logo" onclick="nav('/feed')" style="cursor:pointer">
+    <img class="logo-icon" src="/html/arenas-icon.svg" alt="">
+    <span class="logo-text">Arenas</span>
+  </div>
+  <div class="topbar-center">
+    <div class="topbar-search">
+      <span style="color:var(--gray-400);font-size:13px">🔍</span>
+      <input type="text" id="search-input" placeholder="Search clubs by name, sport, city…" oninput="handleSearch(this.value)">
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <div class="icon-btn" onclick="nav('/notifications')">🔔<div class="notif-dot"></div></div>
+    <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
+      <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">·</div>
+      <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
+        <a href="/html/profile" style="display:block;padding:10px 14px;font-size:13px;color:#111827;text-decoration:none">My profile</a>
+        <a href="/html/auth/logout" style="display:block;padding:10px 14px;font-size:13px;color:#DC2626;text-decoration:none;border-top:1px solid #f3f4f6">Log out</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="nav-section-label">My Arenas</div>
+  <div class="nav-item" onclick="nav('/feed')"><span class="nav-icon">🏠</span> Feed</div>
+  <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">👤</span> My profile</div>
+  <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">🎟️</span> Events</div>
+  <div class="nav-item" onclick="nav('/calendar')"><span class="nav-icon">🗓️</span> Calendar</div>
+  <div class="nav-item" onclick="nav('/leaderboards')"><span class="nav-icon">🏆</span> Leaderboards</div>
+  <div class="nav-item" onclick="nav('/challenges')"><span class="nav-icon">⚡</span> Challenges</div>
+  <div class="nav-item" onclick="nav('/log')"><span class="nav-icon">➕</span> Log activity</div>
+  <div class="nav-item" onclick="nav('/athletes')"><span class="nav-icon">👥</span> Athletes</div>
+  <div class="nav-item active"><span class="nav-icon">🏟️</span> Clubs</div>
+  <div class="nav-section-label">My clubs</div>
+  <div class="nav-section-label">Account</div>
+  <div class="nav-item" onclick="nav('/billing')"><span class="nav-icon">💳</span> Billing</div>
+  <div class="nav-item" onclick="nav('/profile#settings')"><span class="nav-icon">⚙️</span> Settings</div>
+  <div class="sidebar-footer">
+    <div style="display:flex;align-items:center;gap:9px">
+      <div class="sf-av" style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">·</div>
+      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div></div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+
+  <div class="page-intro">
+    <h1>Clubs accepting requests</h1>
+    <p>Clubs that have chosen to be listed. Request to join — the club reviews every request.</p>
+  </div>
+
+  <!-- FILTER BAR -->
+  <div class="filter-zone">
+    <div class="filter-row">
+      <span class="f-group-label">Filter</span>
+      <select class="sport-select" id="sport-select" onchange="setSport(this.value)">
+        <option value="">All sports</option>
+      </select>
+      <div class="f-right">
+        <span class="club-count" id="club-count">Loading…</span>
+        <select class="sort-select" onchange="setSort(this.value)">
+          <option value="name">Sort: Name (A–Z)</option>
+          <option value="new">Sort: Newest</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div class="body-grid">
+    <div class="clubs-col" id="clubs-col">
+      <div class="ccd-grid ccd-grid-2" id="club-grid">
+        <div style="grid-column:1/-1;text-align:center;padding:56px 24px;color:var(--gray-400);font-size:13px">Loading clubs…</div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+</script>
+<script>
+// Reflect the real unread notification count on the bell icon.
+(function(){
+  var B = window.BASE || (location.pathname.indexOf("/html") === 0 ? "/html" : "");
+  fetch(B + "/api/notifications").then(function(r){ return r.json(); }).then(function(data){
+    var unread = (data && data.unreadCount) || 0;
+    var dot = document.querySelector(".notif-dot");
+    if (dot) dot.style.display = unread > 0 ? "block" : "none";
+    var navBadge = document.getElementById("nav-unread-badge");
+    if (navBadge) navBadge.textContent = unread > 0 ? unread : "";
+  }).catch(function(){});
+})();
+</script>
+<script>
+// ── CLUB DIRECTORY (from window.ARENAS_DATA.clubsDirectory) ──
+// Cards come from the shared arenas-club-cards.js module; this page owns the
+// filter/sort/search state, the sport dropdown and the ?q= deep link.
+(function() {
+  const data = window.ARENAS_DATA;
+  if (!data) return;
+
+  // Update the logged-in user's identity in the sidebar footer.
+  const myName = (data.profile && data.profile.name) || 'Athlete';
+  document.querySelectorAll('.sidebar-footer div').forEach(el => {
+    if (el.childElementCount !== 0) return;
+    if (el.textContent.trim() === 'Jamie King') el.textContent = myName;
+  });
+
+  const clubs = data.clubsDirectory || [];
+  const grid = document.getElementById('club-grid');
+  if (!grid) return;
+
+  let sport = '';
+  let sortMode = 'name';
+  let query = '';
+
+  // Sport dropdown from the injected registry (sports.js SSOT) — only sports
+  // that actually have listed clubs, so the filter can never dead-end.
+  const sportSel = document.getElementById('sport-select');
+  const present = {};
+  clubs.forEach(c => { present[c.sport] = true; });
+  (window.ARENAS_SPORTS || []).forEach(s => {
+    if (!present[s.id]) return;
+    const o = document.createElement('option');
+    o.value = s.id;
+    o.textContent = s.label;
+    sportSel.appendChild(o);
+  });
+
+  const cards = window.ArenasClubCards.mount({
+    clubs: clubs,
+    gridEl: grid,
+    countEl: document.getElementById('club-count'),
+    base: window.BASE || '',
+    getFilters: function () { return { sport: sport, query: query, sort: sortMode }; },
+    gridClass: function () { return 'ccd-grid ccd-grid-2'; },
+    emptyStates: {
+      none: {
+        t: 'No clubs are listed yet',
+        s: 'Clubs choose to be listed — if you run one, you can make it discoverable from your club settings.',
+        cta: '<div class="ccd-empty-cta"><button class="ccd-btn ccd-btn-request" onclick="if(window.ArenasClubCreate){window.ArenasClubCreate.open();}else{nav(\'/for-clubs?create=1\');}">+ Create a club</button></div>'
+      },
+      noMatch: { t: 'No clubs match your search', s: 'Try a different name, sport or city.' }
+    },
+    onCardClick: null,
+    toast: window.showToast
+  });
+
+  window.setSport = function (v) { sport = v; cards.render(); };
+  window.setSort = function (v) { sortMode = v; cards.render(); };
+  window.handleSearch = function (val) { query = String(val || '').trim().toLowerCase(); cards.render(); };
+
+  // ?q= deep link (same convention as /athletes).
+  try {
+    const q = new URLSearchParams(location.search).get('q');
+    if (q) {
+      document.getElementById('search-input').value = q;
+      query = q.trim().toLowerCase();
+    }
+  } catch (e) {}
+
+  cards.render();
+})();
+</script>
+<script>
+// Shared "My clubs" sidebar renderer — identical on every athlete-facing page so
+// the sidebar always reflects the viewer's real club memberships
+// (window.ARENAS_DATA.clubs) from the same Supabase query. No hardcoded club data
+// lives in the static HTML.
+(function () {
+  var clubs = (window.ARENAS_DATA && window.ARENAS_DATA.clubs) || [];
+  var label = null;
+  document.querySelectorAll('.sidebar .nav-section-label').forEach(function (l) {
+    if (/^\s*my clubs\s*$/i.test(l.textContent || '')) label = l;
+  });
+  if (!label) return;
+  var parent = label.parentNode;
+  var sib = label.nextElementSibling;
+  while (sib && sib.classList && sib.classList.contains('nav-item')) {
+    var next = sib.nextElementSibling;
+    sib.remove();
+    sib = next;
+  }
+  var anchor = label.nextElementSibling;
+  var sportIcons = window.ARENAS_SPORT_ICONS || {}; // registry emoji + legacy drift entries
+  if (!clubs.length) {
+    var empty = document.createElement('div');
+    empty.className = 'nav-item';
+    empty.style.cssText = 'color:var(--gray-400);cursor:default';
+    empty.textContent = 'No clubs yet';
+    parent.insertBefore(empty, anchor);
+  }
+  clubs.forEach(function (club) {
+    var item = document.createElement('div');
+    item.className = 'nav-item';
+    item.onclick = function () {
+      if (typeof nav !== 'function') return;
+      if (club.role === 'admin' || club.role === 'coach') { nav('/clubs/dashboard?club=' + club.id); }
+      else { nav('/clubs/member/' + club.id); }
+    };
+    var ic = document.createElement('span');
+    ic.className = 'nav-icon';
+    if (club.logo_url && window.clubTileHtml) {
+      ic.style.cssText = 'width:18px;height:18px;border-radius:4px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle';
+      ic.innerHTML = window.clubTileHtml.content(club.logo_url, club.sport);
+    } else {
+      ic.textContent = sportIcons[club.sport] || '🏟';
+    }
+    item.appendChild(ic);
+    item.appendChild(document.createTextNode(' ' + (club.name || 'Club')));
+    // Server-decided plan badge (club.plan comes from getClubPlan on the
+    // sidebar-clubs data path; free clubs have no plan field, so their rows
+    // carry zero badge markup — never client-guessed).
+    if (club.plan === 'club_pro') {
+      var pb = document.createElement('span');
+      pb.className = 'pro-badge';
+      pb.textContent = 'PRO';
+      item.appendChild(pb);
+    }
+    parent.insertBefore(item, anchor);
+  });
+  // "+ Create club" entry point — always the LAST item in My clubs, including
+  // the zero-clubs case (that's the primary audience). Opens the in-app
+  // club-setup modal (arenas-club-create.js, shared submit layer with the
+  // /for-clubs wizard); falls back to the session-aware /for-clubs wizard if
+  // the module failed to load.
+  var create = document.createElement('div');
+  create.className = 'nav-item';
+  create.onclick = function () { if (window.ArenasClubCreate) { window.ArenasClubCreate.open(); } else if (typeof nav === 'function') { nav('/for-clubs?create=1'); } };
+  var cic = document.createElement('span');
+  cic.className = 'nav-icon';
+  cic.textContent = '➕';
+  create.appendChild(cic);
+  create.appendChild(document.createTextNode(' Create club'));
+  parent.insertBefore(create, anchor);
+})();
+</script>
+</body>
+</html>

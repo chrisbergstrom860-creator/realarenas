@@ -485,6 +485,35 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
       </div>
 
     </div>
+
+  <!-- Club settings: directory listing (admin-only; hidden for coaches).
+       visibility='public' lists the club in /clubs for request-and-approve
+       joining; going private clears any pending requests (server-side). -->
+  <div class="tab-content-settings-card" id="club-settings-card" style="display:none;padding:0 20px 20px">
+    <div class="card" style="margin-top:16px">
+      <div style="padding:12px 14px;border-bottom:var(--border)">
+        <div style="font-size:13px;font-weight:600;color:var(--gray-900)">Club settings — directory listing</div>
+        <div style="font-size:11px;color:var(--gray-400);margin-top:2px">Listed clubs appear in the member-facing club directory. Joining is request-and-approve — you review every request in the Members tab.</div>
+      </div>
+      <div style="padding:14px;display:flex;flex-direction:column;gap:12px">
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+          <input type="checkbox" id="cs-visibility" style="margin-top:2px;width:16px;height:16px;accent-color:var(--yellow-dark);cursor:pointer">
+          <span>
+            <span style="display:block;font-size:13px;font-weight:600;color:var(--gray-900)">List this club in the directory</span>
+            <span style="display:block;font-size:11.5px;color:var(--gray-500);margin-top:1px">Off by default. Turning this off removes the club from the directory and clears pending join requests.</span>
+          </span>
+        </label>
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Directory description</div>
+          <textarea id="cs-description" maxlength="500" rows="3" placeholder="What should athletes know about your club? (shown on your directory card)" style="width:100%;padding:8px 10px;border:var(--border);border-radius:7px;font-size:13px;outline:none;resize:vertical;box-sizing:border-box"></textarea>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button id="cs-save" onclick="saveClubSettings()" style="padding:7px 16px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">Save settings</button>
+          <span id="cs-status" style="font-size:11.5px;color:var(--gray-400)"></span>
+        </div>
+      </div>
+    </div>
+  </div>
   </div>
 
   <!-- ═══ MEMBERS TAB ═══ -->
@@ -499,6 +528,16 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
       <input type="text" id="members-search" placeholder="Search members…" oninput="applyMemberFilter()" style="padding:7px 12px;border:var(--border);border-radius:7px;font-size:13px;outline:none;width:220px">
       <select id="members-role" onchange="applyMemberFilter()" style="padding:7px 12px;border:var(--border);border-radius:7px;font-size:13px;background:white;outline:none;cursor:pointer"><option value="">All roles</option><option value="member">Member</option><option value="coach">Coach</option><option value="admin">Admin</option></select>
+    </div>
+    <!-- Directory join requests (request-and-approve). Rendered from
+         window.ARENAS_DATA.joinRequests; the whole card stays hidden when the
+         queue is empty. Approve/decline is manager-gated server-side. -->
+    <div class="card" id="join-requests-card" style="display:none;margin-bottom:14px">
+      <div style="padding:12px 14px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:13px;font-weight:600;color:var(--gray-900)">Join requests <span id="jr-count" style="font-weight:500;color:var(--gray-400)"></span></div>
+        <div style="font-size:11px;color:var(--gray-400)">From the club directory</div>
+      </div>
+      <div id="join-requests-list"></div>
     </div>
     <div class="card">
       <table class="member-table">
@@ -3711,6 +3750,153 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Initial render from injected data.
   applyLogo(club.logo_url || null);
+})();
+</script>
+<script>
+// ── Directory join requests + club settings (directory listing) ──
+// Requests: rendered from window.ARENAS_DATA.joinRequests (server-built,
+// pending only, oldest first). Approve/decline hit the manager-gated routes;
+// the card hides itself when the queue empties. Settings: admin-only card in
+// the Overview tab, saving visibility + description via PATCH.
+(function () {
+  var data = window.ARENAS_DATA || {};
+  var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
+  var clubId = data.club && data.club.id;
+  if (!clubId) return;
+
+  // ── Join requests queue (Members tab) ──
+  var queue = (data.joinRequests || []).slice();
+  var card = document.getElementById('join-requests-card');
+  var listEl = document.getElementById('join-requests-list');
+  var countEl = document.getElementById('jr-count');
+  var jrPalette = [['#FEF9C3', '#854D0E'], ['#FCE7F3', '#9D174D'], ['#E0F2FE', '#0369A1'], ['#F5F3FF', '#5B21B6']];
+
+  function renderQueue() {
+    if (!card || !listEl) return;
+    if (!queue.length) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    if (countEl) countEl.textContent = '· ' + queue.length + ' pending';
+    listEl.innerHTML = '';
+    queue.forEach(function (r, i) {
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:var(--border)';
+      if (i === queue.length - 1) row.style.borderBottom = 'none';
+
+      var av = document.createElement('div');
+      av.className = 'member-av';
+      var c = jrPalette[i % jrPalette.length];
+      av.style.background = c[0];
+      av.style.color = c[1];
+      av.innerHTML = window.avatarHtml.content(r.avatar_url || null, r.name || 'Athlete');
+      row.appendChild(av);
+
+      var info = document.createElement('div');
+      info.style.cssText = 'flex:1;min-width:0';
+      var nameEl = document.createElement('div');
+      nameEl.style.cssText = 'font-size:13px;font-weight:600;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+      nameEl.textContent = r.name || 'Athlete';
+      var whenEl = document.createElement('div');
+      whenEl.style.cssText = 'font-size:11px;color:var(--gray-400)';
+      whenEl.textContent = 'Requested ' + (window.arenasTimeAgo ? window.arenasTimeAgo(r.created_at) : '');
+      info.appendChild(nameEl);
+      info.appendChild(whenEl);
+      row.appendChild(info);
+
+      var approve = document.createElement('button');
+      approve.textContent = '✓ Approve';
+      approve.style.cssText = 'padding:6px 14px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer;flex-shrink:0';
+      approve.onclick = function () { resolve(r, 'approve', approve, decline); };
+      var decline = document.createElement('button');
+      decline.textContent = 'Decline';
+      decline.style.cssText = 'padding:6px 14px;border-radius:7px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer;flex-shrink:0';
+      decline.onclick = function () {
+        if (!window.confirm('Decline ' + (r.name || 'this athlete') + "'s request? They can request again after 7 days.")) return;
+        resolve(r, 'decline', approve, decline);
+      };
+      row.appendChild(approve);
+      row.appendChild(decline);
+      listEl.appendChild(row);
+    });
+  }
+
+  function resolve(r, action, btnA, btnB) {
+    btnA.disabled = true; btnB.disabled = true;
+    fetch(B + '/api/clubs/' + clubId + '/join-requests/' + r.user_id + '/' + action, { method: 'POST' })
+      .then(function (res) { return res.json().then(function (b) { return { status: res.status, body: b }; }); })
+      .then(function (res) {
+        if (res.status === 200 && res.body && res.body.success) {
+          queue = queue.filter(function (x) { return x.user_id !== r.user_id; });
+          renderQueue();
+          if (typeof showToast === 'function') {
+            showToast(action === 'approve'
+              ? '✓ ' + (r.name || 'Athlete') + ' is now a member'
+              : 'Request declined');
+          }
+          if (action === 'approve') setTimeout(function () { location.reload(); }, 900);
+        } else if (res.status === 404) {
+          // Request vanished (cancelled / resolved elsewhere / joined by
+          // invite) — drop it from the queue, honestly.
+          queue = queue.filter(function (x) { return x.user_id !== r.user_id; });
+          renderQueue();
+          if (typeof showToast === 'function') showToast('That request is no longer pending');
+        } else {
+          btnA.disabled = false; btnB.disabled = false;
+          if (typeof showToast === 'function') showToast('Something went wrong — please try again');
+        }
+      })
+      .catch(function () {
+        btnA.disabled = false; btnB.disabled = false;
+        if (typeof showToast === 'function') showToast('Something went wrong — please try again');
+      });
+  }
+
+  renderQueue();
+
+  // ── Club settings card (Overview tab, admin-only) ──
+  var settingsCard = document.getElementById('club-settings-card');
+  if (settingsCard && data.viewerRole === 'admin') {
+    settingsCard.style.display = 'block';
+    var visEl = document.getElementById('cs-visibility');
+    var descEl = document.getElementById('cs-description');
+    if (visEl) visEl.checked = data.club.visibility === 'public';
+    if (descEl) descEl.value = data.club.description || '';
+  }
+
+  window.saveClubSettings = function () {
+    var visEl = document.getElementById('cs-visibility');
+    var descEl = document.getElementById('cs-description');
+    var btn = document.getElementById('cs-save');
+    var status = document.getElementById('cs-status');
+    if (!visEl || !descEl) return;
+    var goingPrivate = data.club.visibility === 'public' && !visEl.checked;
+    if (goingPrivate && queue.length &&
+        !window.confirm('Unlisting the club will clear ' + queue.length + ' pending join request' + (queue.length === 1 ? '' : 's') + '. Continue?')) {
+      return;
+    }
+    if (btn) btn.disabled = true;
+    if (status) status.textContent = 'Saving…';
+    fetch(B + '/api/clubs/' + clubId + '/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ visibility: visEl.checked ? 'public' : 'private', description: descEl.value })
+    })
+      .then(function (res) { return res.json().then(function (b) { return { status: res.status, body: b }; }); })
+      .then(function (res) {
+        if (btn) btn.disabled = false;
+        if (res.status === 200 && res.body && res.body.success) {
+          data.club.visibility = res.body.visibility;
+          data.club.description = res.body.description;
+          if (res.body.visibility === 'private') { queue = []; renderQueue(); }
+          if (status) status.textContent = res.body.visibility === 'public' ? 'Saved — your club is listed in the directory.' : 'Saved — your club is not listed.';
+        } else {
+          if (status) status.textContent = (res.body && res.body.message) || 'Could not save — please try again.';
+        }
+      })
+      .catch(function () {
+        if (btn) btn.disabled = false;
+        if (status) status.textContent = 'Could not save — please try again.';
+      });
+  };
 })();
 </script>
 </body>
