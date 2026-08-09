@@ -118,7 +118,7 @@
   }
 
   function emptyHTML(t, s) {
-    return '<div style="grid-column:1/-1;text-align:center;padding:56px 24px;background:white">' +
+    return '<div style="grid-column:1/-1;text-align:center;padding:56px 24px;background:white;border:var(--border);border-radius:var(--radius-lg)">' +
       '<div style="font-size:36px;margin-bottom:12px">👥</div>' +
       '<h3 style="font-size:16px;font-weight:600;color:var(--gray-900);margin-bottom:6px">' + esc(t) + '</h3>' +
       '<p style="font-size:13px;color:var(--gray-500);line-height:1.6">' + esc(s) + '</p>' +

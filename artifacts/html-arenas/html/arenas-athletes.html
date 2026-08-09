@@ -65,6 +65,10 @@ button,select,input,textarea{font-family:var(--font)}
 /* ── BODY LAYOUT ── */
 .body-grid{display:grid;grid-template-columns:1fr;flex:1;overflow:hidden}
 .athletes-col{overflow-y:auto}
+/* Page gutter for the floating adc- cards (matches /clubs: 20px desktop,
+   14px mobile). Page-local because the shared grid also renders inside the
+   profile's already-padded Athletes tab. */
+#athlete-grid{padding:16px 20px}
 .athletes-col::-webkit-scrollbar{width:4px}
 .athletes-col::-webkit-scrollbar-thumb{background:var(--gray-200);border-radius:2px}
 .sidebar-col{overflow-y:auto;padding:18px 16px;display:flex;flex-direction:column;gap:14px;border-left:var(--border)}
@@ -82,9 +86,12 @@ button,select,input,textarea{font-family:var(--font)}
    the same cards; one template, no drift). Only the page-specific list-view
    layout lives here. */
 .adc-list .adc-card{flex-direction:row;align-items:center;gap:16px}
-.adc-list .adc-head{flex:0 0 200px}
-.adc-list .adc-tags{flex:0 0 200px}
-.adc-list .adc-stats{flex:0 0 200px;grid-template-columns:repeat(3,1fr)}
+/* flex-basis 200px but SHRINKABLE (flex:0 1 + min-width:0): at narrow desktop
+   widths (769–~950px, sidebar still visible) three fixed 200px columns plus
+   the grid gutter would overflow the clipped scrollport. */
+.adc-list .adc-head{flex:0 1 200px;min-width:0}
+.adc-list .adc-tags{flex:0 1 200px;min-width:0}
+.adc-list .adc-stats{flex:0 1 200px;min-width:0;grid-template-columns:repeat(3,minmax(0,1fr))}
 .adc-list .adc-foot{flex:1;justify-content:flex-end;padding-top:0;border-top:none}
 
 /* Clubs to join */
@@ -163,6 +170,7 @@ button,select,input,textarea{font-family:var(--font)}
    the list view — three fixed 200px flex columns on desktop — wraps into
    stacked full-width rows so nothing overflows at ~380px. */
 @media (max-width:768px){
+  body:has(.bottom-nav) #athlete-grid{padding:12px 14px}
   body:has(.bottom-nav) .adc-list .adc-card{flex-wrap:wrap;gap:8px}
   body:has(.bottom-nav) .adc-list .adc-head,
   body:has(.bottom-nav) .adc-list .adc-tags,
@@ -252,7 +260,7 @@ button,select,input,textarea{font-family:var(--font)}
 
       <!-- ATHLETE GRID -->
       <div class="adc-grid adc-grid-2" id="athlete-grid">
-        <div id="athlete-grid-loading" style="grid-column:1/-1;text-align:center;padding:56px 24px;color:var(--gray-400);font-size:13px">Loading athletes…</div>
+        <div id="athlete-grid-loading" style="grid-column:1/-1;text-align:center;padding:56px 24px;color:var(--gray-400);font-size:13px;background:white;border:var(--border);border-radius:var(--radius-lg)">Loading athletes…</div>
       </div>
     </div>
   </div>

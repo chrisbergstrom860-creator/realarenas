@@ -571,9 +571,9 @@ button,select,input,textarea{font-family:var(--font)}
         <button class="btn btn-ghost btn-sm" id="ath-show-following" onclick="athTabShow('following')">Following</button>
       </div>
     </div>
-    <div class="card" style="padding:0;overflow:hidden">
-      <div class="adc-grid adc-grid-2" id="ath-tab-grid"><div style="grid-column:1/-1;padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Loading athletes…</div></div>
-    </div>
+    <!-- No .card wrapper: adc- cards are floating cards now (border+radius
+         of their own); nesting them in a card would double-frame them. -->
+    <div class="adc-grid adc-grid-2" id="ath-tab-grid"><div style="grid-column:1/-1;padding:40px;text-align:center;font-size:13px;color:var(--gray-400);background:white;border:var(--border);border-radius:var(--radius-lg)">Loading athletes…</div></div>
   </div>
 </div>
 
@@ -3060,7 +3060,7 @@ if (logHashMatch) {
   function loadDirectory() {
     if (inst || loading) return;
     loading = true;
-    grid.innerHTML = '<div style="grid-column:1/-1;padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Loading athletes…</div>';
+    grid.innerHTML = '<div style="grid-column:1/-1;padding:40px;text-align:center;font-size:13px;color:var(--gray-400);background:white;border:var(--border);border-radius:var(--radius-lg)">Loading athletes…</div>';
     fetch(B + '/api/athletes/directory')
       .then(function (r) { return r.json(); })
       .then(function (data) {
@@ -3089,7 +3089,7 @@ if (logHashMatch) {
       })
       .catch(function () {
         loading = false;
-        grid.innerHTML = '<div style="grid-column:1/-1;padding:40px;text-align:center;font-size:13px;color:var(--gray-500)">Could not load athletes — <span style="color:var(--gray-900);font-weight:600;cursor:pointer;text-decoration:underline" onclick="athTabRetry()">try again</span></div>';
+        grid.innerHTML = '<div style="grid-column:1/-1;padding:40px;text-align:center;font-size:13px;color:var(--gray-500);background:white;border:var(--border);border-radius:var(--radius-lg)">Could not load athletes — <span style="color:var(--gray-900);font-weight:600;cursor:pointer;text-decoration:underline" onclick="athTabRetry()">try again</span></div>';
       });
   }
 

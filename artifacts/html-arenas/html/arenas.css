@@ -538,14 +538,17 @@ body {
    surfaces cannot drift. List-view layout is /athletes-page-specific and
    lives in that page's inline styles. */
 @keyframes adc-fade-up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-.adc-grid{display:grid;gap:0}
+/* Floating-card treatment matching the club directory's ccd- cards:
+   radius var(--radius-lg) + 12px gaps on both axes; full border, no
+   edge-to-edge border-right/nth-child tile machinery. The page gutter is
+   page-local (/athletes #athlete-grid) — the profile Athletes tab already
+   sits inside padded tab chrome. */
+.adc-grid{display:grid;gap:12px}
 .adc-grid.adc-grid-2{grid-template-columns:1fr 1fr}
 .adc-grid.adc-list{grid-template-columns:1fr}
-.adc-card{background:white;border-bottom:var(--border);border-right:var(--border);padding:16px;display:flex;flex-direction:column;gap:10px;animation:adc-fade-up .2s ease both;min-width:0}
+.adc-card{background:white;border:var(--border);border-radius:var(--radius-lg);padding:16px;display:flex;flex-direction:column;gap:10px;animation:adc-fade-up .2s ease both;min-width:0}
 .adc-card[data-clickable="1"]{cursor:pointer;transition:background .12s}
 .adc-card[data-clickable="1"]:hover{background:var(--gray-50)}
-.adc-grid-2 .adc-card:nth-child(even){border-right:none}
-.adc-list .adc-card{border-right:none}
 .adc-head{display:flex;align-items:center;gap:10px}
 /* Explicit class, NOT .adc-head>div — the avatar wrapper is also a child div,
    and a positional rule's flex:1 outranks .adc-av's fixed 42px box. */
@@ -570,7 +573,6 @@ body {
 @media (max-width:768px){
   /* Mobile (bottom-nav shells): the directory collapses to one column. */
   body:has(.bottom-nav) .adc-grid.adc-grid-2{grid-template-columns:1fr}
-  body:has(.bottom-nav) .adc-card{border-right:none}
 }
 
 /* ── CLUB DIRECTORY CARDS (ccd-) ──
