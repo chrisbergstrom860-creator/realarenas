@@ -568,8 +568,9 @@ document.addEventListener('DOMContentLoaded', function () {
   if (!clubs.length) {
     var empty = document.createElement('div');
     empty.className = 'nav-item';
-    empty.style.cssText = 'color:var(--gray-400);cursor:default';
-    empty.textContent = 'No clubs yet';
+    empty.style.cssText = 'color:var(--gray-400)';
+    empty.textContent = 'No clubs yet — find one';
+    empty.onclick = function () { if (typeof nav === 'function') nav('/clubs'); };
     parent.insertBefore(empty, anchor);
   }
   clubs.forEach(function (club) {
