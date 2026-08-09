@@ -1,0 +1,14 @@
+---
+name: Club post attribution
+description: posts.club_id is the durable announcement signal; club identity primary in shared header; membership-scoped /feed; FK cascade on club delete.
+---
+
+# Club announcements vs personal posts (Aug 2026)
+
+- `posts.club_id` (user-run DDL: FK → clubs **ON DELETE CASCADE** + index) is THE signal. Announce route sets it; personal composer never does. **Never classify by author role** — the old "posts by current admin/coach = announcement" inference retroactively reclassified posts on role changes and is fully retired (single type site keyed on club_id in club feed).
+- Legacy pre-column coach posts deliberately demote to ordinary member posts (user decision — backfill would guess; they age out).
+- Announcements are **club-owned speech**: they survive the author leaving/demotion (club feed + member-home query by club_id, not roster); departed authors resolved via `buildUserProfileMap`, role badge null, "posted by <name>" stays. Club deletion cleanup is **FK-cascade only — the app must not double-handle post deletion**.
+- Rendering: ONE shared header `html/arenas-club-post-header.js` (`clubPostHeaderHtml`) consumed by all THREE post renderers (main feed `postCardHtml`, club dashboard Feed tab, member-home). Club tile (clubTileHtml sport-icon fallback, honest for logoless clubs) + two lines: club name (never truncated, may wrap) / "posted by X · time" (ellipsizes author). Personal posts untouched. Posts still have 3 renderers — only the club header is shared; no full card convergence.
+- **Main-/feed scoping (review-caught leak):** club announcements in `buildFeedPosts` are scoped by the VIEWER's memberships, never by following the author — a non-member following a coach must not receive club announcements. Personal set = `club_id IS NULL` from followed+self; announcement set = `club_id IN (viewer's clubs)`; merge newest-first.
+- Payload convention: announcement items carry `clubId/clubName/clubLogoUrl/clubSport`; personal items carry none. Notif copy: title "Club announcement", body "ClubName · Author: …".
+- Verify: `scripts/verify-club-post-attribution.js` (28 checks incl. demotion non-reclassification, departure survival, non-member follower exclusion, cascade).
