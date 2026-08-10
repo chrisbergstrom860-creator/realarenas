@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+window.BASE = window.location.pathname.startsWith('/html') ? '/html' : '';
+window.nav = function(path){ window.location.href = window.BASE + path; };
+document.addEventListener('DOMContentLoaded', function(){
+  if (window.BASE === '') {
+    document.querySelectorAll('[href^="/html/"]').forEach(function(el){ el.setAttribute('href', el.getAttribute('href').slice(5)); });
+    document.querySelectorAll('[action^="/html/"]').forEach(function(el){ el.setAttribute('action', el.getAttribute('action').slice(5)); });
+  }
+});
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/html/manifest.webmanifest">
+<meta name="theme-color" content="#FFD21E">
+<link rel="icon" href="/html/favicon.ico" sizes="48x48">
+<link rel="icon" href="/html/arenas-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/html/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Arenas">
+<script src="/html/arenas-pwa.js" defer></script>
+<title>Arenas — Athlete</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/html/arenas.css">
+<script src="/html/arenas-club-create.js"></script>
+<script src="/html/arenas-stat-tiles.js"></script>
+<script src="/html/arenas-activity-card.js"></script>
+<script src="/html/arenas-time.js"></script>
+<style>
+button,select,input,textarea{font-family:var(--font)}
+@keyframes fade-up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.icon-btn{width:44px;height:44px;border-radius:8px;border:var(--border);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:19px;position:relative;transition:background .1s}
+.icon-btn:hover{background:var(--gray-50)}
+.user-av{width:40px;height:40px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;color:var(--gray-900);cursor:pointer}
+.sf-row{display:flex;align-items:center;gap:8px}
+
+.main{padding:0;overflow-y:auto}
+.tab-content{display:none;animation:fade-up .2s ease}
+.tab-content.active{display:block}
+.btn-sm{padding:4px 10px;font-size:12px;border-radius:6px}
+
+/* ── PROFILE HERO ──
+   Visual chrome mirrors the my-profile hero (arenas-my-profile.html) minus
+   every owner-only edit affordance (avatar/banner 📷 buttons). The follow
+   button lives where the owner's hero stats end. */
+.profile-hero{background:var(--gray-900);position:relative;overflow:hidden}
+.hero-banner{display:none;position:relative;height:220px;background-size:cover;background-position:center;z-index:1}
+.profile-hero.has-banner .hero-banner{display:block}
+.profile-hero.has-banner .hero-av-wrap{margin-top:-108px;align-self:flex-start}
+.hero-bg{position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,210,30,.08) 0%,transparent 50%),linear-gradient(225deg,rgba(249,115,22,.05) 0%,transparent 50%);pointer-events:none}
+.hero-bg-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);background-size:32px 32px;pointer-events:none}
+.hero-inner{max-width:1200px;margin:0 auto;padding:32px 28px;display:flex;align-items:flex-end;gap:24px;position:relative;z-index:1}
+.hero-av-wrap{position:relative;flex-shrink:0}
+.hero-av{width:152px;height:152px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:50px;font-weight:700;color:var(--gray-900);border:4px solid rgba(255,255,255,.15);flex-shrink:0}
+.hero-info{flex:1;min-width:0}
+.hero-name-row{display:flex;align-items:center;gap:10px;margin-bottom:3px}
+.hero-name{font-size:26px;font-weight:700;color:white;letter-spacing:-.02em;animation:fade-up .3s ease .1s both}
+.hero-name-row .pro-badge{font-size:10px;padding:2px 8px;letter-spacing:.1em;animation:fade-up .3s ease .1s both}
+.hero-handle{font-size:13px;color:var(--gray-400);font-family:var(--mono);margin-bottom:10px;animation:fade-up .3s ease .15s both;line-height:1.45}
+.hero-member-since{display:block;font-size:12px;color:var(--gray-500);margin-top:1px}
+.hero-tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;animation:fade-up .3s ease .2s both}
+.hero-tag{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border:1px solid rgba(255,255,255,.15);display:flex;align-items:center;gap:4px}
+.hero-bio{font-size:13px;color:var(--gray-400);line-height:1.6;max-width:480px;animation:fade-up .3s ease .22s both}
+.hero-bio.clamped{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.hero-bio-more{background:none;border:0;padding:0;margin-top:4px;font-size:12px;font-weight:600;color:var(--yellow);cursor:pointer;font-family:inherit;align-self:flex-start}
+.hero-bio-more:hover{text-decoration:underline}
+.hero-side{display:flex;flex-direction:column;align-items:flex-end;gap:14px;flex-shrink:0}
+.hero-stats{display:flex;gap:28px;animation:fade-up .3s ease .25s both}
+.hero-stat{text-align:center}
+.hero-stat-val{font-size:20px;font-weight:700;color:white;font-family:var(--mono);line-height:1}
+.hero-stat-label{font-size:10px;color:var(--gray-500);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
+.hero-stat-sep{width:1px;background:rgba(255,255,255,.1);align-self:stretch;margin:2px 0}
+
+.hero-tab-bar{background:white;border-bottom:var(--border);position:sticky;top:0;z-index:50}
+.htb-inner{max-width:1200px;margin:0 auto;padding:0 28px;display:flex;gap:0;overflow-x:auto}
+.htab{padding:13px 18px;font-size:13px;font-weight:500;color:var(--gray-500);border-bottom:2px solid transparent;cursor:pointer;transition:color .1s,border-color .1s;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.htab:hover{color:var(--gray-800)}
+.htab.active{color:var(--gray-900);border-bottom-color:var(--gray-900)}
+.htab .tab-count{font-size:10px;font-family:var(--mono);background:var(--gray-100);color:var(--gray-500);padding:1px 6px;border-radius:10px}
+.htab .tab-count:empty{display:none}
+
+.content-cols-full{max-width:1200px;margin:0 auto;padding:24px 28px}
+
+/* Overview stat tiles (same tile grammar as the my-profile overview) */
+.pub-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.pub-tile{background:white;border:var(--border);border-radius:var(--radius-lg);padding:14px 16px}
+.pub-tile-val{font-size:22px;font-weight:700;font-family:var(--mono);color:var(--gray-900);line-height:1.1}
+.pub-tile-label{font-size:10px;color:var(--gray-500);margin-top:4px;text-transform:uppercase;letter-spacing:.05em}
+.pub-card{background:white;border:var(--border);border-radius:var(--radius-lg);margin-bottom:16px;overflow:hidden}
+.pub-card-hd{padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between}
+.pub-card-title{font-size:12px;font-weight:600}
+.pub-card-link{font-size:11px;color:var(--gray-500);cursor:pointer}
+.pub-card-link:hover{color:var(--gray-800)}
+.pub-empty{background:white;border:var(--border);border-radius:var(--radius-lg);text-align:center;padding:40px 24px}
+.pub-empty .ei{font-size:32px;margin-bottom:10px}
+.pub-empty .et{font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:6px}
+.pub-empty .es{font-size:13px;color:var(--gray-500)}
+
+.activity-card-item{background:white;border:var(--border);border-radius:var(--radius-lg);padding:16px 18px;margin-bottom:12px}
+
+/* Clubs — same .club-card grammar as the my-profile Clubs tab, but rows are
+   informational for a visitor (no Open button, no pointer). */
+.club-card{background:white;border:var(--border);border-radius:var(--radius-lg);padding:14px 16px;display:flex;align-items:center;gap:12px}
+.club-icon{width:42px;height:42px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.club-name{font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:2px}
+.club-meta{font-size:12px;color:var(--gray-500)}
+
+/* Following — same .follow-card grammar as the my-profile Following tab. */
+.following-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 18px}
+.follow-card{display:flex;align-items:center;gap:9px;cursor:pointer;padding:4px;border-radius:var(--radius);transition:background .1s}
+.follow-card:hover{background:var(--gray-50)}
+.fc-av{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}
+.fc-name{font-size:13px;font-weight:600;color:var(--gray-900)}
+.fc-sport{font-size:11px;color:var(--gray-500)}
+
+@media (max-width:768px){
+  body:has(.bottom-nav) .hero-inner{flex-direction:column;align-items:stretch;gap:16px;padding:20px 16px}
+  body:has(.bottom-nav) .hero-side{align-items:stretch}
+  body:has(.bottom-nav) .hero-stats{gap:0;justify-content:space-between}
+  body:has(.bottom-nav) .hero-av{width:112px;height:112px;font-size:38px}
+  body:has(.bottom-nav) .hero-av-wrap{width:112px}
+  body:has(.bottom-nav) .hero-banner{height:120px}
+  body:has(.bottom-nav) .profile-hero.has-banner .hero-av-wrap{margin-top:-76px}
+  body:has(.bottom-nav) .pub-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  body:has(.bottom-nav) .following-grid{grid-template-columns:1fr;gap:4px;padding:10px 12px}
+  body:has(.bottom-nav) .follow-card{padding:8px 6px;gap:10px;min-width:0}
+  body:has(.bottom-nav) .fc-name,
+  body:has(.bottom-nav) .fc-sport{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="topbar-logo" onclick="nav('/feed')" style="cursor:pointer">
+    <img class="logo-icon" src="/html/arenas-icon.svg" alt="">
+    <span class="logo-text">Arenas</span>
+  </div>
+  <div class="topbar-center"></div>
+  <div class="topbar-actions">
+    <div class="icon-btn" onclick="nav('/notifications')">🔔<div class="notif-dot"></div></div>
+    <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
+      <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">·</div>
+      <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
+        <a href="/html/profile" style="display:block;padding:10px 14px;font-size:13px;color:#111827;text-decoration:none">My profile</a>
+        <a href="/html/auth/logout" style="display:block;padding:10px 14px;font-size:13px;color:#DC2626;text-decoration:none;border-top:1px solid #f3f4f6">Log out</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="nav-section-label">My Arenas</div>
+  <div class="nav-item" onclick="nav('/feed')"><span class="nav-icon">🏠</span> Feed</div>
+  <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">👤</span> My profile</div>
+  <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">🎟️</span> Events</div>
+  <div class="nav-item" onclick="nav('/calendar')"><span class="nav-icon">🗓️</span> Calendar</div>
+  <div class="nav-item" onclick="nav('/leaderboards')"><span class="nav-icon">🏆</span> Leaderboards</div>
+  <div class="nav-item" onclick="nav('/challenges')"><span class="nav-icon">⚡</span> Challenges</div>
+  <div class="nav-item" onclick="nav('/log')"><span class="nav-icon">➕</span> Log activity</div>
+  <div class="nav-item active" onclick="nav('/athletes')"><span class="nav-icon">👥</span> Athletes</div>
+  <div class="nav-item" onclick="nav('/clubs')"><span class="nav-icon">🏟️</span> Clubs</div>
+  <div class="nav-section-label">My clubs</div>
+  <div class="nav-section-label">Account</div>
+  <div class="nav-item" onclick="nav('/billing')"><span class="nav-icon">💳</span> Billing</div>
+  <div class="nav-item" onclick="nav('/profile#settings')"><span class="nav-icon">⚙️</span> Settings</div>
+  <div class="sidebar-footer">
+    <div style="display:flex;align-items:center;gap:9px">
+      <div class="sf-av" style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">·</div>
+      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)">Jamie King</div></div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main" id="main-content">
+
+<!-- ATHLETE HERO -->
+<div class="profile-hero" id="profile-hero">
+  <div class="hero-bg"></div>
+  <div class="hero-bg-grid"></div>
+  <div class="hero-banner" id="hero-banner" role="img" aria-label="Profile background image"></div>
+  <div class="hero-inner">
+    <div class="hero-av-wrap"><div class="hero-av" id="hero-av">·</div></div>
+    <div class="hero-info">
+      <div class="hero-name-row"><div class="hero-name" id="hero-name">Athlete</div><span id="hero-pro"></span></div>
+      <div class="hero-handle"><span class="hero-loc" id="hero-loc"></span><span class="hero-member-since" id="hero-member"></span></div>
+      <div class="hero-tags" id="hero-tags"></div>
+      <div class="hero-bio" id="hero-bio" style="display:none"></div>
+      <button class="hero-bio-more" id="hero-bio-more" type="button" style="display:none">Show more</button>
+    </div>
+    <div class="hero-side">
+      <div class="hero-stats" id="hero-stats"></div>
+      <button class="btn" id="hero-follow-btn" style="display:none"></button>
+    </div>
+  </div>
+</div>
+
+<!-- TAB BAR -->
+<div class="hero-tab-bar">
+  <div class="htb-inner">
+    <div class="htab active" id="ptab-overview" onclick="setTab('overview')">Overview</div>
+    <div class="htab" id="ptab-activities" onclick="setTab('activities')">Activities <span class="tab-count" id="tc-activities"></span></div>
+    <div class="htab" id="ptab-trophies" onclick="setTab('trophies')">Trophy case <span class="tab-count" id="tc-trophies"></span></div>
+    <div class="htab" id="ptab-clubs" onclick="setTab('clubs')">Clubs <span class="tab-count" id="tc-clubs"></span></div>
+    <div class="htab" id="ptab-following" onclick="setTab('following')">Following <span class="tab-count" id="tc-following"></span></div>
+  </div>
+</div>
+
+<!-- ═══ OVERVIEW ═══ -->
+<div class="tab-content active" id="tab-overview"><div class="content-cols-full" id="ov-body"></div></div>
+
+<!-- ═══ ACTIVITIES ═══ -->
+<div class="tab-content" id="tab-activities"><div class="content-cols-full" id="act-body"></div></div>
+
+<!-- ═══ TROPHY CASE ═══ -->
+<div class="tab-content" id="tab-trophies"><div class="content-cols-full" id="tro-body"></div></div>
+
+<!-- ═══ CLUBS ═══ -->
+<div class="tab-content" id="tab-clubs"><div class="content-cols-full" id="clu-body"></div></div>
+
+<!-- ═══ FOLLOWING ═══ -->
+<div class="tab-content" id="tab-following"><div class="content-cols-full" id="fol-body"></div></div>
+
+</main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, 2800);
+}
+</script>
+<script>
+// Reflect the real unread notification count on the bell icon.
+(function(){
+  var B = window.BASE || (location.pathname.indexOf("/html") === 0 ? "/html" : "");
+  fetch(B + "/api/notifications").then(function(r){ return r.json(); }).then(function(data){
+    var unread = (data && data.unreadCount) || 0;
+    var dot = document.querySelector(".notif-dot");
+    if (dot) dot.style.display = unread > 0 ? "block" : "none";
+  }).catch(function(){});
+})();
+</script>
+<script>
+// ── PUBLIC ATHLETE PROFILE ──
+// Everything renders from the server-injected window.ARENAS_DATA (built by
+// GET /athletes/:userId — zero-leak gate, activity_feed_visible boundary and
+// public-clubs-only filtering all live server-side; this script only draws
+// what the server decided the viewer may see).
+(function () {
+  var data = window.ARENAS_DATA;
+  if (!data || !data.athlete) return;
+  var B = window.BASE || '';
+  var a = data.athlete;
+
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  document.title = 'Arenas — ' + (a.name || 'Athlete');
+
+  // Viewer identity in the sidebar footer.
+  var myName = (data.profile && data.profile.name) || 'Athlete';
+  document.querySelectorAll('.sidebar-footer div').forEach(function(el){
+    if (el.childElementCount !== 0) return;
+    if (el.textContent.trim() === 'Jamie King') el.textContent = myName;
+  });
+
+  // ── HERO ──
+  if (a.banner_url) {
+    document.getElementById('hero-banner').style.backgroundImage = 'url("' + encodeURI(a.banner_url) + '")';
+    document.getElementById('profile-hero').classList.add('has-banner');
+  }
+  var avEl = document.getElementById('hero-av');
+  avEl.innerHTML = window.avatarHtml.content(a.avatar_url || null, a.name || 'Athlete');
+  document.getElementById('hero-name').textContent = a.name || 'Athlete';
+  if (a.pro) document.getElementById('hero-pro').innerHTML = '<span class="pro-badge">PRO</span>';
+  var locBits = [];
+  if (a.location) locBits.push(a.location);
+  else if (a.stateName || a.countryName) locBits.push([a.stateName, a.countryName].filter(Boolean).join(', '));
+  document.getElementById('hero-loc').textContent = locBits.length ? '📍 ' + locBits.join(' · ') : '';
+  if (a.memberSince) {
+    var ms = new Date(a.memberSince);
+    document.getElementById('hero-member').textContent = 'Member since ' +
+      ms.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+  }
+  var tags = (a.sports || []).map(function(s){
+    return '<span class="hero-tag">' + esc(window.arenasSportTag(s) || s) + '</span>';
+  });
+  if (a.level) tags.push('<span class="hero-tag" style="background:rgba(16,185,129,.15);color:#6EE7B7;border-color:rgba(16,185,129,.25)">' + esc(a.level) + '</span>');
+  document.getElementById('hero-tags').innerHTML = tags.join('');
+  if (a.bio) {
+    var bioEl = document.getElementById('hero-bio');
+    bioEl.textContent = a.bio;
+    bioEl.style.display = 'block';
+    bioEl.classList.add('clamped');
+    var moreBtn = document.getElementById('hero-bio-more');
+    requestAnimationFrame(function(){
+      if (bioEl.scrollHeight > bioEl.clientHeight + 2) {
+        moreBtn.style.display = 'inline';
+        moreBtn.onclick = function(){
+          var open = !bioEl.classList.contains('clamped');
+          bioEl.classList.toggle('clamped', open);
+          moreBtn.textContent = open ? 'Show more' : 'Show less';
+        };
+      }
+    });
+  }
+
+  // Hero stats: activity-derived numbers only when the athlete's training is
+  // visible; follow counts always (they are social-graph data, not training).
+  function heroStat(val, label){
+    return '<div class="hero-stat"><div class="hero-stat-val">' + val + '</div><div class="hero-stat-label">' + label + '</div></div>';
+  }
+  var statBits = [];
+  if (!data.trainingPrivate && data.stats) {
+    statBits.push(heroStat(data.stats.totalActivities, 'Activities'));
+    statBits.push(heroStat(data.stats.totalKm, 'km logged'));
+  }
+  statBits.push(heroStat(data.followerCount, 'Followers'));
+  statBits.push(heroStat(data.followingCount, 'Following'));
+  document.getElementById('hero-stats').innerHTML = statBits.join('<div class="hero-stat-sep"></div>');
+
+  // ── FOLLOW BUTTON ──
+  var isFollowing = !!data.isFollowing;
+  var followBtn = document.getElementById('hero-follow-btn');
+  function paintFollowBtn(){
+    followBtn.textContent = isFollowing ? '✓ Following' : 'Follow';
+    followBtn.classList.toggle('btn-yellow', !isFollowing);
+    followBtn.style.display = 'inline-flex';
+  }
+  paintFollowBtn();
+  followBtn.onclick = async function(){
+    var was = isFollowing;
+    followBtn.disabled = true;
+    followBtn.textContent = was ? 'Unfollowing…' : 'Following…';
+    try {
+      var res = await fetch(B + '/api/follow/' + a.id, { method: was ? 'DELETE' : 'POST' });
+      var result = await res.json();
+      if (result.error) { showToast('Error: ' + result.error); }
+      else {
+        isFollowing = !!result.following;
+        data.followerCount = Math.max(0, data.followerCount + (isFollowing ? 1 : -1));
+        document.querySelectorAll('.hero-stat').forEach(function(st){
+          var label = (st.querySelector('.hero-stat-label') || {}).textContent || '';
+          if (/Followers/i.test(label)) st.querySelector('.hero-stat-val').textContent = data.followerCount;
+        });
+        try { document.dispatchEvent(new CustomEvent('arenas:follow-change', { detail: { id: a.id, following: isFollowing, source: 'athlete-profile-page' } })); } catch (e) {}
+        showToast(isFollowing ? '✓ Following' : 'Unfollowed');
+      }
+    } catch (err) { showToast('Something went wrong — please try again'); }
+    followBtn.disabled = false;
+    paintFollowBtn();
+  };
+
+  // ── TABS ──
+  window.setTab = function(id){
+    document.querySelectorAll('.tab-content').forEach(function(t){ t.classList.remove('active'); });
+    document.querySelectorAll('.htab').forEach(function(t){ t.classList.remove('active'); });
+    var tc = document.getElementById('tab-' + id);
+    var tb = document.getElementById('ptab-' + id);
+    if (tc) tc.classList.add('active');
+    if (tb) tb.classList.add('active');
+  };
+
+  var firstName = esc((a.name || 'This athlete').split(' ')[0]);
+
+  function emptyBox(icon, title, sub){
+    return '<div class="pub-empty"><div class="ei">' + icon + '</div><div class="et">' + title + '</div>' +
+      (sub ? '<div class="es">' + sub + '</div>' : '') + '</div>';
+  }
+  // The one private-state notice — activity sections and activity-derived
+  // stats collapse to this when the athlete's activity_feed_visible is off.
+  function privateBox(){
+    return emptyBox('🔒', 'This athlete keeps their training private',
+      'Activities and training stats are hidden by their settings.');
+  }
+
+  var byId = window.ARENAS_SPORTS_BY_ID || {};
+  function fmtDate(d){ return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); }
+
+  // Activity row/card — header mirrors the my-profile Activities surface
+  // (icon tile, escaped title, time-ago, registry sport pill), body via the
+  // ONE shared builder (title off — it lives in this header; no feeling for
+  // visitors).
+  function activityCard(act){
+    var reg = byId[act.sport];
+    var icon = reg ? reg.emoji : '🏃';
+    var avBg = 'background:' + (reg ? reg.colors.bg : 'var(--gray-100)');
+    return '<div class="activity-card-item">' +
+      '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">' +
+        '<div style="width:38px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;' + avBg + '">' + icon + '</div>' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:2px">' + esc(act.title || 'Activity') + '</div>' +
+          '<div style="font-size:11px;color:var(--gray-400)">' + window.arenasTimeAgo(act.created_at || act.date, { dateAfterDays: 7 }) + '</div>' +
+        '</div>' +
+        window.sportPillHtml(act.sport, { icon: false, style: 'flex-shrink:0' }) +
+      '</div>' +
+      window.activityCardBody(act, { title: false, feeling: false }) +
+    '</div>';
+  }
+
+  // Earned badge (trophy) card — the earned branch of the my-profile badge
+  // grammar; visitors never see progress toward unearned badges.
+  function trophyHtml(b){
+    return '<div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;cursor:pointer" onclick="showToast(\'' + esc(b.name) + ' — ' + esc(b.desc) + '\')">' +
+      '<div style="width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;background:linear-gradient(135deg,#FFE566,var(--yellow));box-shadow:0 2px 8px rgba(230,184,0,.3);border:2px solid var(--yellow-dark)">' + b.icon + '</div>' +
+      '<div style="font-size:10px;font-weight:600;color:var(--gray-900);line-height:1.3">' + esc(b.name) + '</div>' +
+      '<div style="font-size:8px;color:var(--gray-400)">' + fmtDate(b.earnedAt) + '</div>' +
+    '</div>';
+  }
+
+  var badges = data.badges || [];
+  var clubs = data.athleteClubs || [];
+  var following = data.followingList || [];
+  var activities = data.activities || [];
+
+  // Tab count pills (totals — this is a directory-style surface, not the
+  // owner's "new since last viewed" badges).
+  if (!data.trainingPrivate) document.getElementById('tc-activities').textContent = activities.length ? activities.length : '';
+  document.getElementById('tc-trophies').textContent = badges.length ? badges.length : '';
+  document.getElementById('tc-clubs').textContent = clubs.length ? clubs.length : '';
+  document.getElementById('tc-following').textContent = data.followingCount ? data.followingCount : '';
+
+  // ── OVERVIEW ──
+  var ov = '';
+  if (data.trainingPrivate) {
+    ov += privateBox();
+  } else {
+    var st = data.stats || { totalActivities: 0, totalKm: 0, currentStreak: 0, sportsBreakdown: [] };
+    ov += '<div class="pub-tiles">' +
+      '<div class="pub-tile"><div class="pub-tile-val">' + st.totalActivities + '</div><div class="pub-tile-label">Activities</div></div>' +
+      '<div class="pub-tile"><div class="pub-tile-val">' + st.totalKm + '</div><div class="pub-tile-label">km logged</div></div>' +
+      '<div class="pub-tile"><div class="pub-tile-val">' + st.currentStreak + '</div><div class="pub-tile-label">Day streak</div></div>' +
+      '<div class="pub-tile"><div class="pub-tile-val">' + st.sportsBreakdown.length + '</div><div class="pub-tile-label">Sports</div></div>' +
+    '</div>';
+    if (st.sportsBreakdown.length) {
+      ov += '<div class="pub-card"><div class="pub-card-hd"><div class="pub-card-title">By sport</div></div>' +
+        '<div style="padding:12px 14px;display:flex;gap:6px;flex-wrap:wrap">' +
+        st.sportsBreakdown.map(function(sb){
+          return window.sportPillHtml(sb.sport, { style: 'font-size:12px' }).replace('</span>', ' · ' + sb.sessions + '</span>');
+        }).join('') +
+      '</div></div>';
+    }
+  }
+  // Trophy strip — earned badges only; renders in the private state too
+  // (badges are public recognition, not raw training data).
+  ov += '<div class="pub-card"><div class="pub-card-hd"><div class="pub-card-title">🏅 Trophy case</div>' +
+    (badges.length > 6 ? '<div class="pub-card-link" onclick="setTab(\'trophies\')">View all ' + badges.length + '</div>' : '') + '</div>' +
+    (badges.length
+      ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:10px;padding:14px">' + badges.slice(0, 6).map(trophyHtml).join('') + '</div>'
+      : '<div style="padding:24px;text-align:center;font-size:13px;color:var(--gray-400)">No badges earned yet</div>') +
+  '</div>';
+  if (!data.trainingPrivate) {
+    ov += '<div class="pub-card"><div class="pub-card-hd"><div class="pub-card-title">Recent activities</div>' +
+      (activities.length > 3 ? '<div class="pub-card-link" onclick="setTab(\'activities\')">View all</div>' : '') + '</div>' +
+      (activities.length
+        ? '<div style="padding:12px 14px;display:flex;flex-direction:column;gap:8px">' +
+          activities.slice(0, 3).map(function(act){
+            var reg = byId[act.sport];
+            return '<div style="display:flex;align-items:center;gap:10px">' +
+              '<div style="width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;background:' + (reg ? reg.colors.bg : 'var(--gray-100)') + '">' + (reg ? reg.emoji : '🏃') + '</div>' +
+              '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(act.title || 'Activity') + '</div></div>' +
+              '<div style="font-size:11px;color:var(--gray-400);flex-shrink:0">' + window.arenasTimeAgo(act.created_at || act.date, { dateAfterDays: 7 }) + '</div>' +
+            '</div>';
+          }).join('') + '</div>'
+        : '<div style="padding:24px;text-align:center;font-size:13px;color:var(--gray-400)">No activities logged yet</div>') +
+    '</div>';
+  }
+  document.getElementById('ov-body').innerHTML = ov;
+
+  // ── ACTIVITIES ──
+  document.getElementById('act-body').innerHTML = data.trainingPrivate
+    ? privateBox()
+    : (activities.length
+        ? '<div style="max-width:640px">' + activities.map(activityCard).join('') + '</div>'
+        : emptyBox('📋', 'No activities logged yet', firstName + ' has not logged any training on Arenas.'));
+
+  // ── TROPHY CASE ──
+  document.getElementById('tro-body').innerHTML = badges.length
+    ? '<div class="pub-card"><div class="pub-card-hd"><div class="pub-card-title">🏅 Trophy case</div>' +
+      '<div style="font-size:11px;font-family:var(--mono);color:var(--gray-400)">' + badges.length + ' earned</div></div>' +
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:10px;padding:14px">' + badges.map(trophyHtml).join('') + '</div></div>'
+    : emptyBox('🏅', 'No badges earned yet', 'Badges ' + firstName + ' earns will appear here.');
+
+  // ── CLUBS (public clubs only — the server already filtered) ──
+  var sportIcons = window.ARENAS_SPORT_ICONS || {};
+  document.getElementById('clu-body').innerHTML = clubs.length
+    ? '<div style="display:flex;flex-direction:column;gap:12px;max-width:600px">' +
+      clubs.map(function(c){
+        var iconHtml;
+        if (c.logo_url && window.clubTileHtml) {
+          iconHtml = '<div class="club-icon" style="overflow:hidden">' + window.clubTileHtml.content(c.logo_url, c.sport) + '</div>';
+        } else {
+          iconHtml = '<div class="club-icon" style="background:var(--gray-100)">' + (sportIcons[c.sport] || '🏟') + '</div>';
+        }
+        return '<div class="club-card">' + iconHtml +
+          '<div style="flex:1;min-width:0"><div class="club-name">' + esc(c.name || 'Club') + '</div>' +
+          '<div class="club-meta">' + esc([window.arenasSportTag(c.sport) || c.sport, c.city].filter(Boolean).join(' · ')) + '</div></div>' +
+        '</div>';
+      }).join('') + '</div>'
+    : emptyBox('🏟️', 'No clubs yet', firstName + ' is not a member of any public clubs.');
+
+  // ── FOLLOWING ──
+  var avColors = [
+    {bg:'#FEF9C3',color:'#854D0E'},{bg:'#FCE7F3',color:'#9D174D'},
+    {bg:'#E0F2FE',color:'#0369A1'},{bg:'#F5F3FF',color:'#5B21B6'},
+    {bg:'#ECFDF5',color:'#065F46'},{bg:'#FFF7ED',color:'#9A3412'},
+    {bg:'#F0FDFA',color:'#134E4A'},{bg:'#FBEAF0',color:'#72243E'}
+  ];
+  document.getElementById('fol-body').innerHTML = following.length
+    ? '<div class="pub-card" style="margin-bottom:0"><div class="pub-card-hd"><div class="pub-card-title">Following</div>' +
+      '<div style="font-size:11px;font-family:var(--mono);color:var(--gray-400)">' + data.followingCount + '</div></div>' +
+      '<div class="following-grid">' +
+      following.map(function(f, i){
+        var av = avColors[i % avColors.length];
+        var bits = [];
+        var primary = (f.sports && f.sports[0]) || null;
+        if (primary) bits.push(esc(window.arenasSportTag(primary) || primary));
+        if (f.location) bits.push(esc(f.location));
+        return '<div class="follow-card" onclick="nav(\'/athletes/' + esc(f.id) + '\')">' +
+          window.avatarHtml(f.avatar_url || null, f.name || 'Athlete', 'fc-av', 'background:' + av.bg + ';color:' + av.color) +
+          '<div style="flex:1;min-width:0"><div class="fc-name">' + esc(f.name || 'Athlete') + '</div>' +
+          '<div class="fc-sport">' + bits.join(' · ') + '</div></div>' +
+        '</div>';
+      }).join('') + '</div></div>'
+    : emptyBox('👥', 'Not following anyone yet', firstName + ' is not following any athletes.');
+
+  // Deep links: /athletes/:id#trophies etc.
+  var hash = (window.location.hash || '').replace('#', '');
+  if (['activities','trophies','clubs','following'].indexOf(hash) !== -1) setTab(hash);
+})();
+</script>
+<script>
+// Shared "My clubs" sidebar renderer — identical on every athlete-facing page so
+// the sidebar always reflects the viewer's real club memberships
+// (window.ARENAS_DATA.clubs) from the same Supabase query. No hardcoded club data
+// lives in the static HTML.
+(function () {
+  var clubs = (window.ARENAS_DATA && window.ARENAS_DATA.clubs) || [];
+  var label = null;
+  document.querySelectorAll('.sidebar .nav-section-label').forEach(function (l) {
+    if (/^\s*my clubs\s*$/i.test(l.textContent || '')) label = l;
+  });
+  if (!label) return;
+  var parent = label.parentNode;
+  var sib = label.nextElementSibling;
+  while (sib && sib.classList && sib.classList.contains('nav-item')) {
+    var next = sib.nextElementSibling;
+    sib.remove();
+    sib = next;
+  }
+  var anchor = label.nextElementSibling;
+  var sportIcons = window.ARENAS_SPORT_ICONS || {};
+  if (!clubs.length) {
+    var empty = document.createElement('div');
+    empty.className = 'nav-item';
+    empty.style.cssText = 'color:var(--gray-400)';
+    empty.textContent = 'No clubs yet — find one';
+    empty.onclick = function () { if (typeof nav === 'function') nav('/clubs'); };
+    parent.insertBefore(empty, anchor);
+  }
+  clubs.forEach(function (club) {
+    var item = document.createElement('div');
+    item.className = 'nav-item';
+    item.onclick = function () {
+      if (typeof nav !== 'function') return;
+      if (club.role === 'admin' || club.role === 'coach') { nav('/clubs/dashboard?club=' + club.id); }
+      else { nav('/clubs/member/' + club.id); }
+    };
+    var ic = document.createElement('span');
+    ic.className = 'nav-icon';
+    if (club.logo_url && window.clubTileHtml) {
+      ic.style.cssText = 'width:18px;height:18px;border-radius:4px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle';
+      ic.innerHTML = window.clubTileHtml.content(club.logo_url, club.sport);
+    } else {
+      ic.textContent = sportIcons[club.sport] || '🏟';
+    }
+    item.appendChild(ic);
+    item.appendChild(document.createTextNode(' ' + (club.name || 'Club')));
+    if (club.plan === 'club_pro') {
+      var pb = document.createElement('span');
+      pb.className = 'pro-badge';
+      pb.textContent = 'PRO';
+      item.appendChild(pb);
+    }
+    parent.insertBefore(item, anchor);
+  });
+  var create = document.createElement('div');
+  create.className = 'nav-item';
+  create.onclick = function () { if (window.ArenasClubCreate) { window.ArenasClubCreate.open(); } else if (typeof nav === 'function') { nav('/for-clubs?create=1'); } };
+  var cic = document.createElement('span');
+  cic.className = 'nav-icon';
+  cic.textContent = '➕';
+  create.appendChild(cic);
+  create.appendChild(document.createTextNode(' Create club'));
+  parent.insertBefore(create, anchor);
+})();
+</script>
+</body>
+</html>

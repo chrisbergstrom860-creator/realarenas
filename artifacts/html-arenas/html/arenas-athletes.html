@@ -451,6 +451,7 @@ function showToast(msg) {
       '<button class="btn ' + (a.isFollowing ? '' : 'btn-yellow') + '" id="modal-follow-btn" data-user-id="' + esc(a.id) + '" onclick="handleModalFollow(\'' + esc(a.id) + '\')">' +
         (a.isFollowing ? '✓ Following' : 'Follow') +
       '</button>' +
+      '<button class="btn" onclick="nav(\'/athletes/' + esc(a.id) + '\')">View full profile</button>' +
       '<button class="btn" onclick="showToast(\'Messaging coming soon!\')">💬 Message</button>';
     modal.classList.add('open');
   };

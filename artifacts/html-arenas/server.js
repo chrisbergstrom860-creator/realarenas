@@ -5556,6 +5556,9 @@ async function buildAthleteDirectory(viewerId) {
   const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 100 });
   const others = ((list && list.users) || [])
     .filter(u => u.id !== viewerId)
+    // Leaderboard opt-out = undiscoverable: excluded from the directory (and
+    // the /athletes/:userId profile page 404s for them — same boundary).
+    .filter(u => prefsFromMeta(u.user_metadata || {}).show_on_leaderboards)
     .slice(0, 50);
   const athleteIds = others.map(u => u.id);
 
@@ -5651,6 +5654,186 @@ app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
     sendPageError(res);
   }
 });
+// ── PUBLIC ATHLETE PROFILE ──────────────────────────────────────────────────
+// /athletes/:userId — the page one athlete visits to see another's profile.
+// Access rules (all enforced HERE, never client-side):
+//   - Zero-leak: a nonexistent id, a deleted account and a leaderboard
+//     opt-out (show_on_leaderboards=false — the toggle that already removes
+//     the athlete from the directory, i.e. from every path to this page) all
+//     return the byte-identical 404 below. One constant, one send path.
+//   - activity_feed_visible=false hides the activity sections AND every
+//     activity-derived stat (totals/streak/breakdown). Identity, trophy
+//     case, public clubs and follow counts still render — same boundary as
+//     the followers' feed rule that toggle already governs.
+//   - Private club memberships are NEVER included (visibility='public'
+//     only) — listing one would breach the club directory's zero-leak
+//     guarantee.
+//   - No PRs, no progress toward unearned badges, no Pro-gated computation.
+const ATHLETE_NOT_FOUND_HTML = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arenas — Athlete not found</title><link rel="icon" href="/html/arenas-icon.svg" type="image/svg+xml">
+<style>body{font-family:'Source Sans 3',-apple-system,sans-serif;background:#F8F9FA;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+.box{text-align:center;padding:48px 32px}.box .ic{font-size:44px;margin-bottom:14px}
+.box h1{font-size:19px;font-weight:700;color:#111827;margin:0 0 8px}
+.box p{font-size:14px;color:#6B7280;margin:0 0 20px}
+.box a{display:inline-block;background:#FFD21E;color:#111827;font-weight:600;font-size:13px;padding:9px 22px;border-radius:8px;text-decoration:none}</style></head>
+<body><div class="box"><div class="ic">👤</div><h1>Athlete not found</h1>
+<p>This profile does not exist or is not available.</p>
+<a href="javascript:void(0)" onclick="location.href=(location.pathname.indexOf('/html')===0?'/html':'')+'/athletes'">Browse athletes</a></div></body></html>`;
+function sendAthleteNotFound(res) {
+  res.status(404).set('Cache-Control', 'no-store').type('html').send(ATHLETE_NOT_FOUND_HTML);
+}
+
+// Public (visitor-safe) stats — deliberately SEPARATE from the Pro-gated
+// /api/profile/stats computation so that route's gate decision never leaks
+// onto a viewer. Shares the canonical underlying helpers with it rather
+// than reimplementing them: parseDistanceKmUnitAware (the one unit-aware km
+// parser) and computeStreaks (tzdate.js), with day-math in the ATHLETE's
+// zone (owner-bucket boundary policy). All-time only; no windows, no
+// points, no PRs.
+function computePublicAthleteStats(acts, tz) {
+  const totalKm = Math.round(acts.reduce((s, a) => s + parseDistanceKmUnitAware(a.distance), 0) * 10) / 10;
+  const { currentStreak } = computeStreaks(acts, tz);
+  const bySport = {};
+  for (const a of acts) { if (a.sport) bySport[a.sport] = (bySport[a.sport] || 0) + 1; }
+  const sportsBreakdown = Object.keys(bySport)
+    .map((sport) => ({ sport, sessions: bySport[sport] }))
+    .sort((x, y) => y.sessions - x.sessions);
+  return { totalActivities: acts.length, totalKm, currentStreak, sportsBreakdown };
+}
+
+app.get(BASE + '/athletes/:userId', requirePageAuth, async (req, res) => {
+  try {
+    if (!supabaseAdmin) return sendPageError(res);
+    const targetId = req.params.userId;
+    // Your own profile lives at /profile (owner chrome, edit affordances).
+    if (targetId === req.user.id) return res.redirect(BASE + '/profile');
+
+    let target = null;
+    try {
+      const { data } = await supabaseAdmin.auth.admin.getUserById(targetId);
+      target = (data && data.user) || null;
+    } catch (err) { target = null; }
+    // Nonexistent / malformed id / deleted account → identical not-found.
+    if (!target) return sendAthleteNotFound(res);
+    const targetPrefs = prefsFromMeta(target.user_metadata || {});
+    // Leaderboard opt-out = undiscoverable everywhere, including here.
+    if (!targetPrefs.show_on_leaderboards) return sendAthleteNotFound(res);
+
+    const meta = target.user_metadata || {};
+    const tDisp = displayFromUser(target);
+    const feedVisible = targetPrefs.activity_feed_visible;
+    const targetTz = getUserTimezone(target);
+
+    const [followerRes, followingRes, isFollowingRes, followEdgesRes, achRes, memberRes, actsRes] = await Promise.all([
+      supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', targetId),
+      supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', targetId),
+      supabaseAdmin.from('follows').select('follower_id').eq('follower_id', req.user.id).eq('following_id', targetId).limit(1),
+      supabaseAdmin.from('follows').select('following_id').eq('follower_id', targetId).limit(60),
+      // User-provisioned table — degrade to no badges on error, never break.
+      supabaseAdmin.from('achievements').select('badge_id, earned_at').eq('user_id', targetId).order('earned_at', { ascending: false }),
+      supabaseAdmin.from('memberships').select('clubs:club_id (id, name, sport, city, logo_url, visibility)').eq('user_id', targetId),
+      // Activities fetched only when the athlete broadcasts training at all;
+      // the private branch never reads the table (nothing to accidentally leak).
+      feedVisible
+        ? supabaseAdmin.from('activities').select('*').eq('user_id', targetId).order('date', { ascending: false }).limit(1000)
+        : Promise.resolve({ data: null })
+    ]);
+
+    // Trophy case: EARNED badges only, joined to the server-side catalog.
+    // No progress state — that would leak activity volume in the private case.
+    const badgeById = {};
+    BADGES.forEach((b) => { badgeById[b.id] = b; });
+    const badges = ((achRes && achRes.data) || []).map((r) => {
+      const b = badgeById[r.badge_id];
+      return b ? { id: b.id, cat: b.cat, icon: b.icon, name: b.name, desc: b.desc, earnedAt: r.earned_at } : null;
+    }).filter(Boolean);
+
+    // Public clubs only — private memberships are indistinguishable from
+    // no membership (same standard as the club directory's zero-leak 404s).
+    const athleteClubs = ((memberRes && memberRes.data) || []).map((m) => {
+      const c = Array.isArray(m.clubs) ? m.clubs[0] : m.clubs;
+      return c && c.visibility === 'public'
+        ? { id: c.id, name: c.name, sport: c.sport, city: c.city, logo_url: c.logo_url }
+        : null;
+    }).filter(Boolean);
+
+    // "Their following" list — every listed person is directory-visible;
+    // resolved via auth metadata like the my-profile Following tab.
+    const followingIds = ((followEdgesRes && followEdgesRes.data) || []).map((r) => r.following_id).filter(Boolean);
+    const fUserMap = {};
+    await Promise.all(followingIds.map(async (id) => {
+      try {
+        const { data: u } = await supabaseAdmin.auth.admin.getUserById(id);
+        const user = u && u.user;
+        if (!user) return;
+        const fm = user.user_metadata || {};
+        const fd = displayFromUser(user);
+        fUserMap[id] = {
+          id,
+          name: fd.name,
+          avatar_url: fd.avatar_url || null,
+          location: fm.location || null,
+          sports: Array.isArray(fm.sports) ? fm.sports : []
+        };
+      } catch (err) { /* omitted row */ }
+    }));
+    const followingList = followingIds.map((id) => fUserMap[id]).filter(Boolean);
+
+    // Activity payloads: scrub ai_insight server-side (same rule as the
+    // shared activity-card surfaces — the fake "Coach's note" never ships).
+    const acts = feedVisible ? ((actsRes && actsRes.data) || []) : null;
+    const cleanActs = feedVisible
+      ? acts.slice(0, 30).map((a) => { const c = Object.assign({}, a); delete c.ai_insight; return c; })
+      : null;
+
+    // Union of declared sports + sports actually logged (visible case only —
+    // in the private case, activity-derived sports would leak training).
+    let heroSports = Array.isArray(meta.sports) ? meta.sports.slice() : [];
+    if (feedVisible) {
+      for (const a of acts) { if (a.sport && !heroSports.includes(a.sport)) heroSports.push(a.sport); }
+    }
+
+    const data = {
+      userId: req.user.id,
+      profile: displayFromUser(req.user),
+      clubs: await getSidebarClubs(req.user.id),
+      athlete: {
+        id: targetId,
+        name: tDisp.name,
+        avatar_url: tDisp.avatar_url,
+        banner_url: meta.banner_url || null,
+        bio: meta.bio || '',
+        location: tDisp.location,
+        countryName: tDisp.countryName,
+        stateName: tDisp.stateName,
+        sports: heroSports,
+        level: meta.level || null,
+        memberSince: target.created_at || null,
+        pro: (await getUserPlan(targetId)) === 'pro'
+      },
+      isFollowing: !!(isFollowingRes.data && isFollowingRes.data.length),
+      followerCount: followerRes.count || 0,
+      followingCount: followingRes.count || 0,
+      followingList,
+      badges,
+      athleteClubs,
+      trainingPrivate: !feedVisible,
+      stats: feedVisible ? computePublicAthleteStats(acts, targetTz) : null,
+      activities: cleanActs
+    };
+
+    const html = injectProBadge(
+      injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-athlete-profile.html'), 'utf8'), data), 'athletes'),
+      (await getUserPlan(req.user.id)) === 'pro'
+    );
+    res.type('html').send(html);
+  } catch (err) {
+    console.log('Athlete profile error:', err.message);
+    sendPageError(res);
+  }
+});
+
 // ── CLUB DIRECTORY ──────────────────────────────────────────────────────────
 // Public-club discovery + request-and-approve join flow.
 //   - Only clubs with visibility='public' are EVER listed or reachable through

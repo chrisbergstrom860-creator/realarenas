@@ -1460,14 +1460,16 @@ document.getElementById('htab-overview').classList.add('active');
 
   function cardHTML(a, i, canUnfollow){
     var av = avColors[i % avColors.length];
-    return '<div class="follow-card">' +
+    // Card body navigates to the athlete's public profile; the unfollow
+    // button stops propagation so it never doubles as a nav click.
+    return '<div class="follow-card" onclick="nav(\'/athletes/' + esc(a.id) + '\')">' +
       window.avatarHtml(a.avatar_url || null, a.name || 'Athlete', 'fc-av', 'background:' + av.bg + ';color:' + av.color) +
       '<div style="flex:1;min-width:0">' +
         '<div class="fc-name">' + esc(a.name || 'Athlete') + '</div>' +
         '<div class="fc-sport">' + subline(a) + '</div>' +
       '</div>' +
       (canUnfollow
-        ? '<button class="btn btn-sm btn-ghost" onclick="handleUnfollow(\'' + esc(a.id) + '\',this)">Following</button>'
+        ? '<button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();handleUnfollow(\'' + esc(a.id) + '\',this)">Following</button>'
         : '') +
       '</div>';
   }
