@@ -23,7 +23,7 @@ The app shell body row (sidebar + main) is capped and centered via a 4-column gr
 - **How to apply:** any future shell-width change only touches `--shell-max`; mirror topbar rules in club-invite's inline copy (the only self-contained shell page — dashboard/member inherit from arenas.css). Landing/blog topbars are non-shell and intentionally different. Bell panel + avatar menu anchor to their own relative wrappers, so they travel with recentered contents automatically.
 
 ## Deferred (user-accepted)
-- **Events page own content cap** (~900–960 banner-driven) = session 3.
+- ~~Events page own content cap~~ DONE (Aug 2026): events `.main` carries `width:100%;max-width:940px;margin:0 auto` in its page style — the sanctioned per-page-width-on-.main pattern (like /log/billing). Auto margins center it inside the 956px shell cell; no-op below 1216px and on mobile.
 
 ## Desktop geometry guard
 `verify-mobile-geometry.js` now also runs 1280/1440/1920 (`DESKTOP_VIEWPORTS` in lib). Surfaces flagged `mobileOnly:true` (rail max:1 contracts) are skipped >768px. **Full 6-width run exceeds a 5-min shell window and background/nohup runs stall or die mid-run (killed runs leak seeds — sweep after!)** — run in halves via `GEO_WIDTHS=mobile|desktop|360,380` foreground.

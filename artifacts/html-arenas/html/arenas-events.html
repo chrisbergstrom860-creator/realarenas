@@ -40,7 +40,14 @@ button,select,input,textarea{font-family:var(--font)}
 .icon-btn:hover{background:var(--gray-50)}/* ── SIDEBAR ── */
 
 /* ── MAIN CONTENT ── */
-.main{display:flex;flex-direction:column;overflow:hidden}
+/* Events' own content cap (last deferred piece of the shell-centering work):
+   the banner-driven cards + 300px rail want a narrower column than the full
+   956px shell cell, so cap .main at 940px and center it inside the cell with
+   auto margins — the same sanctioned per-page-width-on-.main pattern as
+   /log and /billing (one centering mechanism: margins, no justify-content).
+   Below 1216px the cell itself is <940px, so this is a no-op there and on
+   mobile (the ≤768px collapse resets .main to the single column anyway). */
+.main{display:flex;flex-direction:column;overflow:hidden;width:100%;max-width:940px;margin:0 auto}
 
 /* ── BODY LAYOUT ── */
 .body-grid{display:grid;grid-template-columns:1fr 300px;flex:1;overflow:hidden}
