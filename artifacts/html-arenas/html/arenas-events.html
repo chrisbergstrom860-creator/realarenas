@@ -51,7 +51,7 @@ button,select,input,textarea{font-family:var(--font)}
 
 /* ── BODY LAYOUT ── */
 .body-grid{display:grid;grid-template-columns:1fr 300px;flex:1;overflow:hidden}
-.events-col{overflow-y:auto;border-right:var(--border)}
+.events-col{overflow-y:auto}
 .events-col::-webkit-scrollbar{width:4px}
 .events-col::-webkit-scrollbar-thumb{background:var(--gray-200);border-radius:2px}
 .sidebar-col{overflow-y:auto;padding:20px 16px;display:flex;flex-direction:column;gap:14px}
@@ -75,7 +75,7 @@ button,select,input,textarea{font-family:var(--font)}
      no duplicated markup; the rail's only card is "Your RSVPs". Geometry
      guard pins the mobile rail to exactly 1 visible card. */
   body:has(.bottom-nav) .body-grid{display:flex;flex-direction:column;overflow:visible}
-  body:has(.bottom-nav) .events-col{overflow:visible;border-right:none}
+  body:has(.bottom-nav) .events-col{overflow:visible}
   body:has(.bottom-nav) .sidebar-col{overflow:visible;order:-1;padding:14px 14px 0}
   body:has(.bottom-nav) .events-grid{padding:12px 14px}
   body:has(.bottom-nav) .evx-banner{display:none}
