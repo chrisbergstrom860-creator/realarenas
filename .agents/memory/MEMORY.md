@@ -82,3 +82,4 @@
 - [html-arenas challenge images + canUserSeeChallenge](html-arenas-challenge-images.md) — 6:1 ribbon, private bucket, version tokens; canonical gate closed the private-club join/leaderboard hole; invite_required oracle retired.
 - [html-arenas athlete profile](html-arenas-athlete-profile.md) — /athletes/:userId visitor page; ONE byte-identical 404 for missing/deleted/opted-out; feed-visible boundary; opt-out now also filtered from directory.
 - [html-arenas club directory](html-arenas-club-directory.md) — /clubs public-listing + request-and-approve; quiet decline w/ 7-day cooldown same-row flip; zero-leak getPublicClub; admin-only settings.
+- [html-arenas athlete links](html-arenas-athlete-links.md) — ONE shared data-athlete-link mechanism (non-defer script!), payload reachability flags, opted-out never linked; coach-dashboard renderers excluded by plan.
