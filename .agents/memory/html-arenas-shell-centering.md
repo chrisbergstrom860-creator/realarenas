@@ -18,8 +18,11 @@ The app shell body row (sidebar + main) is capped and centered via a 4-column gr
 - Cap shrink fallout pattern: fixed-width side-by-side flex rows (pie 230px + content-sized nowrap legend) overflow narrower columns → fix with `flex-wrap:wrap;justify-content:center` on the desktop row (wraps only when it doesn't fit; legend-below-ALWAYS was rejected earlier). Check profile stats @1280 after any cap change.
 - Events rail's 16px `.sidebar-col` padding makes its right void LOOK bigger (246 vs 230 at 1920) — optical, not structural; shell gutters are exactly symmetric.
 
+## Topbar seam alignment rule
+- The topbar stays a full-width band; its contents center to the shell box via padding that uses the SAME `(100% - --shell-max)/2` formula as the body row's fr gutters — alignment by shared formula, never by tuned pixel values. **Why:** padding % and fr gutters resolve against the same grid width basis (scrollbar included), so the logo cell cannot diverge from the sidebar at any width.
+- **How to apply:** any future shell-width change only touches `--shell-max`; mirror topbar rules in club-invite's inline copy (the only self-contained shell page — dashboard/member inherit from arenas.css). Landing/blog topbars are non-shell and intentionally different. Bell panel + avatar menu anchor to their own relative wrappers, so they travel with recentered contents automatically.
+
 ## Deferred (user-accepted)
-- **Topbar seam**: `.topbar-logo` border-right sits at x=220 while the centered sidebar starts at the gutter (x=230 @1920) — 10px misalignment, plus sidebar's right border no longer aligns with anything in the topbar. Session 2 = topbar inner centering.
 - **Events page own content cap** (~900–960 banner-driven) = session 3.
 
 ## Desktop geometry guard
