@@ -89,7 +89,16 @@ body {
   border-bottom: var(--border);
   display: flex;
   align-items: center;
-  padding: 0 20px 0 0;
+  /* T2 seam alignment: the band stays full-width (background + bottom border
+     edge to edge) but the inner contents center to the same --shell-max box
+     as the body row. Each side's inset uses the SAME formula as the body
+     grid's minmax(0,1fr) gutters — (100% - shell-max)/2 on the same width
+     basis — so the 220px logo cell lands exactly over the sidebar at every
+     width. Below 1216px the max() legs floor to the historical 0 (left) and
+     20px (right), pixel-identical to the old `0 20px 0 0` — including all of
+     mobile, with no extra breakpoint. */
+  padding: 0 max(20px, calc((100% - var(--shell-max)) / 2))
+           0 max(0px, calc((100% - var(--shell-max)) / 2));
   position: sticky;
   top: 0;
   z-index: 200;

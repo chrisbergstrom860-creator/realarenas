@@ -65,7 +65,8 @@ button,select,input,textarea{font-family:var(--font)}
 .app{display:grid;grid-template-columns:minmax(0,1fr) var(--sidebar-w) minmax(0,calc(var(--shell-max,1176px) - var(--sidebar-w))) minmax(0,1fr);grid-template-rows:var(--topbar-h) 1fr;min-height:100vh}
 .sidebar{grid-column:2;grid-row:2}
 .app > .main{grid-column:3;grid-row:2}
-.topbar{grid-column:1/-1;background:white;border-bottom:var(--border);display:flex;align-items:center;padding:0 20px 0 0;position:sticky;top:0;z-index:200}
+/* Inline shell copy — topbar inner centering mirrored from arenas.css (T2 seam). */
+.topbar{grid-column:1/-1;background:white;border-bottom:var(--border);display:flex;align-items:center;padding:0 max(20px,calc((100% - var(--shell-max))/2)) 0 max(0px,calc((100% - var(--shell-max))/2));position:sticky;top:0;z-index:200}
 .topbar-logo{width:var(--sidebar-w);padding:0 16px;display:flex;align-items:center;gap:8px;border-right:var(--border);flex-shrink:0;height:100%}
 .logo-icon{width:34px;height:34px;display:block;flex-shrink:0}
 .logo-text{font-size:17px;font-weight:600;color:var(--gray-900)}
