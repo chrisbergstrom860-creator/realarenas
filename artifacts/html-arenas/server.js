@@ -311,6 +311,9 @@ app.get(['/html/arenas-time.js', '/arenas-time.js'], (req, res) => {
 // Shared athlete-directory card renderer + follow controller — one template
 // for the /athletes page and the my-profile "Athletes" tab (component CSS in
 // arenas.css under the adc- prefix). Dual-path as above.
+app.get(['/html/arenas-athlete-link.js', '/arenas-athlete-link.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-athlete-link.js'));
+});
 app.get(['/html/arenas-athlete-cards.js', '/arenas-athlete-cards.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-athlete-cards.js'));
 });
@@ -995,7 +998,12 @@ function displayFromUser(user) {
     country: meta.country || null,
     countryName: COUNTRY_NAMES[meta.country] || null,
     state: meta.state || null,
-    stateName: US_STATE_NAMES[meta.state] || null
+    stateName: US_STATE_NAMES[meta.state] || null,
+    // Whether /athletes/:id renders for this user — the leaderboard opt-out
+    // 404s the public profile (zero-leak), so surfaces must not link
+    // opted-out names/avatars. Centralised here so every author/actor map
+    // (buildUserDisplayMap, enrichActivities, notifications) carries it.
+    profilePublic: !(meta.prefs && meta.prefs.show_on_leaderboards === false)
   };
 }
 
@@ -1414,7 +1422,17 @@ async function enrichNotifications(notifications) {
       // Ignore individual lookup failures; the card falls back to defaults.
     }
   }));
-  return list.map(n => ({ ...n, actor: actorMap[n.actor_id] || null }));
+  return list.map(n => {
+    const actor = actorMap[n.actor_id] || null;
+    // Serve-time remap (links are stored at creation time): a follow
+    // notification's most useful destination is the follower's public
+    // profile. Only when reachable — an opted-out actor's profile 404s, so
+    // those keep their stored link.
+    const link = (n.type === 'follow' && n.actor_id && actor && actor.profilePublic !== false)
+      ? '/athletes/' + n.actor_id
+      : n.link;
+    return { ...n, link, actor };
+  });
 }
 
 // Resolve a set of user IDs to their display info (name/handle) from auth
@@ -2432,7 +2450,11 @@ async function buildUserProfileMap(ids) {
           // Resolved preference booleans (default-on) — additive, used by
           // ranking surfaces to exclude leaderboard opt-outs. A failed lookup
           // leaves the entry absent → callers default to include.
-          prefs: prefsFromMeta(m)
+          prefs: prefsFromMeta(m),
+          // Whether /athletes/:id renders for this user (leaderboard opt-out
+          // 404s the public profile). Surfaces use this to decide if a
+          // name/avatar becomes a link — opted-out users are never linked.
+          profilePublic: prefsFromMeta(m).show_on_leaderboards !== false
         };
       }
     } catch (err) {
@@ -3108,6 +3130,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
         name: prof(p.user_id).name || 'Member',
         handle: prof(p.user_id).handle || 'member',
         avatarUrl: prof(p.user_id).avatar_url || null,
+        profilePublic: prof(p.user_id).profilePublic !== false,
         role: roleMap[p.user_id] || null,
         clubId: isAnnouncement ? clubId : null,
         clubName: isAnnouncement ? ((clubRow && clubRow.name) || 'Club') : null,
@@ -3146,6 +3169,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
         name: prof(a.user_id).name || 'Member',
         handle: prof(a.user_id).handle || 'member',
         avatarUrl: prof(a.user_id).avatar_url || null,
+        profilePublic: prof(a.user_id).profilePublic !== false,
         content: a.title || '', // kept title-only for compatibility
         timestamp: a.created_at || a.date
       });
@@ -3183,6 +3207,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
         name: prof(r.user_id).name || 'Member',
         handle: prof(r.user_id).handle || 'member',
         avatarUrl: prof(r.user_id).avatar_url || null,
+        profilePublic: prof(r.user_id).profilePublic !== false,
         eventTitle: event.title,
         eventDate: event.date,
         eventLocation: event.location,
@@ -3203,6 +3228,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
           name: prof(m.user_id).name || 'New member',
           handle: prof(m.user_id).handle || 'member',
           avatarUrl: prof(m.user_id).avatar_url || null,
+        profilePublic: prof(m.user_id).profilePublic !== false,
           sports: prof(m.user_id).sports || [],
           timestamp: m.created_at
         });
@@ -3263,6 +3289,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
             name: prof(participant.user_id).name || 'Member',
             handle: prof(participant.user_id).handle || 'member',
             avatarUrl: prof(participant.user_id).avatar_url || null,
+        profilePublic: prof(participant.user_id).profilePublic !== false,
             challengeTitle: challenge.title,
             goalTarget: challenge.goal_target,
             goalUnit: challenge.goal_unit,
@@ -4475,8 +4502,10 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
           });
           const fNameMap = await buildUserDisplayMap(Object.keys(byUser));
           friendsInChallenges = Object.keys(byUser).map((uid) => ({
+            id: uid,
             name: (fNameMap[uid] || {}).name || 'Athlete',
             avatar_url: (fNameMap[uid] || {}).avatar_url || null,
+            profilePublic: fNameMap[uid] ? fNameMap[uid].profilePublic !== false : true,
             sport: byUser[uid][0].sport,
             challengeTitle: byUser[uid][0].title,
             moreCount: byUser[uid].length - 1
@@ -4821,6 +4850,7 @@ app.get(BASE + '/api/challenges/:id/leaderboard', requireAuth, async (req, res) 
         name: disp.name || 'Athlete',
         handle: disp.handle || 'athlete',
         avatar_url: disp.avatar_url || null,
+        profilePublic: disp.profilePublic !== false,
         progress,
         percentage: target ? Math.min(100, Math.round((progress / target) * 100)) : 0
       });
@@ -5307,15 +5337,9 @@ async function buildFeedPosts(limit, currentUserId) {
     try {
       const { data: u } = await supabaseAdmin.auth.admin.getUserById(id);
       const user = u && u.user;
-      if (user) {
-        const meta = user.user_metadata || {};
-        const emailLocal = user.email ? user.email.split('@')[0] : null;
-        profileMap[id] = {
-          name: meta.name || emailLocal || 'Athlete',
-          handle: meta.handle || emailLocal || 'athlete',
-          avatar_url: meta.avatar_url || null
-        };
-      }
+      // displayFromUser (not a hand-rolled subset) so the entry carries
+      // profilePublic — the flag the feed forwards as authorProfilePublic.
+      if (user) profileMap[id] = displayFromUser(user);
     } catch (err) {
       // Ignore individual lookup failures; the card falls back to defaults.
     }
@@ -5349,6 +5373,8 @@ async function buildFeedPosts(limit, currentUserId) {
     authorName: (profileMap[p.user_id] && profileMap[p.user_id].name) || 'Athlete',
     authorHandle: (profileMap[p.user_id] && profileMap[p.user_id].handle) || 'athlete',
     authorAvatarUrl: (profileMap[p.user_id] && profileMap[p.user_id].avatar_url) || null,
+    // Absent lookup → treat as linkable; the profile route is the real gate.
+    authorProfilePublic: profileMap[p.user_id] ? profileMap[p.user_id].profilePublic !== false : true,
     clubId: p.club_id || null,
     canDelete: !!(p.club_id && managedClubIds.has(p.club_id)),
     clubName: (p.club_id && clubMap[p.club_id] && clubMap[p.club_id].name) || null,
@@ -6897,7 +6923,8 @@ app.get(BASE + '/api/events/:id/rsvps', requireAuth, async (req, res) => {
       userId: r.user_id,
       name: (nameMap[r.user_id] || {}).name || 'Member',
       handle: (nameMap[r.user_id] || {}).handle || 'member',
-      avatar_url: (nameMap[r.user_id] || {}).avatar_url || null
+      avatar_url: (nameMap[r.user_id] || {}).avatar_url || null,
+      profilePublic: nameMap[r.user_id] ? nameMap[r.user_id].profilePublic !== false : true
     }));
   res.json({ event, rsvps });
 });
@@ -10329,6 +10356,7 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
       name: nameOf(m.user_id),
       handle: handleOf(m.user_id),
       avatar_url: (profileMap[m.user_id] && profileMap[m.user_id].avatar_url) || null,
+      profilePublic: profileMap[m.user_id] ? profileMap[m.user_id].profilePublic !== false : true,
       role: m.role,
       isMe: m.user_id === userId
     })).sort((a, b) => ((roleOrder[a.role] ?? 3) - (roleOrder[b.role] ?? 3)) || a.name.localeCompare(b.name));
@@ -10368,6 +10396,7 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
         canDelete: viewerIsClubManager,
         coachName: nameOf(a.user_id),
         coachAvatarUrl: (profileMap[a.user_id] && profileMap[a.user_id].avatar_url) || null,
+        coachProfilePublic: profileMap[a.user_id] ? profileMap[a.user_id].profilePublic !== false : true,
         // Display role only if the author is still on the roster — a departed
         // author gets no role badge, but keeps honest "posted by" attribution.
         role: (memberRows.find((m) => m.user_id === a.user_id) || {}).role || null,

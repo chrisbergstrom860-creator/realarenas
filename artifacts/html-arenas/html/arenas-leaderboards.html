@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Arenas">
 <script src="/html/arenas-pwa.js" defer></script>
+<script src="/html/arenas-athlete-link.js"></script>
 <title>Arenas — Leaderboards</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -524,8 +525,12 @@ document.addEventListener('DOMContentLoaded', function(){
       return '' +
         '<div class="podium-col fade-in">' +
         '<div class="place-emoji">' + places[i] + '</div>' +
+        // Leaderboard payloads exclude opted-out athletes server-side, so
+        // everyone listed here has a reachable public profile.
+        '<span' + window.athleteLinkAttrs(a.userId, true) + ' style="display:contents">' +
         window.avatarHtml(a.avatar_url || null, a.name || 'Athlete', 'podium-avatar ' + rankCls[i], 'background:' + colors[i].bg + ';color:' + colors[i].c) +
-        '<div class="podium-pname">' + esc(a.name) + (isYou ? ' (you)' : '') + '</div>' +
+        '</span>' +
+        '<div class="podium-pname"' + window.athleteLinkAttrs(a.userId, true) + '>' + esc(a.name) + (isYou ? ' (you)' : '') + '</div>' +
         '<div class="podium-ploc">' + (a.location ? esc(a.location) : '—') + '</div>' +
         '<div class="podium-pscore">' + val + '</div>' +
         '<div class="podium-pstat">' + (a.activityCount || 0) + ' ' + ((a.activityCount === 1) ? 'activity' : 'activities') + '</div>' +
@@ -567,9 +572,11 @@ document.addEventListener('DOMContentLoaded', function(){
         '<div class="lb-row' + (isYou ? ' is-you' : '') + ' fade-in">' +
         '<div class="lb-rank ' + (rankCls[r._rank] || '') + '">' + r._rank + '</div>' +
         '<div class="lb-athlete">' +
+        '<span' + window.athleteLinkAttrs(r.userId, true) + ' style="display:contents">' +
         window.avatarHtml(r.avatar_url || null, r.name || 'Athlete', 'lb-av', 'background:' + av.bg + ';color:' + av.c) +
+        '</span>' +
         '<div>' +
-        '<div class="lb-name">' + esc(r.name) + (isYou ? ' <span style="font-size:10px;color:var(--gray-400);font-weight:400">(you)</span>' : '') + '</div>' +
+        '<div class="lb-name"' + window.athleteLinkAttrs(r.userId, true) + '>' + esc(r.name) + (isYou ? ' <span style="font-size:10px;color:var(--gray-400);font-weight:400">(you)</span>' : '') + '</div>' +
         '<div class="lb-detail">' + detail + '</div>' +
         '<div class="lb-activity-bar"><div class="lb-activity-fill" style="width:' + pct + '%;background:' + (isYou ? '#F59E0B' : 'var(--gray-300)') + '"></div></div>' +
         '</div>' +

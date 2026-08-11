@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Arenas">
 <script src="/html/arenas-pwa.js" defer></script>
+<script src="/html/arenas-athlete-link.js"></script>
 <title>Arenas — Feed</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -765,9 +766,9 @@ function postCardHtml(post, opts) {
   // "posted by <author>" secondary. Personal posts are unchanged.
   const head = post.clubId
     ? window.clubPostHeaderHtml(post, { timeText: meta, tileSize: 34 })
-    : `${window.avatarHtml(avatarUrl, name, 'pn-av', avStyle)}
+    : `<span${window.athleteLinkAttrs(post.user_id || viewerId, o.authorProfilePublic)} style="display:contents">${window.avatarHtml(avatarUrl, name, 'pn-av', avStyle)}</span>
         <div>
-          <div class="pn-name">${escapeHtml(name)}</div>
+          <div class="pn-name"${window.athleteLinkAttrs(post.user_id || viewerId, o.authorProfilePublic)}>${escapeHtml(name)}</div>
           <div class="pn-meta">${escapeHtml(meta)}</div>
         </div>`;
   return `
@@ -862,7 +863,8 @@ function collectPostItems() {
         : 'background:var(--gray-200);color:var(--gray-700)',
       meta: window.arenasTimeAgo(post.created_at),
       likes: post.likeCount || 0,
-      liked: !!post.userLiked
+      liked: !!post.userLiked,
+      authorProfilePublic: post.authorProfilePublic
     });
     // Sort key: post creation time.
     return { ts: Date.parse(post.created_at) || 0, id: String(post.id || ''), el: card };
@@ -899,9 +901,11 @@ function collectActivityItems() {
     wrap.innerHTML = '' +
       '<div class="post-note-card" style="padding:16px 18px">' +
         '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">' +
+          '<span' + window.athleteLinkAttrs(a.user_id, author.profilePublic) + ' style="display:contents">' +
           window.avatarHtml(author.avatar_url || null, name, '', 'width:36px;height:36px;border-radius:50%;background:var(--gray-200);color:var(--gray-700);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0') +
+          '</span>' +
           '<div style="flex:1;min-width:0">' +
-            '<div style="font-size:13px;font-weight:600;color:var(--gray-900)">' + escFeedAct(name) + ' <span style="font-weight:400;color:var(--gray-400)">logged an activity</span></div>' +
+            '<div style="font-size:13px;font-weight:600;color:var(--gray-900)"><span' + window.athleteLinkAttrs(a.user_id, author.profilePublic) + '>' + escFeedAct(name) + '</span> <span style="font-weight:400;color:var(--gray-400)">logged an activity</span></div>' +
             '<div style="font-size:11px;color:var(--gray-400)">' + window.arenasTimeAgo(a.created_at || a.date) + '</div>' +
           '</div>' +
           window.sportPillHtml(a.sport) +
@@ -945,9 +949,11 @@ function collectRsvpItems() {
     wrap.innerHTML = '' +
       '<div class="post-note-card" style="padding:16px 18px">' +
         '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">' +
+          '<span' + window.athleteLinkAttrs(r.user_id, author.profilePublic) + ' style="display:contents">' +
           window.avatarHtml(author.avatar_url || null, name, '', 'width:36px;height:36px;border-radius:50%;background:var(--gray-200);color:var(--gray-700);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0') +
+          '</span>' +
           '<div style="flex:1;min-width:0">' +
-            '<div style="font-size:13px;font-weight:600;color:var(--gray-900)">' + escFeedAct(name) + ' <span style="font-weight:400;color:var(--gray-400)">is going to an event</span></div>' +
+            '<div style="font-size:13px;font-weight:600;color:var(--gray-900)"><span' + window.athleteLinkAttrs(r.user_id, author.profilePublic) + '>' + escFeedAct(name) + '</span> <span style="font-weight:400;color:var(--gray-400)">is going to an event</span></div>' +
             '<div style="font-size:11px;color:var(--gray-400)">' + ago + '</div>' +
           '</div>' +
           '<span style="font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;border:1px solid #E6B800;background:#FFD21E;color:#111827">✓ Going</span>' +

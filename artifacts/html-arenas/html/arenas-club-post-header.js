@@ -29,7 +29,15 @@
       '',
       'width:' + size + 'px;height:' + size + 'px;border-radius:8px;background:var(--yellow-light);color:var(--gray-900);display:flex;align-items:center;justify-content:center;font-size:' + Math.round(size * 0.5) + 'px;flex-shrink:0;overflow:hidden;border:0.5px solid var(--yellow-dark)' + (o.tileStyle ? ';' + o.tileStyle : '')
     );
-    var secondary = 'posted by ' + esc(item.authorName || item.name || item.coachName || 'a member')
+    // Author name links to the public athlete profile via the shared
+    // athlete-link mechanism (arenas-athlete-link.js) when the caller supplies
+    // an id and the profile is reachable; otherwise stays plain text.
+    var authorId = item.authorUserId || item.user_id || item.userId || null;
+    var reachable = 'authorProfilePublic' in item ? item.authorProfilePublic
+      : ('coachProfilePublic' in item ? item.coachProfilePublic : item.profilePublic);
+    var linkAttrs = (window.athleteLinkAttrs && authorId) ? window.athleteLinkAttrs(authorId, reachable) : '';
+    var authorName = esc(item.authorName || item.name || item.coachName || 'a member');
+    var secondary = 'posted by ' + (linkAttrs ? '<span' + linkAttrs + '>' + authorName + '</span>' : authorName)
       + (o.timeText ? ' · ' + esc(o.timeText) : '');
     return tile
       + '<div style="min-width:0;flex:1">'

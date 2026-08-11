@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Arenas">
 <script src="/html/arenas-pwa.js" defer></script>
+<script src="/html/arenas-athlete-link.js"></script>
 <title>Arenas — Challenges</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -848,8 +849,10 @@ function showToast(msg) {
       const c = palette[i % palette.length];
       const more = f.moreCount > 0 ? ' +' + f.moreCount + ' more' : '';
       return '<div class="friend-row" style="cursor:default">'
+        + '<span' + window.athleteLinkAttrs(f.id, f.profilePublic) + ' style="display:contents">'
         + window.avatarHtml(f.avatar_url || null, f.name || 'Athlete', 'fr-av', 'background:' + c[0] + ';color:' + c[1])
-        + '<div class="fr-info"><div class="fr-name">' + esc(f.name) + '</div><div class="fr-action">In ' + esc(f.challengeTitle) + esc(more) + '</div></div>'
+        + '</span>'
+        + '<div class="fr-info"><div class="fr-name"' + window.athleteLinkAttrs(f.id, f.profilePublic) + '>' + esc(f.name) + '</div><div class="fr-action">In ' + esc(f.challengeTitle) + esc(more) + '</div></div>'
         + '</div>';
     }).join('');
   }
@@ -1026,9 +1029,9 @@ function showToast(msg) {
         const pct = target ? Math.min(100, Math.round((entry.progress / target) * 100)) : 0;
         return `<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:var(--border);${isMe ? 'background:var(--yellow-light)' : ''}">
             <div style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--gray-500);width:24px;flex-shrink:0">${entry.rank}</div>
-            ${window.avatarHtml(entry.avatar_url || null, entry.name || 'Athlete', '', 'width:32px;height:32px;border-radius:50%;background:' + av + ';color:' + avt + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0')}
+            <span${window.athleteLinkAttrs(entry.userId, entry.profilePublic)} style="display:contents">${window.avatarHtml(entry.avatar_url || null, entry.name || 'Athlete', '', 'width:32px;height:32px;border-radius:50%;background:' + av + ';color:' + avt + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0')}</span>
             <div style="flex:1;min-width:0">
-              <div style="font-size:13px;font-weight:${isMe ? '700' : '500'};color:var(--gray-900)">${esc(entry.name)}${isMe ? ' (you)' : ''}</div>
+              <div style="font-size:13px;font-weight:${isMe ? '700' : '500'};color:var(--gray-900)"><span${window.athleteLinkAttrs(entry.userId, entry.profilePublic)}>${esc(entry.name)}</span>${isMe ? ' (you)' : ''}</div>
               <div style="height:4px;background:var(--gray-100);border-radius:2px;margin-top:4px;overflow:hidden">
                 <div style="width:${pct}%;height:100%;background:${entry.rank === 1 ? '#FFD21E' : '#6B7280'};border-radius:2px"></div>
               </div>

@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Arenas">
 <script src="/html/arenas-pwa.js" defer></script>
+<script src="/html/arenas-athlete-link.js"></script>
 <title>Arenas — Jamie King · Profile</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -3082,7 +3083,9 @@ if (logHashMatch) {
             noFollowing: { t: 'Not following anyone yet', s: 'Switch to All and follow athletes — they will show up here and in your feed.' },
             noMatch: { t: 'No matches', s: 'No athletes match your search.' }
           },
-          onCardClick: null,
+          // Straight to the public profile — the directory payload already
+          // excludes opted-out athletes, so every card here is reachable.
+          onCardClick: function (a) { nav('/athletes/' + a.id); },
           onFollowChange: function () { summaryText(); },
           onRender: function () { summaryText(); },
           toast: window.showToast

@@ -290,6 +290,9 @@ body {
    :hover comes after .btn:hover so variant hovers win too.
    Athletes, billing and events keep full local .btn cascades (real padding /
    background divergences) and therefore keep their variant copies local. */
+/* Shared athlete-link affordance (arenas-athlete-link.js): any element carrying
+   data-athlete-link navigates to the public profile. */
+[data-athlete-link]{cursor:pointer}
 .btn{padding:7px 14px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;border:var(--border);font-family:var(--font);transition:all 0.13s;display:inline-flex;align-items:center;gap:6px}
 .btn:hover{background:var(--gray-100)}
 .btn-ghost{background:transparent;color:var(--gray-700)}
