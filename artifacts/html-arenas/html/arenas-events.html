@@ -56,7 +56,9 @@ button,select,input,textarea{font-family:var(--font)}
 .section-meta{font-size:12px;color:var(--gray-500)}
 
 /* ── EVENTS GRID ── */
-.events-grid{display:grid;grid-template-columns:1fr 1fr;gap:0}
+/* Same content gutter as /clubs and /athletes (.ccd-grid / #athlete-grid):
+   16px 20px desktop, 12px 14px mobile, 12px card rhythm via grid gap. */
+.events-grid{display:grid;grid-template-columns:1fr;gap:12px;padding:16px 20px}
 @media (max-width:768px){
   body:has(.bottom-nav) .main{overflow-y:auto;-webkit-overflow-scrolling:touch}
   /* Mobile rail restructure (same pattern as the feed's Activity streak):
@@ -68,10 +70,10 @@ button,select,input,textarea{font-family:var(--font)}
   body:has(.bottom-nav) .body-grid{display:flex;flex-direction:column;overflow:visible}
   body:has(.bottom-nav) .events-col{overflow:visible;border-right:none}
   body:has(.bottom-nav) .sidebar-col{overflow:visible;order:-1;padding:14px 14px 0}
-  body:has(.bottom-nav) .events-grid{grid-template-columns:1fr}
+  body:has(.bottom-nav) .events-grid{padding:12px 14px}
   body:has(.bottom-nav) .evx-banner{display:none}
   body:has(.bottom-nav) .evx-card{flex-wrap:wrap}
-  body:has(.bottom-nav) .evx-banner-m{display:block;width:calc(100% + 32px);height:120px;object-fit:cover;object-position:center;margin:-16px -16px 0;border-radius:12px 12px 0 0}
+  body:has(.bottom-nav) .evx-banner-m{display:block;width:calc(100% + 32px);height:120px;object-fit:cover;object-position:center;margin:-16px -16px 0;border-radius:var(--radius-lg) var(--radius-lg) 0 0}
 }
 
 .ev-date-box{border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;width:44px;height:44px;flex-shrink:0}
@@ -236,7 +238,7 @@ function showToast(msg){
 <style>
 /* evx-* form classes moved to shared arenas.css (arenas-event-form.js renders
    the same form on the dashboard). Page-local rules stay below. */
-.evx-card{border:var(--border);border-radius:var(--radius-lg);padding:16px;margin-bottom:12px;display:flex;gap:14px;background:#fff}
+.evx-card{border:var(--border);border-radius:var(--radius-lg);padding:16px;display:flex;gap:14px;background:#fff}
 /* Event cover image. Desktop: a capped-height band inside the content column
    between the tags row and the social/RSVP row (the middle slice of the 3:1
    crop). Mobile: a full-card-width band at the top of the card instead.
