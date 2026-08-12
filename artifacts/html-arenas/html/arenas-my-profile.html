@@ -1193,7 +1193,14 @@ document.getElementById('htab-overview').classList.add('active');
         var btn = document.createElement('button');
         btn.className = 'btn btn-ghost btn-sm';
         btn.textContent = 'Open →';
-        btn.onclick = function () { nav('/clubs/member'); };
+        // Navigate to THE CLICKED club — same role branch as the sidebar
+        // "My clubs" list, feed, and athlete-profile Clubs tab. The bare
+        // /clubs/member route redirects to the most recently joined club,
+        // which is exactly the wrong-club bug this must never reintroduce.
+        btn.onclick = function () {
+          if (club.role === 'admin' || club.role === 'coach') { nav('/clubs/dashboard?club=' + club.id); }
+          else { nav('/clubs/member/' + club.id); }
+        };
         card.appendChild(btn);
         col.appendChild(card);
       });
