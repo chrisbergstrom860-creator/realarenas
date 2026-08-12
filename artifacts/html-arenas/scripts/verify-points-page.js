@@ -68,7 +68,7 @@ function check(label, ok, detail) {
   });
 
   // ── 5. Footer links on all public pages + the page itself ──
-  ['arenas-landing-login.html', 'arenas-blog.html', 'arenas-about.html', 'arenas-terms.html',
+  ['arenas-landing-login.html', 'arenas-about.html', 'arenas-terms.html',
     'arenas-privacy.html', 'arenas-for-clubs.html', 'arenas-how-points-work.html'].forEach((file) => {
     const src = fs.readFileSync(path.join(HTML_DIR, file), 'utf8');
     check(`${file} footer links to How points work`, src.includes('>How points work</a>'));

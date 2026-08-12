@@ -178,9 +178,6 @@ button,select,input,textarea{font-family:var(--font)}
 /* .ac-stats-row / .ac-stat tile rules live in arenas.css (shared with the
    feed; builder in arenas-stat-tiles.js) — no page-local copy, no drift. */
 .ac-desc{font-size:13px;color:var(--gray-600);line-height:1.55}
-.ac-ai{background:var(--yellow-light);border:1px solid #fde68a;border-radius:6px;padding:9px 12px;display:flex;gap:8px;align-items:flex-start;margin-top:8px}
-.ai-icon{width:18px;height:18px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:var(--gray-900);flex-shrink:0;margin-top:1px}
-.ac-ai-text{font-size:12px;color:#7a5c00;line-height:1.55}
 .ac-footer{padding:10px 18px 14px;border-top:var(--border);display:flex;align-items:center;gap:8px}
 .ac-action{padding:5px 12px;border-radius:6px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer;transition:all .12s}
 .ac-action:hover{background:var(--gray-50)}
@@ -638,7 +635,7 @@ button,select,input,textarea{font-family:var(--font)}
              (user_metadata.prefs) and ENFORCED. Flip = save immediately (no
              save button); initial on/off state is hydrated from
              ARENAS_DATA.prefs so a reload shows the stored truth. Former
-             chrome-only toggles (Public profile, GPS routes, DMs, AI summary)
+             chrome-only toggles (Public profile, GPS routes, DMs)
              were removed — those features don't exist yet; their toggles
              return when they do. -->
         <div class="card">

@@ -3,7 +3,7 @@
    (feed, my-profile, events, challenges, leaderboards, athletes, notifications,
    club-dashboard, club-member). Linked after the Google Fonts <link>; page
    inline <style> still loads afterward and can override anything here.
-   NOTE: arenas-blog.html does NOT use this shell and does not link this file. */
+   (The old arenas-blog.html mock, which did not use this shell, was deleted.) */
 
 :root {
   --topbar-h: 64px; /* shared shell topbar height — every sticky offset below the bar derives from this */

@@ -258,23 +258,6 @@ html { scroll-behavior: smooth; }
 .prev-stat .pl { font-size: 9px; color: var(--gray-400); }
 .prev-desc { font-size: 12px; color: var(--gray-600); line-height: 1.5; }
 
-/* AI coach panel inside preview card */
-.prev-ai-panel {
-  border-top: var(--border);
-  background: var(--yellow-light);
-  padding: 10px 16px;
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-}
-.prev-ai-icon {
-  width: 20px; height: 20px; border-radius: 50%;
-  background: var(--yellow); color: var(--gray-900);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 700; flex-shrink: 0; margin-top: 1px;
-}
-.prev-ai-text { font-size: 12px; color: #7a5c00; line-height: 1.55; }
-.prev-ai-text strong { font-weight: 600; }
 
 /* fade-in animation for cards */
 .prev-card { opacity: 0; animation: card-in 0.4s ease forwards; }
@@ -335,7 +318,6 @@ html { scroll-behavior: smooth; }
 .feature-card h3 { font-size: 15px; font-weight: 600; color: var(--gray-900); margin-bottom: 8px; }
 .feature-card p { font-size: 13px; color: var(--gray-500); line-height: 1.6; }
 .feature-badge { display: inline-block; margin-top: 12px; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
-.badge-ai { background: var(--yellow-light); color: #7a5c00; border: 1px solid #fde68a; }
 .badge-free { background: #F0FDF4; color: #166534; border: 1px solid #BBF7D0; }
 .badge-pro { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
 
@@ -386,7 +368,6 @@ html { scroll-behavior: smooth; }
 .p-desc { font-size: 12px; color: var(--gray-500); margin-top: 1px; }
 .p-stats { display: flex; gap: 6px; }
 .p-stat { background: white; border: var(--border); border-radius: 6px; padding: 3px 8px; font-size: 11px; font-family: var(--mono); color: var(--gray-700); }
-.ai-badge { background: var(--yellow-light); border: 1px solid #fde68a; color: #7a5c00; font-size: 11px; padding: 2px 9px; border-radius: 20px; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 
 /* ── PRICING ── */
 .pricing { padding: 80px 24px; background: var(--gray-50); border-top: var(--border); }
@@ -468,7 +449,6 @@ html { scroll-behavior: smooth; }
 .apc-name { font-size: 13px; font-weight: 600; color: white; }
 .apc-stats { display: flex; gap: 5px; margin-top: 4px; flex-wrap: wrap; }
 .apc-stat { background: rgba(255,255,255,0.08); border-radius: 5px; padding: 2px 7px; font-size: 10px; font-family: var(--mono); color: var(--gray-300); }
-.ai-tag-dark { font-size: 10px; background: rgba(255,210,30,0.2); color: #FFD21E; padding: 2px 8px; border-radius: 10px; white-space: nowrap; flex-shrink: 0; }
 .auth-left-stats { display: flex; gap: 28px; position: relative; z-index: 1; }
 .auth-ls .n { font-size: 22px; font-weight: 700; color: white; font-family: var(--mono); }
 .auth-ls .l { font-size: 12px; color: var(--gray-500); margin-top: 2px; }
@@ -578,12 +558,11 @@ html { scroll-behavior: smooth; }
   .steps-grid::before { display: none !important; }
 
   /* Live feed preview cards — let the 4-up flex row wrap: avatar + info fill
-     row 1 (so .p-desc wraps normally), stats + AI badge drop to row 2 (no clip) */
+     row 1 (so .p-desc wraps normally), stats drop to row 2 (no clip) */
   .p-card { flex-wrap: wrap; row-gap: 10px; }
   .p-info { flex: 1 1 calc(100% - 52px); min-width: 0; }
   .p-stats { flex-wrap: wrap; }
-  .ai-badge { margin-left: auto; }
-
+  
   /* Footer — wrap to column */
   .footer-inner { flex-direction: column; gap: 24px; }
 
@@ -631,7 +610,7 @@ html { scroll-behavior: smooth; }
     <div class="hero-left">
       <div class="hero-eyebrow">🏅 Train. Compete. Connect. · Every sport</div>
       <h1 class="hero-h1">Every sport.<br><em>One community.</em></h1>
-      <p class="hero-sub">Share every workout, climb the weekly leaderboards, and take on events with athletes who train as hard as you do. AI coaching — coming soon.</p>
+      <p class="hero-sub">Share every workout, climb the weekly leaderboards, and take on events with athletes who train as hard as you do.</p>
       <div class="hero-cta">
         <button class="btn btn-yellow btn-lg" onclick="showPage('login'); setMode('signup')">Get started free ▸</button>
         <button class="btn btn-ghost btn-lg" onclick="showPage('login'); setMode('login')">Log in</button>
@@ -652,7 +631,7 @@ html { scroll-behavior: smooth; }
 
       <div class="feed-preview">
 
-        <!-- Card 1: Running with AI coach open -->
+        <!-- Card 1: Running -->
         <div class="prev-card">
           <div class="prev-card-body">
             <div class="prev-head">
@@ -670,10 +649,6 @@ html { scroll-behavior: smooth; }
               <div class="prev-stat"><div class="pv">148</div><div class="pl">bpm</div></div>
             </div>
             <div class="prev-desc">Morning long run done ✓ PB attempt this Sunday — anyone in London want to pace?</div>
-          </div>
-          <div class="prev-ai-panel">
-            <div class="prev-ai-icon">AI</div>
-            <div class="prev-ai-text"><strong>AI Coach:</strong> Solid effort — your pace held well through mile 6. HR spiked 12 bpm in the final 3km, suggesting glycogen depletion. Keep tomorrow easy, then hit Sunday's PB fresh.</div>
           </div>
         </div>
 
@@ -756,12 +731,6 @@ html { scroll-behavior: smooth; }
       <div class="section-title">Everything your training needs, in one place</div>
       <div class="features-grid">
         <div class="feature-card">
-          <div class="feature-icon" style="background:#FFF9E0">✦</div>
-          <h3>AI-powered coaching</h3>
-          <p>Coming soon: every activity you log will get a personalised AI analysis — pace breakdown, heart rate zones, recovery recommendations, and training suggestions grounded in your own data.</p>
-          <span class="feature-badge badge-ai">✦ Coming soon</span>
-        </div>
-        <div class="feature-card">
           <div class="feature-icon" style="background:#F0FDF4">🏟</div>
           <h3>Cross-sport community</h3>
           <p>Running, cycling, climbing, football, swimming — all in one feed. Follow athletes across sports and discover a community Strava's siloed design doesn't allow.</p>
@@ -770,7 +739,7 @@ html { scroll-behavior: smooth; }
         <div class="feature-card">
           <div class="feature-icon" style="background:#EFF6FF">🎟️</div>
           <h3>Event discovery</h3>
-          <p>Discover and create events across every sport. AI matches you with events that suit your fitness profile and connects you with athletes already registered near you.</p>
+          <p>Discover and create events across every sport — find the ones that fit your training and see which athletes near you are already registered.</p>
           <span class="feature-badge badge-free">Free forever</span>
         </div>
         <div class="feature-card">
@@ -833,7 +802,6 @@ html { scroll-behavior: smooth; }
             <div class="p-desc">Morning long run — PB attempt this Sunday!</div>
           </div>
           <div class="p-stats"><div class="p-stat">12.4 km</div><div class="p-stat">4:23/km</div><div class="p-stat">148 bpm</div></div>
-          <div class="ai-badge">✦ AI analysed</div>
         </div>
         <div class="p-card">
           <div class="p-avatar" style="background:#F5F3FF;color:#6D28D9">SR</div>
@@ -842,7 +810,6 @@ html { scroll-behavior: smooth; }
             <div class="p-desc">Sent the V7 project at Montserrat</div>
           </div>
           <div class="p-stats"><div class="p-stat">V7</div><div class="p-stat">3-wk project</div></div>
-          <div class="ai-badge">✦ AI analysed</div>
         </div>
         <div class="p-card">
           <div class="p-avatar" style="background:#FEF9C3;color:#854D0E">MC</div>
@@ -851,7 +818,6 @@ html { scroll-behavior: smooth; }
             <div class="p-desc">Stelvio approach — group ride Saturday open</div>
           </div>
           <div class="p-stats"><div class="p-stat">88 km</div><div class="p-stat">241W</div><div class="p-stat">1,240m</div></div>
-          <div class="ai-badge">✦ AI analysed</div>
         </div>
       </div>
       <div style="text-align:center;margin-top:28px">
@@ -903,7 +869,6 @@ html { scroll-behavior: smooth; }
             <div class="pricing-feat"><span class="pfeat-tick">✓</span> Full training analytics & trends</div>
             <div class="pricing-feat"><span class="pfeat-tick">✓</span> Training load tracking</div>
             <div class="pricing-feat"><span class="pfeat-tick">✓</span> Set goals & track progress</div>
-            <div class="pricing-feat" style="color:var(--gray-400)"><span style="color:var(--gray-300)">✦</span> AI coaching — coming soon</div>
           </div>
           <div class="pricing-cta">
             <button class="btn btn-yellow btn-full" onclick="startUpgrade('pro', this)">Upgrade to Pro ▸</button>
@@ -925,7 +890,6 @@ html { scroll-behavior: smooth; }
             <div class="pricing-feat"><span class="pfeat-tick">✓</span> Training load monitoring</div>
             <div class="pricing-feat"><span class="pfeat-tick">✓</span> At-risk member flags</div>
             <div class="pricing-feat"><span class="pfeat-tick">✓</span> Monthly coach report</div>
-            <div class="pricing-feat" style="color:var(--gray-400)"><span style="color:var(--gray-300)">✦</span> AI coaching — coming soon</div>
           </div>
           <div class="pricing-cta">
             <button class="btn btn-primary btn-full" onclick="startUpgrade('club', this)">Upgrade to Club Pro ▸</button>
@@ -1016,7 +980,6 @@ html { scroll-behavior: smooth; }
               <div class="apc-name">Jamie K. <span style="color:var(--gray-500);font-weight:400;font-size:11px">· Running</span></div>
               <div class="apc-stats"><div class="apc-stat">12.4 km</div><div class="apc-stat">4:23/km</div><div class="apc-stat">148 bpm</div></div>
             </div>
-            <div class="ai-tag-dark">✦ AI analysed</div>
           </div>
           <div class="auth-preview-card">
             <div class="apc-avatar" style="background:#F5F3FF;color:#6D28D9">SR</div>
@@ -1024,7 +987,6 @@ html { scroll-behavior: smooth; }
               <div class="apc-name">Sofia R. <span style="color:var(--gray-500);font-weight:400;font-size:11px">· Climbing</span></div>
               <div class="apc-stats"><div class="apc-stat">V7 sent ✓</div><div class="apc-stat">3-wk project</div></div>
             </div>
-            <div class="ai-tag-dark">✦ AI analysed</div>
           </div>
           <div class="auth-preview-card">
             <div class="apc-avatar" style="background:#FEF9C3;color:#854D0E">MC</div>
@@ -1032,7 +994,6 @@ html { scroll-behavior: smooth; }
               <div class="apc-name">Marco C. <span style="color:var(--gray-500);font-weight:400;font-size:11px">· Cycling</span></div>
               <div class="apc-stats"><div class="apc-stat">88 km</div><div class="apc-stat">241W avg</div><div class="apc-stat">1,240m</div></div>
             </div>
-            <div class="ai-tag-dark">✦ AI analysed</div>
           </div>
         </div>
       </div>

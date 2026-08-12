@@ -36,7 +36,7 @@ const img = cls => `<img class="${cls}" src="${MARK}" alt="">`;
 const SHELL = ['arenas-log.html', 'arenas-billing.html', 'arenas-athletes.html', 'arenas-leaderboards.html',
   'arenas-challenges.html', 'arenas-events.html', 'arenas-calendar.html', 'arenas-feed.html',
   'arenas-club-member.html', 'arenas-my-profile.html', 'arenas-club-dashboard.html', 'arenas-club-invite.html',
-  'arenas-blog.html', 'arenas-billing-canceled.html', 'arenas-billing-success.html', 'arenas-club-join.html',
+  'arenas-billing-canceled.html', 'arenas-billing-success.html', 'arenas-club-join.html',
   'arenas-landing-login.html'];
 for (const f of SHELL) apply(f, 'logo-icon div', '<div class="logo-icon">🏟</div>', img('logo-icon'), 1);
 
@@ -53,7 +53,7 @@ for (const f of ['arenas-about.html', 'arenas-how-points-work.html', 'arenas-pri
 // © footer mini-tiles (inline-styled 22px yellow squares)
 const TILE = '<div style="width:22px;height:22px;background:var(--yellow);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px">🏟</div>';
 const TILE_IMG = `<img src="${MARK}" width="22" height="22" alt="Arenas" style="display:block">`;
-for (const f of ['arenas-landing-login.html', 'arenas-blog.html', 'arenas-leaderboards.html', 'arenas-challenges.html'])
+for (const f of ['arenas-landing-login.html', 'arenas-leaderboards.html', 'arenas-challenges.html'])
   apply(f, '© footer tile', TILE, TILE_IMG, 1);
 
 // ── 2. CSS defs: emoji box → img box (preserve width/height/flex-shrink) ─
@@ -73,7 +73,6 @@ cssRewrite('arenas-club-join.html', 'logo-icon', 1);
 cssRewrite('arenas-billing-success.html', 'logo-icon', 1);
 cssRewrite('arenas-billing-canceled.html', 'logo-icon', 1);
 cssRewrite('arenas-club-invite.html', 'logo-icon', 1);
-cssRewrite('arenas-blog.html', 'logo-icon', 1);
 for (const f of ['arenas-about.html', 'arenas-how-points-work.html', 'arenas-privacy.html', 'arenas-terms.html',
   'arenas-forgot-password.html', 'arenas-reset-password.html', 'arenas-for-clubs.html'])
   cssRewrite(f, 'nav-logo-icon', 1);

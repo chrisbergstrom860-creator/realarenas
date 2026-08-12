@@ -2068,7 +2068,7 @@ async function buildFeedRsvps(currentUserId) {
   }
 }
 
-// Create an activity for the logged-in user, generate an AI insight, and notify
+// Create an activity for the logged-in user and notify
 // the user's followers (best-effort). The full activities schema must exist in
 // Supabase (applied via the SQL editor) — until then inserts return an error.
 app.post(BASE + '/api/activities/create', requireAuth, async (req, res) => {
@@ -9753,8 +9753,9 @@ app.delete(BASE + '/api/clubs/:clubId/logo', requireAuth, async (req, res) => {
 
 // Blog is moving to an external Ghost site (not live yet). Until then the in-app
 // blog is unreachable: every in-app blog link has been removed and this route
-// redirects to the landing page so stale bookmarks/links don't 404. The page
-// file arenas-blog.html stays on disk, unused, to repurpose or point at Ghost later.
+// redirects to the landing page so stale bookmarks/links don't 404. The old
+// arenas-blog.html mock (fabricated posts and a fictional feature-launch article)
+// was deleted; a future blog will be built fresh or hosted on Ghost.
 app.get(BASE + '/blog', (req, res) => res.redirect(BASE + '/landing'));
 // The club-signup "Primary sport" select is server-rendered from the sports
 // registry (lowercase ids as values, proper labels), so the marketing page —
