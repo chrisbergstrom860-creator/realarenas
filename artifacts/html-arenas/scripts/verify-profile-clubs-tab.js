@@ -26,12 +26,34 @@ async function login(email) {
   return raw.map(c => { const [p] = c.split(';'); const i = p.indexOf('='); return { name: p.slice(0, i), value: p.slice(i + 1), domain: 'localhost', path: '/' }; });
 }
 
+const FIXTURE_EMAIL = 'profile-clubs-tab@arenas-test.dev';
+
+// Best-effort teardown of a previous run's fixture user (a crashed run can
+// leave the fixed email registered, which would fail this run's createUser).
+async function precleanFixtureUser() {
+  try {
+    const { data } = await admin.auth.admin.listUsers({ perPage: 200 });
+    const stale = (data.users || []).find((u) => u.email === FIXTURE_EMAIL);
+    if (!stale) return;
+    const { data: ms } = await admin.from('memberships').select('club_id').eq('user_id', stale.id);
+    const staleClubs = (ms || []).map((m) => m.club_id);
+    if (staleClubs.length) {
+      await admin.from('memberships').delete().in('club_id', staleClubs);
+      await admin.from('clubs').delete().in('id', staleClubs).eq('owner_id', stale.id);
+    }
+    await admin.auth.admin.deleteUser(stale.id);
+    console.log('  info: pre-cleaned stale fixture user from a previous run');
+  } catch (e) { console.log('  info: fixture pre-clean skipped —', e.message); }
+}
+
 (async () => {
   const ids = { users: [], clubs: [] };
   const save = () => fs.writeFileSync('/tmp/verify-profile-clubs-tab-manifest.json', JSON.stringify(ids, null, 2));
+  let cleanupFails = 0;
   try {
+    await precleanFixtureUser();
     const { data: ud, error: ue } = await admin.auth.admin.createUser({
-      email: 'profile-clubs-tab@arenas-test.dev', password: PW, email_confirm: true,
+      email: FIXTURE_EMAIL, password: PW, email_confirm: true,
       user_metadata: { name: 'Clubs Tab Verify', sports: ['running'] },
     });
     if (ue) throw ue;
@@ -53,8 +75,9 @@ async function login(email) {
     }
 
     const browser = await launchBrowser();
+    try {
     const ctx = await browser.newContext();
-    await ctx.addCookies(await login('profile-clubs-tab@arenas-test.dev'));
+    await ctx.addCookies(await login(FIXTURE_EMAIL));
     const page = await ctx.newPage();
     await page.setViewportSize({ width: 1440, height: 1000 });
 
@@ -75,8 +98,8 @@ async function login(email) {
       if (target.role === 'coach') {
         ok(/\/clubs\/dashboard$/.test(landed.path) && landed.query.indexOf('club=' + target.id) !== -1,
           `coach card "${target.name}" opens that club's dashboard`, landed.path + landed.query);
-        ok(!landed.loadedClubId || landed.loadedClubId === target.id,
-          `dashboard loaded club id matches clicked club`, String(landed.loadedClubId));
+        ok(landed.loadedClubId === target.id,
+          `dashboard loaded club id === clicked club id`, String(landed.loadedClubId));
       } else {
         ok(landed.path === '/html/clubs/member/' + target.id,
           `member card "${target.name}" URL carries the clicked club id`, landed.path);
@@ -84,11 +107,27 @@ async function login(email) {
           `loaded page club id === clicked club id ("${target.name}")`, String(landed.loadedClubId));
       }
     }
-    await ctx.close(); await browser.close();
+    await ctx.close();
+    } finally { try { await browser.close(); } catch (e) { /* already closed */ } }
   } finally {
-    if (ids.clubs.length) { await admin.from('memberships').delete().in('club_id', ids.clubs); await admin.from('clubs').delete().in('id', ids.clubs); }
-    for (const id of ids.users) { try { await admin.auth.admin.deleteUser(id); } catch (e) { console.log('cleanup fail', e.message); } }
+    // Best-effort, per-resource teardown: check every result, keep going after
+    // failures, and flag residue so the run exits nonzero if anything is left.
+    if (ids.clubs.length) {
+      try {
+        const { error } = await admin.from('memberships').delete().in('club_id', ids.clubs);
+        if (error) { cleanupFails++; console.log('cleanup fail memberships:', error.message); }
+      } catch (e) { cleanupFails++; console.log('cleanup fail memberships:', e.message); }
+      try {
+        const { error } = await admin.from('clubs').delete().in('id', ids.clubs);
+        if (error) { cleanupFails++; console.log('cleanup fail clubs:', error.message); }
+      } catch (e) { cleanupFails++; console.log('cleanup fail clubs:', e.message); }
+    }
+    for (const id of ids.users) {
+      try { await admin.auth.admin.deleteUser(id); }
+      catch (e) { cleanupFails++; console.log('cleanup fail user', id, e.message); }
+    }
+    if (cleanupFails) console.log('CLEANUP RESIDUE — see /tmp/verify-profile-clubs-tab-manifest.json');
   }
-  console.log(fails ? fails + ' FAILURE(S)' : 'ALL PASS');
-  process.exit(fails ? 1 : 0);
+  console.log(fails || cleanupFails ? (fails + cleanupFails) + ' FAILURE(S)' : 'ALL PASS');
+  process.exit(fails || cleanupFails ? 1 : 0);
 })().catch(e => { console.error('FATAL:', e); process.exit(1); });
