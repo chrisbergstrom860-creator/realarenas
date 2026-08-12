@@ -96,23 +96,6 @@ html { scroll-behavior: smooth; }
   position: relative;
   z-index: 0;
 }
-/* Lane-line motif — whisper-faint track texture behind the hero content.
-   Background layer only: absolutely positioned, evenly spaced, zero height added. */
-.hero-left::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background-image:
-    linear-gradient(#EFEFEA, #EFEFEA),
-    linear-gradient(#EFEFEA, #EFEFEA),
-    linear-gradient(#EFEFEA, #EFEFEA),
-    linear-gradient(#EFEFEA, #EFEFEA);
-  background-size: 100% 1px;
-  background-repeat: no-repeat;
-  background-position: 0 20%, 0 40%, 0 60%, 0 80%;
-}
 .hero-eyebrow {
   display: inline-flex;
   align-items: center;
