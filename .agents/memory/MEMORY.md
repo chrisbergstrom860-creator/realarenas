@@ -32,7 +32,7 @@
 - [html-arenas marketing responsive](html-arenas-marketing-responsive.md) — self-contained marketing/auth pages; hero grid is `.split-hero` not `.hero`; topbar needs height:auto when wrapping; real grid class names listed.
 - [html-arenas mobile shell](html-arenas-mobile-shell.md) — STEP2 mobile: server-injected bottom nav + one @media block gated on body:has(.bottom-nav); collapse with minmax(0,1fr)+min-width:0 (not 1fr) or content clips; px tables need .table-scroll.
 - [html-arenas visual verify](html-arenas-visual-verify.md) — authed pages 302 to landing; verify widgets via self-contained harness + temp unauthed route; screenshot tool prepends previewPath /html/landing not /html.
-- [html-arenas landing honesty](html-arenas-landing-honesty.md) — pre-launch, no real users: landing copy must carry NO traction numbers or named testimonials; "8 sports" hard / "every sport" via 20pt fallback.
+- [html-arenas landing honesty](html-arenas-landing-honesty.md) — NO traction numbers, named testimonials, AI claims, or coming-soon promises anywhere; mock blog deleted; ai_insight scrubber stays.
 - [html-arenas landing race-timing design](html-arenas-landing-design.md) — approved tokens (800 italic, #111827 band, skew -8deg) + lane-line calibration: bg-layer only, #EFEFEA/#1D2736, even 20-80%, never gap-aligned.
 - [html-arenas feed right-rail](html-arenas-feed-rightrail.md) — right-rail from buildFeedSidebar; getDateRange('week') is rolling-7-day but Monday-week stats use local weekStart — keep rank & km on one boundary.
 - [html-arenas distance units](html-arenas-distance-units.md) — ONE canonical unit-aware km parser app-wide; unit-blind parseDistanceKm RETIRED (never reintroduce); guard script verify-km-consistency.js.

@@ -39,3 +39,9 @@ All promise-shaped sync copy ("Strava sync coming soon", "device sync", Connecte
 ## App-shell honesty (same rule)
 Fabricated subscription-status UI was removed from all main-app pages: "· Pro" footer suffixes, "💳 Pro plan" nav items, "✦ Pro" hero tag, and the fake Plan/billing card on my-profile settings. Payments don't exist — never reintroduce Pro-status labels in the app shell. Pro mentions in /for-clubs, landing pricing marketing, and arenas-terms.html are honest future-tense copy and are intentionally kept.
 Also removed from my-profile Clubs tab: fake Hackney club card + dead "Find clubs near you" search card (no club search/directory exists). Clubs tab markup starts empty (#clubs-list); JS renders real data.clubs or an invite-only empty state; subtitle links to BASE+/athletes.
+
+## AI copy fully removed (Aug 2026)
+- The AI insights feature is deferred indefinitely. ALL "AI coaching / AI analysed / coming soon" copy was removed app-wide (landing, for-clubs, billing, terms, privacy) — do not reintroduce AI or coming-soon promises without an explicit user decision.
+- arenas-blog.html was DELETED (was an unreachable mock full of fabricated "AI Coach launched" posts); /blog still redirects to /landing. A future blog starts fresh or on Ghost.
+- The activities.ai_insight column + stripLegacyInsight scrubber stay (old rows may carry it; must never render).
+- Rule extended: no promises without a timeline anywhere — same category as controls that do nothing (the fake "Message" button was removed too).
