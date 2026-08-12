@@ -18,3 +18,7 @@ description: Rule for club-scoped navigation (explicit ?club= everywhere), the n
 # Post-login landing policy
 
 Everyone lands on `/feed` after login (login POST, root route for logged-in users). There is NO manager special-case — the old `isClubManager → /clubs/dashboard` redirect was deleted (helper removed too) because it combined with the fallback above to land managers on the last-created club. The only dashboard redirect left is the for-clubs wizard COMPLETION (onboarding, not login), which now carries the new club's explicit `?club=`. Wizard-created club-only accounts are ordinary users — feed works; clubs reachable via sidebar/avatar menu.
+
+# Bare /clubs/member fallback masks missing-id links
+
+The bare `/clubs/member` route redirects to the viewer's most recent membership (getSidebarClubs order). Any club card/link that forgets the id therefore "works" in one-club testing and silently lands multi-club users on the wrong club — exactly the profile Clubs-tab bug (its Open button called `nav('/clubs/member')` since the tab's original wiring). Every club link must carry the explicit id + role branch (admin/coach → `/clubs/dashboard?club=`, else `/clubs/member/:id`); behaviour pinned by `scripts/verify-profile-clubs-tab.js` (asserts the DESTINATION page's loaded club id, not just the URL).
