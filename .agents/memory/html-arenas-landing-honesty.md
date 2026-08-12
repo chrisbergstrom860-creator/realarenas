@@ -45,3 +45,18 @@ Also removed from my-profile Clubs tab: fake Hackney club card + dead "Find club
 - arenas-blog.html was DELETED (was an unreachable mock full of fabricated "AI Coach launched" posts); /blog still redirects to /landing. A future blog starts fresh or on Ghost.
 - The activities.ai_insight column + stripLegacyInsight scrubber stay (old rows may carry it; must never render).
 - Rule extended: no promises without a timeline anywhere — same category as controls that do nothing (the fake "Message" button was removed too).
+
+## For-clubs page audit (Aug 2026)
+- `arenas-for-clubs.html` got the same honesty pass as the landing grid: the
+  "at injury risk" health claim is BANNED (feature = 5+ day inactivity heuristic
+  + check-in nudge — say "gone quiet / check in"), "fastest 5K" removed (no pace
+  goal type), and "coach notes on events" removed everywhere — **no coach-notes
+  feature exists** (events only have a description field). Don't reintroduce any.
+- Invite emails are sent from `Arenas <noreply@send.realarenas.com>` with the
+  coach's name in the body — never claim they're sent "from your address".
+- Both marketing grids now carry tier badges (`.feature-badge` + `.badge-free`/
+  `.badge-pro`, CSS duplicated on each page): landing has two split-badge cards
+  (bottom row = where Pro lives); for-clubs has exactly one Club Pro badge
+  (training load) — no splits. Compare table + pricing say "Monthly & yearly
+  club reports"; superset framing of free features under Club Pro is
+  user-approved — don't "fix" it.
