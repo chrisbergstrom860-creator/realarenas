@@ -5721,9 +5721,16 @@ function computePublicAthleteStats(acts, tz) {
   const totalKm = Math.round(acts.reduce((s, a) => s + parseDistanceKmUnitAware(a.distance), 0) * 10) / 10;
   const { currentStreak } = computeStreaks(acts, tz);
   const bySport = {};
-  for (const a of acts) { if (a.sport) bySport[a.sport] = (bySport[a.sport] || 0) + 1; }
+  for (const a of acts) {
+    if (!a.sport) continue;
+    if (!bySport[a.sport]) bySport[a.sport] = { sessions: 0, hours: 0 };
+    bySport[a.sport].sessions += 1;
+    // Same canonical parser + same tenths rounding as the owner's
+    // /api/profile/stats sportBreakdown, so the two surfaces cannot disagree.
+    bySport[a.sport].hours += parseDurationHours(a.duration);
+  }
   const sportsBreakdown = Object.keys(bySport)
-    .map((sport) => ({ sport, sessions: bySport[sport] }))
+    .map((sport) => ({ sport, sessions: bySport[sport].sessions, hours: Math.round(bySport[sport].hours * 10) / 10 }))
     .sort((x, y) => y.sessions - x.sessions);
   return { totalActivities: acts.length, totalKm, currentStreak, sportsBreakdown };
 }

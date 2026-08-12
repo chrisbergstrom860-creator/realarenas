@@ -452,7 +452,37 @@ function showToast(msg) {
         st.sportsBreakdown.map(function(sb){
           return window.sportPillHtml(sb.sport, { style: 'font-size:12px' }).replace('</span>', ' · ' + sb.sessions + '</span>');
         }).join('') +
-      '</div></div>';
+      '</div>';
+      // Hours-per-sport horizontal bars. Server-computed hours (same parser +
+      // tenths rounding as the owner's Stats & PRs) — never recomputed here.
+      // Zero-hour sports keep an honest row (empty track, "—" value) so the
+      // pill list and the chart always agree on which sports exist; the whole
+      // strip is omitted only when NO sport has recorded time.
+      var chartRows = st.sportsBreakdown.slice().sort(function(a, b){
+        return (b.hours || 0) - (a.hours || 0) || b.sessions - a.sessions;
+      });
+      var maxHours = chartRows.reduce(function(m, sb){ return Math.max(m, sb.hours || 0); }, 0);
+      if (maxHours > 0) {
+        ov += '<div style="padding:2px 14px 4px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em">Hours per sport</div>' +
+          '<div style="padding:0 14px 14px;display:flex;flex-direction:column;gap:8px">' +
+          chartRows.map(function(sb){
+            var reg = byId[sb.sport];
+            var hrs = sb.hours || 0;
+            var pct = hrs > 0 ? Math.max(2, Math.round((hrs / maxHours) * 100)) : 0;
+            return '<div style="display:flex;align-items:center;gap:8px">' +
+              '<div style="width:96px;flex-shrink:0;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--gray-700);min-width:0">' +
+                '<span style="flex-shrink:0">' + (reg ? reg.emoji : '🏃') + '</span>' +
+                '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (reg ? reg.label : esc(sb.sport)) + '</span>' +
+              '</div>' +
+              '<div style="flex:1;min-width:0;height:14px;border-radius:4px;background:var(--gray-100);overflow:hidden">' +
+                (pct > 0 ? '<div style="width:' + pct + '%;height:100%;border-radius:4px;background:' + (reg ? reg.colors.text : 'var(--gray-400)') + '"></div>' : '') +
+              '</div>' +
+              '<div style="width:46px;flex-shrink:0;text-align:right;font-size:12px;font-weight:600;color:' + (hrs > 0 ? 'var(--gray-900)' : 'var(--gray-400)') + '">' + (hrs > 0 ? hrs + 'h' : '—') + '</div>' +
+            '</div>';
+          }).join('') +
+        '</div>';
+      }
+      ov += '</div>';
     }
   }
   // Trophy strip — earned badges only; renders in the private state too
