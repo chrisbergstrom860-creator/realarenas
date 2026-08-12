@@ -117,6 +117,9 @@ button,select,input,textarea{font-family:var(--font)}
 .feat-icon{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:14px}
 .feat-title{font-size:15px;font-weight:700;color:var(--gray-900);margin-bottom:6px}
 .feat-desc{font-size:13px;color:var(--gray-500);line-height:1.65}
+.feature-badge{display:inline-block;margin-top:12px;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.badge-free{background:#F0FDF4;color:#166534;border:1px solid #BBF7D0}
+.badge-pro{background:#EFF6FF;color:#1D4ED8;border:1px solid #BFDBFE}
 
 /* ── COMPARISON TABLE ── */
 .compare-wrap{overflow-x:auto}
@@ -434,27 +437,38 @@ button,select,input,textarea{font-family:var(--font)}
       <div class="feat-card">
         <div class="feat-icon" style="background:var(--orange-light)">📊</div>
         <div class="feat-title">Training load monitoring</div>
-        <div class="feat-desc">See every member's weekly volume at a glance. Colour-coded load bars flag who's peaking, who's building, and who's at injury risk before they are.</div>
+        <div class="feat-desc">See every member's weekly volume at a glance. Colour-coded load bars show who's peaking, who's building, and who's gone quiet — so you can check in before they drift away.</div>
+        <span class="feature-badge badge-pro">Club Pro</span>
       </div>
       <div class="feat-card">
         <div class="feat-icon" style="background:var(--yellow-light)">🏆</div>
         <div class="feat-title">Private leaderboards</div>
         <div class="feat-desc">Club-only rankings that update in real time. Weekly, monthly, or all-time. Members compete with each other, not strangers. Huge for retention.</div>
+        <span class="feature-badge badge-free">Free forever</span>
       </div>
       <div class="feat-card">
         <div class="feat-icon" style="background:var(--purple-light)">⚡</div>
         <div class="feat-title">Club challenges</div>
-        <div class="feat-desc">Set a 100km monthly challenge, a 7-day streak, or a fastest 5K competition. Members see live progress in their feed. You see who's engaged and who isn't.</div>
+        <div class="feat-desc">Set a 100km monthly challenge, an active-days goal, or a team hours target. Members see live progress in their feed. You see who's engaged and who isn't.</div>
+        <span class="feature-badge badge-free">Free forever</span>
       </div>
       <div class="feat-card">
         <div class="feat-icon" style="background:var(--blue-light)">🎟️</div>
         <div class="feat-title">Event management</div>
-        <div class="feat-desc">Create club events, collect RSVPs, and send coach notes — all inside Arenas. Members RSVP from their feed. You see the full attendance list instantly.</div>
+        <div class="feat-desc">Create club events, collect RSVPs, and put every detail in one place — all inside Arenas. Members RSVP from their feed. You see the full attendance list instantly.</div>
+        <span class="feature-badge badge-free">Free forever</span>
       </div>
       <div class="feat-card">
         <div class="feat-icon" style="background:var(--orange-light)">✉️</div>
         <div class="feat-title">One-click invite system</div>
         <div class="feat-desc">Send personalised email invites to members. They click, create their account, and auto-join your club. No approval queue, no manual steps, no friction.</div>
+        <span class="feature-badge badge-free">Free forever</span>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon" style="background:var(--yellow-light)">📣</div>
+        <div class="feat-title">Club feed &amp; announcements</div>
+        <div class="feat-desc">Your club gets its own feed — member activities, RSVPs, milestones and new joins in one stream. Post coach announcements every member actually sees. The WhatsApp group can finally retire.</div>
+        <span class="feature-badge badge-free">Free forever</span>
       </div>
     </div>
   </div>
@@ -485,6 +499,7 @@ button,select,input,textarea{font-family:var(--font)}
           <tr><td>Coach dashboard</td><td><span class="cross">✕</span></td><td><span class="cross">✕</span></td><td><span class="check">✓</span></td></tr>
           <tr><td>Cross-sport support</td><td><span class="check">✓</span></td><td>Running &amp; cycling only</td><td><span class="check">✓</span></td></tr>
           <tr><td>At-risk member flags</td><td><span class="cross">✕</span></td><td><span class="cross">✕</span></td><td><span class="check">✓</span></td></tr>
+          <tr><td>Monthly &amp; yearly club reports</td><td><span class="cross">✕</span></td><td><span class="cross">✕</span></td><td><span class="check">✓</span></td></tr>
         </tbody>
       </table>
     </div>
@@ -511,7 +526,7 @@ button,select,input,textarea{font-family:var(--font)}
             <div class="hiw-num">2</div>
             <div>
               <div class="hiw-title">Set up your club</div>
-              <div class="hiw-desc">Name, sport, location, and handle. Takes 60 seconds. Your club page is live immediately with a shareable join link.</div>
+              <div class="hiw-desc">Name, sport, location, and handle. Takes 60 seconds. Your club is live immediately — generate a shareable join link in one click.</div>
             </div>
           </div>
           <div class="hiw-step">
@@ -562,8 +577,7 @@ button,select,input,textarea{font-family:var(--font)}
           <div class="price-feature"><span class="pf-check">✓</span> Club challenges</div>
           <div class="price-feature" style="color:var(--gray-400)"><span style="color:var(--gray-300)">✕</span> Training load monitoring</div>
           <div class="price-feature" style="color:var(--gray-400)"><span style="color:var(--gray-300)">✕</span> At-risk member flags</div>
-          <div class="price-feature" style="color:var(--gray-400)"><span style="color:var(--gray-300)">✕</span> Coach notes on events</div>
-          <div class="price-feature" style="color:var(--gray-400)"><span style="color:var(--gray-300)">✕</span> Monthly coach report</div>
+          <div class="price-feature" style="color:var(--gray-400)"><span style="color:var(--gray-300)">✕</span> Monthly &amp; yearly club reports</div>
         </div>
         <div class="price-cta"><button class="btn btn-full" style="border-color:var(--gray-300)" onclick="openSignup()">Get started free →</button></div>
       </div>
@@ -578,7 +592,7 @@ button,select,input,textarea{font-family:var(--font)}
           <div class="price-feature"><span class="pf-check">✓</span> Everything in Starter</div>
           <div class="price-feature"><span class="pf-check">✓</span> Training load monitoring</div>
           <div class="price-feature"><span class="pf-check">✓</span> At-risk member flags</div>
-          <div class="price-feature"><span class="pf-check">✓</span> Monthly coach report</div>
+          <div class="price-feature"><span class="pf-check">✓</span> Monthly &amp; yearly club reports</div>
         </div>
         <div class="price-cta">
           <button class="btn btn-yellow btn-full btn-lg" onclick="startClubUpgrade(this)">Get Club Pro →</button>
@@ -668,7 +682,7 @@ button,select,input,textarea{font-family:var(--font)}
         <div class="form-field">
           <label class="form-label">Email address</label>
           <input class="form-input" type="email" id="admin-email" placeholder="you@example.com" autocomplete="email">
-          <div class="form-hint">You'll use this to log in. Club invite emails are sent on your behalf from this address.</div>
+          <div class="form-hint">You'll use this to log in. Club invite emails carry your name so members know who's asking.</div>
           <div id="email-exists-note" style="display:none;margin-top:8px;padding:10px 12px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;font-size:12.5px;color:#854D0E;line-height:1.5">This email already has an Arenas account — log in to create your club. <a id="email-exists-login" href="#" style="color:#633806;font-weight:700;text-decoration:underline;white-space:nowrap">Log in →</a></div>
         </div>
         <div class="form-field">
