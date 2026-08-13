@@ -36,9 +36,14 @@
     }
   }
 
-  // opts: { id, label, html, align: 'center'|'top', zIndex, trigger, onClose }
+  // opts: { id, label, html, node, align: 'center'|'top', zIndex, trigger,
+  //         onClose }
   // 'top' = flex-start with the OVERLAY scrolling (long forms); 'center'
   // (default) = centered panel that scrolls internally.
+  // node: adopt an EXISTING panel element instead of html — for pages whose
+  // modal markup is static (their populate code targets ids inside the panel).
+  // The node is moved into the overlay and returned to its original parent on
+  // close, so it stays reusable across opens.
   function open(opts) {
     opts = opts || {};
     if (opts.id) close(opts.id); // replace an existing same-id overlay cleanly
@@ -61,7 +66,16 @@
       (opts.align === 'top' ? 'flex-start' : 'center') +
       ';justify-content:center;padding:20px;backdrop-filter:blur(2px)' +
       (opts.align === 'top' ? ';overflow-y:auto' : '');
-    ov.innerHTML = opts.html || '';
+    if (opts.node) {
+      entry.nodeHome = {
+        node: opts.node,
+        parent: opts.node.parentNode,
+        next: opts.node.nextSibling
+      };
+      ov.appendChild(opts.node);
+    } else {
+      ov.innerHTML = opts.html || '';
+    }
     var panel = ov.firstElementChild;
     if (panel) {
       if (!panel.getAttribute('role')) panel.setAttribute('role', 'dialog');
@@ -84,6 +98,16 @@
     else { for (var i = stack.length - 1; i >= 0; i--) { if (stack[i].id === id) { idx = i; break; } } }
     if (idx === -1) return;
     var entry = stack.splice(idx, 1)[0];
+    if (entry.nodeHome && entry.nodeHome.parent) {
+      // Return an adopted panel to its original home before the overlay dies.
+      // If the recorded sibling went stale (consumer mutated the home while
+      // open), fall back to appendChild — never leave the panel detached.
+      try {
+        entry.nodeHome.parent.insertBefore(entry.nodeHome.node, entry.nodeHome.next);
+      } catch (err) {
+        try { entry.nodeHome.parent.appendChild(entry.nodeHome.node); } catch (err2) {}
+      }
+    }
     if (entry.el && entry.el.parentNode) entry.el.remove();
     if (!stack.length) {
       document.body.style.overflow = prevOverflow;

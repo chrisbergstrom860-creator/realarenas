@@ -336,7 +336,9 @@ const PAGES = [
     surfaces: [{ name: 'directory cards', sel: '#athlete-grid', min: 4 }],
     steps: [
       { name: 'modal-athlete-profile', js: `document.querySelector('#athlete-grid .adc-card[data-clickable]').click()`,
-        waitFor: '#modal-profile.open', root: '#modal-profile' }
+        // Batch A: quick-view opens via window.arenasOverlay (root created
+        // per-open, no .open class); panel ids are unchanged.
+        waitFor: '#modal-profile #modal-banner', root: '#modal-profile' }
     ] },
   { user: 'member', name: 'clubs-directory', path: '/clubs', waitFor: '#club-grid > *', root: 'body',
     surfaces: [{ name: 'club cards', sel: '#club-grid', min: 1 }] },

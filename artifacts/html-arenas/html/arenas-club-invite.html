@@ -36,6 +36,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Arenas">
 <script src="/html/arenas-pwa.js" defer></script>
+<script src="/html/arenas-overlay.js"></script>
 <title>Arenas — Club Invites · Hackney Running Club</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -517,7 +518,9 @@ button,select,input,textarea{font-family:var(--font)}
 </div>
 
 <!-- SUCCESS MODAL -->
-<div class="modal-overlay" id="modal-success" onclick="closeModals(event)">
+<!-- Panel is adopted by window.arenasOverlay on open (node mode) and returned
+     here on close; this hidden home never becomes the visible backdrop. -->
+<div class="modal-overlay" id="modal-success-home">
   <div class="modal">
     <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Invitations sent! 🎉</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
     <div class="modal-body">
@@ -585,9 +588,17 @@ function sendInvites(){
   let ok=false;
   rows.forEach(r=>{const e=r.querySelector('input[type=email]');if(e&&e.value.includes('@'))ok=true;});
   if(!ok){showToast('Please add at least one valid email address');return;}
-  document.getElementById('modal-success').classList.add('open');
+  openSuccessModal();
 }
-function closeModals(e){if(!e||e.target.classList.contains('modal-overlay'))document.querySelectorAll('.modal-overlay').forEach(m=>m.classList.remove('open'));}
+// Adopt the static success panel into the shared overlay primitive (node
+// mode): Escape/backdrop/scroll-lock/focus/aria come from arenasOverlay; the
+// panel returns to its hidden home on close.
+function openSuccessModal(){
+  var home = document.getElementById('modal-success-home');
+  if (home && window.arenasOverlay)
+    window.arenasOverlay.open({ id: 'modal-success', node: home.firstElementChild, label: 'Invitations sent' });
+}
+function closeModals(){ if (window.arenasOverlay) window.arenasOverlay.close('modal-success'); }
 // Post-send CTA: stay on this console and surface the freshly-refreshed
 // "Pending invitations" panel (same tab as the form; it sits below the fold on
 // stacked/mobile layouts, hence the scroll + brief highlight).
@@ -864,11 +875,11 @@ updateCounts();
       var sent = sentList.length, skipped = (r.data.skipped||[]).length, failed = (r.data.failed||[]).length;
       var notified = sentList.filter(function(s){ return s.existingUser; }).length;
       var newUsers = sentList.filter(function(s){ return !s.existingUser; });
-      var modal = document.getElementById('modal-success');
+      var modal = document.getElementById('modal-success-home');
       if (modal){
         var v = modal.querySelector('.ss-val'); if (v) v.textContent = sent;
         var title = modal.querySelector('.sb-title'); if (title) title.textContent = sent+' invitation'+(sent!==1?'s':'')+' sent successfully';
-        modal.classList.add('open');
+        openSuccessModal();
       }
       // Surface a copyable join link for the first brand-new invitee.
       var linkEl = document.getElementById('join-link-url');

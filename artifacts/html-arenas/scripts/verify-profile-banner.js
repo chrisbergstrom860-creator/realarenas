@@ -214,7 +214,9 @@ async function listBannerObjects(uid) {
       await page.goto(`https://${DOMAIN}/html/athletes?q=Banner%20Testperson`, { waitUntil: 'domcontentloaded' });
       await page.waitForSelector('.adc-card', { timeout: 15000 });
       await page.locator('.adc-card', { hasText: 'Banner Testperson' }).first().click();
-      await page.waitForSelector('#modal-profile.open', { state: 'attached' });
+      // Batch A: the quick-view opens via window.arenasOverlay (root created
+      // per-open, no .open class); the panel keeps its ids.
+      await page.waitForSelector('#modal-profile #modal-banner', { state: 'attached' });
       const band = await page.evaluate(() => {
         const el = document.getElementById('modal-banner');
         return el ? { display: getComputedStyle(el).display, bg: el.style.backgroundImage } : null;

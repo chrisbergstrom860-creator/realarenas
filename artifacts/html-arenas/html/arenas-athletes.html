@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/html/arenas.css">
 <script src="/html/arenas-club-create.js"></script>
+<script src="/html/arenas-overlay.js"></script>
 <script src="/html/arenas-athlete-cards.js"></script>
 <style>
 button,select,input,textarea{font-family:var(--font)}
@@ -267,7 +268,9 @@ button,select,input,textarea{font-family:var(--font)}
 </div>
 
 <!-- PROFILE MODAL -->
-<div class="modal-overlay" id="modal-profile" onclick="closeModal(event)">
+<!-- Panel is adopted by window.arenasOverlay on open (node mode) and returned
+     here on close; this hidden home never becomes the visible backdrop. -->
+<div class="modal-overlay" id="modal-profile-home">
   <div class="modal">
     <div class="modal-header">
       <div class="mh-banner" id="modal-banner"></div>
@@ -294,9 +297,8 @@ button,select,input,textarea{font-family:var(--font)}
 <div class="toast" id="toast"></div>
 
 <script>
-function closeModal(e) {
-  if (!e || e.target.classList.contains('modal-overlay'))
-    document.getElementById('modal-profile').classList.remove('open');
+function closeModal() {
+  if (window.arenasOverlay) window.arenasOverlay.close('modal-profile');
 }
 
 function showToast(msg) {
@@ -410,7 +412,7 @@ function showToast(msg) {
     const a = athletes.find(x => x.id === userId);
     if (!a) return;
     const av = window.ArenasAthleteCards.avColor(athletes.indexOf(a));
-    const modal = document.getElementById('modal-profile');
+    const modal = document.getElementById('modal-profile-home');
     if (!modal) return;
     const bannerEl = document.getElementById('modal-banner');
     if (bannerEl) {
@@ -451,7 +453,12 @@ function showToast(msg) {
         (a.isFollowing ? '✓ Following' : 'Follow') +
       '</button>' +
       '<button class="btn" onclick="nav(\'/athletes/' + esc(a.id) + '\')">View full profile</button>';
-    modal.classList.add('open');
+    // Adopt the static panel into the shared overlay primitive (node mode):
+    // Escape/backdrop/scroll-lock/focus/aria come from arenasOverlay; the
+    // panel returns to its hidden home on close.
+    if (window.arenasOverlay) {
+      window.arenasOverlay.open({ id: 'modal-profile', node: modal.firstElementChild, label: 'Athlete profile' });
+    }
   };
 
   window.handleModalFollow = async function(userId){
