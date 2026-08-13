@@ -76,7 +76,7 @@ function escapeHtml(s) {
 // sending, so dev works without a key. It NEVER throws or rejects — it returns
 // { ok, skipped?, status?, error? } so callers can fire-and-forget and a failed
 // email can never break the surrounding request (e.g. invite-row creation).
-async function sendEmail({ to, subject, html, text }) {
+async function sendEmail({ to, subject, html, text, replyTo }) {
   const key = process.env.RESEND_API_KEY;
   if (!key) {
     console.log('[email skipped: no RESEND_API_KEY] To:', to, '| Subject:', subject);
@@ -91,7 +91,8 @@ async function sendEmail({ to, subject, html, text }) {
         to: Array.isArray(to) ? to : [to],
         subject,
         html,
-        ...(text ? { text } : {})
+        ...(text ? { text } : {}),
+        ...(replyTo ? { reply_to: replyTo } : {})
       })
     });
     if (!resp.ok) {
@@ -9835,6 +9836,132 @@ app.get(BASE + '/about', (req, res) => sendMarketingPage(req, res, 'arenas-about
 app.get(BASE + '/terms', (req, res) => sendMarketingPage(req, res, 'arenas-terms.html'));
 // Privacy Policy is a public content page (no auth), served raw like /terms.
 app.get(BASE + '/privacy', (req, res) => sendMarketingPage(req, res, 'arenas-privacy.html'));
+// Contact page — same session-aware pattern as /terms and /privacy (marketing
+// chrome logged out, "Back to app" chrome logged in), plus the session email
+// injected for prefill. Only the requester's OWN email is ever injected —
+// never the support inbox (CONTACT_INBOX stays server-side only).
+app.get(BASE + '/contact', async (req, res) => {
+  let sessionEmail = null;
+  const token = req.signedCookies && req.signedCookies.sb_access_token;
+  if (token) {
+    try {
+      const { data, error } = await supabase.auth.getUser(token);
+      if (!error && data && data.user) sessionEmail = data.user.email || null;
+    } catch (e) { sessionEmail = null; }
+  }
+  let page = fs.readFileSync(path.join(HTML, 'arenas-contact.html'), 'utf8');
+  if (sessionEmail) {
+    page = page
+      .replace('window.ARENAS_CONTACT_EMAIL = null;',
+        'window.ARENAS_CONTACT_EMAIL = ' + JSON.stringify(sessionEmail) + ';')
+      .replace('<a class="nav-link" href="/html/landing#login">Log in</a>',
+        '<a class="nav-link" href="/html/feed">Back to app</a>')
+      .replace('<a class="nav-cta yellow" href="/html/landing#login">Sign up free</a>',
+        '<a class="nav-cta yellow" href="/html/feed">Open the app →</a>');
+  }
+  res.type('html').send(page);
+});
+
+// ── CONTACT FORM SUBMISSION ──
+// The app's first per-IP rate limiter (nothing shared existed to reuse — the
+// other 429s are per-subject upload locks). Small in-memory sliding window:
+// 5 submissions per IP per 10 minutes. Restart resets it, which is fine for
+// abuse control on a contact form.
+// CONTACT_RATE_MAX is a test hook (verify-contact-form.js spawns instances
+// with a raised cap so validation cases don't trip the limiter); production
+// never sets it, so the default 5 applies.
+const CONTACT_RATE = { windowMs: 10 * 60 * 1000, max: Number(process.env.CONTACT_RATE_MAX) || 5 };
+const contactHits = new Map(); // ip -> [timestamps]
+function contactRateLimited(ip) {
+  const now = Date.now();
+  const hits = (contactHits.get(ip) || []).filter((t) => now - t < CONTACT_RATE.windowMs);
+  if (hits.length >= CONTACT_RATE.max) { contactHits.set(ip, hits); return true; }
+  hits.push(now);
+  contactHits.set(ip, hits);
+  // Opportunistic cleanup so the map can't grow unbounded.
+  if (contactHits.size > 5000) {
+    for (const [k, v] of contactHits) {
+      if (!v.some((t) => now - t < CONTACT_RATE.windowMs)) contactHits.delete(k);
+    }
+  }
+  return false;
+}
+const CONTACT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const CONTACT_FAIL_MSG = 'Your message could not be sent — please try again.';
+app.post(BASE + '/api/contact', async (req, res) => {
+  try {
+    const body = req.body || {};
+    // Honeypot: silently discard — respond exactly like success so bots learn
+    // nothing, but nothing is stored or sent.
+    if (typeof body.website === 'string' && body.website.trim() !== '') {
+      return res.json({ ok: true });
+    }
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    if (contactRateLimited(ip)) {
+      return res.status(429).json({ error: 'Too many messages — please wait a few minutes and try again.' });
+    }
+    const email = typeof body.email === 'string' ? body.email.trim() : '';
+    const subject = typeof body.subject === 'string' ? body.subject.trim() : '';
+    const message = typeof body.message === 'string' ? body.message.trim() : '';
+    if (!CONTACT_EMAIL_RE.test(email) || email.length > 320) return res.status(400).json({ error: 'Enter a valid email address.' });
+    if (!subject) return res.status(400).json({ error: 'Subject is required.' });
+    if (subject.length > 200) return res.status(400).json({ error: 'Subject must be 200 characters or fewer.' });
+    if (!message) return res.status(400).json({ error: 'Message is required.' });
+    if (message.length > 5000) return res.status(400).json({ error: 'Message must be 5000 characters or fewer.' });
+
+    // Attach the user id when the requester has a valid session (nullable).
+    let userId = null;
+    const token = req.signedCookies && req.signedCookies.sb_access_token;
+    if (token) {
+      try {
+        const { data, error } = await supabase.auth.getUser(token);
+        if (!error && data && data.user) userId = data.user.id;
+      } catch (e) { userId = null; }
+    }
+
+    // Persist FIRST so a Resend failure still leaves the message recorded.
+    const { data: row, error: insErr } = await supabaseAdmin
+      .from('contact_messages')
+      .insert({ from_email: email, subject, message, user_id: userId, send_status: 'pending' })
+      .select('id')
+      .single();
+    if (insErr || !row) {
+      console.error('[contact] insert failed:', insErr && insErr.message);
+      return res.status(500).json({ error: CONTACT_FAIL_MSG });
+    }
+
+    // Config check AFTER persisting: the message is recorded either way, but
+    // we never report success for mail that wasn't sent. The inbox address is
+    // server-side only — it must never reach a response body or error string.
+    const inbox = process.env.CONTACT_INBOX;
+    if (!inbox || !process.env.RESEND_API_KEY) {
+      await supabaseAdmin.from('contact_messages').update({ send_status: 'failed_config' }).eq('id', row.id);
+      console.error('[contact] not sent — missing', !inbox ? 'CONTACT_INBOX' : 'RESEND_API_KEY');
+      return res.status(500).json({ error: CONTACT_FAIL_MSG });
+    }
+
+    const sent = await sendEmail({
+      to: inbox,
+      replyTo: email,
+      subject: `[Arenas contact] ${subject}`,
+      html: `<!doctype html><html><body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b;padding:24px">
+  <p style="margin:0 0 4px;font-size:13px;color:#52525b">New contact form message</p>
+  <p style="margin:0 0 2px;font-size:14px"><strong>From:</strong> ${escapeHtml(email)}</p>
+  <p style="margin:0 0 16px;font-size:14px"><strong>Subject:</strong> ${escapeHtml(subject)}</p>
+  <div style="font-size:14px;line-height:1.6;white-space:pre-wrap;border-top:1px solid #e4e4e7;padding-top:14px">${escapeHtml(message)}</div>
+</body></html>`,
+      text: `New contact form message\nFrom: ${email}\nSubject: ${subject}\n\n${message}`
+    });
+    await supabaseAdmin.from('contact_messages')
+      .update({ send_status: sent.ok ? 'sent' : 'failed' })
+      .eq('id', row.id);
+    if (!sent.ok) return res.status(502).json({ error: CONTACT_FAIL_MSG });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[contact] error:', (err && err.message) || err);
+    return res.status(500).json({ error: CONTACT_FAIL_MSG });
+  }
+});
 // How points work is a PUBLIC content page (no auth), like /terms and /privacy:
 // scoring transparency is a marketing asset and the page contains nothing
 // personal. The sport table AND every worked-example number are rendered from

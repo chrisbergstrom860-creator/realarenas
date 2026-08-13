@@ -25,7 +25,7 @@
  */
 'use strict';
 
-const VERSION = 'v7';
+const VERSION = 'v8';
 const RUNTIME_CACHE = 'arenas-runtime-' + VERSION;
 const AVATAR_CACHE = 'arenas-avatars-' + VERSION;
 const POST_IMAGE_CACHE = 'arenas-post-images-' + VERSION;
@@ -63,7 +63,8 @@ const PUBLIC_PAGES = [
 // - /about, /terms, /privacy: the server swaps the nav auth CTAs for app
 //   links when a session cookie is present, so a cached copy could show
 //   logged-out chrome to a signed-in user or vice versa.
-const NEVER_CACHED = ['/how-points-work', '/about', '/terms', '/privacy'];
+// - /contact: same per-requester chrome swap PLUS the session email prefill.
+const NEVER_CACHED = ['/how-points-work', '/about', '/terms', '/privacy', '/contact'];
 function isNeverCached(pathname) {
   const rel = BASE && pathname.indexOf(BASE) === 0 ? pathname.slice(BASE.length) : pathname;
   return NEVER_CACHED.indexOf(rel || '/') !== -1;

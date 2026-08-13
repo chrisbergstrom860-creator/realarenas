@@ -44,6 +44,7 @@ const USER_REFS = [
   ['club_invites', 'invited_by'],
   ['club_join_requests', 'user_id'],
   ['challenge_invites', 'invitee_id'], ['challenge_invites', 'inviter_id'],
+  ['contact_messages', 'user_id'],
 ];
 // Tables without an `id` PK — deletions match on their composite ref columns only
 // (never on full rows: null-valued columns would become eq.null and match nothing).
