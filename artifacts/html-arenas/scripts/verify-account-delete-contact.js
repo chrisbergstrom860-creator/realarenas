@@ -109,20 +109,29 @@ const postContact = (base, body, cookie) => fetch(base + '/api/contact', {
     const { data: hostRows } = await admin.from('activities')
       .select('id, user_id').neq('user_id', uid).limit(1);
     const host = (hostRows || [])[0] || null;
+    // MANDATORY: without a host both like proofs would silently not run and
+    // "zero rows" would pass vacuously — that must be a failure, not a skip.
+    if (!host) throw new Error('no borrowable host activity found — cascade proofs cannot run');
     ids.likes = [];
-    if (host) {
-      const { error: giveErr } = await admin.from('activity_likes')
-        .insert({ activity_id: host.id, user_id: uid });
-      if (giveErr) throw giveErr;
-      ids.likes.push({ activity_id: host.id, user_id: uid });
-      const { error: recvErr } = await admin.from('activity_likes')
-        .insert({ activity_id: actMine.id, user_id: host.user_id });
-      if (recvErr) throw recvErr;
-      ids.likes.push({ activity_id: actMine.id, user_id: host.user_id });
-      save();
-    } else {
-      console.log('  info: no borrowable activity found — give-direction cascade proof skipped');
-    }
+    const { error: giveErr } = await admin.from('activity_likes')
+      .insert({ activity_id: host.id, user_id: uid });
+    if (giveErr) throw giveErr;
+    ids.likes.push({ activity_id: host.id, user_id: uid });
+    const { error: recvErr } = await admin.from('activity_likes')
+      .insert({ activity_id: actMine.id, user_id: host.user_id });
+    if (recvErr) throw recvErr;
+    ids.likes.push({ activity_id: actMine.id, user_id: host.user_id });
+    save();
+
+    // profiles FK capability probe: an insert with a guaranteed-nonexistent
+    // auth UUID must fail with SQLSTATE 23503 (profiles_id_fkey). This pins
+    // that the post-delete disappearance below is the FK cascade, not some
+    // other mechanism. If the probe insert ever SUCCEEDS, the row is removed
+    // immediately and the assertion fails loudly.
+    const orphanId = require('crypto').randomUUID();
+    const { error: probeErr } = await admin.from('profiles').insert({ id: orphanId, name: 'fk probe' });
+    if (!probeErr) await admin.from('profiles').delete().eq('id', orphanId);
+    ok(!!probeErr && probeErr.code === '23503', 'profiles has an FK to auth.users (orphan insert fails 23503)', probeErr ? probeErr.code : 'insert succeeded');
 
     spawned = await spawnNoKeyServer(19919, { CONTACT_RATE_MAX: '100' });
     const cookie = await login(spawned.base, FIXTURE_EMAIL);
@@ -157,9 +166,9 @@ const postContact = (base, body, cookie) => fetch(base + '/api/contact', {
     for (const r of (preMail || [])) { if (!ids.messages.includes(r.id)) ids.messages.push(r.id); } save();
     // Cascade preconditions: both like directions present, profiles row exists.
     const { data: preGiven } = await admin.from('activity_likes').select('activity_id').eq('user_id', uid);
-    ok((preGiven || []).length === (host ? 1 : 0), 'precondition: like GIVEN by fixture exists', String((preGiven || []).length));
+    ok((preGiven || []).length === 1, 'precondition: like GIVEN by fixture exists', String((preGiven || []).length));
     const { data: preRecv } = await admin.from('activity_likes').select('user_id').eq('activity_id', actMine.id);
-    ok((preRecv || []).length === (host ? 1 : 0), 'precondition: like RECEIVED on fixture activity exists', String((preRecv || []).length));
+    ok((preRecv || []).length === 1, 'precondition: like RECEIVED on fixture activity exists', String((preRecv || []).length));
     const { data: preProf } = await admin.from('profiles').select('id').eq('id', uid);
     ok((preProf || []).length === 1, 'precondition: profiles row exists for fixture user', String((preProf || []).length));
 
@@ -188,10 +197,8 @@ const postContact = (base, body, cookie) => fetch(base + '/api/contact', {
     ok((postGiven || []).length === 0, 'zero activity_likes remain GIVEN by the deleted user (auth-user FK cascade)', String((postGiven || []).length));
     const { data: postRecv } = await admin.from('activity_likes').select('user_id').eq('activity_id', actMine.id);
     ok((postRecv || []).length === 0, 'zero activity_likes remain RECEIVED on the deleted user\'s activities', String((postRecv || []).length));
-    if (host) {
-      const { data: hostStill } = await admin.from('activities').select('id').eq('id', host.id);
-      ok((hostStill || []).length === 1, 'borrowed host activity itself survived (only the like was cascaded)');
-    }
+    const { data: hostStill } = await admin.from('activities').select('id').eq('id', host.id);
+    ok((hostStill || []).length === 1, 'borrowed host activity itself survived (only the like was cascaded)');
     const { data: postProf } = await admin.from('profiles').select('id').eq('id', uid);
     ok((postProf || []).length === 0, 'profiles row is gone (profiles_id_fkey cascade)', String((postProf || []).length));
 
