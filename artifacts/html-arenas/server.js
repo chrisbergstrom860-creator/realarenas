@@ -9068,6 +9068,19 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
     await del('club_join_requests', q => q.eq('user_id', uid));
     await del('club_invites', q => q.eq('invited_by', uid));
     if (email) await del('club_invites', q => q.eq('email', email));
+    // Contact-form messages. Two matches are required: user_id covers
+    // logged-in submissions, but logged-out submissions carry no user_id and
+    // would leave the address (and message) behind — so also match the
+    // account's email in from_email. from_email is stored as typed (only
+    // trimmed) while auth emails are lowercased, hence case-insensitive
+    // ilike with LIKE metacharacters escaped (_ is common in addresses).
+    // NOTE: email must be read BEFORE auth.admin.deleteUser below — it is
+    // (captured from the session at the top of this route).
+    await del('contact_messages', q => q.eq('user_id', uid));
+    if (email) {
+      const pattern = email.replace(/[\\%_]/g, m => '\\' + m);
+      await del('contact_messages', q => q.ilike('from_email', pattern));
+    }
     await del('subscriptions', q => q.eq('owner_type', 'user').eq('owner_id', uid));
 
     // 3d. Storage avatar, then the auth user LAST.
