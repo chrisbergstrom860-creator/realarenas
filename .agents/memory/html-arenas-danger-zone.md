@@ -14,6 +14,7 @@ Endpoints live in server.js (`/api/account/export`, `/api/account/delete`), UI i
 - **Surviving-club billing hand-off:** club checkout binds the owner's card, so after a transfer the sub still bills the departed owner. Fix shipped: `billing`-type notification to the new owner (type 'billing' is NOT in NOTIF_PREF_BY_TYPE so it can't be pref-suppressed; actor_id must stay null or the actor_id sweep deletes it in the same request).
 - Export = single JSON attachment; avatar as public URL not bytes (single-file, no zip dep). Paged fetch (fetchAllRows) — PostgREST silently truncates at 1000 rows.
 - Auth user is deleted LAST; sweep order children-first incl. others' likes/comments on the user's posts, notifications/follows both directions, invites by invited_by AND email.
+- `contact_messages` needs a DUAL match: user_id (logged-in submissions) AND case-insensitive `ilike` on from_email with `\ % _` escaped (logged-out rows carry no user_id; from_email is stored as typed, auth emails are lowercase). Email must be read before auth delete. Guard: verify-account-delete-contact.js (underscore LIKE-trap control row). The sweep is a HAND-MAINTAINED list — every new user-data table must be added here explicitly (sweep-script coverage ≠ deletion coverage). Known cascade reliances not in the list: activity_likes + profiles (DB-side cascade, unverified by a guard).
 
 ## Schema gotchas hit
 
