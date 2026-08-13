@@ -25,6 +25,12 @@ const {
 } = require('./tzdate');
 
 const app = express();
+// One reverse-proxy hop in every deployment (Replit artifact router in dev,
+// Railway's edge in prod), so req.ip must come from X-Forwarded-For's last
+// entry — otherwise the contact-form rate limiter buckets every visitor under
+// the proxy's socket address. Exactly ONE hop is trusted, so clients can't
+// spoof their way out of the bucket.
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 const BASE = (process.env.BASE_PATH || '').replace(/\/$/, '');
 const HTML = path.join(__dirname, 'html');
@@ -9853,7 +9859,9 @@ app.get(BASE + '/contact', async (req, res) => {
   if (sessionEmail) {
     page = page
       .replace('window.ARENAS_CONTACT_EMAIL = null;',
-        'window.ARENAS_CONTACT_EMAIL = ' + JSON.stringify(sessionEmail) + ';')
+        // \u003c-escape so a value containing "</script>" can never terminate
+        // the inline script element (script-context XSS boundary).
+        'window.ARENAS_CONTACT_EMAIL = ' + JSON.stringify(sessionEmail).replace(/</g, '\\u003c') + ';')
       .replace('<a class="nav-link" href="/html/landing#login">Log in</a>',
         '<a class="nav-link" href="/html/feed">Back to app</a>')
       .replace('<a class="nav-cta yellow" href="/html/landing#login">Sign up free</a>',

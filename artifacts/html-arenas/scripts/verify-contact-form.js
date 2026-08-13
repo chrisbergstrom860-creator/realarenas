@@ -46,8 +46,8 @@ async function login(email) {
   return raw.map((c) => c.split(';')[0]).join('; ');
 }
 
-const post = (base, body) => fetch(base + '/api/contact', {
-  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+const post = (base, body, headers) => fetch(base + '/api/contact', {
+  method: 'POST', headers: { 'Content-Type': 'application/json', ...(headers || {}) }, body: JSON.stringify(body),
 });
 
 // Spawn a second server instance with RESEND_API_KEY stripped (and a fresh
@@ -143,6 +143,13 @@ function spawnNoKeyServer(port, extraEnv) {
     const sixthBody = await sixth.text();
     ok(sixth.status === 429, '6th hit from one IP inside the window is 429', 'got ' + sixth.status);
     noLeak(sixthBody, 'rate-limit response');
+    // Forwarded-IP isolation: trust proxy = 1 hop, so distinct X-Forwarded-For
+    // clients must get distinct buckets — a different forwarded IP is NOT 429
+    // even though the exhausted one still is.
+    const otherIp = await post(spawned.base, { email: 'bad', subject: '', message: '' }, { 'X-Forwarded-For': '203.0.113.77' });
+    ok(otherIp.status === 400, 'different forwarded client IP gets its own bucket (400, not 429)', 'got ' + otherIp.status);
+    const sameIp = await post(spawned.base, { email: 'a@b.co', subject: 's', message: 'm' });
+    ok(sameIp.status === 429, 'exhausted IP stays rate-limited', 'got ' + sameIp.status);
   } finally {
     if (spawned) { try { spawned.proc.kill('SIGKILL'); } catch (e) { /* already dead */ } }
     for (const id of ids.messages) {
