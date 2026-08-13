@@ -83,3 +83,4 @@
 - [html-arenas athlete profile](html-arenas-athlete-profile.md) — /athletes/:userId visitor page; ONE byte-identical 404 for missing/deleted/opted-out; feed-visible boundary; opt-out now also filtered from directory.
 - [html-arenas club directory](html-arenas-club-directory.md) — /clubs public-listing + request-and-approve; quiet decline w/ 7-day cooldown same-row flip; zero-leak getPublicClub; admin-only settings.
 - [html-arenas athlete links](html-arenas-athlete-links.md) — ONE shared data-athlete-link mechanism (non-defer script!), payload reachability flags, opted-out never linked; coach-dashboard renderers excluded by plan.
+- [html-arenas contact form](html-arenas-contact-form.md) — /contact + /api/contact: inbox never leaks, trust proxy=1 for the per-IP limiter, spawned-server (BASE_PATH!) test pattern, no support address may reappear.
