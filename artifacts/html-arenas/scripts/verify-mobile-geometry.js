@@ -6,12 +6,9 @@
 // Engine: scripts/lib/mobile-geometry.js. Asserts at 360/380/414px AND
 // 1280/1440/1920px (desktop added with the shell-centering work):
 //
-// KNOWN PRE-EXISTING FAILURES (Aug 2026, deliberately not fixed in the
-// shell-centering pass): feed@1280/1440/1920 "nothing clipped" — every feed
-// .side-card's last child overhangs the card's overflow:hidden bottom by
-// 4-14px (cropped padding/descenders). Pre-dates the centered shell (fails
-// identically with it stashed); invisible to the mobile-only guard because
-// most rail cards are mobile-hidden.
+// No known-failure exemptions — the guard must be fully green. (The former
+// feed@desktop side-card clipping was fixed at the source: flex-shrink:0 on
+// height-constrained rail children in arenas.css.)
 //
 // The full 6-width run exceeds a 5-minute shell window — run in halves:
 //   GEO_WIDTHS=mobile | desktop | <comma list, e.g. 360,380>.

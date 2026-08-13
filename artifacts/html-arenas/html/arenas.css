@@ -152,6 +152,15 @@ body {
   cursor: pointer;
 }
 
+/* Height-constrained flex rails (fixed-height/scrollable flex columns):
+   children must NEVER flex-shrink. Default flex-shrink:1 lets an over-full
+   rail shrink every card a few px below its content height, and the cards'
+   overflow:hidden then clips the last child's padding/descenders. The rail
+   itself scrolls (overflow-y:auto) — shrinking is never the right response.
+   Covers feed .side-col, events/athletes .sidebar-col, and the shared left
+   .sidebar (same pattern, same hazard). */
+.side-col > *, .sidebar-col > *, .sidebar > * { flex-shrink: 0; }
+
 .sidebar {
   background: white;
   border-right: var(--border);
