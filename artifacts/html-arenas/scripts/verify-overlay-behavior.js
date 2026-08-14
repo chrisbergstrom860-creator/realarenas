@@ -224,10 +224,21 @@ async function auditOverlay(browser, cfg, widths) {
         await pg.screenshot({ path: '/tmp/overlay-' + cfg.overlayId + '-' + SHOTS + '-' + width + '.png' });
       }
 
+      // Tier C: window-level teardown spy — arenasEventForm.teardown()
+      // increments window.__aefTeardowns; every close path must add exactly 1.
+      const spy = () => pg.evaluate(() => window.__aefTeardowns || 0);
+      const spyCheck = async (what, s0) => {
+        if (!cfg.teardownSpy) return;
+        const s1 = await spy();
+        check(label + ': teardown fired exactly once on ' + what, s1 === s0 + 1, s0 + ' → ' + s1);
+      };
+
       // 2. Escape closes + restore + focus return
+      let s0 = await spy();
       await pg.keyboard.press('Escape');
       const escClosed = await waitClosed(pg, cfg.overlayId);
       check(label + ': Escape closes', escClosed);
+      await spyCheck('Escape', s0);
       const after = await pg.evaluate((sel) => {
         const ae = document.activeElement;
         return {
@@ -244,19 +255,25 @@ async function auditOverlay(browser, cfg, widths) {
 
       // 3. Backdrop click closes (reopen first)
       await openOverlay(pg, cfg);
+      s0 = await spy();
       await pg.mouse.click(8, 8);
       check(label + ': backdrop click closes', await waitClosed(pg, cfg.overlayId));
+      await spyCheck('backdrop', s0);
 
       // 4. Explicit ✕ closes (reopen first)
       await openOverlay(pg, cfg);
+      s0 = await spy();
       await pg.evaluate((sel) => { const b = document.querySelector(sel); if (b) b.click(); }, cfg.closeSel);
       check(label + ': ✕ closes', await waitClosed(pg, cfg.overlayId));
+      await spyCheck('✕', s0);
 
       // 5. Extra close paths (e.g. Done / View pending buttons)
       for (const extra of cfg.extraCloses || []) {
         await openOverlay(pg, cfg);
+        s0 = await spy();
         await pg.evaluate((sel) => { const b = document.querySelector(sel); if (b) b.click(); }, extra.sel);
         check(label + ': ' + extra.label + ' closes', await waitClosed(pg, cfg.overlayId));
+        await spyCheck(extra.label, s0);
       }
 
       // 6. beforeClose dirty-guard (Batch B onward). Dialogs are auto-dismissed
@@ -411,7 +428,120 @@ try {
         h.check(label + ': post-revoke Escape closes with NO prompt',
           (await h.waitClosed()) && h.dialogs.length === d0, h.dialogs.slice(d0).join(' | '));
       }
-    }
+    },
+    // ── Batch C1: the four arenasEventForm hosts ────────────────────────────
+    // Shared crop scenario for the two create forms (only they have the
+    // inline image field). Proves, per the approved plan:
+    //   a) stacking: crop overlay opens OVER the host; Escape closes the crop
+    //      first, host survives underneath with scroll still locked;
+    //   b) the user's point-1 sequence: typed text + staged image → Escape
+    //      (crop closes, its cancel clears the image) → Escape again MUST
+    //      still prompt off the text fields — no silent discard;
+    //   c) host close with the crop still open kills both (teardown cancels
+    //      the crop) and restores scroll.
+    ...(() => {
+      const cropAudit = (px, xSel) => async (pg, label, h) => {
+        const CROP = 'arenas-crop-overlay';
+        const cropOpen = () => pg.waitForFunction((id) => {
+          const el = document.getElementById(id);
+          return !!el && el.getBoundingClientRect().width > 0;
+        }, CROP, { timeout: 8000 });
+        const d0 = h.dialogs.length;
+        await h.openOverlay();
+        await pg.evaluate((p) => {
+          const t = document.getElementById(p + '-title');
+          t.value = 'Typed before staging an image';
+          t.dispatchEvent(new Event('input', { bubbles: true }));
+        }, px);
+        await pg.setInputFiles('#' + px + '-image', 'public/opengraph.jpg');
+        await cropOpen();
+        const stacked = await pg.evaluate(() => document.body.style.overflow === 'hidden');
+        h.check(label + ': crop opens over host, scroll still locked', stacked && await h.isOpen());
+        await pg.keyboard.press('Escape');
+        await pg.waitForFunction((id) => !document.getElementById(id), CROP, { timeout: 4000 });
+        h.check(label + ': Escape closes the CROP first — host still open, no prompt yet',
+          (await h.isOpen()) && h.dialogs.length === d0, h.dialogs.slice(d0).join(' | '));
+        await pg.keyboard.press('Escape');
+        await pg.waitForTimeout(150);
+        h.check(label + ': second Escape still prompts off typed text (image gone ≠ clean)',
+          h.dialogs.length === d0 + 1 && await h.isOpen(), h.dialogs.length - d0 + ' dialog(s)');
+        let s0 = await pg.evaluate(() => window.__aefTeardowns || 0);
+        await pg.evaluate((sel) => { document.querySelector(sel).click(); }, xSel);
+        h.check(label + ': dirty — explicit ✕ closes, teardown fired',
+          (await h.waitClosed()) && (await pg.evaluate(() => window.__aefTeardowns || 0)) === s0 + 1);
+        // b2) crop-ONLY dirt: no typed text, accept the crop (#ac-use →
+        // cropState 'ready') — Escape on the HOST must prompt purely off the
+        // staged image; proves cropState contributes to isDirty on its own.
+        await h.openOverlay();
+        await pg.setInputFiles('#' + px + '-image', 'public/opengraph.jpg');
+        await cropOpen();
+        await pg.evaluate(() => { document.getElementById('ac-use').click(); });
+        await pg.waitForFunction((id) => !document.getElementById(id), CROP, { timeout: 8000 });
+        const dAcc = h.dialogs.length;
+        await pg.keyboard.press('Escape');
+        await pg.waitForTimeout(150);
+        h.check(label + ': accepted crop ALONE makes the guard prompt on Escape',
+          h.dialogs.length === dAcc + 1 && await h.isOpen(), (h.dialogs.length - dAcc) + ' dialog(s)');
+        await pg.evaluate((sel) => { document.querySelector(sel).click(); }, xSel);
+        await h.waitClosed();
+        // c) crop OPEN when the host ✕ is clicked → both die, scroll restored.
+        await h.openOverlay();
+        await pg.setInputFiles('#' + px + '-image', 'public/opengraph.jpg');
+        await cropOpen();
+        const dPre = h.dialogs.length;
+        await pg.evaluate((sel) => { document.querySelector(sel).click(); }, xSel);
+        await h.waitClosed();
+        const endState = await pg.evaluate((id) => ({
+          crop: !!document.getElementById(id), overflow: document.body.style.overflow
+        }), CROP);
+        h.check(label + ': host ✕ with crop open — both closed, scroll restored',
+          !endState.crop && endState.overflow === 'scroll' && h.dialogs.length === dPre,
+          JSON.stringify(endState) + ' dialogs+' + (h.dialogs.length - dPre));
+      };
+      return [
+        { // Events page create (prefix evx)
+          name: 'events #evx-modal', tier: 3, user: 'coach',
+          page: '/events', overlayId: 'evx-modal', teardownSpy: true,
+          focusSel: '#create-event-btn',
+          trigger: `(() => { openCreateEvent(); })()`,
+          closeSel: '#evx-close',
+          expectsBeforeClose: true,
+          makeDirty: `(() => { const t = document.getElementById('evx-title'); t.value = 'Dirty'; t.dispatchEvent(new Event('input', { bubbles: true })); })()`,
+          postAudit: cropAudit('evx', '#evx-close')
+        },
+        { // Events page self-edit (prefix eev) — opens PREFILLED; the generic
+          // clean-Escape check proves an untouched edit form reads clean.
+          name: 'events #eev-modal', tier: 3, user: 'coach',
+          page: '/events', overlayId: 'eev-modal', teardownSpy: true,
+          focusSel: '#create-event-btn',
+          trigger: `(() => { ARENAS_EVENTS.edit('${ev.id}'); })()`,
+          closeSel: '#eev-close',
+          expectsBeforeClose: true,
+          makeDirty: `(() => { const t = document.getElementById('eev-title'); t.value = 'Dirty edit'; t.dispatchEvent(new Event('input', { bubbles: true })); })()`
+        },
+        { // Dashboard edit (prefix edit-ev) — prefilled; Cancel is a real path.
+          name: 'dashboard #edit-event-overlay', tier: 3, user: 'coach',
+          page: '/clubs/dashboard?club=' + club.id, overlayId: 'edit-event-overlay', teardownSpy: true,
+          focusSel: 'button[onclick*="switchToTabAndCreate"]',
+          trigger: `(() => { editClubEvent('${ev.id}'); })()`,
+          closeSel: '#edit-ev-x',
+          extraCloses: [{ label: 'Cancel button', sel: '#edit-ev-cancel' }],
+          expectsBeforeClose: true,
+          makeDirty: `(() => { const t = document.getElementById('edit-ev-title'); t.value = 'Dirty edit'; t.dispatchEvent(new Event('input', { bubbles: true })); })()`
+        },
+        { // Dashboard create (prefix cev)
+          name: 'dashboard #create-club-event-overlay', tier: 3, user: 'coach',
+          page: '/clubs/dashboard?club=' + club.id, overlayId: 'create-club-event-overlay', teardownSpy: true,
+          focusSel: 'button[onclick*="switchToTabAndCreate"]',
+          trigger: `(() => { openCreateClubEvent(); })()`,
+          closeSel: '#cev-x',
+          extraCloses: [{ label: 'Cancel button', sel: '#cev-cancel' }],
+          expectsBeforeClose: true,
+          makeDirty: `(() => { const t = document.getElementById('cev-title'); t.value = 'Dirty'; t.dispatchEvent(new Event('input', { bubbles: true })); })()`,
+          postAudit: cropAudit('cev', '#cev-x')
+        }
+      ];
+    })()
   ];
 
   for (const cfg of OVERLAYS) await auditOverlay(browser, cfg, widths);

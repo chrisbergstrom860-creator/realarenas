@@ -540,17 +540,11 @@ function showToast(msg){
   // modal or leave scroll locked.
   var createFormApi = null;
   function openCreateEvent() {
-    // Replace an existing modal through its teardown — a decode still in
-    // flight from the old instance must not orphan a crop overlay.
-    if (document.getElementById('evx-modal')) closeCreateModal();
-    var overlay = document.createElement('div');
-    overlay.id = 'evx-modal';
-    overlay.className = 'modal-overlay open';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:500;padding:32px 16px;overflow-y:auto';
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeCreateModal(); });
+    // Batch C1: chrome rides window.arenasOverlay. Same-id open() replaces an
+    // existing instance THROUGH its onClose (→ teardown), so a decode still in
+    // flight from the old instance can never orphan a crop overlay.
     var shell = document.createElement('div');
     shell.style.cssText = 'background:#fff;border-radius:14px;max-width:520px;width:100%;padding:22px';
-    shell.addEventListener('click', function (e) { e.stopPropagation(); });
     shell.innerHTML =
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
         '<div style="font-size:17px;font-weight:700;color:var(--gray-900)">Create an event</div>' +
@@ -571,15 +565,26 @@ function showToast(msg){
     btn.textContent = 'Create event';
     createFormApi.el.appendChild(btn);
     shell.appendChild(createFormApi.el);
-    overlay.appendChild(shell);
-    document.body.appendChild(overlay);
+    var api = createFormApi;
+    window.arenasOverlay.open({
+      id: 'evx-modal', node: shell, align: 'top', label: 'Create an event',
+      // Ask the module — a typed field or a staged/pending image reads dirty.
+      beforeClose: function () {
+        return !api.isDirty() || window.confirm('Discard this event? Your changes haven\u2019t been saved.');
+      },
+      // The ONE teardown route: every close path (✕, backdrop, Escape,
+      // post-submit, same-id replace) lands here exactly once.
+      onClose: function () {
+        api.teardown();
+        if (createFormApi === api) createFormApi = null;
+      }
+    });
     document.getElementById('evx-close').addEventListener('click', closeCreateModal);
   }
 
-  // Centralized teardown for EVERY create-modal close path.
+  // All close paths route through the primitive; teardown runs in onClose.
   function closeCreateModal() {
-    if (createFormApi) createFormApi.teardown();
-    var m = document.getElementById('evx-modal'); if (m) m.remove();
+    window.arenasOverlay.close('evx-modal');
   }
 
 
@@ -759,15 +764,10 @@ function showToast(msg){
   function editEvent(eventId) {
     var ev = evById[eventId];
     if (!ev || !window.arenasEventForm) return;
-    if (document.getElementById('eev-modal')) closeEditModal();
-    var overlay = document.createElement('div');
-    overlay.id = 'eev-modal';
-    overlay.className = 'modal-overlay open';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:500;padding:32px 16px;overflow-y:auto';
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeEditModal(); });
+    // Batch C1: chrome rides window.arenasOverlay (same-id replace runs the
+    // old instance's onClose → teardown).
     var shell = document.createElement('div');
     shell.style.cssText = 'background:#fff;border-radius:14px;max-width:520px;width:100%;padding:22px';
-    shell.addEventListener('click', function (e) { e.stopPropagation(); });
     shell.innerHTML =
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">' +
         '<div style="font-size:17px;font-weight:700;color:var(--gray-900)">Edit event</div>' +
@@ -795,13 +795,24 @@ function showToast(msg){
     editFormApi.el.appendChild(note);
     editFormApi.el.appendChild(btn);
     shell.appendChild(editFormApi.el);
-    overlay.appendChild(shell);
-    document.body.appendChild(overlay);
+    var api = editFormApi;
+    window.arenasOverlay.open({
+      id: 'eev-modal', node: shell, align: 'top', label: 'Edit event',
+      // Prefilled edit form: the module's baseline IS the prefill, so an
+      // untouched form closes silently; any real edit (or staged image state)
+      // prompts before discarding.
+      beforeClose: function () {
+        return !api.isDirty() || window.confirm('Discard your changes to this event?');
+      },
+      onClose: function () {
+        api.teardown();
+        if (editFormApi === api) editFormApi = null;
+      }
+    });
     document.getElementById('eev-close').addEventListener('click', closeEditModal);
   }
   function closeEditModal() {
-    if (editFormApi) { editFormApi.teardown(); editFormApi = null; }
-    var m = document.getElementById('eev-modal'); if (m) m.remove();
+    window.arenasOverlay.close('eev-modal');
   }
 
   // Image manager moved into shared arenas-event-form.js — the same overlay

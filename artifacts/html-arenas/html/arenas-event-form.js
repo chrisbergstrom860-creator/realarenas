@@ -218,6 +218,7 @@
 
     // ── Cover-image crop wiring (create mode) ──
     var cropBlob = null, cropState = 'none', cropSeq = 0, cropHandle = null;
+    var torn = false; // set by teardown(); gates every in-flight submit callback
     var imgInput = g('image');
     if (imgInput) imgInput.addEventListener('change', function () {
       var seq = ++cropSeq;               // supersedes all in-flight callbacks
@@ -371,9 +372,11 @@
             max_participants: body.max_participants
           })
         }).then(function (r) { return r.json(); }).then(function (result) {
+          if (torn) return; // form was closed mid-flight — never touch a successor
           if (result && result.error) { showError('Error: ' + result.error); btnBusy(false); return; }
           opts.onSuccess(result);
         }).catch(function () {
+          if (torn) return;
           showError('Something went wrong — please try again.');
           btnBusy(false);
         });
@@ -384,13 +387,18 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       }).then(function (r) { return r.json(); }).then(function (result) {
+        if (torn) return; // closed mid-flight: the event may exist, but the
+        // host's onSuccess (which closes overlays by id and, on the dashboard,
+        // schedules a reload) must never fire against a successor instance.
         if (result && result.error) { showError(result.error); btnBusy(false); return; }
         // Create-first-then-upload: the event exists now, so a failed image
         // upload never rolls back the create.
         uploadImageThen(result.event && result.event.id, function () {
+          if (torn) return;
           opts.onSuccess(result);
         });
       }).catch(function (err2) {
+        if (torn) return;
         showError('Something went wrong: ' + err2.message);
         btnBusy(false);
       });
@@ -402,6 +410,13 @@
     // overlay that may still be open (or arrive late). Hosts MUST call this
     // on every close path or the crop can outlive its parent modal.
     function teardown() {
+      // Instrumentation for verify-overlay-behavior.js: proves every host
+      // close path (incl. Escape/backdrop via the primitive) reaches teardown.
+      window.__aefTeardowns = (window.__aefTeardowns || 0) + 1;
+      // Invalidate in-flight submits too: a response landing after close must
+      // not run the host's onSuccess (which closes by id — it would hit a
+      // same-id SUCCESSOR overlay and, on the dashboard, schedule a reload).
+      torn = true;
       cropSeq++; cropBlob = null; cropState = 'none';
       // cancel() covers the mid-decode window too — a crop overlay that
       // hasn't opened yet must never appear after its parent modal is gone.
@@ -409,7 +424,20 @@
       if (window.arenasOverlay) window.arenasOverlay.close('arenas-crop-overlay');
     }
 
-    return { el: form, submit: submit, teardown: teardown };
+    // Dirty state for host beforeClose guards (Batch C1) — hosts must ask the
+    // module, never re-derive. Baseline is collect() at the end of build():
+    // collect() is form-scoped (works detached) and every prefill — edit
+    // values, create date defaults, default chips/selects — is already in the
+    // markup here, with nothing async ever writing into the form. So an
+    // untouched form (including a prefilled edit form) always reads clean.
+    // Any staged image counts as dirty: 'ready' (accepted crop), 'pending'
+    // (decode in flight) and 'fallback' (raw file) would all be lost.
+    var cleanBaseline = JSON.stringify(collect());
+    function isDirty() {
+      return JSON.stringify(collect()) !== cleanBaseline || cropState !== 'none';
+    }
+
+    return { el: form, submit: submit, teardown: teardown, isDirty: isDirty };
   }
 
   // ── manageImage(ev, opts) ────────────────────────────────────────────────

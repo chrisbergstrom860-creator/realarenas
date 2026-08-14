@@ -1579,22 +1579,18 @@ document.addEventListener('DOMContentLoaded', function () {
   // Host owns only chrome; module owns fields (incl. the new entry fee +
   // max participants), prefill, validation, and the PATCH body.
   var editFormApi = null;
+  // Batch C1: all close paths route through the primitive; teardown runs in
+  // the overlay's onClose (the single route — Escape/backdrop included).
   window.closeEditEvent = function () {
-    if (editFormApi) editFormApi.teardown();
-    var ov = document.getElementById('edit-event-overlay'); if (ov) ov.remove();
+    window.arenasOverlay.close('edit-event-overlay');
   };
   window.editClubEvent = function (eventId) {
     var data = window.ARENAS_DATA || {};
     var allEvents = (data.upcomingEvents || []).concat(data.pastEvents || []);
     var event = allEvents.find(function (e) { return e.id === eventId; });
     if (!event) { showToast('Could not load event details'); return; }
-    var overlay = document.createElement('div');
-    overlay.id = 'edit-event-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto';
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeEditEvent(); });
     var shell = document.createElement('div');
     shell.style.cssText = 'background:white;border-radius:var(--radius-lg);width:100%;max-width:540px;overflow:hidden';
-    shell.addEventListener('click', function (e) { e.stopPropagation(); });
     shell.innerHTML =
       '<div style="padding:14px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">' +
         '<div style="font-size:15px;font-weight:700;color:var(--gray-900)">Edit event</div>' +
@@ -1617,8 +1613,19 @@ document.addEventListener('DOMContentLoaded', function () {
         setTimeout(function () { window.location.reload(); }, 1200);
       }
     });
-    overlay.appendChild(shell);
-    document.body.appendChild(overlay);
+    var api = editFormApi;
+    window.arenasOverlay.open({
+      id: 'edit-event-overlay', node: shell, align: 'top', label: 'Edit event',
+      // Prefilled form — module baseline is the prefill, so untouched closes
+      // silently; a real edit or staged image prompts before discarding.
+      beforeClose: function () {
+        return !api.isDirty() || window.confirm('Discard your changes to this event?');
+      },
+      onClose: function () {
+        api.teardown();
+        if (editFormApi === api) editFormApi = null;
+      }
+    });
     var body = shell.querySelector('#edit-ev-body');
     body.appendChild(editFormApi.el);
     var note = document.createElement('div');
@@ -1652,13 +1659,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var clubId = data.club && data.club.id;
     var memberCount = data.memberCount || 0;
     if (!clubId) { showToast('No club found for your account'); return; }
-    var overlay = document.createElement('div');
-    overlay.id = 'create-club-event-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto';
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeCreateClubEvent(); });
     var shell = document.createElement('div');
     shell.style.cssText = 'background:white;border-radius:var(--radius-lg);width:100%;max-width:540px;overflow:hidden';
-    shell.addEventListener('click', function (e) { e.stopPropagation(); });
     shell.innerHTML =
       '<div style="padding:14px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">' +
         '<div style="font-size:15px;font-weight:700;color:var(--gray-900)">Create a club event</div>' +
@@ -1680,8 +1682,17 @@ document.addEventListener('DOMContentLoaded', function () {
         setTimeout(function () { window.location.hash = 'events'; window.location.reload(); }, 1500);
       }
     });
-    overlay.appendChild(shell);
-    document.body.appendChild(overlay);
+    var api = createClubFormApi;
+    window.arenasOverlay.open({
+      id: 'create-club-event-overlay', node: shell, align: 'top', label: 'Create a club event',
+      beforeClose: function () {
+        return !api.isDirty() || window.confirm('Discard this event? Your changes haven\u2019t been saved.');
+      },
+      onClose: function () {
+        api.teardown();
+        if (createClubFormApi === api) createClubFormApi = null;
+      }
+    });
     var body = shell.querySelector('#cev-body');
     body.appendChild(createClubFormApi.el);
     var banner = document.createElement('div');
@@ -1706,12 +1717,10 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   };
 
-  // Centralized teardown for EVERY close path (✕, Cancel, backdrop, and
-  // post-submit): module teardown invalidates in-flight crop callbacks and
-  // closes a crop overlay that may still be open (or arrive late).
+  // Batch C1: all close paths (✕, Cancel, backdrop, Escape, post-submit)
+  // route through the primitive; teardown runs once in the overlay's onClose.
   window.closeCreateClubEvent = function () {
-    if (createClubFormApi) createClubFormApi.teardown();
-    var ov = document.getElementById('create-club-event-overlay'); if (ov) ov.remove();
+    window.arenasOverlay.close('create-club-event-overlay');
   };
 
 
