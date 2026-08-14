@@ -117,12 +117,13 @@ async function loginCookies(email) {
       const { context, page, errors } = await openAt(1280);
       const png = await sharp({ create: { width: 800, height: 600, channels: 3, background: { r: 200, g: 30, b: 90 } } }).png().toBuffer();
       const doUpload = async (buf, fname) => {
-        // The modal stays open after an upload — open it only if closed
-        // (Escape doesn't close this overlay). Real-click when closed.
-        const isOpen = await page.evaluate(() => document.querySelector('#modal-avatar-photo').classList.contains('open'));
+        // The modal stays open after an upload — open it only if closed.
+        // Batch C2: rides arenasOverlay (root created per-open, no .open
+        // class), so presence of the root IS the open state.
+        const isOpen = await page.evaluate(() => !!document.getElementById('modal-avatar-photo'));
         if (!isOpen) {
           await page.locator('.hero-av').click();
-          await page.waitForSelector('#modal-avatar-photo.open', { state: 'attached' });
+          await page.waitForSelector('#modal-avatar-photo .modal-close', { state: 'visible' });
         }
         const [chooser] = await Promise.all([
           page.waitForEvent('filechooser'),

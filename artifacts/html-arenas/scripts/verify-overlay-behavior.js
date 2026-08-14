@@ -224,9 +224,11 @@ async function auditOverlay(browser, cfg, widths) {
         await pg.screenshot({ path: '/tmp/overlay-' + cfg.overlayId + '-' + SHOTS + '-' + width + '.png' });
       }
 
-      // Tier C: window-level teardown spy — arenasEventForm.teardown()
-      // increments window.__aefTeardowns; every close path must add exactly 1.
-      const spy = () => pg.evaluate(() => window.__aefTeardowns || 0);
+      // Tier C: window-level teardown spy. Default counter is the event-form
+      // module's __aefTeardowns; C2 photo modals set cfg.spyName to their own
+      // onClose counters. Every close path must add exactly 1.
+      const spyName = cfg.spyName || '__aefTeardowns';
+      const spy = () => pg.evaluate((n) => window[n] || 0, spyName);
       const spyCheck = async (what, s0) => {
         if (!cfg.teardownSpy) return;
         const s1 = await spy();
@@ -541,7 +543,83 @@ try {
           postAudit: cropAudit('cev', '#cev-x')
         }
       ];
-    })()
+    })(),
+    // ── Batch C2: the three photo modals (NO dirty guards by design — §3
+    // approved: upload is immediate on file select for logo/avatar, and the
+    // banner stages nothing that survives a crop cancel). The spy counters
+    // prove onClose (and for the banner, token+cancel cleanup) fire exactly
+    // once from EVERY path — Escape and backdrop included.
+    { // Club logo (club-dashboard) — trigger is the real pencil affordance.
+      name: 'dashboard #modal-club-logo', tier: 3, user: 'coach',
+      page: '/clubs/dashboard?club=' + club.id, overlayId: 'modal-club-logo',
+      teardownSpy: true, spyName: '__photoModalCloses',
+      focusSel: 'button[onclick*="switchToTabAndCreate"]',
+      trigger: `(() => { document.querySelector('.club-logo-edit').click(); })()`,
+      closeSel: '#modal-club-logo .modal-close',
+      extraCloses: [{ label: 'Close button', sel: '#modal-club-logo .modal-footer .btn-ghost' }]
+    },
+    { // Avatar photo (my-profile)
+      name: 'profile #modal-avatar-photo', tier: 3, user: 'member',
+      page: '/profile', overlayId: 'modal-avatar-photo',
+      teardownSpy: true, spyName: '__photoModalCloses',
+      focusSel: '#hero-banner-btn',
+      trigger: `(() => { document.querySelector('.hero-av-edit').click(); })()`,
+      closeSel: '#modal-avatar-photo .modal-close',
+      extraCloses: [{ label: 'Done button', sel: '#modal-avatar-photo .modal-footer .btn-ghost' }]
+    },
+    { // Banner photo (my-profile) — carries the mid-decode orphan fix; its
+      // spy counts bannerCleanup() (token++ / cropHandle.cancel / input clear).
+      name: 'profile #modal-banner-photo', tier: 3, user: 'member',
+      page: '/profile', overlayId: 'modal-banner-photo',
+      teardownSpy: true, spyName: '__bannerCleanups',
+      focusSel: '#hero-banner-btn',
+      trigger: `(() => { document.getElementById('hero-banner-btn').click(); })()`,
+      closeSel: '#modal-banner-photo .modal-close',
+      extraCloses: [{ label: 'Done button', sel: '#modal-banner-photo .modal-footer .btn-ghost' }],
+      postAudit: async (pg, label, h) => {
+        const CROP = 'arenas-crop-overlay';
+        const cropOpen = () => pg.waitForFunction((id) => {
+          const el = document.getElementById(id);
+          return !!el && el.getBoundingClientRect().width > 0;
+        }, CROP, { timeout: 8000 });
+        const cleanups = () => pg.evaluate(() => window.__bannerCleanups || 0);
+        // §5 crop stacking, observed: pick file → 4:1 crop opens over host.
+        const d0 = h.dialogs.length;
+        await h.openOverlay();
+        await pg.setInputFiles('#bn-file', 'public/opengraph.jpg');
+        await cropOpen();
+        const stacked = await pg.evaluate(() => document.body.style.overflow === 'hidden');
+        h.check(label + ': crop opens over host, scroll still locked', stacked && await h.isOpen());
+        await pg.keyboard.press('Escape');
+        await pg.waitForFunction((id) => !document.getElementById(id), CROP, { timeout: 4000 });
+        h.check(label + ': Escape closes the CROP only — host still open',
+          (await h.isOpen()) && h.dialogs.length === d0);
+        // §5 approved divergence from C1: second Escape closes the host
+        // SILENTLY — the crop cancel already unstaged everything (onCancel
+        // cleared the input), so there is genuinely nothing to lose.
+        let s0 = await cleanups();
+        await pg.keyboard.press('Escape');
+        h.check(label + ': second Escape closes host silently (nothing staged, zero dialogs)',
+          (await h.waitClosed()) && h.dialogs.length === d0);
+        h.check(label + ': cleanup still fired on that close', (await cleanups()) === s0 + 1);
+        // Host ✕ with the crop STILL OPEN: both die, token+cancel run once,
+        // the shared file input is cleared, scroll restored.
+        await h.openOverlay();
+        await pg.setInputFiles('#bn-file', 'public/opengraph.jpg');
+        await cropOpen();
+        s0 = await cleanups();
+        await pg.evaluate(() => { document.querySelector('#modal-banner-photo .modal-close').click(); });
+        await h.waitClosed();
+        const end = await pg.evaluate((id) => ({
+          crop: !!document.getElementById(id),
+          overflow: document.body.style.overflow,
+          input: document.getElementById('bn-file').value
+        }), CROP);
+        h.check(label + ': host ✕ with crop open — both closed, input cleared, scroll restored',
+          !end.crop && end.overflow === 'scroll' && end.input === '' && (await cleanups()) === s0 + 1,
+          JSON.stringify(end));
+      }
+    }
   ];
 
   for (const cfg of OVERLAYS) await auditOverlay(browser, cfg, widths);

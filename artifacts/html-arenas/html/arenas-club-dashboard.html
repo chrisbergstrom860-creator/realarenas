@@ -374,7 +374,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
     <div class="club-info">
       <div class="club-icon">🏃</div>
       <div style="min-width:0"><div style="display:flex;align-items:center;gap:6px;min-width:0"><div class="club-name-small club-name">Hackney RC</div><!--CLUB_PRO_BADGE_SLOT--></div><div class="club-plan"><span class="member-count">48</span> members</div></div>
-      <button class="club-logo-edit" onclick="openModal('club-logo')" title="Change club logo">✏️</button>
+      <button class="club-logo-edit" onclick="openClubLogoModal()" title="Change club logo">✏️</button>
     </div>
   </div>
 </aside>
@@ -934,9 +934,11 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
 
 <!-- MODALS -->
 <!-- New event modal -->
-<div class="modal-overlay" id="modal-club-logo" onclick="closeAllModals(event)">
+<!-- Batch C2: opened via window.arenasOverlay (node mode) — this home div is
+     just the panel's parking spot between opens; it never gets .open. -->
+<div class="modal-overlay" id="modal-club-logo-home">
   <div class="modal">
-    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Club logo</div><div style="font-size:13px;color:var(--gray-500);margin-top:2px">Shown wherever your club appears across Arenas</div></div><button class="modal-close" onclick="closeAllModals()">✕</button></div>
+    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)">Club logo</div><div style="font-size:13px;color:var(--gray-500);margin-top:2px">Shown wherever your club appears across Arenas</div></div><button class="modal-close" onclick="arenasOverlay.close('modal-club-logo')">✕</button></div>
     <div class="modal-body">
       <div style="display:flex;align-items:center;gap:14px;padding:12px;background:var(--gray-50);border-radius:var(--radius)">
         <div id="cl-logo-preview" style="width:56px;height:56px;border-radius:12px;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;overflow:hidden">🏟</div>
@@ -951,7 +953,7 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
         <input id="cl-logo-file" type="file" accept="image/jpeg,image/png,image/webp" style="display:none">
       </div>
     </div>
-    <div class="modal-footer"><button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeAllModals()">Close</button></div>
+    <div class="modal-footer"><button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="arenasOverlay.close('modal-club-logo')">Close</button></div>
   </div>
 </div>
 
@@ -967,11 +969,20 @@ function setTab(id, el) {
   window.scrollTo(0, 0);
 }
 
-function openModal(id) { document.getElementById('modal-' + id).classList.add('open'); }
-function closeAllModals(e) {
-  if (!e || e.target.classList.contains('modal-overlay')) {
-    document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
-  }
+// Batch C2: the club-logo modal (the page's ONLY .modal-overlay) rides
+// window.arenasOverlay — the legacy openModal/closeAllModals sweep is gone.
+// NO dirty guard by design (§3 approved): upload fires immediately on file
+// select, so there is never staged-uncommitted state to protect. The onClose
+// spy proves every close path (✕, Close, backdrop, Escape) lands here once.
+function openClubLogoModal() {
+  window.arenasOverlay.open({
+    id: 'modal-club-logo',
+    node: document.getElementById('modal-club-logo-home').firstElementChild,
+    label: 'Club logo',
+    onClose: function () {
+      window.__photoModalCloses = (window.__photoModalCloses || 0) + 1;
+    }
+  });
 }
 
 function showToast(msg) {

@@ -314,11 +314,16 @@ const PAGES = [
       { name: 'goals', js: htab('goals'), surfaces: [{ name: 'goals tab', sel: '#tab-goals', min: 1 }] },
       // Live my-profile modals. (modal-comment is dead prototype markup with
       // no opener anywhere — not a reachable state, so not measured.)
-      { name: 'modal-avatar-photo', js: closeModals + `openModal('avatar-photo')`,
-        waitFor: '#modal-avatar-photo.open', root: '#modal-avatar-photo' },
-      // Batch B: these two open via window.arenasOverlay (root created
-      // per-open, no .open class); close the previous primitive overlay too.
-      { name: 'modal-delete-account', js: closeModals + `window.openDeleteModal()`,
+      // Batch C2: avatar rides arenasOverlay too (root created per-open,
+      // no .open class); close it via the primitive before the next step.
+      { name: 'modal-avatar-photo', js: closeModals + `window.openAvatarModal()`,
+        waitFor: '#modal-avatar-photo .modal-close', root: '#modal-avatar-photo' },
+      { name: 'modal-banner-photo',
+        js: `window.arenasOverlay.close('modal-avatar-photo'); window.openBannerModal()`,
+        waitFor: '#modal-banner-photo .modal-close', root: '#modal-banner-photo' },
+      // Batch B: these two open via window.arenasOverlay as well.
+      { name: 'modal-delete-account',
+        js: `window.arenasOverlay.close('modal-banner-photo'); window.openDeleteModal()`,
         waitFor: '#modal-delete-account .modal-close', root: '#modal-delete-account' },
       { name: 'modal-goal', js: `window.arenasOverlay.close('modal-delete-account'); ` + closeModals + `window.openGoalForm()`,
         waitFor: '#modal-goal .modal-close', root: '#modal-goal' }
@@ -363,9 +368,11 @@ const PAGES = [
       // modal-challenge are dead prototype markup with no opener — the live
       // RSVP list is the runtime inline #rsvp-modal-overlay built by
       // viewEventRsvps.)
-      { name: 'modal-club-logo', js: closeModals + `openModal('club-logo')`,
-        waitFor: '#modal-club-logo.open', root: '#modal-club-logo' },
-      { name: 'modal-event-rsvps', js: closeModals + `window.viewEventRsvps('${EVENTS[0]}')`,
+      // Batch C2: club-logo rides arenasOverlay (no .open class).
+      { name: 'modal-club-logo', js: closeModals + `window.openClubLogoModal()`,
+        waitFor: '#modal-club-logo .modal-close', root: '#modal-club-logo' },
+      { name: 'modal-event-rsvps',
+        js: `window.arenasOverlay.close('modal-club-logo'); ` + closeModals + `window.viewEventRsvps('${EVENTS[0]}')`,
         waitFor: '#rsvp-modal-overlay', root: '#rsvp-modal-overlay',
         surfaces: [{ name: 'rsvp list panel', sel: '#rsvp-modal-overlay > div', min: 2 }] }
     ] },

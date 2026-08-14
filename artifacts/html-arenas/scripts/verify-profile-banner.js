@@ -111,7 +111,7 @@ async function listBannerObjects(uid) {
       const { context, page, errors } = await openAt(360, 780);
       const png = await sharp({ create: { width: 2000, height: 900, channels: 3, background: { r: 30, g: 90, b: 200 } } }).png().toBuffer();
       await page.locator('#hero-banner-btn').click();
-      await page.waitForSelector('#modal-banner-photo.open', { state: 'attached' });
+      await page.waitForSelector('#modal-banner-photo .modal-close', { state: 'visible' }); // Batch C2: arenasOverlay root, no .open class
       const [chooser] = await Promise.all([
         page.waitForEvent('filechooser'),
         page.locator('#bn-upload').click()
@@ -183,7 +183,7 @@ async function listBannerObjects(uid) {
       const { context, page } = await openAt(1280);
       const png2 = await sharp({ create: { width: 1800, height: 500, channels: 3, background: { r: 200, g: 60, b: 30 } } }).png().toBuffer();
       await page.locator('#hero-banner-btn').click();
-      await page.waitForSelector('#modal-banner-photo.open', { state: 'attached' });
+      await page.waitForSelector('#modal-banner-photo .modal-close', { state: 'visible' }); // Batch C2: arenasOverlay root, no .open class
       const [chooser] = await Promise.all([
         page.waitForEvent('filechooser'),
         page.locator('#bn-upload').click()
@@ -246,7 +246,7 @@ async function listBannerObjects(uid) {
     {
       const { context, page } = await openAt(1280);
       await page.locator('#hero-banner-btn').click();
-      await page.waitForSelector('#modal-banner-photo.open', { state: 'attached' });
+      await page.waitForSelector('#modal-banner-photo .modal-close', { state: 'visible' }); // Batch C2: arenasOverlay root, no .open class
       await page.locator('#bn-remove').click();
       await page.waitForFunction(() => {
         const b = document.getElementById('hero-banner');
