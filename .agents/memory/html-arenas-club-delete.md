@@ -17,3 +17,11 @@ description: Owner-only DELETE /api/clubs/:clubId, shared destroyClub teardown, 
 - UI: danger-zone card in club-dashboard settings (owner-only via server-injected `isOwner` boolean — owner_id itself deliberately NOT injected), arenasOverlay html-mode modal, `beforeClose` omitted (delete-account precedent), `clubPaid` (real getClubPlan) drives the no-refund line.
 - Success path vs Stripe PROVEN live (test mode, 2026-08-14): checkout row was status=active with real sub id at delete time (matches the cancel filter with no gap — webhook writes active before /billing/success even loads); webhook sub.deleted arrives before the row delete and no-ops harmlessly either way. Feature already used organically (real owner deleted 'Golf for Life' same day) — club count baseline is LIVE data, don't treat 9 as fixed.
 - Verifier `scripts/verify-club-delete.js` is in the battery (22 checks incl. Stripe-abort intactness via bogus sub id, 1051-row paging, member-side residue). Visual harness pattern: temp unauthed route + `__dzAutoOpen` hook, screenshot path needs `/../` prefix (previewPath is /html/landing).
+
+## Owner protection (owner-demotion gap, closed 2026-08-14)
+- Rule: clubs.owner_id's role can only be changed by the owner themselves; the owner cannot be removed from their own club. Both role PATCH and member DELETE fetch clubs.owner_id and FAIL CLOSED on read error.
+- Owner self role changes BYPASS the admin gate (self-scope only) — otherwise a self-demotion is an irreversible management lockout. A demoted owner still cannot manage others.
+- Members payloads carry isOwner (API + invite-page injection); members API 500s if the owner lookup fails so isOwner never silently degrades to false; UI shows an Owner pill, no dropdown/Remove.
+- **Why:** owner is the Stripe-billed party and sole club-deleter; an admin demoting/removing them = billed party losing control.
+- No standalone ownership-transfer route/UI exists (only inside account deletion) — sole-admin-non-owner state is still reachable via owner self-demotion, so the conditional sole-admin 409 copy STAYS conditional.
+- Assertions live in scripts/verify-club-delete.js section 1b.
