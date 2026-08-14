@@ -512,6 +512,19 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
         </div>
       </div>
     </div>
+    <!-- Danger zone — deliberately its own card, visually separated from the
+         ordinary settings above. Owner-only (server-injected isOwner boolean;
+         clubs.owner_id is who Stripe bills, so only they may delete). -->
+    <div class="card" id="club-danger-zone" style="display:none;margin-top:16px;border:1px solid #FECACA">
+      <div style="padding:12px 14px;border-bottom:1px solid #FECACA;background:#FEF5F5;border-radius:12px 12px 0 0">
+        <div style="font-size:13px;font-weight:700;color:#A32D2D">Danger zone</div>
+        <div style="font-size:11px;color:var(--gray-500);margin-top:2px">Deleting the club is permanent. There is no undo.</div>
+      </div>
+      <div style="padding:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div style="font-size:12px;color:var(--gray-600);max-width:520px">Removes the club, its challenges, events and announcements for every member. Members keep all their logged activities and achievements.</div>
+        <button id="cd-open" onclick="openDeleteClubModal()" style="padding:7px 16px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid #E5B5B5;background:white;color:#A32D2D;cursor:pointer;flex-shrink:0">Delete this club…</button>
+      </div>
+    </div>
   </div>
   </div>
 
@@ -967,6 +980,84 @@ function setTab(id, el) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   if (el) el.classList.add('active');
   window.scrollTo(0, 0);
+}
+
+// ── Delete club (owner-only) ──
+// arenasOverlay html mode, beforeClose OMITTED by design (the explicit
+// #modal-delete-account precedent: abandoning a half-typed handle is a valid
+// exit, not staged state worth guarding). Server re-validates owner + typed
+// handle, so the client gate is UX only.
+function openDeleteClubModal() {
+  var d = window.ARENAS_DATA || {};
+  var club = d.club || {};
+  var memberCount = d.memberCount || 1;
+  var others = Math.max(0, memberCount - 1);
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  var paidLine = d.clubPaid
+    ? '<div style="background:#FEF5F5;border:1px solid #FECACA;border-radius:8px;padding:10px 12px;font-size:12.5px;color:#A32D2D;margin-bottom:12px"><strong>Your Club Pro subscription is cancelled immediately.</strong> There is no refund for the remainder of the current billing period.</div>'
+    : '';
+  var memberLine = others
+    ? '<strong>' + others + ' other member' + (others === 1 ? '' : 's') + '</strong> ' + (others === 1 ? 'loses' : 'lose') + ' their membership, and their participation records in this club\u2019s challenges and events are deleted. Their logged activities, PRs, streaks, and achievements are untouched.'
+    : 'You are the only member. The club\u2019s challenges, events and announcements are deleted with it. Your logged activities, PRs, streaks, and achievements are untouched.';
+  window.arenasOverlay.open({
+    id: 'modal-delete-club',
+    label: 'Delete club',
+    html:
+      '<div class="modal" style="max-width:440px">' +
+        '<div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:#A32D2D">Delete ' + esc(club.name) + '</div><div style="font-size:12px;color:var(--gray-500);margin-top:3px">This is permanent. There is no undo.</div></div><button class="modal-close" onclick="arenasOverlay.close(\'modal-delete-club\')">\u2715</button></div>' +
+        '<div class="modal-body" style="padding:16px 20px">' +
+          paidLine +
+          '<div style="font-size:13px;color:var(--gray-700);line-height:1.55;margin-bottom:14px">' + memberLine + '</div>' +
+          '<div style="font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:6px">Type <span style="font-family:monospace;color:var(--gray-900)">' + esc(club.handle) + '</span> to confirm</div>' +
+          '<input id="cd-confirm" type="text" autocomplete="off" placeholder="' + esc(club.handle) + '" style="width:100%;padding:9px 11px;border:var(--border);border-radius:7px;font-size:13px;outline:none;box-sizing:border-box">' +
+          '<div id="cd-error" style="display:none;background:var(--red-light);border:1px solid #FECACA;border-radius:8px;padding:9px 12px;font-size:12.5px;color:#A32D2D;margin-top:10px"></div>' +
+        '</div>' +
+        '<div class="modal-footer" style="display:flex;gap:10px">' +
+          '<button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="arenasOverlay.close(\'modal-delete-club\')">Cancel</button>' +
+          '<button id="cd-delete" disabled onclick="confirmDeleteClub()" style="flex:1;padding:9px 0;border-radius:7px;font-size:13px;font-weight:600;border:1px solid #A32D2D;background:#A32D2D;color:white;cursor:pointer;opacity:.5">Delete club forever</button>' +
+        '</div>' +
+      '</div>'
+  });
+  var input = document.getElementById('cd-confirm');
+  var btn = document.getElementById('cd-delete');
+  input.addEventListener('input', function () {
+    var ok = input.value.trim() === String(club.handle || '');
+    btn.disabled = !ok;
+    btn.style.opacity = ok ? '1' : '.5';
+  });
+  input.focus();
+}
+
+function confirmDeleteClub() {
+  var d = window.ARENAS_DATA || {};
+  var btn = document.getElementById('cd-delete');
+  var errEl = document.getElementById('cd-error');
+  var input = document.getElementById('cd-confirm');
+  btn.disabled = true;
+  btn.textContent = 'Deleting\u2026';
+  errEl.style.display = 'none';
+  fetch((window.BASE || '') + '/api/clubs/' + encodeURIComponent(d.club.id), {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirm: input.value.trim() })
+  })
+    .then(function (res) { return res.json().then(function (b) { return { status: res.status, body: b }; }); })
+    .then(function (res) {
+      if (res.status === 200 && res.body && res.body.success) {
+        window.location.href = res.body.redirect || ((window.BASE || '') + '/feed');
+        return;
+      }
+      btn.textContent = 'Delete club forever';
+      btn.disabled = false;
+      errEl.textContent = (res.body && res.body.message) || 'Could not delete the club \u2014 please try again.';
+      errEl.style.display = 'block';
+    })
+    .catch(function () {
+      btn.textContent = 'Delete club forever';
+      btn.disabled = false;
+      errEl.textContent = 'Could not delete the club \u2014 please try again.';
+      errEl.style.display = 'block';
+    });
 }
 
 // Batch C2: the club-logo modal (the page's ONLY .modal-overlay) rides
@@ -3893,6 +3984,12 @@ document.addEventListener('DOMContentLoaded', function () {
     var descEl = document.getElementById('cs-description');
     if (visEl) visEl.checked = data.club.visibility === 'public';
     if (descEl) descEl.value = data.club.description || '';
+    // Danger zone is OWNER-only (stricter than admin): server injects the
+    // boolean; a non-owner admin sees nothing here.
+    if (data.isOwner) {
+      var dz = document.getElementById('club-danger-zone');
+      if (dz) dz.style.display = 'block';
+    }
   }
 
   window.saveClubSettings = function () {

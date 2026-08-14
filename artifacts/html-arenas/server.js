@@ -6243,6 +6243,110 @@ app.patch(BASE + '/api/clubs/:clubId/settings', requireAuth, async (req, res) =>
   }
 });
 
+// Delete a club — the FIRST owner-gated action in the app (deliberate:
+// clubs.owner_id is who Stripe bills, so only they may cancel-and-destroy).
+// Populated clubs ARE deletable — the typed-handle confirmation is the brake.
+// Hard ordering (irreversibility gradient):
+//   1. reads + refusals (404 / 403 owner_only / 400 confirm_mismatch)
+//   2. member notifications INSERTED FIRST — a notification failure is a 500
+//      with nothing cancelled and nothing deleted (safe direction); it must
+//      never be able to abort or complicate the teardown once Stripe is done
+//   3. Stripe cancel (immediate, no proration — account-delete precedent);
+//      ANY retrieve/cancel error → 502 with the club fully intact
+//   4. destroyClub — rows + storage objects
+app.delete(BASE + '/api/clubs/:clubId', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  const { data: club } = await supabaseAdmin
+    .from('clubs').select('id, name, handle, owner_id, logo_url')
+    .eq('id', req.params.clubId).maybeSingle();
+  if (!club) return res.status(404).json({ error: 'Club not found' });
+  if (club.owner_id !== req.user.id) {
+    return res.status(403).json({
+      error: 'owner_only',
+      message: 'Only the club owner can delete this club. The owner is the account the club\u2019s billing runs through \u2014 ask them to do it.'
+    });
+  }
+  if ((req.body || {}).confirm !== club.handle) {
+    return res.status(400).json({ error: 'confirm_mismatch', message: 'Type the club handle exactly to confirm.' });
+  }
+  let teardownStarted = false;
+  const notifIds = [];
+  // Compensating cleanup: already-written "club deleted" notifications are a
+  // false alarm for any failure that leaves the club intact — remove them,
+  // best-effort, before returning the error.
+  const retract = async () => {
+    if (!notifIds.length) return;
+    try {
+      const { error: rErr } = await supabaseAdmin.from('notifications').delete().in('id', notifIds);
+      if (rErr) console.log('Club delete: notification retraction failed (non-fatal):', rErr.message);
+    } catch (e) { console.log('Club delete: notification retraction failed (non-fatal):', e.message); }
+  };
+  try {
+    // 2. Notify the other members BEFORE anything irreversible. link:null —
+    // the club will be gone, so the notification is informational only (the
+    // panel just marks read on tap; no dead navigation target). Type 'club'
+    // is not in NOTIF_PREF_BY_TYPE, so it cannot be pref-suppressed —
+    // structural news, billing-notification precedent. actor_id stays null:
+    // no row to dangle and no dependence on the owner's account surviving.
+    const { data: members, error: memErr } = await supabaseAdmin
+      .from('memberships').select('user_id').eq('club_id', club.id);
+    if (memErr) throw new Error('memberships read: ' + memErr.message);
+    for (const m of (members || []).filter(m => m.user_id !== req.user.id)) {
+      const { data: nRow, error: nErr } = await supabaseAdmin.from('notifications').insert({
+        user_id: m.user_id,
+        type: 'club',
+        title: club.name + ' has been deleted',
+        body: club.name + ' has been deleted by its owner. Your logged activities and achievements are unaffected.',
+        link: null,
+        actor_id: null,
+        entity_id: null,
+        read: false
+      }).select('id').single();
+      if (nErr) throw new Error('member notification: ' + nErr.message);
+      notifIds.push(nRow.id);
+    }
+    // 3. Stripe — cancel first, abort on ANY doubt, nothing deleted. The
+    // subscription read itself fails CLOSED: a read error must never be
+    // mistaken for "no subscriptions" (that would delete the club while a
+    // live sub keeps billing).
+    const { data: subs, error: subErr } = await supabaseAdmin
+      .from('subscriptions').select('stripe_subscription_id, status')
+      .eq('owner_type', 'club').eq('owner_id', club.id)
+      .in('status', PAID_SUB_STATUSES).not('stripe_subscription_id', 'is', null);
+    if (subErr) throw new Error('subscription read: ' + subErr.message);
+    if ((subs || []).length && !stripe) {
+      await retract();
+      return res.status(502).json({ error: 'stripe_unavailable', message: 'This club has an active subscription but billing is not reachable right now. Nothing was deleted \u2014 try again later.' });
+    }
+    for (const s of subs || []) {
+      try {
+        const live = await stripe.subscriptions.retrieve(s.stripe_subscription_id);
+        if (!(live && live.status === 'canceled')) {
+          await stripe.subscriptions.cancel(s.stripe_subscription_id);
+          console.log('Club delete: canceled subscription', s.stripe_subscription_id);
+        }
+      } catch (err) {
+        console.log('Club delete aborted: Stripe cancel failed:', err.message);
+        await retract();
+        return res.status(502).json({ error: 'stripe_abort', message: 'The subscription could not be cancelled, so nothing was deleted. Try again \u2014 a deleted club must never keep billing.' });
+      }
+    }
+
+    // 4. Full teardown (shared with the account-delete sweep).
+    teardownStarted = true;
+    await destroyClub(club);
+    return res.json({ success: true, redirect: BASE + '/feed' });
+  } catch (err) {
+    console.log('Club delete error:', err.message);
+    // Any failure BEFORE teardown began (partial notification insert, sub
+    // read, etc.) leaves the club fully intact — so already-written "club
+    // deleted" notifications are false alarms and must be retracted. Once
+    // teardown has started they are true and must stay.
+    if (!teardownStarted) await retract();
+    return res.status(500).json({ error: 'delete_failed', message: 'Something failed before anything was deleted or during teardown \u2014 nothing is billing either way. Try again.' });
+  }
+});
+
 // ── EVENTS API ──
 // Mounted under BASE so the shared proxy routes them here (the separate
 // api-server owns the bare "/api"). Display names come from auth metadata (no
@@ -8843,6 +8947,65 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
   }
 });
 
+// Full teardown of one club — every row and storage object the club owns.
+// Shared by the account-delete sweep (sole-member clubs die with the account)
+// and the deliberate owner-initiated DELETE /api/clubs/:clubId route.
+// Callers MUST have already handled Stripe cancellation — this function only
+// touches Supabase. Throws on any required-row delete failure (no partial
+// silence); storage-object cleanup is best-effort and never blocking.
+// Cascade facts (probe-verified 2026-08-14): clubs → posts → post_comments/
+// post_likes all ON DELETE CASCADE; events → event_rsvps/event_invites
+// ON DELETE CASCADE — so those rows are never double-handled here. The one
+// thing a DB cascade cannot do is delete storage objects, so club posts'
+// image references are read BEFORE the club row dies and their objects
+// removed after.
+async function destroyClub(club) {
+  const cid = club.id;
+  const del = async (table, applyFilters) => {
+    let q = supabaseAdmin.from(table).delete();
+    q = applyFilters(q);
+    const { error } = await q;
+    if (error) throw new Error('delete ' + table + ': ' + error.message);
+  };
+  const idsOf = rows => (rows || []).map(r => r.id);
+  // `.in()` id lists ride the request URL, so a large club (1000+ rows,
+  // proven by the verifier's 1051-challenge case) would blow the URL length
+  // limit — chunk every id-based delete.
+  const delByIdsChunked = async (table, col, ids) => {
+    for (let i = 0; i < ids.length; i += 200) {
+      await del(table, q => q.in(col, ids.slice(i, i + 200)));
+    }
+  };
+
+  // Paged reads (fetchAllRows) — a club beyond PostgREST's 1000-row default
+  // page must not leave rows or image objects behind. Read errors throw, so
+  // nothing is deleted on a failed read (fail closed).
+  const clubChallenges = await fetchAllRows('challenges', q => q.eq('club_id', cid), 'id, image_path');
+  if (idsOf(clubChallenges).length) {
+    await delByIdsChunked('challenge_participants', 'challenge_id', idsOf(clubChallenges));
+    await del('challenges', q => q.eq('club_id', cid));
+    // Rows first, storage objects second — best-effort, never blocking.
+    for (const ch of clubChallenges) await deleteChallengeImageObject(ch.image_path, ch.id);
+  }
+  const clubEvents = await fetchAllRows('events', q => q.eq('club_id', cid), 'id, image_path');
+  if (idsOf(clubEvents).length) {
+    // event_rsvps/event_invites cascade with their event (probe-verified) —
+    // the old explicit event_rsvps delete was redundant and was dropped.
+    await del('events', q => q.eq('club_id', cid));
+    for (const ev of clubEvents) await deleteEventImageObject(ev.image_path, ev.id);
+  }
+  // Club announcement rows cascade with the club, but their image OBJECTS
+  // don't — capture the references while the rows still exist.
+  const clubPosts = await fetchAllRows('posts', q => q.eq('club_id', cid).not('image_url', 'is', null), 'id, user_id, image_url');
+  await del('club_invites', q => q.eq('club_id', cid));
+  await del('club_join_requests', q => q.eq('club_id', cid));
+  await del('memberships', q => q.eq('club_id', cid));
+  await del('subscriptions', q => q.eq('owner_type', 'club').eq('owner_id', cid));
+  if (club.logo_url) await deleteAvatarObject(club.logo_url, 'clubs/' + cid);
+  await del('clubs', q => q.eq('id', cid));
+  for (const p of clubPosts || []) await deletePostImageObject(p.image_url, p.user_id);
+}
+
 // Account deletion. Hard ordering rule: Stripe cancellation runs FIRST — any
 // active/past_due subscription (the user's own, or a club sub on a club that
 // dies with the account) is canceled via the API before a single row is
@@ -8910,7 +9073,11 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
       return res.status(409).json({
         error: 'sole_admin',
         clubs: blocked,
-        message: `You are the only admin of ${names}. Transfer the admin role to another member, or delete the club first — then come back and delete your account.`
+        // Both cases are reachable: an admin can demote the owner to member
+        // (role PATCH has no owner protection), leaving a sole admin who is
+        // NOT the owner — and club deletion is owner-only. So the delete
+        // suggestion must be conditional or it fabricates an ability.
+        message: `You are the only admin of ${names}. Transfer the admin role to another member, or — if you are the club's owner — delete the club from its dashboard's Settings tab. Then come back and delete your account.`
       });
     }
 
@@ -8964,37 +9131,9 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
     };
     const idsOf = rows => (rows || []).map(r => r.id);
 
-    // 3a. Dying clubs' full sub-cascade.
-    for (const club of dying) {
-      const cid = club.id;
-      const { data: clubChallenges } = await supabaseAdmin.from('challenges').select('id, image_path').eq('club_id', cid);
-      if (idsOf(clubChallenges).length) {
-        await del('challenge_participants', q => q.in('challenge_id', idsOf(clubChallenges)));
-        await del('challenges', q => q.in('id', idsOf(clubChallenges)));
-        // Rows first, storage objects second — best-effort, never blocking.
-        for (const ch of clubChallenges) await deleteChallengeImageObject(ch.image_path, ch.id);
-      }
-      const { data: clubEvents } = await supabaseAdmin.from('events').select('id, image_path').eq('club_id', cid);
-      if (idsOf(clubEvents).length) {
-        await del('event_rsvps', q => q.in('event_id', idsOf(clubEvents)));
-        await del('events', q => q.in('id', idsOf(clubEvents)));
-        // Rows first, storage objects second — best-effort, never blocking.
-        for (const ev of clubEvents) await deleteEventImageObject(ev.image_path, ev.id);
-      }
-      // Club announcement posts (posts.club_id) are NOT swept here: the
-      // clubs → posts FK is ON DELETE CASCADE, and posts → post_comments /
-      // post_likes cascade too (all three probe-verified 2026-08-14).
-      // Known gap: a cascaded post's image object in the public post-images
-      // bucket is NOT cleaned up — the cascade happens in Postgres, so no
-      // app code runs. A deliberate club-delete route must read club posts'
-      // image_url values BEFORE deleting the club and remove those objects.
-      await del('club_invites', q => q.eq('club_id', cid));
-      await del('club_join_requests', q => q.eq('club_id', cid));
-      await del('memberships', q => q.eq('club_id', cid));
-      await del('subscriptions', q => q.eq('owner_type', 'club').eq('owner_id', cid));
-      if (club.logo_url) await deleteAvatarObject(club.logo_url, 'clubs/' + cid);
-      await del('clubs', q => q.eq('id', cid));
-    }
+    // 3a. Dying clubs' full sub-cascade (shared with the deliberate
+    // owner-initiated club-delete route — see destroyClub above).
+    for (const club of dying) await destroyClub(club);
 
     // 3b. Ownership transfers for surviving clubs. If the surviving club has a
     // paid subscription it is still billed to the departed owner's card, so the
@@ -10407,6 +10546,18 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
       pastChallenges: pastChallenges.slice(0, 5),
       challengeStats,
       userEmail: req.user.email,
+      // Danger zone: club deletion is owner-only (clubs.owner_id — who Stripe
+      // bills), so the card renders only for the owner. clubPaid drives the
+      // no-refund line in the confirmation modal (real subscription, not the
+      // gate flag — PRO-badge convention).
+      // (owner_id is fetched separately and NOT injected into the page —
+      // the boolean is all the UI needs; no user UUID leak into ARENAS_DATA.)
+      isOwner: await (async () => {
+        const { data: ownRow } = await supabaseAdmin
+          .from('clubs').select('owner_id').eq('id', clubId).maybeSingle();
+        return !!(ownRow && ownRow.owner_id === req.user.id);
+      })(),
+      clubPaid: (await getClubPlan(clubId)) === 'club_pro',
       // Session-2 hook: true only when CLUB_PLAN_GATES_ENABLED is on AND this
       // club is on the free plan (never-throw, computeProLocked convention).
       // No UI consumes it yet.
