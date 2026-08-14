@@ -735,6 +735,16 @@ app.post(BASE + '/api/clubs/create', requireAuth, async (req, res) => {
   if (!name || name.length > 80) return res.status(400).json({ error: 'invalid_name' });
   if (!/^[a-z0-9]{2,20}$/.test(handle)) return res.status(400).json({ error: 'invalid_handle' });
   if (!SPORTS.some(s => s.id === sport)) return res.status(400).json({ error: 'invalid_sport' });
+  // Directory listing, wizard-only field. When present it must be a valid
+  // value; when absent the insert omits the column and the DB default
+  // ('private') applies — non-wizard create paths stay byte-identical.
+  let visibility;
+  if (body.visibility !== undefined) {
+    if (body.visibility !== 'public' && body.visibility !== 'private') {
+      return res.status(400).json({ error: 'invalid_visibility' });
+    }
+    visibility = body.visibility;
+  }
   try {
     // Soft anti-abuse cap on clubs OWNED per account (handle squatting and
     // invite spam scale with free club creation). Memberships in other
@@ -762,7 +772,9 @@ app.post(BASE + '/api/clubs/create', requireAuth, async (req, res) => {
 
     const { data: club, error: clubErr } = await supabaseAdmin
       .from('clubs')
-      .insert({ name, handle, sport, city, owner_id: req.user.id })
+      .insert(visibility !== undefined
+        ? { name, handle, sport, city, owner_id: req.user.id, visibility }
+        : { name, handle, sport, city, owner_id: req.user.id })
       .select('id')
       .single();
     if (clubErr || !club) {

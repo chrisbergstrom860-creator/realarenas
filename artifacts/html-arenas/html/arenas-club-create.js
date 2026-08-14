@@ -45,18 +45,24 @@ window.ArenasClubCreate = (function () {
   //   {ok:true, redirect}                      — go to the new club dashboard
   //   {ok:false, target:'club'|'review', msg}  — inline error; 'club' means
   //     the club-details step, 'review' the final step.
-  async function submit(club, invites) {
+  async function submit(club, invites, visibility) {
     try {
+      // visibility is included ONLY when the caller made a valid explicit
+      // choice (the modal wizard validates before launch). Two-argument
+      // callers (the /for-clubs wizard) omit the field entirely and get the
+      // server/DB default — never a coerced value.
+      var payload = {
+        name: club.name,
+        handle: club.handle,
+        sport: club.sport,
+        city: club.city || '',
+        invites: invites || []
+      };
+      if (visibility === 'public' || visibility === 'private') payload.visibility = visibility;
       var r = await fetch(window.BASE + '/api/clubs/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: club.name,
-          handle: club.handle,
-          sport: club.sport,
-          city: club.city || '',
-          invites: invites || []
-        })
+        body: JSON.stringify(payload)
       });
       var d = {};
       try { d = await r.json(); } catch (e) { d = {}; }
@@ -116,6 +122,14 @@ window.ArenasClubCreate = (function () {
     '.ccm-review-eyebrow{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-400);margin-bottom:6px}',
     '.ccm-review-main{font-size:13.5px;font-weight:600;color:var(--gray-900)}',
     '.ccm-review-sub{font-size:12px;color:var(--gray-500)}',
+    // Directory-listing radio pair: reuses review-card tokens, no new form
+    // language beyond the native radio (accent-color matches the settings
+    // checkbox on the dashboard).
+    '.ccm-vis-opt{display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:6px 0}',
+    '.ccm-vis-opt+.ccm-vis-opt{border-top:var(--border)}',
+    '.ccm-vis-opt input{margin-top:2px;width:15px;height:15px;accent-color:var(--yellow-dark);cursor:pointer;flex-shrink:0}',
+    '.ccm-vis-title{display:block;font-size:12.5px;font-weight:600;color:var(--gray-900)}',
+    '.ccm-vis-sub{display:block;font-size:11.5px;color:var(--gray-500);margin-top:1px;line-height:1.45}',
     '.ccm-fineprint{font-size:11.5px;color:var(--gray-400);text-align:center;margin-top:10px}',
     '.ccm-fineprint a{color:inherit;text-decoration:underline}',
     '.ccm-footer{padding:12px 20px;border-top:var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0}',
@@ -198,6 +212,17 @@ window.ArenasClubCreate = (function () {
               '<div class="ccm-review-sub" id="ccm-review-meta"></div></div>' +
             '<div class="ccm-review-card"><div class="ccm-review-eyebrow">Invites queued</div>' +
               '<div class="ccm-review-sub" style="font-size:12.5px;color:var(--gray-700)" id="ccm-review-invites">\u2014</div></div>' +
+            // Directory choice — same clubs.visibility flag as the dashboard
+            // settings card, same vocabulary ("List this club in the
+            // directory", request-and-approve). Radio pair with NO default:
+            // launching requires an explicit decision (validated in next()).
+            '<div class="ccm-review-card"><div class="ccm-review-eyebrow">Directory listing</div>' +
+              '<label class="ccm-vis-opt"><input type="radio" name="ccm-visibility" value="public" id="ccm-vis-public">' +
+                '<span><span class="ccm-vis-title">List this club in the directory</span>' +
+                '<span class="ccm-vis-sub">Athletes can find your club in the club directory and request to join \u2014 you review every request in the Members tab.</span></span></label>' +
+              '<label class="ccm-vis-opt"><input type="radio" name="ccm-visibility" value="private" id="ccm-vis-private">' +
+                '<span><span class="ccm-vis-title">Keep it unlisted</span>' +
+                '<span class="ccm-vis-sub">Your club won\u2019t appear in the directory \u2014 athletes join by invite only. You can list it later from Club settings.</span></span></label></div>' +
             '<div class="ccm-review-card" style="font-size:12px;color:var(--gray-600);line-height:1.55"><strong>Your club launches on Club Starter, which is free</strong> \u2014 no credit card required. Club Pro can be added anytime from your Billing page.</div>' +
             '<div class="ccm-fineprint">By launching you agree to our <a href="' + ((window.BASE || '') + '/terms') + '" target="_blank" rel="noopener">Terms of Service</a>.</div>' +
           '</div>' +
@@ -221,6 +246,9 @@ window.ArenasClubCreate = (function () {
     document.getElementById('ccm-add-row').onclick = function () { addInvRow(true); };
     document.getElementById('ccm-name').addEventListener('input', function () {
       document.getElementById('ccm-handle').value = deriveHandle(this.value);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('input[name=ccm-visibility]'), function (r) {
+      r.addEventListener('change', syncVisibilityMeta);
     });
   }
 
@@ -290,12 +318,28 @@ window.ArenasClubCreate = (function () {
     var invites = readInvites();
     document.getElementById('ccm-review-name').textContent = c.name || '\u2014';
     document.getElementById('ccm-review-handle').textContent = c.handle ? '@' + c.handle : '\u2014';
-    var sport = (window.ARENAS_SPORTS || []).filter(function (s) { return s.id === c.sport; })[0];
-    document.getElementById('ccm-review-meta').textContent =
-      (sport ? sport.label : '') + (c.city ? (sport ? ' \u00b7 ' : '') + c.city : '');
     document.getElementById('ccm-review-invites').textContent = invites.length
       ? invites.length + ' member invite' + (invites.length !== 1 ? 's' : '') + ' ready to send'
       : 'No invites added \u2014 you can invite members from your dashboard';
+    syncVisibilityMeta();
+  }
+
+  function readVisibility() {
+    var el = document.querySelector('input[name=ccm-visibility]:checked');
+    return el ? el.value : '';
+  }
+
+  // The "Your club" summary line reflects the choice live, so step 3 shows
+  // everything about to be created — including the directory setting.
+  function syncVisibilityMeta() {
+    var c = readClub();
+    var sport = (window.ARENAS_SPORTS || []).filter(function (s) { return s.id === c.sport; })[0];
+    var vis = readVisibility();
+    var bits = [];
+    if (sport) bits.push(sport.label);
+    if (c.city) bits.push(c.city);
+    if (vis) bits.push(vis === 'public' ? 'Listed in the club directory' : 'Unlisted \u2014 invite only');
+    document.getElementById('ccm-review-meta').textContent = bits.join(' \u00b7 ');
   }
 
   function next() {
@@ -305,6 +349,9 @@ window.ArenasClubCreate = (function () {
       if (!v.ok) { showErr('club', v.msg); return; }
     }
     if (stepIdx < STEPS.length - 1) { showStep(stepIdx + 1); return; }
+    // Directory listing is a deliberate choice — no preselected default, so
+    // launching without picking one is a validation error, not a fallback.
+    if (!readVisibility()) { showErr('review', 'Choose whether to list your club in the directory.'); return; }
     launch();
   }
 
@@ -314,7 +361,7 @@ window.ArenasClubCreate = (function () {
     var nextBtn = document.getElementById('ccm-next');
     nextBtn.disabled = true;
     nextBtn.textContent = 'Launching\u2026';
-    var res = await submit(readClub(), readInvites());
+    var res = await submit(readClub(), readInvites(), readVisibility());
     if (res.ok) { window.location.href = res.redirect; return; }
     nextBtn.disabled = false;
     nextBtn.textContent = '\ud83d\ude80 Launch my club';
@@ -330,6 +377,14 @@ window.ArenasClubCreate = (function () {
       return;
     }
     build();
+    // Fresh session: the directory choice must be made explicitly EACH time
+    // the wizard is opened — a radio left checked in an abandoned session
+    // must not carry into a new club. Clear stale errors with it.
+    Array.prototype.forEach.call(document.querySelectorAll('input[name=ccm-visibility]'), function (r) {
+      r.checked = false;
+    });
+    var revErr = document.getElementById('ccm-err-review');
+    if (revErr) { revErr.textContent = ''; revErr.classList.remove('show'); }
     showStep(0);
     document.getElementById('ccm-overlay').classList.add('open');
     document.body.style.overflow = 'hidden';
