@@ -27,3 +27,10 @@ description: Shared club-create contract layer + in-app modal, dual-mode /for-cl
 ## Accepted risks (disclose before real launch)
 - `/auth/email-check` is an unauthenticated account-enumeration oracle with no rate limit, and scans the full paged auth user list per call. Fine at prototype scale only.
 - `/auth/signup-club` does no server-side handle format validation (client lowercases; a direct form POST can store an arbitrary-case handle — uniqueness still holds via the index). Cheap parity fix: apply the same regex+lowercase there.
+
+## Directory-listing choice in wizard step 3 (shipped)
+- `clubs.visibility` controls DIRECTORY LISTING ONLY (request-and-approve joining; never content or open joining) — keep all copy on those words, both surfaces (dashboard settings card + wizard) must stay in the same vocabulary.
+- Wizard step 3 = radio pair with NO preselected default; launch blocked with inline error until chosen. User-mandated: force a decision, never a skipped default.
+- `submit(club, invites, visibility)` includes the field ONLY on a valid explicit value; two-arg callers (/for-clubs wizard) omit it → server omits column → DB default 'private'. Never coerce.
+- `open()` resets the radios + review error each session — a stale choice from an abandoned session must not carry into a new club (architect-caught; also the payload coercion).
+- POST /api/clubs/create validates 'public'|'private' when present (400 invalid_visibility), inserts the column only when provided.
