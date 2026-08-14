@@ -32,3 +32,12 @@ Migrating an overlay retires its `.open`-class contract — grep ALL verify-* sc
 - teardown() also bumps window.__aefTeardowns (verifier spy: exactly +1 per close on every path).
 - Crop stacking: Escape closes the crop first, host survives with scroll locked; crop-cancel wipes cropState so the second-Escape guard fires off typed fields; accepted-crop-only (ac-use) dirt separately asserted.
 - Scripts must never raw-.remove() a primitive-managed overlay (stale stack entry, locked scroll) — geometry cleanup uses arenasOverlay.close(id).
+
+## Batch C2 — the three photo modals (closes the migration category)
+- `#modal-club-logo` (club-dashboard), `#modal-avatar-photo` + `#modal-banner-photo` (my-profile) → node-mode with `-home` parking divs; legacy `openModal`/`closeModals`/`closeAllModals` DELETED from both pages (nothing toggles `.open` there anymore).
+- **NO dirty guards by design** (user-approved §3): logo/avatar upload immediately on file select; banner stages nothing that survives a crop cancel — pick photo → cancel crop → Escape loses nothing. Deliberate divergence from C1's guard standard, not an oversight.
+- Banner mid-decode orphan fix relocated: former closeModals wrapper is now `bannerCleanup()` = the banner overlay's `onClose` (same 4 ops: token++, cropHandle.cancel(), null, input clear — only when cropHandle set). Strictly stronger: Escape/backdrop can't bypass it. `openBannerModal` lives INSIDE the banner IIFE (closure access).
+- Spies: `window.__bannerCleanups` (banner), `window.__photoModalCloses` (logo+avatar). Verifier harness spy generalized via `cfg.spyName` (defaults `__aefTeardowns`).
+- Contract ripple (grep for `.open` waits when migrating!): fixed in verify-mobile-geometry (open via new fns, chain closes via `arenasOverlay.close`), verify-profile-banner (3 waits), verify-header-avatar (isOpen = root presence).
+- E2e note: post-remove image fetch of the just-deleted storage object 404s/400s in console — benign pre-existing race, not migration-related.
+- Closing state: 15 overlays under the primitive + verifier; deliberate exclusions = calendar `#day-panel`, for-clubs `#signup-overlay`/`#success-overlay` (own `.signup-overlay` system), plus runtime inline `#rsvp-modal-overlay`.
