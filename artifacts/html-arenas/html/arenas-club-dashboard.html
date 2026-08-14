@@ -2053,14 +2053,11 @@ document.addEventListener('DOMContentLoaded', function () {
         '<div style="font-size:11px;font-weight:600;margin-top:3px;color:var(--gray-700)">' + g.label + '</div>' +
       '</div>';
     }).join('');
-    var overlay = document.createElement('div');
-    overlay.id = 'create-club-challenge-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto';
-    overlay.innerHTML =
+    var panelHtml =
       '<div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:540px;overflow:hidden;box-shadow:var(--shadow-lg);margin:auto">' +
         '<div style="padding:14px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between">' +
           '<div style="font-size:15px;font-weight:700;color:var(--gray-900)">Create a club challenge</div>' +
-          '<button onclick="document.getElementById(\'create-club-challenge-overlay\').remove()" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>' +
+          '<button onclick="window.arenasOverlay.close(\'create-club-challenge-overlay\')" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>' +
         '</div>' +
         '<div style="padding:18px;max-height:70vh;overflow-y:auto">' +
           '<div id="cch-error" style="display:none;background:var(--red-light);border:1px solid #FECACA;border-radius:8px;padding:10px 14px;font-size:13px;color:#A32D2D;margin-bottom:12px"></div>' +
@@ -2078,17 +2075,38 @@ document.addEventListener('DOMContentLoaded', function () {
           '</div>' +
         '</div>' +
         '<div style="padding:14px 18px;border-top:var(--border);display:flex;justify-content:flex-end;gap:8px">' +
-          '<button onclick="document.getElementById(\'create-club-challenge-overlay\').remove()" style="padding:8px 16px;border-radius:8px;font-size:13px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Cancel</button>' +
+          '<button id="cch-cancel" onclick="window.arenasOverlay.close(\'create-club-challenge-overlay\')" style="padding:8px 16px;border-radius:8px;font-size:13px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">Cancel</button>' +
           '<button id="cch-submit" onclick="submitCreateClubChallenge(' + (clubId ? '\'' + esc(clubId) + '\'' : 'null') + ')" style="padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">Create &amp; notify members →</button>' +
         '</div>' +
       '</div>';
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
-    document.body.appendChild(overlay);
+    window.arenasOverlay.open({
+      id: 'create-club-challenge-overlay',
+      html: panelHtml,
+      label: 'Create a club challenge',
+      align: 'top',
+      beforeClose: function () {
+        if (cchFormState() === cchSnapshot) return true;
+        return window.confirm('Discard this challenge? Nothing has been created yet.');
+      }
+    });
     var today = new Date().toISOString().split('T')[0];
     var end = new Date(); end.setDate(end.getDate() + 30);
     document.getElementById('cch-start').value = today;
     document.getElementById('cch-end').value = end.toISOString().split('T')[0];
+    // Snapshot AFTER the date prefills above — every write into this form is
+    // synchronous (no fetch populates it), so the untouched form always
+    // compares clean and only a real user edit arms the guard.
+    var cchSnapshot = cchFormState();
   };
+
+  function cchFormState() {
+    function v(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+    var sportEl = document.querySelector('.cch-sport-chip.selected');
+    var goalEl = document.querySelector('.cch-goal-type.selected');
+    return [v('cch-title'), v('cch-desc'), sportEl ? sportEl.dataset.sport : '',
+      goalEl ? goalEl.dataset.type : '', v('cch-target'), v('cch-unit'),
+      v('cch-start'), v('cch-end')].join('|');
+  }
 
   window.submitCreateClubChallenge = async function (clubId) {
     var titleEl = document.getElementById('cch-title');
@@ -2132,7 +2150,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (clubId && result.challenge && result.challenge.id) {
         try { await fetch(B + '/api/challenges/' + result.challenge.id + '/nudge-join', { method: 'POST' }); } catch (e) {}
       }
-      var ov = document.getElementById('create-club-challenge-overlay'); if (ov) ov.remove();
+      window.arenasOverlay.close('create-club-challenge-overlay'); // explicit — bypasses guard
       showToast('✓ Challenge created — all club members notified!');
       setTimeout(function () { window.location.hash = 'challenges'; window.location.reload(); }, 1200);
     } catch (err) {

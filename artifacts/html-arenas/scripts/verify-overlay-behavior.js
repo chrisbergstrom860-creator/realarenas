@@ -37,7 +37,11 @@ function check(name, ok, detail) {
   else { failures++; console.log('FAIL  ' + name + (detail ? ' — ' + String(detail).slice(0, 300) : '')); }
 }
 
-const emails = { coach: 'ovl-coach@arenas-test.dev', member: 'ovl-member@arenas-test.dev' };
+const emails = {
+  coach: 'ovl-coach@arenas-test.dev',
+  member: 'ovl-member@arenas-test.dev',
+  extra: 'ovl-extra@arenas-test.dev' // followed-but-uninvited → evx picker row
+};
 const users = {};
 const seeded = { userIds: [], clubs: [], events: [], challenges: [] };
 
@@ -98,7 +102,25 @@ async function seed() {
     { challenge_id: ch.id, user_id: users.member.id }
   ]);
   if (cpErr) throw new Error('participants: ' + cpErr.message);
-  return { club, ev, ch };
+  // Batch B: private event owned by coach, one PENDING invite (member) for the
+  // revoke path, and coach→extra follow so "Invite more" has an eligible row.
+  await createUser('extra', 'Ovl Extra');
+  const { data: evPriv, error: pErr } = await admin.from('events').insert({
+    title: 'Overlay Private Event', sport: 'running',
+    date: new Date(Date.now() + 5 * 864e5).toISOString(),
+    location: 'Testville', created_by: users.coach.id, visibility: 'private'
+  }).select().single();
+  if (pErr) throw new Error('private event: ' + pErr.message);
+  seeded.events.push(evPriv.id);
+  const { error: iErr } = await admin.from('event_invites').insert({
+    event_id: evPriv.id, invitee_id: users.member.id, inviter_id: users.coach.id
+  });
+  if (iErr) throw new Error('event invite: ' + iErr.message);
+  const { error: fErr } = await admin.from('follows').insert({
+    follower_id: users.coach.id, following_id: users.extra.id
+  });
+  if (fErr) throw new Error('follow: ' + fErr.message);
+  return { club, ev, ch, evPriv };
 }
 
 async function cleanup() {
@@ -108,7 +130,12 @@ async function cleanup() {
   }
   for (const id of seeded.events) {
     await admin.from('event_rsvps').delete().eq('event_id', id);
+    await admin.from('event_invites').delete().eq('event_id', id);
     await admin.from('events').delete().eq('id', id);
+  }
+  for (const id of seeded.userIds) {
+    await admin.from('follows').delete().eq('follower_id', id);
+    await admin.from('follows').delete().eq('following_id', id);
   }
   for (const id of seeded.clubs) {
     await admin.from('club_invites').delete().eq('club_id', id);
@@ -144,6 +171,9 @@ async function openOverlay(pg, cfg) {
     const el = document.getElementById(id);
     return !!el && getComputedStyle(el).display !== 'none' && el.getBoundingClientRect().width > 0;
   }, cfg.overlayId, { timeout: 8000 });
+  // Some overlays finish populating async (e.g. the evx invite picker loads
+  // over fetch) — wait for the marker before dirty-state interactions.
+  if (cfg.readySel) await pg.waitForSelector(cfg.readySel, { timeout: 8000 });
 }
 
 async function waitClosed(pg, overlayId) {
@@ -156,12 +186,19 @@ async function waitClosed(pg, overlayId) {
 
 async function auditOverlay(browser, cfg, widths) {
   for (const width of widths) {
+    // Some scenarios consume seeded state (evx revoke deletes the invite row);
+    // beforeWidth re-seeds so each width starts from the same fixture.
+    if (cfg.beforeWidth) await cfg.beforeWidth();
     const label = cfg.name + ' @' + width;
     const ctx = await browser.newContext({ viewport: { width, height: width < 500 ? 800 : 820 } });
     await ctx.addCookies(users[cfg.user].cookies);
     const pg = await ctx.newPage();
     const pageErrors = [];
     pg.on('pageerror', (e) => pageErrors.push(String(e)));
+    // Guard prompts are window.confirm — dismiss (= "stay") and count them, so
+    // we can assert both that they fire when dirty and that they DON'T when clean.
+    const dialogs = [];
+    pg.on('dialog', (d) => { dialogs.push(d.message()); d.dismiss().catch(() => {}); });
     try {
       await pg.goto(BASE + cfg.page, { waitUntil: 'networkidle' });
       // Sentinel: restore must reinstate this exact value, not reset to ''.
@@ -201,6 +238,9 @@ async function auditOverlay(browser, cfg, widths) {
       }, cfg.focusSel);
       check(label + ': scroll restored to prior value (not "")', after.overflow === 'scroll', 'got "' + after.overflow + '"');
       check(label + ': focus returns to trigger', after.focusOnTrigger, 'activeElement is ' + after.aeDesc);
+      if (cfg.expectsBeforeClose) {
+        check(label + ': clean untouched form — Escape closed with NO prompt', dialogs.length === 0, dialogs.join(' | '));
+      }
 
       // 3. Backdrop click closes (reopen first)
       await openOverlay(pg, cfg);
@@ -219,14 +259,27 @@ async function auditOverlay(browser, cfg, widths) {
         check(label + ': ' + extra.label + ' closes', await waitClosed(pg, cfg.overlayId));
       }
 
-      // 6. beforeClose dirty-guard (later batches; none in Batch A)
+      // 6. beforeClose dirty-guard (Batch B onward). Dialogs are auto-dismissed
+      // (= user chooses "stay"), so a firing guard keeps the overlay open.
       if (cfg.expectsBeforeClose) {
+        const d0 = dialogs.length;
         await openOverlay(pg, cfg);
         await pg.evaluate(cfg.makeDirty);
         await pg.keyboard.press('Escape');
-        check(label + ': dirty state blocks Escape', await isOpen(pg, cfg.overlayId));
+        await pg.waitForTimeout(150);
+        check(label + ': dirty — Escape prompts', dialogs.length === d0 + 1, dialogs.length - d0 + ' dialog(s)');
+        check(label + ': dirty — Escape (dismissed) keeps it open', await isOpen(pg, cfg.overlayId));
+        await pg.mouse.click(8, 8);
+        await pg.waitForTimeout(150);
+        check(label + ': dirty — backdrop prompts', dialogs.length === d0 + 2, dialogs.length - d0 + ' dialog(s)');
+        check(label + ': dirty — backdrop (dismissed) keeps it open', await isOpen(pg, cfg.overlayId));
         await pg.evaluate((sel) => { const b = document.querySelector(sel); if (b) b.click(); }, cfg.closeSel);
-        await waitClosed(pg, cfg.overlayId);
+        check(label + ': dirty — explicit ✕ closes without prompting', (await waitClosed(pg, cfg.overlayId)) && dialogs.length === d0 + 2);
+      }
+
+      // 7. Overlay-specific scenario (e.g. evx revoke path, delete-account no-guard)
+      if (cfg.postAudit) {
+        await cfg.postAudit(pg, label, { dialogs, check, isOpen: () => isOpen(pg, cfg.overlayId), waitClosed: () => waitClosed(pg, cfg.overlayId), openOverlay: () => openOverlay(pg, cfg) });
       }
 
       check(label + ': zero page errors', pageErrors.length === 0, pageErrors.join(' | '));
@@ -242,7 +295,7 @@ async function auditOverlay(browser, cfg, widths) {
 const widths = [1280, 380];
 let browser;
 try {
-  const { club, ev, ch } = await seed();
+  const { club, ev, ch, evPriv } = await seed();
   await login('coach');
   await login('member');
   browser = await launchBrowser();
@@ -282,6 +335,82 @@ try {
       focusSel: 'button[onclick*="switchToTabAndCreate"]',
       trigger: `(() => { viewChallengeLeaderboard('${ch.id}'); })()`,
       closeSel: '#ch-lb-overlay button'
+    },
+    // ── Batch B: the four form overlays ─────────────────────────────────────
+    { // Goal form (static panel, node-mode; snapshot-at-open dirty guard)
+      name: 'profile #modal-goal', tier: 2, user: 'member',
+      page: '/profile', overlayId: 'modal-goal',
+      focusSel: '#hero-banner-btn',
+      trigger: `(() => { openGoalForm(); })()`,
+      closeSel: '#modal-goal .modal-close',
+      extraCloses: [{ label: 'Cancel button', sel: '#modal-goal .modal-footer .btn-ghost' }],
+      expectsBeforeClose: true,
+      makeDirty: `(() => { document.getElementById('g-target').value = '123'; })()`
+    },
+    { // Delete-account (static panel, node-mode; deliberately NO dirty guard)
+      name: 'profile #modal-delete-account', tier: 2, user: 'member',
+      page: '/profile', overlayId: 'modal-delete-account',
+      focusSel: '#hero-banner-btn',
+      trigger: `(() => { openDeleteModal(); })()`,
+      closeSel: '#modal-delete-account .modal-close',
+      extraCloses: [{ label: 'Cancel button', sel: '#modal-delete-account .modal-footer .btn-ghost' }],
+      // Typed confirmation must be droppable with no prompt: fill "DELETE",
+      // Escape → closes, zero dialogs. NEVER clicks the confirm button.
+      postAudit: async (pg, label, h) => {
+        const d0 = h.dialogs.length;
+        await h.openOverlay();
+        await pg.evaluate(() => {
+          const i = document.getElementById('del-confirm-input');
+          i.value = 'DELETE'; i.dispatchEvent(new Event('input'));
+        });
+        await pg.keyboard.press('Escape');
+        h.check(label + ': typed DELETE — Escape closes with NO prompt',
+          (await h.waitClosed()) && h.dialogs.length === d0, h.dialogs.slice(d0).join(' | '));
+      }
+    },
+    { // Club-challenge create form (dynamic; snapshot-at-open dirty guard)
+      name: 'dashboard #create-club-challenge-overlay', tier: 2, user: 'coach',
+      page: '/clubs/dashboard?club=' + club.id, overlayId: 'create-club-challenge-overlay',
+      focusSel: 'button[onclick*="switchToTabAndCreate"]',
+      trigger: `(() => { openCreateClubChallenge(); })()`,
+      closeSel: '#create-club-challenge-overlay button',
+      extraCloses: [{ label: 'Cancel button', sel: '#cch-cancel' }],
+      expectsBeforeClose: true,
+      makeDirty: `(() => { document.getElementById('cch-title').value = 'Dirty title'; })()`
+    },
+    { // Event invite manager (dynamic; live checked-but-unsent dirty guard)
+      name: 'events #evx-inv-modal', tier: 2, user: 'coach',
+      page: '/events', overlayId: 'evx-inv-modal',
+      focusSel: 'button[onclick*="manageInvites"]',
+      trigger: `(() => { ARENAS_EVENTS.manageInvites('${evPriv.id}'); })()`,
+      readySel: '#evx-inv-pick input',
+      beforeWidth: async () => {
+        await admin.from('event_invites').upsert(
+          { event_id: evPriv.id, invitee_id: users.member.id, inviter_id: users.coach.id },
+          { onConflict: 'event_id,invitee_id', ignoreDuplicates: true });
+      },
+      closeSel: '#evx-inv-modal [data-evx-close], #evx-inv-modal div[onclick*="remove"]',
+      expectsBeforeClose: true,
+      makeDirty: `(() => { const c = document.querySelector('#evx-inv-pick input'); c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); })()`,
+      // Approved sequence: check a box, revoke a pending invitee → the list
+      // reload wipes the checkboxes, and the LIVE guard must read clean again.
+      postAudit: async (pg, label, h) => {
+        const d0 = h.dialogs.length;
+        await h.openOverlay();
+        await pg.evaluate(() => {
+          const c = document.querySelector('#evx-inv-pick input');
+          c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        await pg.evaluate(() => { const b = document.querySelector('#evx-inv-list [data-revoke]'); b.click(); });
+        // Reload done = the revoked row's button is gone and the picker re-rendered.
+        await pg.waitForFunction(() => !document.querySelector('#evx-inv-list [data-revoke]') &&
+          document.querySelector('#evx-inv-pick input'), null, { timeout: 8000 });
+        const checked = await pg.evaluate(() => document.querySelectorAll('#evx-inv-pick input:checked').length);
+        h.check(label + ': revoke reload clears checked boxes', checked === 0, checked + ' still checked');
+        await pg.keyboard.press('Escape');
+        h.check(label + ': post-revoke Escape closes with NO prompt',
+          (await h.waitClosed()) && h.dialogs.length === d0, h.dialogs.slice(d0).join(' | '));
+      }
     }
   ];
 

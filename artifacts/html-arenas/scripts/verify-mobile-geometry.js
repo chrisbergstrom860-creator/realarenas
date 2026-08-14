@@ -313,10 +313,12 @@ const PAGES = [
       // no opener anywhere — not a reachable state, so not measured.)
       { name: 'modal-avatar-photo', js: closeModals + `openModal('avatar-photo')`,
         waitFor: '#modal-avatar-photo.open', root: '#modal-avatar-photo' },
-      { name: 'modal-delete-account', js: closeModals + `openModal('delete-account')`,
-        waitFor: '#modal-delete-account.open', root: '#modal-delete-account' },
-      { name: 'modal-goal', js: closeModals + `window.openGoalForm()`,
-        waitFor: '#modal-goal.open', root: '#modal-goal' }
+      // Batch B: these two open via window.arenasOverlay (root created
+      // per-open, no .open class); close the previous primitive overlay too.
+      { name: 'modal-delete-account', js: closeModals + `window.openDeleteModal()`,
+        waitFor: '#modal-delete-account .modal-close', root: '#modal-delete-account' },
+      { name: 'modal-goal', js: `window.arenasOverlay.close('modal-delete-account'); ` + closeModals + `window.openGoalForm()`,
+        waitFor: '#modal-goal .modal-close', root: '#modal-goal' }
     ] },
   // Mobile defaults to WEEK view (no .cal-grid) — wait on the shell, then
   // audit week (default) plus an explicit switch to month.

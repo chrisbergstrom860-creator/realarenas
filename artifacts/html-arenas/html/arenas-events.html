@@ -604,23 +604,30 @@ function showToast(msg){
   // state per invitee, with revoke for pending ones (server refuses revoke
   // once someone has RSVP'd — challenge-invite precedent).
   function manageInvites(eventId) {
-    var existing = document.getElementById('evx-inv-modal');
-    if (existing) existing.remove();
-    var overlay = document.createElement('div');
-    overlay.id = 'evx-inv-modal';
-    overlay.className = 'modal-overlay open';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-start;justify-content:center;z-index:500;padding:32px 16px;overflow-y:auto';
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
-    overlay.innerHTML =
-      '<div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:22px" onclick="event.stopPropagation()">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">' +
-          '<div style="font-size:16px;font-weight:700;color:var(--gray-900)">Invited athletes</div>' +
-          '<div style="cursor:pointer;font-size:20px;color:var(--gray-400)" onclick="document.getElementById(\'evx-inv-modal\').remove()">×</div>' +
-        '</div>' +
-        '<div id="evx-inv-list" style="font-size:12px;color:var(--gray-400)">Loading…</div>' +
-        '<div id="evx-inv-more" style="margin-top:14px"></div>' +
-      '</div>';
-    document.body.appendChild(overlay);
+    // Batch B: chrome via the shared primitive (same-id open replaces any
+    // stale instance). Dirty guard is LIVE — checked-but-unsent boxes in the
+    // "Invite more" picker guard Escape/backdrop; viewing the list doesn't,
+    // and a revoke's list reload clears the boxes so the guard reads clean.
+    window.arenasOverlay.open({
+      id: 'evx-inv-modal',
+      label: 'Invited athletes',
+      align: 'top',
+      html:
+        '<div style="background:#fff;border-radius:14px;max-width:420px;width:100%;padding:22px" onclick="event.stopPropagation()">' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">' +
+            '<div style="font-size:16px;font-weight:700;color:var(--gray-900)">Invited athletes</div>' +
+            '<button data-evx-close aria-label="Close" style="cursor:pointer;font-size:20px;color:var(--gray-400);background:none;border:none;padding:0;line-height:1" onclick="window.arenasOverlay.close(\'evx-inv-modal\')">×</button>' +
+          '</div>' +
+          '<div id="evx-inv-list" style="font-size:12px;color:var(--gray-400)">Loading…</div>' +
+          '<div id="evx-inv-more" style="margin-top:14px"></div>' +
+        '</div>',
+      beforeClose: function () {
+        var n = document.querySelectorAll('#evx-inv-pick input:checked').length;
+        if (n === 0) return true;
+        return window.confirm('You selected ' + n + ' athlete' + (n !== 1 ? 's' : '') +
+          ' but haven\u2019t sent the invites. Close without sending?');
+      }
+    });
 
     function load() {
       fetch(B + '/api/events/' + encodeURIComponent(eventId) + '/invites', { credentials:'same-origin' })

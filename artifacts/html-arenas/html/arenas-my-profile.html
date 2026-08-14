@@ -735,9 +735,11 @@ button,select,input,textarea{font-family:var(--font)}
   </div>
 </div>
 
-<div class="modal-overlay" id="modal-delete-account" onclick="closeModals(event)">
+<!-- Batch B: opened via window.arenasOverlay (node mode) — this home div is
+     just the panel's parking spot between opens; it never gets .open. -->
+<div class="modal-overlay" id="modal-delete-account-home">
   <div class="modal" style="max-width:460px">
-    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:#A32D2D">Delete account</div><div style="font-size:12px;color:var(--gray-500);margin-top:3px">This is permanent. There is no undo.</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
+    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:#A32D2D">Delete account</div><div style="font-size:12px;color:var(--gray-500);margin-top:3px">This is permanent. There is no undo.</div></div><button class="modal-close" onclick="arenasOverlay.close('modal-delete-account')">✕</button></div>
     <div class="modal-body">
       <div style="font-size:13px;color:var(--gray-700);font-weight:600">Deleting your account removes, permanently:</div>
       <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--gray-700)">
@@ -757,15 +759,16 @@ button,select,input,textarea{font-family:var(--font)}
       <div id="del-error" style="display:none;font-size:13px;color:#B91C1C;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:10px 12px"></div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="closeModals()">Cancel</button>
+      <button class="btn btn-ghost" style="flex:1;justify-content:center" onclick="arenasOverlay.close('modal-delete-account')">Cancel</button>
       <button id="del-confirm-btn" class="btn" style="flex:1;justify-content:center;background:#DC2626;color:white;border-color:#DC2626" disabled onclick="confirmDeleteAccount()">Delete forever</button>
     </div>
   </div>
 </div>
 
-<div class="modal-overlay" id="modal-goal" onclick="closeModals(event)">
+<!-- Batch B: opened via window.arenasOverlay (node mode); see -home note above. -->
+<div class="modal-overlay" id="modal-goal-home">
   <div class="modal">
-    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)" id="goal-modal-title">New goal</div></div><button class="modal-close" onclick="closeModals()">✕</button></div>
+    <div class="modal-header"><div><div style="font-size:18px;font-weight:700;color:var(--gray-900)" id="goal-modal-title">New goal</div></div><button class="modal-close" onclick="arenasOverlay.close('modal-goal')">✕</button></div>
     <div class="modal-body">
       <div class="form-field"><label class="form-label">Goal type</label>
         <div class="goal-type-grid" id="g-type-grid">
@@ -795,7 +798,7 @@ button,select,input,textarea{font-family:var(--font)}
       </div>
       <div id="g-error" style="display:none;background:var(--red-light);border:1px solid #FECACA;border-radius:var(--radius);padding:10px 14px;font-size:13px;color:#A32D2D"></div>
     </div>
-    <div class="modal-footer"><button class="btn btn-yellow" style="flex:1;justify-content:center" id="g-save" onclick="saveGoal()">Save goal</button><button class="btn btn-ghost" onclick="closeModals()">Cancel</button></div>
+    <div class="modal-footer"><button class="btn btn-yellow" style="flex:1;justify-content:center" id="g-save" onclick="saveGoal()">Save goal</button><button class="btn btn-ghost" onclick="arenasOverlay.close('modal-goal')">Cancel</button></div>
   </div>
 </div>
 
@@ -929,7 +932,13 @@ function openDeleteModal() {
   document.getElementById('del-confirm-btn').disabled = true;
   var err = document.getElementById('del-error');
   err.style.display = 'none'; err.textContent = '';
-  openModal('delete-account');
+  // Deliberately NO beforeClose: losing a typed DELETE confirmation on
+  // Escape/backdrop is the right outcome — never guard leaving this form.
+  arenasOverlay.open({
+    id: 'modal-delete-account',
+    node: document.getElementById('modal-delete-account-home').firstElementChild,
+    label: 'Delete account'
+  });
   setTimeout(function () { input.focus(); }, 50);
 }
 function delConfirmChanged() {
@@ -2649,8 +2658,25 @@ if (logHashMatch) {
     document.getElementById('g-sport').value = (goal && goal.sport) || '';
     document.getElementById('g-start').value = (goal && goal.startDate) || '';
     document.getElementById('g-end').value = (goal && goal.endDate) || '';
-    openModal('goal');
+    // Snapshot AFTER the last write above — population is fully synchronous
+    // (all values come from in-memory goalsData), so nothing can land later
+    // and read as dirty. Dirty = any field differs from this snapshot;
+    // change-and-change-back reads clean again.
+    var snapshot = goalFormState();
+    arenasOverlay.open({
+      id: 'modal-goal',
+      node: document.getElementById('modal-goal-home').firstElementChild,
+      label: goal ? 'Edit goal' : 'New goal',
+      beforeClose: function () {
+        if (goalFormState() === snapshot) return true;
+        return window.confirm('Discard your changes to this goal?');
+      }
+    });
   };
+  function goalFormState() {
+    function v(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+    return [fType, fPeriod, v('g-target'), v('g-unit'), v('g-sport'), v('g-start'), v('g-end')].join('|');
+  }
   window.editGoal = function (id) {
     var g = (goalsData && goalsData.active || []).filter(function (x) { return x.id === id; })[0];
     if (g) window.openGoalForm(g);
@@ -2692,7 +2718,7 @@ if (logHashMatch) {
         if (res.status === 403 && r.error === 'pro_required') return formError('Goals need an active Pro plan. Upgrade on the billing page to continue.');
         return formError(r.message || 'Could not save the goal. Please try again.');
       }
-      closeModals();
+      arenasOverlay.close('modal-goal'); // explicit close — bypasses the guard
       showToast(editingGoal ? '✓ Goal updated' : '✓ Goal created');
       loadGoals();
     } catch (err) {
