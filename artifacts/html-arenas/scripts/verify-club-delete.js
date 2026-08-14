@@ -226,6 +226,50 @@ const count = async (table, col, val) =>
     let s = await snapshot();
     check('refusals deleted nothing', JSON.stringify(s) === JSON.stringify(before), JSON.stringify(s));
 
+    // ── 1b. Owner-demotion gap (owner protection on role/removal routes) ──
+    const api = (cookie, method, path, body) => fetch(BASE_URL + path, {
+      method, headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(r => r.json().then(b => ({ status: r.status, body: b })));
+    const roleOf = async (uid) => (await admin.from('memberships').select('role')
+      .eq('club_id', clubId).eq('user_id', uid).maybeSingle()).data;
+
+    r = await api(admin2Cookie, 'PATCH', `/api/clubs/${clubId}/members/${users.owner}/role`, { role: 'member' });
+    check('admin2 demoting owner → 403 with explanatory copy',
+      r.status === 403 && /owner themselves/.test(r.body.error || ''), JSON.stringify(r));
+    check('owner role untouched after refused demotion', (await roleOf(users.owner)).role === 'admin');
+
+    r = await api(admin2Cookie, 'DELETE', `/api/clubs/${clubId}/members/${users.owner}`);
+    check('admin2 removing owner → 403 with explanatory copy',
+      r.status === 403 && /owner cannot be removed/.test(r.body.error || ''), JSON.stringify(r));
+    check('owner membership intact after refused removal', !!(await roleOf(users.owner)));
+
+    // Ordinary role changes between non-owners are unaffected.
+    r = await api(admin2Cookie, 'PATCH', `/api/clubs/${clubId}/members/${users.member}/role`, { role: 'coach' });
+    check('admin2 promoting member → coach still works', r.status === 200 && (await roleOf(users.member)).role === 'coach', JSON.stringify(r));
+    r = await api(ownerCookie, 'PATCH', `/api/clubs/${clubId}/members/${users.member}/role`, { role: 'member' });
+    check('owner changing a non-owner role still works', r.status === 200 && (await roleOf(users.member)).role === 'member', JSON.stringify(r));
+
+    // Owner changing their OWN role is allowed (self only) — and crucially the
+    // restore must work THROUGH THE API while the owner is no longer admin
+    // (no management lockout after a self-demotion).
+    r = await api(ownerCookie, 'PATCH', `/api/clubs/${clubId}/members/${users.owner}/role`, { role: 'member' });
+    check('owner self role change allowed', r.status === 200 && (await roleOf(users.owner)).role === 'member', JSON.stringify(r));
+    r = await api(ownerCookie, 'PATCH', `/api/clubs/${clubId}/members/${users.member}/role`, { role: 'coach' });
+    check('demoted owner cannot manage OTHERS (admin gate still applies)', r.status === 403, JSON.stringify(r));
+    r = await api(admin2Cookie, 'PATCH', `/api/clubs/${clubId}/members/${users.owner}/role`, { role: 'admin' });
+    check('even a PROMOTION of the owner by another admin is refused', r.status === 403, JSON.stringify(r));
+    r = await api(ownerCookie, 'PATCH', `/api/clubs/${clubId}/members/${users.owner}/role`, { role: 'admin' });
+    check('non-admin owner can restore their own admin role via API (no lockout)', r.status === 200 && (await roleOf(users.owner)).role === 'admin', JSON.stringify(r));
+
+    // Members API flags the owner row so the UI can hide the controls.
+    r = await api(admin2Cookie, 'GET', `/api/clubs/${clubId}/members`);
+    const ownRow = ((r.body && r.body.members) || []).find(m => m.user_id === users.owner);
+    check('members API marks owner row isOwner', !!(ownRow && ownRow.isOwner === true), JSON.stringify(ownRow));
+
+    s = await snapshot();
+    check('owner-protection checks left counts unchanged', JSON.stringify(s) === JSON.stringify(before), JSON.stringify(s));
+
     // ── 2. Stripe abort ──
     r = await del(ownerCookie, clubId, 'clubdelverify');
     check('bogus paid sub → 502 stripe abort', r.status === 502, JSON.stringify(r));

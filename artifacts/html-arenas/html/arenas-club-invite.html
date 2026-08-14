@@ -802,10 +802,13 @@ updateCounts();
       setStat('members', members.length);
       if (members.length===0){ body.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--gray-400);padding:18px">No members yet</td></tr>'; return; }
       body.innerHTML = members.map(function(m){
-        var roleCell = (isAdmin && !m.isSelf)
+        // Owner rows never get role/remove controls for other admins — the
+        // server refuses those calls anyway (owner = billed account holder).
+        var canManage = isAdmin && !m.isSelf && !m.isOwner;
+        var roleCell = canManage
           ? '<select class="inv-row-select" data-role-for="'+esc(m.user_id)+'" style="width:auto">'+['member','coach','admin'].map(function(ro){ return '<option value="'+ro+'"'+(m.role===ro?' selected':'')+'>'+ro.charAt(0).toUpperCase()+ro.slice(1)+'</option>'; }).join('')+'</select>'
-          : '<span class="pill '+(pillRole[m.role]||'pill-member')+'">'+esc(m.role)+'</span>';
-        var actions = (isAdmin && !m.isSelf)
+          : '<span class="pill '+(pillRole[m.role]||'pill-member')+'">'+esc(m.role)+'</span>'+(m.isOwner?' <span class="pill pill-member" title="The club is billed to the owner; only they can change their own role">Owner</span>':'');
+        var actions = canManage
           ? '<button class="btn btn-sm btn-red" data-remove="'+esc(m.user_id)+'">Remove</button>'
           : (m.isSelf ? '<span style="font-size:11px;color:var(--gray-400)">You</span>' : '');
         return '<tr><td><div class="member-cell">'+window.avatarHtml(m.avatar_url||null, m.name||'Member', 'av-sm', 'background:var(--yellow-light);color:#7a5c00;overflow:hidden')+'<div><div class="member-name">'+esc(m.name)+'</div></div></div></td>'+

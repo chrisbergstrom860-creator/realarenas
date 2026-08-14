@@ -10890,7 +10890,7 @@ app.get(BASE + '/clubs/invite', requirePageAuth, async (req, res) => {
     const pickManagedMembership = async (clubFilter) => {
       let q = supabaseAdmin
         .from('memberships')
-        .select('club_id, role, clubs (id, name, handle, sport, city, logo_url, visibility, description)')
+        .select('club_id, role, clubs (id, name, handle, sport, city, logo_url, visibility, description, owner_id)')
         .eq('user_id', req.user.id)
         .in('role', ['admin', 'coach']);
       if (clubFilter) q = q.eq('club_id', clubFilter);
@@ -10946,7 +10946,8 @@ app.get(BASE + '/clubs/invite', requirePageAuth, async (req, res) => {
         name: (nameMap[m.user_id] && nameMap[m.user_id].name) || 'Member',
         handle: (nameMap[m.user_id] && nameMap[m.user_id].handle) || 'member',
         avatar_url: (nameMap[m.user_id] && nameMap[m.user_id].avatar_url) || null,
-        isSelf: m.user_id === req.user.id
+        isSelf: m.user_id === req.user.id,
+        isOwner: m.user_id === ((membership.clubs && membership.clubs.owner_id) || null)
       })),
       baseUrl: publicBaseUrl(req)
     };
@@ -11788,11 +11789,17 @@ app.get(BASE + '/api/clubs/:clubId/members', requireAuth, async (req, res) => {
   const role = await getClubRole(req.user.id, clubId);
   if (!isClubManagerRole(role && role.role)) return res.status(403).json({ error: 'Not authorized' });
   try {
-    const { data } = await supabaseAdmin
+    const { data, error: memErr } = await supabaseAdmin
       .from('memberships')
       .select('user_id, role, created_at')
       .eq('club_id', clubId)
       .order('created_at', { ascending: true });
+    const { data: memClub, error: memClubErr } = await supabaseAdmin
+      .from('clubs').select('owner_id').eq('id', clubId).maybeSingle();
+    // Fail closed: a failed owner lookup must not render the owner's row as
+    // manageable (isOwner would silently degrade to false).
+    if (memErr || memClubErr || !memClub) return res.status(500).json({ error: 'Could not load members' });
+    const ownerId = memClub.owner_id || null;
     const rows = data || [];
     const nameMap = await buildUserDisplayMap(rows.map(m => m.user_id));
     return res.json({
@@ -11803,7 +11810,8 @@ app.get(BASE + '/api/clubs/:clubId/members', requireAuth, async (req, res) => {
         name: (nameMap[m.user_id] && nameMap[m.user_id].name) || 'Member',
         handle: (nameMap[m.user_id] && nameMap[m.user_id].handle) || 'member',
         avatar_url: (nameMap[m.user_id] && nameMap[m.user_id].avatar_url) || null,
-        isSelf: m.user_id === req.user.id
+        isSelf: m.user_id === req.user.id,
+        isOwner: m.user_id === ownerId
       }))
     });
   } catch (err) {
@@ -11817,8 +11825,22 @@ app.patch(BASE + '/api/clubs/:clubId/members/:userId/role', requireAuth, async (
   const { clubId, userId } = req.params;
   const newRole = req.body && req.body.role;
   if (!['member', 'coach', 'admin'].includes(newRole)) return res.status(400).json({ error: 'Invalid role' });
+  // Owner protection: clubs.owner_id is the billed account holder and the only
+  // person who can delete the club — other admins must not be able to strip
+  // their standing. Fail closed if the club row can't be read.
+  const { data: roleClub, error: roleClubErr } = await supabaseAdmin
+    .from('clubs').select('owner_id').eq('id', clubId).maybeSingle();
+  if (roleClubErr || !roleClub) return res.status(500).json({ error: 'Could not update role' });
+  // The owner may always change their OWN role, even after stepping down from
+  // admin — otherwise a self-demotion is an irreversible management lockout
+  // (the admin gate below would refuse the restore).
+  const ownerSelf = req.user.id === roleClub.owner_id && userId === req.user.id;
   const requester = await getClubRole(req.user.id, clubId);
-  if (!requester || requester.role !== 'admin') return res.status(403).json({ error: 'Only admins can change roles' });
+  if (!requester) return res.status(403).json({ error: 'Only admins can change roles' });
+  if (!ownerSelf && requester.role !== 'admin') return res.status(403).json({ error: 'Only admins can change roles' });
+  if (userId === roleClub.owner_id && req.user.id !== roleClub.owner_id) {
+    return res.status(403).json({ error: "The club owner's role can only be changed by the owner themselves — the club and its billing belong to them, so other admins cannot demote them." });
+  }
   try {
     const { error } = await supabaseAdmin
       .from('memberships')
@@ -11839,6 +11861,15 @@ app.delete(BASE + '/api/clubs/:clubId/members/:userId', requireAuth, async (req,
   const requester = await getClubRole(req.user.id, clubId);
   if (!requester || requester.role !== 'admin') return res.status(403).json({ error: 'Only admins can remove members' });
   if (userId === req.user.id) return res.status(400).json({ error: 'You cannot remove yourself from the club' });
+  // Owner protection: removing the owner would leave clubs.owner_id pointing
+  // at a non-member while they still hold the club's billing. Fail closed if
+  // the club row can't be read.
+  const { data: rmClub, error: rmClubErr } = await supabaseAdmin
+    .from('clubs').select('owner_id').eq('id', clubId).maybeSingle();
+  if (rmClubErr || !rmClub) return res.status(500).json({ error: 'Could not remove member' });
+  if (userId === rmClub.owner_id) {
+    return res.status(403).json({ error: 'The club owner cannot be removed — the club and its billing belong to them. Only the owner can leave, by deleting the club or their account.' });
+  }
   try {
     // Conditional delete that returns the deleted row: success requires an
     // actual membership row to have been removed, so "removing" someone who
