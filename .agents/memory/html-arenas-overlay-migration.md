@@ -25,3 +25,10 @@ Migrating an overlay retires its `.open`-class contract — grep ALL verify-* sc
 ## Remaining (user-driven, do not start unprompted)
 - Batch C: #modal-avatar-photo/#modal-banner-photo (crop-cancel closeModals wrapper keys on them).
 - #ccm-overlay excluded until bottom-sheet mode question settled; fetch-abort-on-close banked as its own task.
+
+## Batch C1 (arenasEventForm hosts)
+- All four form hosts (evx/eev/edit-ev/cev) ride arenasOverlay node-mode; the module owns dirty: build() returns isDirty() = collect() JSON vs baseline captured at END of build (prefills are markup, nothing async writes in → untouched edit forms read clean) OR cropState !== 'none'.
+- teardown() sets a `torn` flag gating EVERY in-flight submit callback — without it a stale success closes a same-id SUCCESSOR overlay and (dashboard) schedules a reload. Architect caught this; keep the flag when touching submit().
+- teardown() also bumps window.__aefTeardowns (verifier spy: exactly +1 per close on every path).
+- Crop stacking: Escape closes the crop first, host survives with scroll locked; crop-cancel wipes cropState so the second-Escape guard fires off typed fields; accepted-crop-only (ac-use) dirt separately asserted.
+- Scripts must never raw-.remove() a primitive-managed overlay (stale stack entry, locked scroll) — geometry cleanup uses arenasOverlay.close(id).
