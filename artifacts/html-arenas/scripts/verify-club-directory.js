@@ -254,6 +254,168 @@ async function main() {
   const { data: doomedClub } = await admin.from('clubs').select('id').eq('id', doomedId);
   check('doomed club itself deleted', (doomedClub || []).length === 0, doomedClub);
 
+  // ── 13. Leave club (self-serve) ──
+  // Copy contracts (must match server.js verbatim):
+  const OWNER_LEAVE_COPY = "The club owner cannot leave — the club and its billing belong to them. To step away, delete the club from its dashboard's Settings tab, or delete your account.";
+  const SOLE_ADMIN_LEAVE_COPY = 'You are the only admin of Dir Public Club. Promote another member to admin from the invite page, then come back and leave the club.';
+
+  // Relist the club (sec 11 made it private) and seed the leaver's footprint.
+  r = await api('owner', 'PATCH', '/clubs/' + pubClubId + '/settings', { visibility: 'public' });
+  check('13-setup: club relisted', r.status === 200, r);
+  const { data: lvCh, error: lvChErr } = await admin.from('challenges').insert({
+    title: 'Leave Verify Challenge', sport: 'running', goal_type: 'distance', goal_target: 50, goal_unit: 'km',
+    start_date: new Date(Date.now() - 3 * 864e5).toISOString().slice(0, 10),
+    end_date: new Date(Date.now() + 11 * 864e5).toISOString().slice(0, 10),
+    club_id: pubClubId, created_by: users.owner.id, visibility: 'club'
+  }).select().single();
+  check('13-setup: club challenge seeded', !lvChErr && lvCh, lvChErr && lvChErr.message);
+  const { data: lvEv, error: lvEvErr } = await admin.from('events').insert({
+    created_by: users.owner.id, club_id: pubClubId, title: 'Leave Verify Event', sport: 'running',
+    date: new Date(Date.now() + 7 * 864e5).toISOString(), location: 'Verify Park', visibility: 'club'
+  }).select().single();
+  check('13-setup: club event seeded', !lvEvErr && lvEv, lvEvErr && lvEvErr.message);
+  await admin.from('challenge_participants').insert({ challenge_id: lvCh.id, user_id: users.seeker.id });
+  await admin.from('event_rsvps').insert({ event_id: lvEv.id, user_id: users.seeker.id, status: 'going' });
+  const { data: lvAct } = await admin.from('activities').insert({
+    user_id: users.seeker.id, sport: 'running', title: 'Leave verify run',
+    duration: '00:45', date: new Date(Date.now() - 864e5).toISOString().slice(0, 10)
+  }).select().single();
+  const { data: lvPostOwner } = await admin.from('posts').insert({
+    user_id: users.owner.id, club_id: pubClubId, content: 'Leave verify announcement (owner)'
+  }).select().single();
+  const { data: lvPostCoach } = await admin.from('posts').insert({
+    user_id: users.coach.id, club_id: pubClubId, content: 'Leave verify announcement (coach)'
+  }).select().single();
+  await admin.from('post_comments').insert({ post_id: lvPostOwner.id, user_id: users.seeker.id, content: 'leave verify comment' });
+  await admin.from('post_likes').insert({ post_id: lvPostOwner.id, user_id: users.seeker.id });
+  const { data: jrBefore } = await admin.from('club_join_requests').select('status').eq('club_id', pubClubId).eq('user_id', users.seeker.id).maybeSingle();
+  check('13-setup: seeker join-request row exists (approved, from sec 8)', jrBefore && jrBefore.status === 'approved', jrBefore);
+
+  // Zero-leak: non-member leave vs nonexistent club — byte-identical.
+  const rLvOut = await api('seeker2', 'POST', '/clubs/' + pubClubId + '/leave');
+  const rLvFake = await api('seeker2', 'POST', '/clubs/' + fakeId + '/leave');
+  check('13: non-member leave → 404', rLvOut.status === 404, rLvOut);
+  check('13: BYTE-IDENTICAL non-member vs nonexistent leave', rLvOut.status === rLvFake.status && rLvOut.raw === rLvFake.raw, { out: rLvOut.raw, fake: rLvFake.raw });
+
+  // Owner refused with exact copy + zero effect.
+  r = await api('owner', 'POST', '/clubs/' + pubClubId + '/leave');
+  check('13: owner leave → 403 with exact copy', r.status === 403 && r.body && r.body.error === OWNER_LEAVE_COPY, r);
+  const { data: ownMemAfter } = await admin.from('memberships').select('role').eq('club_id', pubClubId).eq('user_id', users.owner.id).maybeSingle();
+  check('13: owner refusal zero effect (membership intact)', ownMemAfter && ownMemAfter.role === 'admin', ownMemAfter);
+
+  // Server-injected canLeave flag on the member-home page.
+  const pageData = async (k) => {
+    const pr = await fetch(BASE_URL + '/clubs/member/' + pubClubId, { headers: { Cookie: users[k].cookie } });
+    const ph = await pr.text();
+    const pm = ph.match(/window\.ARENAS_DATA\s*=\s*(\{[\s\S]*?\});?\s*<\/script>/);
+    try { return JSON.parse(pm[1]); } catch (e) { return {}; }
+  };
+  let pd = await pageData('owner');
+  check('13: owner page canLeave=false (control hidden server-side)', pd.canLeave === false, pd.canLeave);
+  pd = await pageData('seeker');
+  check('13: member page canLeave=true, clubPrivate=false', pd.canLeave === true && pd.clubPrivate === false, { canLeave: pd.canLeave, clubPrivate: pd.clubPrivate });
+
+  // Sole-admin (non-owner): promote coach to admin, demote owner to member.
+  await admin.from('memberships').update({ role: 'admin' }).eq('club_id', pubClubId).eq('user_id', users.coach.id);
+  await admin.from('memberships').update({ role: 'member' }).eq('club_id', pubClubId).eq('user_id', users.owner.id);
+  r = await api('coach', 'POST', '/clubs/' + pubClubId + '/leave');
+  check('13: sole-admin-non-owner leave → 409 sole_admin with exact copy', r.status === 409 && r.body && r.body.error === 'sole_admin' && r.body.message === SOLE_ADMIN_LEAVE_COPY, r);
+  const { data: coachMemAfter } = await admin.from('memberships').select('role').eq('club_id', pubClubId).eq('user_id', users.coach.id).maybeSingle();
+  check('13: sole-admin refusal zero effect', coachMemAfter && coachMemAfter.role === 'admin', coachMemAfter);
+  pd = await pageData('coach');
+  check('13: blocked sole-admin page canLeave=false', pd.canLeave === false, pd.canLeave);
+
+  // Boundary case: with another admin present, a non-owner admin CAN leave.
+  await admin.from('memberships').update({ role: 'admin' }).eq('club_id', pubClubId).eq('user_id', users.owner.id);
+  r = await api('coach', 'POST', '/clubs/' + pubClubId + '/leave');
+  check('13: non-sole admin leave succeeds (another admin present)', r.status === 200 && r.body && r.body.success, r);
+  const { data: coachMemGone } = await admin.from('memberships').select('user_id').eq('club_id', pubClubId).eq('user_id', users.coach.id);
+  check('13: coach membership gone', (coachMemGone || []).length === 0, coachMemGone);
+  const { data: coachPost } = await admin.from('posts').select('id').eq('id', lvPostCoach.id);
+  check('13: departed admin\'s authored announcement intact', (coachPost || []).length === 1, coachPost);
+  const { data: coachLeaveNotifs } = await admin.from('notifications').select('user_id, title, body, link').eq('type', 'club').eq('title', 'Member left').eq('actor_id', users.coach.id).eq('entity_id', pubClubId);
+  check('13: admins notified exactly once of coach leave (owner only)', (coachLeaveNotifs || []).length === 1 && coachLeaveNotifs[0].user_id === users.owner.id && /Dir Coach left Dir Public Club/.test(coachLeaveNotifs[0].body) && coachLeaveNotifs[0].link === '/clubs/dashboard?club=' + pubClubId, coachLeaveNotifs);
+
+  // Presence in standings BEFORE the member leaves.
+  r = await api('owner', 'GET', '/challenges/' + lvCh.id + '/leaderboard');
+  check('13: seeker ranked in challenge standings before leaving', ((r.body && r.body.leaderboard) || []).some(e => e.userId === users.seeker.id), r.body && r.body.leaderboard);
+  r = await api('member', 'GET', '/leaderboard/club');
+  check('13: seeker on club leaderboard before leaving', ((r.body && r.body.leaderboard) || []).some(e => e.userId === users.seeker.id), r.body && (r.body.clubName || r.body.leaderboard));
+
+  // The member leaves.
+  r = await api('seeker', 'POST', '/clubs/' + pubClubId + '/leave');
+  check('13: member leave succeeds', r.status === 200 && r.body && r.body.success, r);
+  // Gone: membership, participant row, RSVP, join-request row.
+  const { data: g1 } = await admin.from('memberships').select('user_id').eq('club_id', pubClubId).eq('user_id', users.seeker.id);
+  check('13: membership row gone', (g1 || []).length === 0, g1);
+  const { data: g2 } = await admin.from('challenge_participants').select('user_id').eq('challenge_id', lvCh.id).eq('user_id', users.seeker.id);
+  check('13: challenge_participants row gone', (g2 || []).length === 0, g2);
+  const { data: g3 } = await admin.from('event_rsvps').select('user_id').eq('event_id', lvEv.id).eq('user_id', users.seeker.id);
+  check('13: event_rsvps row gone', (g3 || []).length === 0, g3);
+  const { data: g4 } = await admin.from('club_join_requests').select('*').eq('club_id', pubClubId).eq('user_id', users.seeker.id);
+  check('13: club_join_requests row gone', (g4 || []).length === 0, g4);
+  // Intact: comment, like, activity, the owner's announcement.
+  const { data: k1 } = await admin.from('post_comments').select('id').eq('post_id', lvPostOwner.id).eq('user_id', users.seeker.id);
+  check('13: comment on announcement intact', (k1 || []).length === 1, k1);
+  const { data: k2 } = await admin.from('post_likes').select('user_id').eq('post_id', lvPostOwner.id).eq('user_id', users.seeker.id);
+  check('13: like on announcement intact', (k2 || []).length === 1, k2);
+  const { data: k3 } = await admin.from('activities').select('id').eq('id', lvAct.id);
+  check('13: activity intact', (k3 || []).length === 1, k3);
+  const { data: k4 } = await admin.from('posts').select('id').eq('id', lvPostOwner.id);
+  check('13: owner announcement intact', (k4 || []).length === 1, k4);
+  // Absent from standings after leaving.
+  r = await api('owner', 'GET', '/challenges/' + lvCh.id + '/leaderboard');
+  check('13: seeker absent from challenge standings after leaving', !((r.body && r.body.leaderboard) || []).some(e => e.userId === users.seeker.id), r.body && r.body.leaderboard);
+  r = await api('member', 'GET', '/leaderboard/club');
+  check('13: seeker absent from club leaderboard after leaving', !((r.body && r.body.leaderboard) || []).some(e => e.userId === users.seeker.id), r.body && r.body.leaderboard);
+  // Admins notified exactly once (owner is the only admin; coach left).
+  const { data: seekerLeaveNotifs } = await admin.from('notifications').select('user_id, body').eq('type', 'club').eq('title', 'Member left').eq('actor_id', users.seeker.id).eq('entity_id', pubClubId);
+  check('13: admins notified exactly once of member leave', (seekerLeaveNotifs || []).length === 1 && seekerLeaveNotifs[0].user_id === users.owner.id && /Dir Seeker left Dir Public Club/.test(seekerLeaveNotifs[0].body), seekerLeaveNotifs);
+
+  // ── 14. Rejoin: full public leave→request→approve→leave cycle ──
+  r = await api('seeker', 'POST', '/clubs/' + pubClubId + '/join-request');
+  check('14: re-request after leaving succeeds (no cooldown, fresh row)', r.status === 200 && r.body && r.body.success, r);
+  const { data: rj1 } = await admin.from('club_join_requests').select('status, resolved_at').eq('club_id', pubClubId).eq('user_id', users.seeker.id);
+  check('14: fresh pending row (single, unresolved)', rj1 && rj1.length === 1 && rj1[0].status === 'pending' && rj1[0].resolved_at === null, rj1);
+  r = await api('owner', 'POST', '/clubs/' + pubClubId + '/join-requests/' + users.seeker.id + '/approve');
+  check('14: re-approve succeeds', r.status === 200 && r.body && r.body.status === 'approved', r);
+  const { data: rj2 } = await admin.from('memberships').select('role').eq('club_id', pubClubId).eq('user_id', users.seeker.id).maybeSingle();
+  check('14: membership recreated with role member', rj2 && rj2.role === 'member', rj2);
+  r = await api('seeker', 'POST', '/clubs/' + pubClubId + '/leave');
+  check('14: second leave succeeds (cycle complete)', r.status === 200 && r.body && r.body.success, r);
+  const { data: rj3 } = await admin.from('memberships').select('user_id').eq('club_id', pubClubId).eq('user_id', users.seeker.id);
+  check('14: membership gone again', (rj3 || []).length === 0, rj3);
+
+  // ── 15. Rejoin a PRIVATE club after leaving: fresh invite works ──
+  await admin.from('memberships').insert({ user_id: users.seeker.id, club_id: privClubId, role: 'member' });
+  r = await api('seeker', 'POST', '/clubs/' + privClubId + '/leave');
+  check('15: leave private club succeeds', r.status === 200 && r.body && r.body.success, r);
+  pd = null;
+  const token2 = require('crypto').randomBytes(32).toString('hex');
+  const { error: inv2Err } = await admin.from('club_invites').insert({
+    club_id: privClubId, invited_by: users.owner.id, email: 'open-invite@realarenas.com',
+    role: 'member', token: token2, status: 'pending',
+    expires_at: new Date(Date.now() + 30 * 864e5).toISOString()
+  });
+  check('15: private-club open invite seeded', !inv2Err, inv2Err && inv2Err.message);
+  const joinRes2 = await fetch(BASE_URL + '/auth/join/' + token2 + '/existing', {
+    method: 'POST', headers: { Cookie: users.seeker.cookie }
+  });
+  const joinBody2 = await joinRes2.json().catch(() => null);
+  check('15: invite accepted after leaving (nothing blocks rejoin)', joinRes2.status === 200 && joinBody2 && joinBody2.success, { status: joinRes2.status, joinBody2 });
+  const { data: rj4 } = await admin.from('memberships').select('role').eq('club_id', privClubId).eq('user_id', users.seeker.id).maybeSingle();
+  check('15: private-club membership recreated', rj4 && rj4.role === 'member', rj4);
+
+  // Section 13-15 seeded-data cleanup (clubs/users cleanup below handles the rest).
+  await admin.from('challenge_participants').delete().eq('challenge_id', lvCh.id);
+  await admin.from('challenges').delete().eq('id', lvCh.id);
+  await admin.from('event_rsvps').delete().eq('event_id', lvEv.id);
+  await admin.from('events').delete().eq('id', lvEv.id);
+  await admin.from('post_comments').delete().eq('post_id', lvPostOwner.id);
+  await admin.from('post_likes').delete().eq('post_id', lvPostOwner.id);
+  await admin.from('posts').delete().in('id', [lvPostOwner.id, lvPostCoach.id]);
+  await admin.from('activities').delete().eq('id', lvAct.id);
+
   // ── Cleanup ──
   await admin.from('clubs').delete().eq('id', pubClubId);
   await admin.from('clubs').delete().eq('id', privClubId);

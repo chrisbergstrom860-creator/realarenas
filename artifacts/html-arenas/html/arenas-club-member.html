@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/html/arenas.css">
 <script src="/html/arenas-time.js"></script>
+<script src="/html/arenas-overlay.js"></script>
 <script src="/html/arenas-post-image.js"></script>
 <script src="/html/arenas-club-post-header.js"></script>
 <style>
@@ -495,6 +496,10 @@ function showToast(msg) {
               '<div style="font-size:18px;font-weight:700;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(c.name) + '</div>' +
               '<div style="font-size:11px;color:rgba(255,255,255,.55)">' + esc(sportLabel) + (c.city ? ' · ' + esc(c.city) : '') + ' · You\u2019re a ' + esc(r.myRole) + '</div>' +
             '</div>' +
+            // Leave-club control: renders only on the server-injected canLeave
+            // flag (owner and blocked sole admin never see it — server-decided,
+            // same pattern as the dashboard danger zone's isOwner).
+            (data.canLeave ? '<button id="btn-leave-club" style="flex-shrink:0;background:transparent;border:0.5px solid rgba(255,255,255,.25);color:rgba(255,255,255,.65);font-size:11px;font-weight:600;padding:6px 12px;border-radius:8px;cursor:pointer;font-family:inherit">Leave club</button>' : '') +
           '</div>' +
           '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">' +
             '<div style="background:rgba(255,255,255,.06);border:0.5px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 10px;text-align:center">' +
@@ -702,6 +707,91 @@ function showToast(msg) {
   };
 
   loadMemberHome();
+})();
+</script>
+
+<!-- Leave-club confirmation. Parking home + arenasOverlay node mode; deliberately
+     NO beforeClose (same as #modal-delete-account — nothing here is a form). -->
+<div class="modal-overlay" id="modal-leave-club-home" style="display:none">
+  <div class="modal" style="max-width:460px">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:var(--border)">
+      <div style="font-size:14px;font-weight:700" id="leave-club-title">Leave this club?</div>
+      <button onclick="arenasOverlay.close('modal-leave-club')" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--gray-400);line-height:1">×</button>
+    </div>
+    <div style="padding:16px 18px;font-size:12.5px;color:var(--gray-600);line-height:1.6">
+      <p style="margin:0 0 10px">You'll lose:</p>
+      <ul style="margin:0 0 12px;padding-left:18px">
+        <li>your membership in this club</li>
+        <li>your standing in this club's challenges</li>
+        <li>your RSVPs to this club's events</li>
+      </ul>
+      <p style="margin:0 0 10px">Your activities, PRs, streaks, and achievements are yours and stay untouched.</p>
+      <p style="margin:0" id="leave-club-rejoin-line"></p>
+      <div id="leave-club-error" style="display:none;margin-top:10px;padding:8px 10px;border-radius:8px;background:#FEF2F2;border:0.5px solid #FECACA;color:#991B1B;font-size:12px"></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:var(--border)">
+      <button onclick="arenasOverlay.close('modal-leave-club')" style="background:white;border:var(--border);border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">Cancel</button>
+      <button id="btn-leave-club-confirm" style="background:#DC2626;border:0.5px solid #B91C1C;color:white;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">Leave club</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var D = window.ARENAS_DATA || {};
+  if (!D.canLeave || !D.club) return;
+  var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  function openLeaveModal(){
+    var title = document.getElementById('leave-club-title');
+    if (title) title.textContent = 'Leave ' + (D.club.name || 'this club') + '?';
+    var line = document.getElementById('leave-club-rejoin-line');
+    if (line) {
+      line.innerHTML = D.clubPrivate
+        ? '<strong>' + esc(D.club.name) + '</strong> is a private club — to return, you\u2019ll need an invite from one of its managers.'
+        : '<strong>' + esc(D.club.name) + '</strong> is a public club — you can request to join again anytime.';
+    }
+    var errBox = document.getElementById('leave-club-error');
+    if (errBox) { errBox.style.display = 'none'; errBox.textContent = ''; }
+    var btn = document.getElementById('btn-leave-club-confirm');
+    if (btn) { btn.disabled = false; btn.textContent = 'Leave club'; }
+    window.arenasOverlay.open({
+      id: 'modal-leave-club',
+      node: document.getElementById('modal-leave-club-home').firstElementChild,
+      label: 'Leave club'
+      // Deliberately NO beforeClose — nothing to lose by closing.
+    });
+  }
+
+  // The Leave button is created inside the async hero render — delegate.
+  document.addEventListener('click', function(e){
+    if (e.target && e.target.id === 'btn-leave-club') openLeaveModal();
+  });
+
+  document.addEventListener('click', async function(e){
+    if (!e.target || e.target.id !== 'btn-leave-club-confirm') return;
+    var btn = e.target;
+    btn.disabled = true; btn.textContent = 'Leaving…';
+    try {
+      var r = await fetch(B + '/api/clubs/' + D.club.id + '/leave', { method: 'POST' });
+      var body = null; try { body = await r.json(); } catch (err) {}
+      if (r.ok && body && body.success) {
+        location.href = B + '/feed';
+        return;
+      }
+      var errBox = document.getElementById('leave-club-error');
+      if (errBox) {
+        errBox.textContent = (body && (body.message || body.error)) || 'Could not leave the club. Please try again.';
+        errBox.style.display = 'block';
+      }
+      btn.disabled = false; btn.textContent = 'Leave club';
+    } catch (err) {
+      var errBox2 = document.getElementById('leave-club-error');
+      if (errBox2) { errBox2.textContent = 'Could not leave the club. Please try again.'; errBox2.style.display = 'block'; }
+      btn.disabled = false; btn.textContent = 'Leave club';
+    }
+  });
 })();
 </script>
 </body>

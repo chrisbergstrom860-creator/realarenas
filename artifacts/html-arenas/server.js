@@ -10616,13 +10616,42 @@ app.get(BASE + '/clubs/member/:clubId', requirePageAuth, async (req, res) => {
       }
       return res.redirect(BASE + '/feed');
     }
+    // Leave-club control: server-decided flag, same pattern as the dashboard
+    // danger zone's isOwner — the button renders only when the leave API
+    // would allow it (the route re-checks; this only controls rendering).
+    // Fail closed: any read error hides the button.
+    let canLeave = false, clubPrivate = false;
+    try {
+      const { data: cRow } = await supabaseAdmin
+        .from('clubs').select('owner_id, visibility').eq('id', req.params.clubId).maybeSingle();
+      if (cRow) {
+        clubPrivate = cRow.visibility === 'private';
+        if (cRow.owner_id !== req.user.id) {
+          if (membership.role === 'admin') {
+            const { data: members, error: mErr } = await supabaseAdmin
+              .from('memberships').select('user_id, role').eq('club_id', req.params.clubId);
+            if (!mErr && members) {
+              const others = members.filter(m => m.user_id !== req.user.id);
+              const otherAdmins = others.filter(m => m.role === 'admin');
+              // Blocked sole admin (other members, no other admin) — same
+              // condition as the route's 409.
+              canLeave = !(others.length && !otherAdmins.length);
+            }
+          } else {
+            canLeave = true;
+          }
+        }
+      }
+    } catch (err) { /* fail closed — button stays hidden */ }
     const clubData = {
       club,
       role: membership.role,
       profile: displayFromUser(req.user),
       clubs: await getSidebarClubs(req.user.id),
       userId: req.user.id,
-      userEmail: req.user.email
+      userEmail: req.user.email,
+      canLeave,
+      clubPrivate
     };
     const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-club-member.html'), 'utf8'), clubData), 'club-member'), (await getUserPlan(req.user.id)) === 'pro');
     res.type('html').send(html);
@@ -11885,6 +11914,120 @@ app.delete(BASE + '/api/clubs/:clubId/members/:userId', requireAuth, async (req,
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: 'Could not remove member' });
+  }
+});
+
+// Leave a club (self-serve). POST, not DELETE: it's a multi-table teardown
+// with refusal semantics, matching account deletion's shape. What goes with
+// the member: their membership row, their standing in this club's challenges
+// (challenge_participants), their RSVPs to this club's events, and their
+// club_join_requests row (so any rejoin is a clean first-time path). What
+// stays: their comments/likes on club announcements (their speech — leaving a
+// group doesn't retract what you said in it), announcements they authored as
+// admin/coach (club-owned by design), and all activities/PRs/streaks/
+// achievements (member-owned).
+// KNOWN REPORTING PROPERTY: club monthly reports are an on-read view of
+// current data (roster and participant rows are re-queried live for any
+// month), so any departure — leave or account deletion — removes that person
+// from past months' figures too. Deliberate, not a bug.
+app.post(BASE + '/api/clubs/:clubId/leave', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Server not configured' });
+  const { clubId } = req.params;
+  const uid = req.user.id;
+  try {
+    // ── Guards (pure reads; fail closed on any read error) ──
+    const { data: club, error: clubErr } = await supabaseAdmin
+      .from('clubs').select('id, name, owner_id').eq('id', clubId).maybeSingle();
+    if (clubErr) return res.status(500).json({ error: 'Could not leave the club' });
+    if (!club) return res.status(404).json({ error: 'Club not found' });
+    // Zero-leak: a non-member gets the same 404 as a nonexistent club id.
+    const mine = await getClubRole(uid, clubId);
+    if (!mine) return res.status(404).json({ error: 'Club not found' });
+    // Owner cannot leave — it would orphan clubs.owner_id (the Stripe-billing
+    // owner) exactly like the demotion/removal gap this mirrors. Copy names
+    // real exits only: no ownership-transfer feature exists.
+    if (uid === club.owner_id) {
+      return res.status(403).json({ error: "The club owner cannot leave — the club and its billing belong to them. To step away, delete the club from its dashboard's Settings tab, or delete your account." });
+    }
+    if (mine.role === 'admin') {
+      const { data: members, error: mErr } = await supabaseAdmin
+        .from('memberships').select('user_id, role').eq('club_id', clubId);
+      if (mErr) return res.status(500).json({ error: 'Could not leave the club' });
+      const others = (members || []).filter(m => m.user_id !== uid);
+      const otherAdmins = others.filter(m => m.role === 'admin');
+      // Same condition as account deletion's sole-admin block: other members
+      // exist and no other admin remains.
+      if (others.length && !otherAdmins.length) {
+        return res.status(409).json({
+          error: 'sole_admin',
+          message: `You are the only admin of ${club.name}. Promote another member to admin from the invite page, then come back and leave the club.`
+        });
+      }
+    }
+
+    // ── Teardown reads BEFORE the commit point (a read failure still aborts
+    // with zero effect) ──
+    const { data: clubChallenges, error: chErr } = await supabaseAdmin
+      .from('challenges').select('id').eq('club_id', clubId);
+    if (chErr) return res.status(500).json({ error: 'Could not leave the club' });
+    const { data: clubEvents, error: evErr } = await supabaseAdmin
+      .from('events').select('id').eq('club_id', clubId);
+    if (evErr) return res.status(500).json({ error: 'Could not leave the club' });
+
+    // ── Commit point: conditional delete that returns the deleted row — an
+    // honest, race-free 404 if the membership vanished since the guard reads.
+    const { data: deleted, error: delErr } = await supabaseAdmin
+      .from('memberships').delete().eq('user_id', uid).eq('club_id', clubId).select('user_id');
+    if (delErr) return res.status(500).json({ error: 'Could not leave the club' });
+    if (!deleted || deleted.length === 0) return res.status(404).json({ error: 'Club not found' });
+
+    // ── Standing-in-club teardown (checked writes — failures surface) ──
+    // Deleting participant rows also removes the member from challenge
+    // standings (which enumerate participant rows with no membership filter)
+    // and from report challenge stats — no ghost rankings.
+    const errs = [];
+    const chunks = (ids) => { const out = []; for (let i = 0; i < ids.length; i += 200) out.push(ids.slice(i, i + 200)); return out; };
+    for (const part of chunks((clubChallenges || []).map(c => c.id))) {
+      const { error } = await supabaseAdmin.from('challenge_participants')
+        .delete().eq('user_id', uid).in('challenge_id', part);
+      if (error) { errs.push('challenge_participants: ' + error.message); break; }
+    }
+    for (const part of chunks((clubEvents || []).map(e => e.id))) {
+      const { error } = await supabaseAdmin.from('event_rsvps')
+        .delete().eq('user_id', uid).in('event_id', part);
+      if (error) { errs.push('event_rsvps: ' + error.message); break; }
+    }
+    {
+      const { error } = await supabaseAdmin.from('club_join_requests')
+        .delete().eq('user_id', uid).eq('club_id', clubId);
+      if (error) errs.push('club_join_requests: ' + error.message);
+    }
+    if (errs.length) {
+      console.log('Leave-club teardown incomplete for', uid, clubId, '—', errs.join('; '));
+      return res.status(500).json({ error: 'You left the club, but some of your club records could not be fully removed. Please try again or contact the club admin.' });
+    }
+
+    // ── Notify the club's admins (best-effort; same recipient rule as
+    // invite acceptance — admins only, not a whole-club fan-out) ──
+    try {
+      const leaverName = (displayFromUser(req.user).name || 'A member');
+      const { data: admins } = await supabaseAdmin
+        .from('memberships').select('user_id').eq('club_id', clubId).eq('role', 'admin');
+      for (const a of (admins || [])) {
+        if (a.user_id === uid) continue;
+        await createNotification({
+          userId: a.user_id, type: 'club', title: 'Member left',
+          body: `${leaverName} left ${club.name}`,
+          link: '/clubs/dashboard?club=' + clubId,
+          actorId: uid, entityId: clubId
+        });
+      }
+    } catch (err) { console.log('Leave-club notification error:', err.message); }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.log('Leave club error:', err.message);
+    return res.status(500).json({ error: 'Could not leave the club' });
   }
 });
 
