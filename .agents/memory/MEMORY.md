@@ -57,6 +57,7 @@
 - [html-arenas activity-card body](html-arenas-activity-card-module.md) — ONE shared body builder (feed/dashboard/profile), title→tiles→notes; fake "Coach's note" REMOVED (ai_insight scrubbed server-side); never hand-build a card body.
 - [html-arenas stat tiles](html-arenas-feed-stat-tiles.md) — SHARED builder arenas-stat-tiles.js + CSS in arenas.css powers feed AND profile Activities tab; never fork tiles per page.
 - [html-arenas club context](html-arenas-club-context.md) — club-scoped nav must CARRY ?club= (navClub helpers); never infer "the club" from most-recent membership; login lands everyone on /feed.
+- [html-arenas club deletion](html-arenas-club-delete.md) — owner-only DELETE route + shared destroyClub; notifs-before-Stripe w/ retraction; chunked `.in()` + fetchAllRows scale traps; conditional sole-admin 409.
 - [html-arenas danger zone](html-arenas-danger-zone.md) — export+delete: Stripe cancel FIRST (any error aborts), club survival matrix, transfer billing notif (actor_id null), posts have no club_id.
 - [html-arenas settings prefs](html-arenas-settings-prefs.md) — 7 real toggles in user_metadata.prefs (absent=true, read-merge-write only); enforcement map + deliberate non-gates; only /api/profile/prefs may write prefs.
 - [html-arenas club creation](html-arenas-club-create.md) — dual-mode /for-clubs wizard (WIZARD_STEPS), /api/clubs/create w/ 3-club cap, signup fork dead, safe login `next`, email-check enumeration risk.
