@@ -1837,7 +1837,11 @@ app.post(BASE + '/api/posts/:id/comment', requireAuth, async (req, res) => {
 // announcement (club_id set) ALSO a current admin/coach of that club — the
 // club owns that speech, matching who may announce. Personal posts stay
 // author-only. Club deletion cascades posts via the club_id FK
-// (ON DELETE CASCADE) — the app never double-handles that.
+// (ON DELETE CASCADE — probe-verified 2026-08-14, along with the
+// posts → post_comments / post_likes cascades) — the app never
+// double-handles the rows. Caveat: a DB cascade cannot clean up the post's
+// storage object (post-images bucket); any deliberate club-delete path must
+// handle those objects itself.
 // Historical note (pre club_id):
 // so there is no club context giving a manager authority (matches the
 // activity rule, not the event one).
@@ -8977,8 +8981,13 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
         // Rows first, storage objects second — best-effort, never blocking.
         for (const ev of clubEvents) await deleteEventImageObject(ev.image_path, ev.id);
       }
-      // (posts are user-scoped — no club_id column; the club feed derives
-      // from member activity — so there is no club-posts table to sweep)
+      // Club announcement posts (posts.club_id) are NOT swept here: the
+      // clubs → posts FK is ON DELETE CASCADE, and posts → post_comments /
+      // post_likes cascade too (all three probe-verified 2026-08-14).
+      // Known gap: a cascaded post's image object in the public post-images
+      // bucket is NOT cleaned up — the cascade happens in Postgres, so no
+      // app code runs. A deliberate club-delete route must read club posts'
+      // image_url values BEFORE deleting the club and remove those objects.
       await del('club_invites', q => q.eq('club_id', cid));
       await del('club_join_requests', q => q.eq('club_id', cid));
       await del('memberships', q => q.eq('club_id', cid));
