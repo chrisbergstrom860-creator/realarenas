@@ -36,6 +36,7 @@
   }
 
   function sportName(id) {
+    if (id === 'any') return 'Any sport'; // club-only pseudo-value
     var s = (window.ARENAS_SPORTS_BY_ID || {})[id];
     if (s) return s.label;
     var t = String(id == null ? '' : id);
@@ -43,6 +44,7 @@
   }
 
   function sportColorStyle(id) {
+    if (id === 'any') return 'background:var(--gray-100);color:var(--gray-600);border-color:var(--gray-200)';
     var found = null;
     (window.ARENAS_SPORTS || []).forEach(function (s) { if (s.id === id) found = s; });
     return found ? 'background:' + found.colors.bg + ';color:' + found.colors.text + ';border-color:' + found.colors.border : '';
@@ -124,7 +126,9 @@
     function visibleList() {
       var f = filters();
       var list = clubs.slice();
-      if (f.sport) list = list.filter(function (c) { return c.sport === f.sport; });
+      // "Any sport" clubs claim every sport, so they appear under every
+      // sport filter as well as unfiltered — that's what the value means.
+      if (f.sport) list = list.filter(function (c) { return c.sport === f.sport || c.sport === 'any'; });
       if (f.query) list = list.filter(function (c) { return searchText(c).indexOf(f.query) !== -1; });
       var sort = f.sort || 'name';
       list.sort(function (a, b) {

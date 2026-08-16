@@ -424,7 +424,7 @@ function showToast(msg) {
   var sfRole = document.querySelector('.sf-role');
   if (sfRole) {
     var roleLabel = cap(D.role) || 'Member';
-    var sportLabel = cap(club.sport);
+    var sportLabel = club.sport === 'any' ? 'Any sport' : cap(club.sport);
     sfRole.textContent = sportLabel ? roleLabel + ' · ' + sportLabel : roleLabel;
   }
 })();
@@ -485,7 +485,8 @@ function showToast(msg) {
 
       var c = r.club || data.club;
       var s = r.standing || {};
-      var sportLabel = c.sport ? (c.sport.charAt(0).toUpperCase() + c.sport.slice(1) + ' club') : 'Club';
+      var sportLabel = c.sport === 'any' ? 'Any-sport club'
+        : c.sport ? (c.sport.charAt(0).toUpperCase() + c.sport.slice(1) + ' club') : 'Club';
 
       // Hero + stats
       var html = '' +

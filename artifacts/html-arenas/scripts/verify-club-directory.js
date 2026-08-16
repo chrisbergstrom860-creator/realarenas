@@ -416,6 +416,97 @@ async function main() {
   await admin.from('posts').delete().in('id', [lvPostOwner.id, lvPostCoach.id]);
   await admin.from('activities').delete().eq('id', lvAct.id);
 
+  // ── 16. "Any sport" club: create → directory → filter → labels ──
+  // 'any' is a club-only pseudo-value (never a registry entry). It must be
+  // creatable end to end, appear unfiltered AND under every sport filter
+  // (that's what the value claims), label as "Any sport" everywhere, and
+  // create validation must still reject non-registry garbage.
+  r = await api('coach', 'POST', '/clubs/create', { name: 'Dir Any Club', handle: 'dirany', sport: 'any', city: 'Malmo' });
+  const anyClubId = ((r.body && r.body.redirect) || '').split('club=')[1];
+  check('16: any-sport club created via create endpoint', !!anyClubId, r.body);
+  console.log('MANIFEST anyClub:', JSON.stringify({ anyClubId }));
+  r = await api('coach', 'PATCH', '/clubs/' + anyClubId + '/settings', { visibility: 'public' });
+  check('16: any club listed public', r.status === 200 && r.body && r.body.visibility === 'public', r);
+  // Garbage still rejected (registry validation intact, incl. legacy casing).
+  r = await api('coach', 'POST', '/clubs/create', { name: 'Dir Bad Club', handle: 'dirbad', sport: 'surfing' });
+  check('16: non-registry sport rejected 400 invalid_sport', r.status === 400 && r.body && r.body.error === 'invalid_sport', r);
+  r = await api('coach', 'POST', '/clubs/create', { name: 'Dir Bad Club', handle: 'dirbad', sport: 'Running' });
+  check('16: capitalized legacy casing rejected 400', r.status === 400 && r.body && r.body.error === 'invalid_sport', r);
+  // Directory payload carries the raw value.
+  r = await api('seeker2', 'GET', '/clubs/directory');
+  const anyCard = ((r.body && r.body.clubs) || []).find(c => c.id === anyClubId);
+  check('16: directory card carries sport any', anyCard && anyCard.sport === 'any', anyCard);
+  // Wizard select (server-rendered /for-clubs) offers the option.
+  const fcHtml = await (await fetch(BASE_URL + '/for-clubs')).text();
+  check('16: /for-clubs sport select offers Any sport', fcHtml.includes('<option value="any">Any sport</option>'), null);
+  // Injected shared helpers know the pseudo-value (label + icon).
+  const clubsHtml = await (await fetch(BASE_URL + '/clubs', { headers: { Cookie: users.seeker2.cookie } })).text();
+  check('16: injected arenasSportTag handles any', clubsHtml.includes("'any') return '\uD83C\uDFDF Any sport'"), null);
+  check('16: injected icon map carries any \uD83C\uDFDF', /"any":\s*"\uD83C\uDFDF"/.test(clubsHtml), null);
+
+  // Browser: directory filter + labels at 1280 and 380, profile Clubs tab label.
+  const { launchBrowser } = await import('./lib/mobile-geometry.js');
+  const DOMAIN = process.env.REPLIT_DEV_DOMAIN;
+  const toCookies = (raw) => raw.split('; ').map((pair) => {
+    const i = pair.indexOf('=');
+    return { name: pair.slice(0, i), value: pair.slice(i + 1), domain: DOMAIN, path: '/' };
+  });
+  const browser = await launchBrowser();
+  try {
+    for (const width of [1280, 380]) {
+      const context = await browser.newContext({ viewport: { width, height: 900 } });
+      await context.addCookies(toCookies(users.seeker2.cookie));
+      const page = await context.newPage();
+      const errors = [];
+      page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+      page.on('pageerror', (e) => errors.push(String(e)));
+      await page.goto(`https://${DOMAIN}/html/clubs`, { waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(() => document.querySelectorAll('#club-grid .ccd-card').length > 0, null, { timeout: 15000 });
+      const unfiltered = await page.evaluate(() => Array.from(document.querySelectorAll('#club-grid .ccd-card')).map(c => c.textContent));
+      check(`16: @${width} any club visible unfiltered`, unfiltered.some(t => t.includes('Dir Any Club')), unfiltered.length);
+      check(`16: @${width} pill labels Any sport (never bare Any)`, unfiltered.some(t => t.includes('Any sport')), null);
+      // Under EVERY sport filter option the any club stays visible.
+      const options = await page.evaluate(() => Array.from(document.querySelectorAll('#sport-select option')).map(o => o.value).filter(Boolean));
+      check(`16: @${width} filter dropdown has no Any chip but has sports`, options.length > 0 && !options.includes('any'), options);
+      for (const opt of options) {
+        const visible = await page.evaluate((v) => {
+          window.setSport(v);
+          return Array.from(document.querySelectorAll('#club-grid .ccd-card')).map(c => c.textContent);
+        }, opt);
+        check(`16: @${width} any club appears under filter "${opt}"`, visible.some(t => t.includes('Dir Any Club')), visible.length);
+        if (opt === 'cycling') {
+          check(`16: @${width} running club correctly absent under cycling`, !visible.some(t => t.includes('Dir Public Club')), null);
+        }
+      }
+      await page.screenshot({ path: `/tmp/any-club-directory-${width}.png` });
+      check(`16: @${width} zero console errors on /clubs`, errors.length === 0, errors.join(' | '));
+
+      // Profile Clubs tab (coach is the any club's admin): meta says "Any sport".
+      const context2 = await browser.newContext({ viewport: { width, height: 900 } });
+      await context2.addCookies(toCookies(users.coach.cookie));
+      const page2 = await context2.newPage();
+      const errors2 = [];
+      page2.on('console', (m) => { if (m.type() === 'error') errors2.push(m.text()); });
+      page2.on('pageerror', (e) => errors2.push(String(e)));
+      await page2.goto(`https://${DOMAIN}/html/profile#clubs`, { waitUntil: 'domcontentloaded' });
+      await page2.waitForFunction(() => {
+        const el = document.getElementById('clubs-list');
+        return el && el.textContent.includes('Dir Any Club');
+      }, null, { timeout: 15000 });
+      const metaText = await page2.evaluate(() => document.getElementById('clubs-list').textContent);
+      check(`16: @${width} profile Clubs tab labels Any sport`, metaText.includes('Any sport'), metaText.slice(0, 200));
+      check(`16: @${width} profile Clubs tab never shows "Malmo \u00b7 Any" bare`, !/Malmo \u00b7 Any(?! sport)/.test(metaText), metaText.slice(0, 200));
+      if (width === 380) await page2.screenshot({ path: `/tmp/any-club-profile-${width}.png` });
+      check(`16: @${width} zero console errors on profile Clubs tab`, errors2.length === 0, errors2.join(' | '));
+      await context.close();
+      await context2.close();
+    }
+  } finally {
+    await browser.close();
+  }
+  await admin.from('memberships').delete().eq('club_id', anyClubId);
+  await admin.from('clubs').delete().eq('id', anyClubId);
+
   // ── Cleanup ──
   await admin.from('clubs').delete().eq('id', pubClubId);
   await admin.from('clubs').delete().eq('id', privClubId);

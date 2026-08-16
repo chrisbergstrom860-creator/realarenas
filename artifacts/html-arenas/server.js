@@ -734,7 +734,10 @@ app.post(BASE + '/api/clubs/create', requireAuth, async (req, res) => {
   const city = typeof body.city === 'string' ? body.city.trim().slice(0, 80) : '';
   if (!name || name.length > 80) return res.status(400).json({ error: 'invalid_name' });
   if (!/^[a-z0-9]{2,20}$/.test(handle)) return res.status(400).json({ error: 'invalid_handle' });
-  if (!SPORTS.some(s => s.id === sport)) return res.status(400).json({ error: 'invalid_sport' });
+  // 'any' is a club-only pseudo-value (mirrors challenges.sport === 'any'),
+  // deliberately NOT a registry entry so it can never leak into the activity
+  // log, goals, or how-points-work as a loggable sport.
+  if (sport !== 'any' && !SPORTS.some(s => s.id === sport)) return res.status(400).json({ error: 'invalid_sport' });
   // Directory listing, wizard-only field. When present it must be a valid
   // value; when absent the insert omits the column and the DB default
   // ('private') applies — non-wizard create paths stay byte-identical.
@@ -1211,7 +1214,7 @@ const AVATAR_HELPERS_SCRIPT = `<script>(function arenasAvatarHelpers(){
   // page's sport maps/pickers derive from. ARENAS_SPORT_ICONS is kept as a
   // derived alias (registry emoji + legacy entries for drifted stored values).
   window.ARENAS_SPORTS = ${JSON.stringify(SPORTS)};
-  window.ARENAS_SPORT_ICONS = ${JSON.stringify(Object.assign({}, SPORT_ICONS, LEGACY_SPORT_EMOJI))};
+  window.ARENAS_SPORT_ICONS = ${JSON.stringify(Object.assign({}, SPORT_ICONS, LEGACY_SPORT_EMOJI, { any: '🏟' }))};
   var sportsById = {};
   window.ARENAS_SPORTS.forEach(function (s) { sportsById[s.id] = s; });
   window.ARENAS_SPORTS_BY_ID = sportsById;
@@ -1219,6 +1222,7 @@ const AVATAR_HELPERS_SCRIPT = `<script>(function arenasAvatarHelpers(){
   // drifted values (🔱 Triathlon); plain Title-case text for anything else —
   // existing stored data always keeps rendering (graceful fallback, no 🏅 spam).
   window.arenasSportTag = function (id) {
+    if (id === 'any') return '🏟 Any sport'; // club-only pseudo-value (never a registry id)
     var s = sportsById[id];
     if (s) return s.emoji + ' ' + s.label;
     var t = String(id == null ? '' : id);
@@ -9948,7 +9952,8 @@ app.get(BASE + '/blog', (req, res) => res.redirect(BASE + '/landing'));
 // registry (lowercase ids as values, proper labels), so the marketing page —
 // which gets no script injections — can never drift from the registry again.
 const CLUB_SPORT_OPTIONS = '<option value="">Select a sport…</option>'
-  + SPORTS.map((s) => `<option value="${s.id}">${s.label}</option>`).join('');
+  + SPORTS.map((s) => `<option value="${s.id}">${s.label}</option>`).join('')
+  + '<option value="any">Any sport</option>'; // club-only pseudo-value, not a registry entry
 // The admin "Your primary sport" chips are likewise server-rendered from the
 // registry (drift cleanup: the old markup offered a non-registry Triathlon
 // chip and only 6 sports; now every registry sport, no Triathlon).

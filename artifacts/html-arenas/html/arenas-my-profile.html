@@ -1203,7 +1203,7 @@ document.getElementById('htab-overview').classList.add('active');
         meta.className = 'club-meta';
         var parts = [];
         if (club.city) parts.push(club.city);
-        if (club.sport) parts.push(titleCase(club.sport));
+        if (club.sport) parts.push(club.sport === 'any' ? 'Any sport' : titleCase(club.sport));
         meta.textContent = parts.join(' · ');
         mid.appendChild(meta);
         var pillRow = document.createElement('div');

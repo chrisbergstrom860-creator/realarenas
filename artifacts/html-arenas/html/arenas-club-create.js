@@ -155,6 +155,8 @@ window.ArenasClubCreate = (function () {
     sports.forEach(function (s) {
       out += '<option value="' + s.id + '">' + (s.emoji ? s.emoji + ' ' : '') + s.label + '</option>';
     });
+    // Club-only pseudo-value — matches the server-rendered /for-clubs select.
+    out += '<option value="any">\uD83C\uDFDF Any sport</option>';
     return out;
   }
 
