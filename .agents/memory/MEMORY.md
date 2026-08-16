@@ -86,4 +86,5 @@
 - [html-arenas athlete links](html-arenas-athlete-links.md) — ONE shared data-athlete-link mechanism (non-defer script!), payload reachability flags, opted-out never linked; coach-dashboard renderers excluded by plan.
 - [html-arenas overlay migration](html-arenas-overlay-migration.md) — arenasOverlay migration patterns: node mode, dirty-guard rules (live vs snapshot; delete-account = none), verifier extension, `.open`-grep ripple.
 - [html-arenas leave-club](html-arenas-leave-club.md) — self-serve leave: teardown boundary, owner/sole-admin refusals, on-read reporting property (departures rewrite past months), rejoin proofs.
+- [html-arenas "Any sport" clubs](html-arenas-any-sport.md) — 'any' = club-only pseudo-value (never registry); BOTH create paths validate; single filter predicate; label sites listed; legacy capitalized rows user-gated.
 - [html-arenas contact form](html-arenas-contact-form.md) — /contact + /api/contact: inbox never leaks, trust proxy=1 for the per-IP limiter, spawned-server (BASE_PATH!) test pattern, no support address may reappear.
