@@ -12,4 +12,4 @@ description: clubs.sport 'any' pseudo-value — where it lives, why not in the r
 - Labels: injected `arenasSportTag` + `ARENAS_SPORT_ICONS` (`any:'🏟'`) are the central fix points; hand-rendered special-cases exist in club-member.html (x2), my-profile Clubs tab, club-join.html meta, club-create.js review summary + sportOptions. Never render club sport bare — grep for new `c.sport` reads when touching club UI.
 - Verifier: `verify-club-directory.js` section 16 (API + playwright filter/label checks at 1280/380 + signup-funnel coverage).
 
-Legacy defect (user-gated, do NOT fix unprompted): 5 private clubs hold capitalized sport values ("Running"/"Football"). Normalizing to lowercase ids is safe — nothing keys on exact string — but the user hasn't decided.
+Legacy capitalized rows: RESOLVED 2026-08-16 — the 5 private clubs' sport values normalized to lowercase registry ids (data-only, visibility untouched). All clubs.sport values are now registry ids or 'any'; create-path validation keeps it that way.
