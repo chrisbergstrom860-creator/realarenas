@@ -432,6 +432,26 @@ async function main() {
   check('16: non-registry sport rejected 400 invalid_sport', r.status === 400 && r.body && r.body.error === 'invalid_sport', r);
   r = await api('coach', 'POST', '/clubs/create', { name: 'Dir Bad Club', handle: 'dirbad', sport: 'Running' });
   check('16: capitalized legacy casing rejected 400', r.status === 400 && r.body && r.body.error === 'invalid_sport', r);
+  // Public signup funnel enforces the same contract (form route, 302s).
+  const signupClub = (fields) => fetch(BASE_URL + '/auth/signup-club', {
+    method: 'POST', redirect: 'manual',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(fields).toString()
+  });
+  let sr = await signupClub({ email: 'clubdir-badsport@arenas-test.dev', password: PW, name: 'Dir Bad', club_name: 'Bad Sport Club', handle: 'dirbadsport', sport: 'surfing', city: 'Oslo' });
+  check('16: signup-club rejects non-registry sport (302 error, no account)', sr.status === 302 && /error=signup/.test(sr.headers.get('location') || ''), { status: sr.status, loc: sr.headers.get('location') });
+  const { data: badList } = await admin.auth.admin.listUsers({ perPage: 1000 });
+  check('16: no account created for rejected signup', !((badList && badList.users) || []).some(u => u.email === 'clubdir-badsport@arenas-test.dev'), null);
+  sr = await signupClub({ email: 'clubdir-anysignup@arenas-test.dev', password: PW, name: 'Dir AnySignup', club_name: 'Signup Any Club', handle: 'diranysignup', sport: 'any', city: 'Oslo' });
+  check('16: signup-club accepts any (302 success redirect)', sr.status === 302 && !/error=/.test(sr.headers.get('location') || ''), { status: sr.status, loc: sr.headers.get('location') });
+  const { data: anySignupClub } = await admin.from('clubs').select('id, sport').eq('handle', 'diranysignup').maybeSingle();
+  check('16: signup-funnel club stored with sport any', anySignupClub && anySignupClub.sport === 'any', anySignupClub);
+  if (anySignupClub) {
+    await admin.from('memberships').delete().eq('club_id', anySignupClub.id);
+    await admin.from('clubs').delete().eq('id', anySignupClub.id);
+  }
+  await deleteUserByEmail('clubdir-anysignup@arenas-test.dev');
+
   // Directory payload carries the raw value.
   r = await api('seeker2', 'GET', '/clubs/directory');
   const anyCard = ((r.body && r.body.clubs) || []).find(c => c.id === anyClubId);

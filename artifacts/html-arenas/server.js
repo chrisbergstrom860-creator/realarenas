@@ -596,6 +596,15 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
       return res.redirect(BASE + '/for-clubs?error=server');
     }
 
+    // Same club-sport contract as /api/clubs/create: registry id or the
+    // club-only 'any' pseudo-value. The wizard's select can only submit these,
+    // so a mismatch means a hand-crafted POST — reject before creating the
+    // account (nothing to roll back yet).
+    const clubSport = typeof sport === 'string' ? sport.trim() : '';
+    if (clubSport !== 'any' && !SPORTS.some(s => s.id === clubSport)) {
+      return res.redirect(BASE + '/for-clubs?error=signup');
+    }
+
     // Create the user with the admin client so the email is auto-confirmed and
     // no confirmation step is required. Same hidden-field timezone capture as
     // the athlete signup (invalid values silently dropped).

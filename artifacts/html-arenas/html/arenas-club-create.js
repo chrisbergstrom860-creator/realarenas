@@ -339,6 +339,7 @@ window.ArenasClubCreate = (function () {
     var vis = readVisibility();
     var bits = [];
     if (sport) bits.push(sport.label);
+    else if (c.sport === 'any') bits.push('Any sport');
     if (c.city) bits.push(c.city);
     if (vis) bits.push(vis === 'public' ? 'Listed in the club directory' : 'Unlisted \u2014 invite only');
     document.getElementById('ccm-review-meta').textContent = bits.join(' \u00b7 ');

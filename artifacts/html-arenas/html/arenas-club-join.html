@@ -92,7 +92,7 @@ body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);fon
   function clubBlock(){
     var c = D.club || {};
     var meta = [];
-    if (c.sport) meta.push('🏅 ' + esc(c.sport));
+    if (c.sport) meta.push(c.sport === 'any' ? '🏟 Any sport' : '🏅 ' + esc(c.sport));
     if (c.city) meta.push('📍 ' + esc(c.city));
     var tile = window.clubTileHtml ? window.clubTileHtml(c.logo_url||null, c.sport, '', 'width:40px;height:40px;border-radius:9px;background:var(--yellow-light);display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;overflow:hidden') : '';
     return '<div class="club-card" style="display:flex;align-items:center;gap:12px">'+tile+'<div style="min-width:0"><div class="club-name">'+esc(c.name||'a club')+'</div>'+
