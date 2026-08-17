@@ -14,3 +14,17 @@ uri = "file://screenshots/ribbon-360.jpg"
 type = "image"
 title = "Ribbon variants — 360px (~332px card)"
 description = "Variant A: fixed 80px (4.15:1 displayed). Variant B: 6:1 (~55px). Plus no-image card."
+
+[[outputs]]
+id = "V5_fKsNF5a_cSBALSxBBx"
+uri = "file://screenshots/billing-coach.png"
+type = "image"
+title = "Billing page — coach"
+description = "Coach view: no club billing cards; explanatory empty state."
+
+[[outputs]]
+id = "7xYMxmcjkj1DxQU7a7uWS"
+uri = "file://screenshots/billing-admin.png"
+type = "image"
+title = "Billing page — admin"
+description = "Admin view: upgrade + Manage billing cards for both clubs."
