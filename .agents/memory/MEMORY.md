@@ -89,4 +89,5 @@
 - [html-arenas "Any sport" clubs](html-arenas-any-sport.md) — 'any' = club-only pseudo-value (never registry); BOTH create paths validate; single filter predicate; label sites listed; legacy capitalized rows normalized 2026-08-16.
 - [html-arenas contact form](html-arenas-contact-form.md) — /contact + /api/contact: inbox never leaks, trust proxy=1 for the per-IP limiter, spawned-server (BASE_PATH!) test pattern, no support address may reappear.
 - [html-arenas club billing authority](html-arenas-club-billing.md) — checkout/portal are admin-or-owner via canManageClubBilling/getBillableClubIds (never isClubManagerRole); one server-decided list feeds UI + API.
+- [html-arenas Plausible analytics](html-arenas-analytics.md) — ONE send/sendFile injection middleware + client hostname gate; events via arenasTrack on server-confirmed outcomes only; never paste the snippet per-file.
 - [html-arenas post write gate](html-arenas-post-write-gate.md) — like/comment gated by canUserSeePost (read-path union); zero-leak 404; unlike lost with visibility; one grandfathered like.
