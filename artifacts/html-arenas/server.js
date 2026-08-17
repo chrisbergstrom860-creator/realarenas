@@ -686,6 +686,7 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
           await createClubInviteRecord({
             clubId: club.id,
             inviterUser: data.user,
+            inviterRole: 'admin',
             email: inv && inv.email,
             role: inv && inv.role,
             req,
@@ -820,6 +821,7 @@ app.post(BASE + '/api/clubs/create', requireAuth, async (req, res) => {
           await createClubInviteRecord({
             clubId: club.id,
             inviterUser: req.user,
+            inviterRole: 'admin',
             email: inv && inv.email,
             role: inv && inv.role,
             req,
@@ -10968,6 +10970,9 @@ app.get(BASE + '/clubs/invite', requirePageAuth, async (req, res) => {
     const inviteData = {
       club: membership.clubs || { id: clubId, name: 'Your club' },
       role: membership.role,
+      // Server-decided invite ceiling (same pattern as canLeave/isOwner): the
+      // client renders only the roles the server would accept from this viewer.
+      canInviteAdmin: membership.role === 'admin',
       profile: displayFromUser(req.user),
       memberCount,
       invites: invites.map(i => ({
@@ -11530,6 +11535,12 @@ app.post(BASE + '/api/clubs/:clubId/invites', requireAuth, async (req, res) => {
 
   let email = (req.body && req.body.email || '').trim().toLowerCase();
   let inviteRole = ['member', 'coach', 'admin'].includes(req.body && req.body.role) ? req.body.role : 'member';
+  // An inviter cannot grant a role above their own: coaches may invite
+  // members and coaches, but only an admin can mint an admin invite —
+  // otherwise the invite path would bypass the admin-only role route.
+  if (inviteRole === 'admin' && role.role !== 'admin') {
+    return res.status(403).json({ error: 'Coaches can invite members and coaches. Only a club admin can send an admin invite.' });
+  }
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ error: 'A valid email is required' });
   }
@@ -11624,9 +11635,15 @@ app.post(BASE + '/api/clubs/:clubId/invites', requireAuth, async (req, res) => {
 // members, insert the row, send the email (fire-and-forget) and, for existing
 // Arenas users, an in-app notification. Shared by the bulk-invite endpoint and
 // the club signup wizard. Returns { status: 'sent'|'skipped'|'failed', ... }.
-async function createClubInviteRecord({ clubId, inviterUser, email, role, req, userByEmail, clubName, inviterName }) {
+async function createClubInviteRecord({ clubId, inviterUser, inviterRole, email, role, req, userByEmail, clubName, inviterName }) {
   const cleanEmail = (email || '').trim().toLowerCase();
   const irole = ['member', 'coach', 'admin'].includes(role) ? role : 'member';
+  // Defense-in-depth mirror of the route-level rule: an inviter cannot grant
+  // a role above their own. Callers pass the inviter's club role ('admin' for
+  // the club-creation wizard paths, where the creator becomes admin+owner).
+  if (irole === 'admin' && inviterRole !== 'admin') {
+    return { status: 'failed', email: cleanEmail, reason: 'role_not_allowed' };
+  }
   if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
     return { status: 'failed', email: cleanEmail, reason: 'invalid_email' };
   }
@@ -11694,6 +11711,12 @@ app.post(BASE + '/api/clubs/:clubId/invites/bulk', requireAuth, async (req, res)
   const incoming = Array.isArray(req.body && req.body.invites) ? req.body.invites : [];
   if (incoming.length === 0) return res.status(400).json({ error: 'No invites provided' });
   if (incoming.length > 200) return res.status(400).json({ error: 'Too many invites at once (max 200)' });
+  // Pre-scan so a disallowed row rejects the WHOLE batch with zero effect —
+  // an inviter cannot grant a role above their own (mirrors the personal
+  // invite route; the admin-only role route must not be bypassable here).
+  if (role.role !== 'admin' && incoming.some((r) => r && r.role === 'admin')) {
+    return res.status(403).json({ error: 'Coaches can invite members and coaches. Only a club admin can send an admin invite.' });
+  }
 
   // Resolve all existing Arenas users once (not per email) so we can notify
   // people who already have an account in-app instead of relying on the link.
@@ -11712,6 +11735,7 @@ app.post(BASE + '/api/clubs/:clubId/invites/bulk', requireAuth, async (req, res)
     const r = await createClubInviteRecord({
       clubId,
       inviterUser: req.user,
+      inviterRole: role.role,
       email: raw && raw.email,
       role: raw && raw.role,
       req,
@@ -11773,6 +11797,12 @@ app.post(BASE + '/api/clubs/invites/:inviteId/resend', requireAuth, async (req, 
     if (!invite) return res.status(404).json({ error: 'Invite not found' });
     const role = await getClubRole(req.user.id, invite.club_id);
     if (!isClubManagerRole(role && role.role)) return res.status(403).json({ error: 'Not authorized' });
+    // Same ceiling as minting: a coach may not resend (extend + re-deliver)
+    // an admin invite — otherwise the coach keeps an admin grant alive that
+    // they could never have created.
+    if (invite.role === 'admin' && role.role !== 'admin') {
+      return res.status(403).json({ error: 'Coaches can invite members and coaches. Only a club admin can send an admin invite.' });
+    }
     if (invite.status !== 'pending') return res.status(400).json({ error: 'Only pending invites can be resent' });
 
     const ttl = invite.email === OPEN_INVITE_EMAIL ? OPEN_INVITE_TTL_MS : INVITE_TTL_MS;

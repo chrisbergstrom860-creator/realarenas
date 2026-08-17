@@ -647,6 +647,21 @@ updateCounts();
     return fetch(B + path, Object.assign({ headers:{'Content-Type':'application/json'} }, opts||{}))
       .then(function(r){ return r.json().catch(function(){return {};}).then(function(j){ return { ok:r.ok, data:j }; }); });
   }
+  // ── Server-decided invite role ceiling ──
+  // canInviteAdmin comes from the server (same pattern as canLeave/isOwner):
+  // coaches can grant member/coach only, so strip the Admin option from the
+  // invite-row selects. The member-role selects (data-role-for) are untouched
+  // — those render only for admins anyway.
+  if (!D.canInviteAdmin) {
+    var stripAdmin = function(scope){
+      (scope || document).querySelectorAll('#invite-rows select.inv-row-select option').forEach(function(o){
+        if (o.value.toLowerCase() === 'admin' || o.textContent.trim().toLowerCase() === 'admin') o.remove();
+      });
+    };
+    stripAdmin();
+    var origAddRow = window.addRow;
+    window.addRow = function(){ origAddRow(); stripAdmin(); };
+  }
   function fmtAgo(iso){ if(!iso) return '—'; var d=(Date.now()-new Date(iso).getTime())/86400000; if(d<1) return 'today'; return Math.floor(d)+'d ago'; }
   function fmtLeft(iso){ if(!iso) return '—'; var d=(new Date(iso).getTime()-Date.now())/86400000; if(d<0) return 'expired'; var n=Math.ceil(d); return n+' day'+(n!==1?'s':''); }
 
@@ -900,6 +915,7 @@ updateCounts();
       var tb = document.getElementById('invite-rows');
       if (tb){
         tb.innerHTML = '<tr><td><input class="inv-row-input" type="email" placeholder="name@example.com" oninput="validateEmail(this)"></td><td><input class="inv-row-input" type="text" placeholder="Name"></td><td><select class="inv-row-select"><option>Member</option><option>Coach</option><option>Admin</option></select></td><td style="text-align:center"><button class="inv-row-del" onclick="delRow(this)">✕</button></td></tr>';
+        if (typeof stripAdmin === 'function') stripAdmin();
         if (window.updateCounts) updateCounts();
       }
       refresh();

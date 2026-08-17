@@ -147,6 +147,104 @@ async function login(email, password) {
     });
     const acc2Body = await acc2.json().catch(() => ({}));
     check('re-accept of consumed invite is a 404 (single-use) or alreadyMember', acc2.status === 404 || acc2Body.alreadyMember === true, acc2.status + ' ' + JSON.stringify(acc2Body));
+
+    // ── Invite role ceiling: an inviter cannot grant a role above their own ──
+    // Coach may invite members/coaches; only an admin can mint an admin invite.
+    const REFUSAL = 'Coaches can invite members and coaches. Only a club admin can send an admin invite.';
+    const coachEmail = 'invite-notif-coach@arenas-test.dev';
+    const target2 = 'invite-notif-target2@arenas-test.dev';
+    await deleteUserByEmail(coachEmail);
+    await deleteUserByEmail(target2);
+    const { data: coachUser, error: coErr } = await mk(coachEmail, 'Invite Coach', 'invcoach');
+    check('create coach user', !coErr, coErr && coErr.message);
+    const coachId = coachUser.user.id;
+    await admin.from('memberships').insert({ user_id: coachId, club_id: clubId, role: 'coach' });
+    const coachCookie = await login(coachEmail, password);
+    const adminCookie = await login(adminEmail, password);
+    const post = (cookie, path, body) => fetch(BASE_URL + path, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify(body)
+    });
+    const rowsFor = async (email) => (await admin.from('club_invites')
+      .select('id, role').eq('club_id', clubId).eq('email', email)).data || [];
+
+    // Coach → admin invite refused with zero effect (personal route).
+    let r1 = await post(coachCookie, '/api/clubs/' + clubId + '/invites', { email: target2, role: 'admin' });
+    let b1 = await r1.json();
+    check('coach personal admin invite → 403 with explanatory copy', r1.status === 403 && b1.error === REFUSAL, r1.status + ' ' + JSON.stringify(b1));
+    check('coach personal admin invite → zero rows', (await rowsFor(target2)).length === 0);
+
+    // Coach → bulk batch containing an admin row refused whole, zero effect.
+    let r2 = await post(coachCookie, '/api/clubs/' + clubId + '/invites/bulk', {
+      invites: [{ email: 'invite-notif-b1@arenas-test.dev', role: 'member' }, { email: target2, role: 'admin' }]
+    });
+    let b2 = await r2.json();
+    check('coach bulk with admin row → 403 whole batch', r2.status === 403 && b2.error === REFUSAL, r2.status + ' ' + JSON.stringify(b2));
+    check('coach bulk refusal → zero rows (both emails)', (await rowsFor(target2)).length === 0 && (await rowsFor('invite-notif-b1@arenas-test.dev')).length === 0);
+
+    // Coach can still invite members and coaches.
+    let r3 = await post(coachCookie, '/api/clubs/' + clubId + '/invites', { email: target2, role: 'coach' });
+    check('coach can mint a coach invite', r3.ok, r3.status);
+    const coachMinted = await rowsFor(target2);
+    check('coach-minted invite stored with role coach', coachMinted.length === 1 && coachMinted[0].role === 'coach', JSON.stringify(coachMinted));
+    await admin.from('club_invites').delete().eq('club_id', clubId).eq('email', target2);
+
+    // Coach join links still work and never carry a role above member.
+    let r4 = await post(coachCookie, '/api/clubs/' + clubId + '/join-link', {});
+    let b4 = await r4.json();
+    check('coach join-link creation still works', r4.ok && !!b4.joinUrl, r4.status + ' ' + JSON.stringify(b4));
+    const { data: openRows } = await admin.from('club_invites')
+      .select('role').eq('club_id', clubId).eq('email', 'open-invite@realarenas.com');
+    check('join link role is hardcoded member', (openRows || []).every((r) => r.role === 'member'), JSON.stringify(openRows));
+
+    // Admin unaffected: personal admin invite works and REDEEMS as admin.
+    let r5 = await post(adminCookie, '/api/clubs/' + clubId + '/invites', { email: target2, role: 'admin' });
+    check('admin can still mint an admin invite', r5.ok, r5.status + ' ' + JSON.stringify(await r5.json().catch(() => ({}))));
+    const adminMinted = await rowsFor(target2);
+    check('admin-minted invite stored with role admin', adminMinted.length === 1 && adminMinted[0].role === 'admin', JSON.stringify(adminMinted));
+    const { data: mintedRow } = await admin.from('club_invites')
+      .select('token').eq('club_id', clubId).eq('email', target2).eq('status', 'pending').single();
+    const { data: t2User, error: t2Err } = await mk(target2, 'Invite Target Two', 'invtarget2');
+    check('create redeemer user', !t2Err, t2Err && t2Err.message);
+    const t2Cookie = await login(target2, password);
+    const r6 = await fetch(BASE_URL + '/auth/join/' + mintedRow.token + '/existing', { method: 'POST', headers: { Cookie: t2Cookie } });
+    const b6 = await r6.json().catch(() => ({}));
+    const { data: t2Mem } = await admin.from('memberships')
+      .select('role').eq('user_id', t2User.user.id).eq('club_id', clubId).maybeSingle();
+    check('legit admin invite redeems as admin membership', r6.ok && b6.success === true && t2Mem && t2Mem.role === 'admin', r6.status + ' ' + JSON.stringify({ b6, t2Mem }));
+
+    // Coach cannot RESEND (extend + re-deliver) an admin invite either.
+    // (Fresh pending admin invite — the target2 one was consumed above.)
+    const resendEmail = 'invite-notif-resend@arenas-test.dev';
+    const rMint = await post(adminCookie, '/api/clubs/' + clubId + '/invites', { email: resendEmail, role: 'admin' });
+    check('mint pending admin invite for resend test', rMint.ok, rMint.status);
+    const { data: adminInvRow } = await admin.from('club_invites')
+      .select('id, expires_at').eq('club_id', clubId).eq('email', resendEmail).single();
+    const r5b = await post(coachCookie, '/api/clubs/invites/' + adminInvRow.id + '/resend', {});
+    const b5b = await r5b.json();
+    const { data: afterResend } = await admin.from('club_invites')
+      .select('expires_at').eq('id', adminInvRow.id).single();
+    check('coach resend of admin invite → 403 with explanatory copy', r5b.status === 403 && b5b.error === REFUSAL, r5b.status + ' ' + JSON.stringify(b5b));
+    check('coach resend refusal leaves expires_at unchanged', afterResend.expires_at === adminInvRow.expires_at, adminInvRow.expires_at + ' → ' + afterResend.expires_at);
+    // Admin resend of the same invite still works (expiry extends).
+    const r5c = await post(adminCookie, '/api/clubs/invites/' + adminInvRow.id + '/resend', {});
+    const { data: afterAdminResend } = await admin.from('club_invites')
+      .select('expires_at').eq('id', adminInvRow.id).single();
+    check('admin resend of admin invite still works', r5c.ok && afterAdminResend.expires_at !== adminInvRow.expires_at, r5c.status);
+
+    // Admin bulk with admin rows unaffected.
+    let r7 = await post(adminCookie, '/api/clubs/' + clubId + '/invites/bulk', {
+      invites: [{ email: 'invite-notif-b2@arenas-test.dev', role: 'admin' }]
+    });
+    let b7 = await r7.json();
+    check('admin bulk admin invite unaffected', r7.ok && (b7.sent || []).length === 1, r7.status + ' ' + JSON.stringify(b7));
+
+    // UI ceiling flag is server-decided on the /clubs/invite payload.
+    const pageFor = async (cookie) => await (await fetch(BASE_URL + '/clubs/invite?club=' + clubId, { headers: { Cookie: cookie } })).text();
+    const coachPage = await pageFor(coachCookie);
+    const adminPage = await pageFor(adminCookie);
+    check('coach invite console payload says canInviteAdmin:false', coachPage.includes('"canInviteAdmin":false'));
+    check('admin invite console payload says canInviteAdmin:true', adminPage.includes('"canInviteAdmin":true'));
   } finally {
     if (clubId) {
       await admin.from('club_invites').delete().eq('club_id', clubId);
@@ -155,6 +253,8 @@ async function login(email, password) {
     }
     await deleteUserByEmail(adminEmail);
     await deleteUserByEmail(inviteeEmail);
+    await deleteUserByEmail('invite-notif-coach@arenas-test.dev');
+    await deleteUserByEmail('invite-notif-target2@arenas-test.dev');
     console.log('      seeded users/club cleaned up');
   }
 
