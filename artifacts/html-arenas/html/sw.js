@@ -25,7 +25,7 @@
  */
 'use strict';
 
-const VERSION = 'v8';
+const VERSION = 'v9';
 const RUNTIME_CACHE = 'arenas-runtime-' + VERSION;
 const AVATAR_CACHE = 'arenas-avatars-' + VERSION;
 const POST_IMAGE_CACHE = 'arenas-post-images-' + VERSION;

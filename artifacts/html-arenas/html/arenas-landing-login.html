@@ -1150,7 +1150,15 @@ async function startUpgrade(kind, btn) {
     if (r.status === 409) { window.nav('/billing'); return; }
     var d = {};
     try { d = await r.json(); } catch (e) { d = {}; }
-    if (r.ok && d.url) { window.location.href = d.url; return; }
+    if (r.ok && d.url) {
+      // Analytics: Stripe session confirmed by the server (d.url), not click.
+      if (kind === 'pro' && window.arenasTrack) {
+        window.arenasTrack('Pro Checkout Started', function () { window.location.href = d.url; });
+      } else {
+        window.location.href = d.url;
+      }
+      return;
+    }
     if (r.ok && d.redirect) { window.location.href = d.redirect; return; }
     alert('Billing is unavailable right now — please try again later.');
   } catch (err) {

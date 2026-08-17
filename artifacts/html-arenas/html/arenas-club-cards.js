@@ -191,6 +191,7 @@
         .then(function (r) {
           if (r.status === 200 && r.body && r.body.success) {
             club.viewerState = 'pending';
+            if (window.arenasTrack) window.arenasTrack('Club Join Requested');
             toast('✓ Request sent — the club will review it');
           } else if (r.body && r.body.error === 'already_member') {
             club.viewerState = 'member';

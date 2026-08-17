@@ -504,10 +504,19 @@ async function saveActivity() {
     // planLinkFailed: activity saved but the plan didn't get marked done —
     // land on the calendar too, where the still-pending plan is visible,
     // instead of /feed where the failure would be invisible.
-    if (result.planCompleted || result.planLinkFailed) {
-      window.location.href = ACT_BASE + '/calendar' + (/^\d{4}-\d{2}$/.test(pickedMonth) ? '#' + pickedMonth : '');
+    var goAfterSave = function () {
+      if (result.planCompleted || result.planLinkFailed) {
+        window.location.href = ACT_BASE + '/calendar' + (/^\d{4}-\d{2}$/.test(pickedMonth) ? '#' + pickedMonth : '');
+      } else {
+        window.location.href = ACT_BASE + '/feed';
+      }
+    };
+    // "First Activity Logged" — is_first is server-computed on the insert
+    // (first-ever activity, not every one); delay the nav ≤400ms for flush.
+    if (result.is_first && window.arenasTrack) {
+      window.arenasTrack('First Activity Logged', goAfterSave);
     } else {
-      window.location.href = ACT_BASE + '/feed';
+      goAfterSave();
     }
   } catch (err) {
     showActError('Something went wrong — please try again.');

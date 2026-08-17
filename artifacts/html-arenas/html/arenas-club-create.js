@@ -66,7 +66,16 @@ window.ArenasClubCreate = (function () {
       });
       var d = {};
       try { d = await r.json(); } catch (e) { d = {}; }
-      if (r.ok && d.redirect) return { ok: true, redirect: d.redirect };
+      if (r.ok && d.redirect) {
+        // Analytics: club creation server-confirmed (both surfaces flow
+        // through this one submit). Await the flush (≤400ms) because every
+        // caller navigates away immediately after.
+        await new Promise(function (resolve) {
+          if (window.arenasTrack) window.arenasTrack('Club Created', resolve);
+          else resolve();
+        });
+        return { ok: true, redirect: d.redirect };
+      }
       if (d.error === 'handle_taken') return { ok: false, target: 'club', msg: 'That handle is already taken — try another.' };
       if (d.error === 'invalid_handle') return { ok: false, target: 'club', msg: 'Handles are 2–20 lowercase letters or numbers.' };
       if (d.error === 'invalid_name' || d.error === 'invalid_sport') return { ok: false, target: 'club', msg: 'Please check your club name and sport.' };
@@ -379,6 +388,9 @@ window.ArenasClubCreate = (function () {
       if (typeof window.nav === 'function') window.nav('/for-clubs?create=1');
       return;
     }
+    // Analytics: in-app creation modal actually opened (the /for-clubs wizard
+    // fires the same event from its own openSignup()).
+    if (window.arenasTrack) window.arenasTrack('Club Creation Started');
     build();
     // Fresh session: the directory choice must be made explicitly EACH time
     // the wizard is opened — a radio left checked in an abandoned session

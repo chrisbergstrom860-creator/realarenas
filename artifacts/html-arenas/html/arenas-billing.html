@@ -222,7 +222,16 @@ async function startCheckout(kind, clubId, btn) {
     if (r.status === 409) { window.location.reload(); return; }
     var d = {};
     try { d = await r.json(); } catch (e) { d = {}; }
-    if (r.ok && d.url) { window.location.href = d.url; return; }
+    if (r.ok && d.url) {
+      // Analytics: fire only once the server has actually created the Stripe
+      // session (d.url present) — never on the button click.
+      if (kind === 'pro' && window.arenasTrack) {
+        window.arenasTrack('Pro Checkout Started', function () { window.location.href = d.url; });
+      } else {
+        window.location.href = d.url;
+      }
+      return;
+    }
     alert('Could not start checkout right now — please try again later.');
   } catch (err) {
     alert('Could not start checkout right now — please try again later.');

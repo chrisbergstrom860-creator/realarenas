@@ -927,6 +927,9 @@ async function startClubUpgrade(btn) {
 function openSignup() {
   document.getElementById('signup-overlay').classList.add('open');
   document.body.style.overflow = 'hidden';
+  // Analytics: wizard actually opened (both the logged-out 4-step and the
+  // logged-in 3-step flow come through here).
+  if (window.arenasTrack) window.arenasTrack('Club Creation Started');
 }
 function closeSignup() {
   document.getElementById('signup-overlay').classList.remove('open');

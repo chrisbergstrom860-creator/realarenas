@@ -235,6 +235,102 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser(process.env.SESSION_SECRET));
 
+// ── PLAUSIBLE ANALYTICS ──
+// Privacy-friendly analytics by Plausible. ONE injection point for every
+// served HTML page (app-shell routes, sendFile bypasses like /landing and the
+// marketing pages, read-and-substitute sends, and the inline sendPageError
+// page): the middleware below wraps res.send and res.sendFile and inserts the
+// snippet before the first </head> of any HTML response. Never duplicate this
+// tag into individual html files.
+//
+// Dev-traffic gating is CLIENT-SIDE by hostname, deliberately: the tag is
+// injected unconditionally (so its presence is verifiable in dev), but the
+// Plausible script only loads when location.hostname is realarenas.com or a
+// subdomain. A server-side env gate (NODE_ENV/BASE_PATH) could silently
+// suppress analytics in production on a config slip; the hostname check
+// cannot — on www.realarenas.com it always matches, and on *.replit.dev or
+// localhost it never does, so verifier runs and manual dev tests send
+// nothing. In dev, window.plausible becomes a no-op so custom-event call
+// sites never throw.
+const ANALYTICS_SNIPPET = `<!-- Privacy-friendly analytics by Plausible (loads on realarenas.com only) -->
+<script>
+  if (/(^|\\.)realarenas\\.com$/.test(location.hostname)) {
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init();
+    var plausibleScript=document.createElement('script');
+    plausibleScript.async=true;
+    plausibleScript.src='https://plausible.io/js/pa-HP_G3pZi3T9xQ23D1nWTb.js';
+    document.head.appendChild(plausibleScript);
+    // Fire a custom event; optional done() runs after Plausible confirms
+    // (or after 400ms, whichever comes first) so navigations don't lose it.
+    window.arenasTrack=function(name,done){
+      var called=false;
+      var fin=function(){ if(called)return; called=true; if(done)done(); };
+      try{ window.plausible(name, done?{callback:fin}:undefined); }catch(e){}
+      if(done)setTimeout(fin,400);
+    };
+  } else {
+    window.plausible=function(){};
+    window.arenasTrack=function(name,done){ if(done)done(); };
+  }
+</script>
+`;
+
+function injectAnalytics(html) {
+  if (typeof html !== 'string') return html;
+  const i = html.search(/<\/head>/i);
+  if (i === -1) return html; // fragments, sw.js, plain-text sends: untouched
+  // NO content-based duplicate guard: user-controlled text embedded in a page
+  // (an activity title containing the script URL, say) must never be able to
+  // suppress injection. Single-injection is structural instead — each
+  // response passes through exactly one injection site (the wrapped res.send,
+  // or the sendFile override which bypasses it via origSend).
+  return html.slice(0, i) + ANALYTICS_SNIPPET + html.slice(i);
+}
+
+// One-time signed signup marker (see /auth/signup + the /feed route). Short
+// TTL: it only needs to survive the redirect hop.
+const SIGNUP_MARKER_COOKIE = 'arenas_signup';
+function setSignupMarker(res) {
+  res.cookie(SIGNUP_MARKER_COOKIE, '1', {
+    signed: true, httpOnly: true, sameSite: 'lax', maxAge: 5 * 60 * 1000, path: '/'
+  });
+}
+function consumeSignupMarker(req, res) {
+  if (req.signedCookies && req.signedCookies[SIGNUP_MARKER_COOKIE] === '1') {
+    res.clearCookie(SIGNUP_MARKER_COOKIE, { path: '/' });
+    return true;
+  }
+  return false;
+}
+
+app.use((req, res, next) => {
+  const origSend = res.send.bind(res);
+  res.send = (body) => {
+    if (typeof body === 'string' && /<\/head>/i.test(body)) {
+      body = injectAnalytics(body);
+    }
+    return origSend(body);
+  };
+  const origSendFile = res.sendFile.bind(res);
+  res.sendFile = (filePath, ...rest) => {
+    // Only page HTML goes through injection; assets keep the streaming path.
+    if (typeof filePath === 'string' && filePath.endsWith('.html')) {
+      try {
+        const html = fs.readFileSync(filePath, 'utf8');
+        res.type('html');
+        // origSend, NOT the wrapped res.send: already injected here, and the
+        // wrapper has no duplicate guard by design (see injectAnalytics).
+        return origSend(injectAnalytics(html));
+      } catch (e) {
+        // fall through to the normal sendFile error behavior
+      }
+    }
+    return origSendFile(filePath, ...rest);
+  };
+  next();
+});
+
 if (process.env.NODE_ENV !== 'production') {
   app.use((req, res, next) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -576,6 +672,11 @@ app.post(BASE + '/auth/signup', async (req, res) => {
     }
     setSession(res, data.session);
     console.log('Signup success for:', email);
+    // Signed one-time marker for the "Signup Completed" analytics event: set
+    // only by the two server-confirmed account-creation paths (here and
+    // /auth/confirm), consumed and cleared by the next /feed render. A query
+    // param would be trivially spoofable; a signed cookie is not.
+    setSignupMarker(res);
     return res.redirect(BASE + '/feed');
   } catch (err) {
     console.log('Signup exception:', err.message);
@@ -927,6 +1028,8 @@ app.get(BASE + '/auth/confirm', async (req, res) => {
       return res.redirect(BASE + '/landing?msg=confirm_failed');
     }
     setSession(res, data.session);
+    // Signed one-time "Signup Completed" marker — see /auth/signup.
+    setSignupMarker(res);
     return res.redirect(BASE + '/feed');
   } catch (err) {
     return res.redirect(BASE + '/landing?msg=confirm_failed');
@@ -2263,6 +2366,21 @@ app.post(BASE + '/api/activities/create', requireAuth, async (req, res) => {
     .select()
     .single();
   if (error) return res.json({ error: error.message });
+  // First-ever activity flag for analytics ("First Activity Logged"). Not
+  // determinable client-side; one cheap head-count on the indexed user_id.
+  // Best-effort: a count failure must never break the save, so isFirst just
+  // stays false (the event is dropped, never fabricated). Deliberately NOT
+  // made atomic: two concurrent first-ever inserts could both count 2 and
+  // both skip the event — an undercount in a freak race, never an overcount.
+  // Exact coverage would need an RPC/transaction; not worth it for analytics.
+  let isFirst = false;
+  try {
+    const { count } = await supabaseAdmin
+      .from('activities')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', req.user.id);
+    isFirst = count === 1;
+  } catch (e) { /* leave false */ }
   // Close out the linked plan in the same request: set activity_id + done.
   // Self-only by construction (linkPlan ownership was verified above); the
   // .eq('user_id', …) filter is defense-in-depth.
@@ -2317,7 +2435,7 @@ app.post(BASE + '/api/activities/create', requireAuth, async (req, res) => {
   }
   // Award any newly earned badges (volume/distance/streak/feats) without blocking.
   checkAchievements(req.user.id, getUserTimezone(req.user)).catch(() => {});
-  res.json({ success: true, activity: data, planCompleted, planLinkFailed });
+  res.json({ success: true, activity: data, planCompleted, planLinkFailed, is_first: isFirst });
 });
 
 // Recent activities for a given user (used by the profile Activities tab).
@@ -5663,7 +5781,14 @@ app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
     const feedMeta = req.user.user_metadata || {};
     const userSports = Array.isArray(feedMeta.sports) ? feedMeta.sports.filter(Boolean) : [];
     const userData = { profile: displayFromUser(req.user), userId: req.user.id, sports: userSports, posts, followsNobody, feedActivities, followingRsvps, clubs: userClubs, week: sidebar.week, dayStrip: sidebar.dayStrip, currentStreak: sidebar.currentStreak, clubRank: sidebar.clubRank, followSuggestions: sidebar.followSuggestions };
-    const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), userData), 'feed'), (await getUserPlan(req.user.id)) === 'pro');
+    let html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), userData), 'feed'), (await getUserPlan(req.user.id)) === 'pro');
+    // "Signup Completed" analytics: server-decided flag, driven only by the
+    // signed one-time marker the two account-creation paths set. Consumed
+    // (cookie cleared) on first render so it cannot double-fire, and never
+    // spoofable via URL or client state.
+    if (consumeSignupMarker(req, res)) {
+      html = html.replace('window.BASE =', 'window.ARENAS_SIGNUP_COMPLETED = true;\nwindow.BASE =');
+    }
     res.type('html').send(html);
   } catch (err) {
     console.log('Feed data error:', err.message);

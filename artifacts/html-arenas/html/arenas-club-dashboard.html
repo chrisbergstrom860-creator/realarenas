@@ -3949,6 +3949,7 @@ document.addEventListener('DOMContentLoaded', function () {
       .then(function (res) { return res.json().then(function (b) { return { status: res.status, body: b }; }); })
       .then(function (res) {
         if (res.status === 200 && res.body && res.body.success) {
+          if (action === 'approve' && window.arenasTrack) window.arenasTrack('Club Join Approved');
           queue = queue.filter(function (x) { return x.user_id !== r.user_id; });
           renderQueue();
           if (typeof showToast === 'function') {
