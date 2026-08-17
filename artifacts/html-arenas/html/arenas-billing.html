@@ -179,11 +179,13 @@ button{font-family:var(--font)}
   }
   html += '</div>';
 
-  // ── Clubs you manage ──
-  html += '<div class="section-label">Clubs you manage</div>';
+  // ── Club billing ── (server-decided list: only clubs where the viewer is
+  // an admin or the club owner appear — coaches use Club Pro features but
+  // never see a billing control here, matching the API's admin-or-owner gate)
+  html += '<div class="section-label">Club billing</div>';
   var clubs = b.managedClubs || [];
   if (!clubs.length) {
-    html += '<div class="muted-line">You don\u2019t manage any clubs. Club Pro applies to clubs where you are an admin or coach.</div>';
+    html += '<div class="muted-line">You don\u2019t manage billing for any clubs. A club\u2019s Club Pro subscription is handled by its admins and its owner \u2014 coaches keep full access to Club Pro features.</div>';
   } else {
     clubs.forEach(function (c) {
       html += '<div class="bill-card">';

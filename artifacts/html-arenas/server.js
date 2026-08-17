@@ -1561,6 +1561,57 @@ function isClubManagerRole(role) {
   return role === 'admin' || role === 'coach';
 }
 
+// ── CLUB BILLING AUTHORITY ──
+// Club Pro checkout and the Stripe portal are money actions billed to the
+// owner's card, so they sit at admin-or-owner — NOT the manager (admin/coach)
+// bar used for day-to-day club actions. Owner is clubs.owner_id, checked
+// separately from the membership role because an owner may have self-demoted
+// below admin and must still be able to manage a subscription on their own
+// card. Coaches keep full USE of Club Pro features (plan gates read only the
+// club's plan, never the caller's role); they just can't buy or change it.
+// Fails closed on any lookup error.
+const CLUB_BILLING_REFUSAL =
+  'Only a club admin or the club owner can manage this club\u2019s billing. ' +
+  'Coaches can use Club Pro features, but only an admin or the owner can start or change the subscription.';
+
+async function canManageClubBilling(userId, clubId) {
+  if (!supabaseAdmin || !userId || !clubId) return false;
+  try {
+    const role = await getClubRole(userId, clubId);
+    if (role && role.role === 'admin') return true;
+    const { data: club, error } = await supabaseAdmin
+      .from('clubs').select('owner_id').eq('id', clubId).maybeSingle();
+    if (error || !club) return false;
+    return club.owner_id === userId;
+  } catch (err) {
+    return false;
+  }
+}
+
+// The clubs whose billing this user may manage: clubs where they hold the
+// admin role, plus clubs they own (deduped). Returns [{id}] — the /billing
+// page and the no-id checkout both derive their club lists from this so the
+// UI can never show a billing control the API would refuse.
+async function getBillableClubIds(userId) {
+  if (!supabaseAdmin || !userId) return [];
+  try {
+    const [{ data: mems }, { data: owned }] = await Promise.all([
+      supabaseAdmin.from('memberships').select('club_id, role').eq('user_id', userId),
+      supabaseAdmin.from('clubs').select('id').eq('owner_id', userId)
+    ]);
+    const ids = [];
+    for (const m of (mems || [])) {
+      if (m.role === 'admin' && m.club_id && !ids.includes(m.club_id)) ids.push(m.club_id);
+    }
+    for (const c of (owned || [])) {
+      if (c.id && !ids.includes(c.id)) ids.push(c.id);
+    }
+    return ids;
+  } catch (err) {
+    return [];
+  }
+}
+
 // ── PLAN RESOLUTION (subscriptions table) ──
 // A subscription row counts as paid only while status is 'active' or
 // 'past_due' (grace window while Stripe retries a failed payment). No row,
@@ -11127,16 +11178,16 @@ app.post(BASE + '/api/billing/checkout/pro', requireAuth, async (req, res) => {
   }
 });
 
-// Start Club Pro checkout for a club. Same authorization bar as every other
-// club-management action (admin/coach via getClubRole); plain members 403.
+// Start Club Pro checkout for a club. Money action → admin-or-owner
+// (canManageClubBilling), a stricter bar than day-to-day club management;
+// coaches and plain members get the explanatory 403.
 app.post(BASE + '/api/billing/checkout/club/:clubId', requireAuth, async (req, res) => {
   if (!stripe) return res.status(503).json({ error: 'Billing is not configured' });
   const priceId = (process.env.STRIPE_PRICE_CLUB_PRO || '').trim();
   if (!priceId) return res.status(503).json({ error: 'Billing is not configured' });
   const { clubId } = req.params;
-  const role = await getClubRole(req.user.id, clubId);
-  if (!isClubManagerRole(role && role.role)) {
-    return res.status(403).json({ error: 'Not authorized' });
+  if (!(await canManageClubBilling(req.user.id, clubId))) {
+    return res.status(403).json({ error: CLUB_BILLING_REFUSAL });
   }
   try {
     const plan = await getClubPlan(clubId);
@@ -11153,28 +11204,25 @@ app.post(BASE + '/api/billing/checkout/club/:clubId', requireAuth, async (req, r
 
 // Start Club Pro checkout without an explicit club id (used by the marketing
 // pricing CTAs, which don't know the caller's clubs). Resolves the caller's
-// managed clubs (admin/coach) server-side: checkout starts for the first
-// managed club still on the free plan; a caller who manages no club is routed
-// to club creation ({redirect}); all managed clubs already subscribed → 409.
+// BILLABLE clubs (admin-or-owner, getBillableClubIds — same bar as the
+// explicit checkout) server-side: checkout starts for the first billable club
+// still on the free plan; a caller with no billable club is routed to club
+// creation ({redirect}); all billable clubs already subscribed → 409.
 app.post(BASE + '/api/billing/checkout/club', requireAuth, async (req, res) => {
   if (!stripe) return res.status(503).json({ error: 'Billing is not configured' });
   const priceId = (process.env.STRIPE_PRICE_CLUB_PRO || '').trim();
   if (!priceId) return res.status(503).json({ error: 'Billing is not configured' });
   if (!supabaseAdmin) return res.status(503).json({ error: 'Billing is not configured' });
   try {
-    const { data: mems } = await supabaseAdmin
-      .from('memberships')
-      .select('club_id, role')
-      .eq('user_id', req.user.id);
-    const managed = (mems || []).filter(m => isClubManagerRole(m.role) && m.club_id);
-    if (managed.length === 0) {
+    const billable = await getBillableClubIds(req.user.id);
+    if (billable.length === 0) {
       return res.json({ redirect: BASE + '/for-clubs' });
     }
-    for (const m of managed) {
-      const plan = await getClubPlan(m.club_id);
+    for (const clubId of billable) {
+      const plan = await getClubPlan(clubId);
       if (plan !== 'club_pro') {
         const session = await createBillingCheckout({
-          req, ownerType: 'club', ownerId: m.club_id, priceId
+          req, ownerType: 'club', ownerId: clubId, priceId
         });
         return res.json({ url: session.url });
       }
@@ -11187,7 +11235,10 @@ app.post(BASE + '/api/billing/checkout/club', requireAuth, async (req, res) => {
 });
 
 // Billing page. Shows the honest current state: the viewer's individual plan
-// (getUserPlan), the plan of every club they manage (getClubPlan), upgrade
+// (getUserPlan), the plan of every club whose BILLING they manage
+// (admin-or-owner via getBillableClubIds — server-decided, same pattern as
+// canLeave/isOwner/canInviteAdmin: a coach never sees a club billing card
+// here, matching the 403 the checkout/portal routes would return), upgrade
 // buttons with auto-renewal disclosures when free, and Manage billing (Stripe
 // portal) when subscribed. Rendered from injected data only — no fabrication.
 app.get(BASE + '/billing', requirePageAuth, async (req, res) => {
@@ -11195,21 +11246,23 @@ app.get(BASE + '/billing', requirePageAuth, async (req, res) => {
     if (!supabaseAdmin) return sendPageError(res);
     const userPlan = await getUserPlan(req.user.id);
     const clubs = await getSidebarClubs(req.user.id);
-    const { data: mems } = await supabaseAdmin
-      .from('memberships')
-      .select('role, club_id, clubs:club_id (id, name, sport)')
-      .eq('user_id', req.user.id);
+    const billableIds = await getBillableClubIds(req.user.id);
     const managedClubs = [];
-    for (const m of (mems || [])) {
-      if (!isClubManagerRole(m.role)) continue;
-      const c = Array.isArray(m.clubs) ? m.clubs[0] : m.clubs;
-      if (!c || !c.id) continue;
-      managedClubs.push({
-        id: c.id,
-        name: c.name || 'Club',
-        role: m.role,
-        plan: await getClubPlan(c.id)
-      });
+    if (billableIds.length) {
+      const { data: billClubs } = await supabaseAdmin
+        .from('clubs').select('id, name, owner_id').in('id', billableIds);
+      const byId = new Map((billClubs || []).map(c => [c.id, c]));
+      for (const id of billableIds) {
+        const c = byId.get(id);
+        if (!c) continue;
+        const role = await getClubRole(req.user.id, id);
+        managedClubs.push({
+          id: c.id,
+          name: c.name || 'Club',
+          role: c.owner_id === req.user.id ? 'owner' : ((role && role.role) || 'owner'),
+          plan: await getClubPlan(c.id)
+        });
+      }
     }
     const data = {
       userId: req.user.id,
@@ -11555,13 +11608,12 @@ app.post(BASE + '/api/billing/portal/pro', requireAuth, async (req, res) => {
   }
 });
 
-// Same authorization bar as club checkout: admin/coach only.
+// Same authorization bar as club checkout: admin-or-owner only.
 app.post(BASE + '/api/billing/portal/club/:clubId', requireAuth, async (req, res) => {
   if (!stripe) return res.status(503).json({ error: 'Billing is not configured' });
   const { clubId } = req.params;
-  const role = await getClubRole(req.user.id, clubId);
-  if (!isClubManagerRole(role && role.role)) {
-    return res.status(403).json({ error: 'Not authorized' });
+  if (!(await canManageClubBilling(req.user.id, clubId))) {
+    return res.status(403).json({ error: CLUB_BILLING_REFUSAL });
   }
   try {
     const portal = await createPortalSession({ req, ownerType: 'club', ownerId: clubId });
