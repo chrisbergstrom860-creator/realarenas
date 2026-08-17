@@ -1760,6 +1760,17 @@ app.post(BASE + '/api/posts/create', requireAuth, (req, res) => {
 
 app.post(BASE + '/api/posts/:id/like', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for posting' });
+  // Visibility gate (zero-leak): fetch-first; a caller who can't see the
+  // post answers byte-identically to a nonexistent id. Applies to BOTH
+  // directions of the toggle — losing visibility also loses unlike.
+  const { data: post } = await supabaseAdmin
+    .from('posts')
+    .select('id, user_id, club_id, content')
+    .eq('id', req.params.id)
+    .maybeSingle();
+  if (!post || !(await canUserSeePost(req.user.id, post))) {
+    return res.status(404).json({ error: 'Post not found' });
+  }
   const { data: existing } = await supabaseAdmin
     .from('post_likes')
     .select('post_id')
@@ -1779,13 +1790,9 @@ app.post(BASE + '/api/posts/:id/like', requireAuth, async (req, res) => {
   });
   if (error) return res.json({ error: error.message });
   // Notify the post author that someone gave them kudos (skip self-likes).
+  // (post row already fetched by the visibility gate above.)
   try {
-    const { data: post } = await supabaseAdmin
-      .from('posts')
-      .select('user_id, content')
-      .eq('id', req.params.id)
-      .maybeSingle();
-    if (post && post.user_id !== req.user.id) {
+    if (post.user_id !== req.user.id) {
       const liker = displayFromUser(req.user);
       const text = post.content || '';
       await createNotification({
@@ -1812,6 +1819,16 @@ app.post(BASE + '/api/posts/:id/comment', requireAuth, async (req, res) => {
     return res.json({ error: 'Comment cannot be empty' });
   }
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured for posting' });
+  // Visibility gate (zero-leak): same rule and refusal as like — see
+  // canUserSeePost. Fetch-first; deny === missing (404 "Post not found").
+  const { data: post } = await supabaseAdmin
+    .from('posts')
+    .select('id, user_id, club_id')
+    .eq('id', req.params.id)
+    .maybeSingle();
+  if (!post || !(await canUserSeePost(req.user.id, post))) {
+    return res.status(404).json({ error: 'Post not found' });
+  }
   const { data, error } = await supabaseAdmin
     .from('post_comments')
     .insert({
@@ -1823,13 +1840,9 @@ app.post(BASE + '/api/posts/:id/comment', requireAuth, async (req, res) => {
     .single();
   if (error) return res.json({ error: error.message });
   // Notify the post author that someone commented (skip self-comments).
+  // (post row already fetched by the visibility gate above.)
   try {
-    const { data: post } = await supabaseAdmin
-      .from('posts')
-      .select('user_id, content')
-      .eq('id', req.params.id)
-      .maybeSingle();
-    if (post && post.user_id !== req.user.id) {
+    if (post.user_id !== req.user.id) {
       const commenter = displayFromUser(req.user);
       const text = content.trim();
       await createNotification({
@@ -6449,6 +6462,41 @@ async function canManagePost(post, userId) {
   if (post.user_id === userId) return true;
   if (!post.club_id) return false;
   return isClubManager(post.club_id, userId);
+}
+
+// Single-post WRITE gate (like/unlike/comment). Mirrors the READ path's
+// union across surfaces — never stricter, never looser:
+//   - author always;
+//   - announcement (club_id set): viewer is a current member of that club
+//     (/feed + club feed rule; author roster status irrelevant);
+//   - personal post (club_id null): viewer follows the author (/feed rule)
+//     OR shares >=1 current club with the author (club-feed rule, which
+//     shows co-members' personal posts regardless of follows).
+// Profile privacy/opt-out never filters posts on the read path, so it is
+// deliberately absent here. Fails closed on lookup errors. Callers must
+// convert `false` into the byte-identical 404 "Post not found" a missing id
+// gets (zero-leak standard — no existence oracle).
+async function canUserSeePost(userId, post) {
+  if (!supabaseAdmin || !post || !userId) return false;
+  if (post.user_id === userId) return true;
+  if (post.club_id) {
+    const { data: mem } = await supabaseAdmin
+      .from('memberships').select('user_id')
+      .eq('club_id', post.club_id).eq('user_id', userId).maybeSingle();
+    return !!mem;
+  }
+  const { data: fol } = await supabaseAdmin
+    .from('follows').select('follower_id')
+    .eq('follower_id', userId).eq('following_id', post.user_id).maybeSingle();
+  if (fol) return true;
+  const { data: mine } = await supabaseAdmin
+    .from('memberships').select('club_id').eq('user_id', userId);
+  const myClubs = (mine || []).map((m) => m.club_id);
+  if (!myClubs.length) return false;
+  const { data: shared } = await supabaseAdmin
+    .from('memberships').select('club_id')
+    .eq('user_id', post.user_id).in('club_id', myClubs).limit(1);
+  return !!(shared && shared.length);
 }
 
 async function canManageEvent(event, userId) {

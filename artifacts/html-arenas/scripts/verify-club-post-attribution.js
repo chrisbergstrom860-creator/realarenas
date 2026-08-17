@@ -258,6 +258,65 @@ async function main() {
   // clean up outsider's club
   await admin.from('clubs').delete().eq('id', otherClubId);
 
+  // ── 6c. Like/comment visibility gate (canUserSeePost, zero-leak) ──
+  // Roster now: member is the club's only member; outsider has no club and
+  // follows nobody. Write path must match the read path's union:
+  // announcement → club membership; personal → follow OR shared club.
+  const ghostLike = await api('member', 'POST', '/posts/00000000-0000-0000-0000-00000000dead/like');
+  const ghostComment = await api('member', 'POST', '/posts/00000000-0000-0000-0000-00000000dead/comment', { content: 'x' });
+  check('gate baseline: like on missing id → 404 Post not found', ghostLike.status === 404 && ghostLike.body && ghostLike.body.error === 'Post not found', ghostLike);
+  check('gate baseline: comment on missing id → 404 Post not found', ghostComment.status === 404 && ghostComment.body && ghostComment.body.error === 'Post not found', ghostComment);
+
+  const { data: gateAnn } = await admin.from('posts')
+    .insert({ user_id: users.member.id, club_id: clubId, content: 'gate probe announcement' })
+    .select('id').single();
+  // Non-member on a club announcement: byte-identical to nonexistent.
+  let gDenied = await api('outsider', 'POST', '/posts/' + gateAnn.id + '/like');
+  check('non-member like on announcement: byte-identical not-found', gDenied.status === ghostLike.status && JSON.stringify(gDenied.body) === JSON.stringify(ghostLike.body), gDenied);
+  gDenied = await api('outsider', 'POST', '/posts/' + gateAnn.id + '/comment', { content: 'should not land' });
+  check('non-member comment on announcement: byte-identical not-found', gDenied.status === ghostComment.status && JSON.stringify(gDenied.body) === JSON.stringify(ghostComment.body), gDenied);
+  const { data: gateRows } = await admin.from('post_likes').select('post_id').eq('post_id', gateAnn.id);
+  const { data: gateCRows } = await admin.from('post_comments').select('id').eq('post_id', gateAnn.id);
+  check('denied attempts wrote zero rows', gateRows.length === 0 && gateCRows.length === 0, { gateRows, gateCRows });
+  // Member of the club: both work.
+  r = await api('member', 'POST', '/posts/' + gateAnn.id + '/like');
+  check('member like on announcement works', r.body && r.body.liked === true, r.body);
+  r = await api('member', 'POST', '/posts/' + gateAnn.id + '/comment', { content: 'seen it' });
+  check('member comment on announcement works', r.body && r.body.success === true, r.body);
+
+  // Personal post: follow OR shared club grants access; neither → zero-leak.
+  r = await api('member', 'POST', '/posts/create', { content: 'gate probe personal', sport: 'running' });
+  const gatePers = r.body && r.body.post && r.body.post.id;
+  check('gate personal post created', !!gatePers, r.body);
+  gDenied = await api('outsider', 'POST', '/posts/' + gatePers + '/like');
+  check('stranger (no follow, no shared club) like: byte-identical not-found', gDenied.status === ghostLike.status && JSON.stringify(gDenied.body) === JSON.stringify(ghostLike.body), gDenied);
+  gDenied = await api('outsider', 'POST', '/posts/' + gatePers + '/comment', { content: 'nope' });
+  check('stranger comment: byte-identical not-found', gDenied.status === ghostComment.status && JSON.stringify(gDenied.body) === JSON.stringify(ghostComment.body), gDenied);
+  // Follow leg: outsider follows the author → like now works.
+  await admin.from('follows').insert({ follower_id: users.outsider.id, following_id: users.member.id });
+  r = await api('outsider', 'POST', '/posts/' + gatePers + '/like');
+  check('follower like on personal post works', r.body && r.body.liked === true, r.body);
+  // Losing visibility also loses UNLIKE (toggle is behind the same gate):
+  await admin.from('follows').delete().eq('follower_id', users.outsider.id).eq('following_id', users.member.id);
+  gDenied = await api('outsider', 'POST', '/posts/' + gatePers + '/like');
+  check('after unfollow, unlike attempt: byte-identical not-found', gDenied.status === ghostLike.status && JSON.stringify(gDenied.body) === JSON.stringify(ghostLike.body), gDenied);
+  const { data: keptLike } = await admin.from('post_likes').select('user_id').eq('post_id', gatePers).eq('user_id', users.outsider.id);
+  check('existing like row untouched by denied unlike', keptLike.length === 1, keptLike);
+  // Shared-club leg: outsider joins the club → comment now works (club feed
+  // shows co-members' personal posts, so the write path must accept it).
+  await admin.from('memberships').insert({ user_id: users.outsider.id, club_id: clubId, role: 'member' });
+  r = await api('outsider', 'POST', '/posts/' + gatePers + '/comment', { content: 'co-member can comment' });
+  check('co-member (shared club, no follow) comment works', r.body && r.body.success === true, r.body);
+  // And unlike works again through the shared-club leg (toggle removes it).
+  r = await api('outsider', 'POST', '/posts/' + gatePers + '/like');
+  check('co-member unlike works (toggle)', r.body && r.body.liked === false, r.body);
+  // Author self-like always allowed.
+  r = await api('member', 'POST', '/posts/' + gatePers + '/like');
+  check('author self-like works', r.body && r.body.liked === true, r.body);
+  await admin.from('memberships').delete().eq('user_id', users.outsider.id).eq('club_id', clubId);
+  await admin.from('posts').delete().eq('id', gateAnn.id);
+  await admin.from('posts').delete().eq('id', gatePers);
+
   // ── 7. Club deletion → FK cascade removes announcements (no app double-handling) ──
   const { data: cascAnn } = await admin.from('posts')
     .insert({ user_id: users.member.id, club_id: clubId, content: 'cascade probe' })
