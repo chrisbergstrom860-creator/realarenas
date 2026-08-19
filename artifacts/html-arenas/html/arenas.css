@@ -665,7 +665,7 @@ body {
    The 4×7 geometry is fixed: rows are calendar weeks, columns are Mon–Sun.
    Cell boxes stay uniform; elapsed rest days use a deliberately smaller,
    faint neutral marker while future days render no dot at all. */
-.activity-overview-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}
+.activity-overview-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:stretch}
 .activity-overview-split.activity-overview-single{grid-template-columns:1fr}
 .activity-grid-card{background:white;border:var(--border);border-radius:var(--radius-lg);margin-bottom:16px;overflow:hidden;min-width:0}
 .activity-grid-header{padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -683,7 +683,7 @@ body {
 .owner-activity-grid{margin:12px}
 
 @media (max-width:768px){
-  body:has(.bottom-nav) .activity-overview-split{grid-template-columns:1fr}
+  body:has(.bottom-nav) .activity-overview-split{grid-template-columns:1fr;align-items:start}
   body:has(.bottom-nav) .activity-grid-body{padding:14px 14px 17px}
   body:has(.bottom-nav) .activity-grid-weekdays,
   body:has(.bottom-nav) .activity-grid-row{column-gap:4px}

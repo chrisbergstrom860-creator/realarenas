@@ -131,10 +131,12 @@ const CHALLENGES = [chPriv.id, chShort.id, chLong.id, chByM.id];
 // activities: dense, multi-sport, long titles, spread over the month → feeds
 // PRs, stats-4, calendar, leaderboards, club rollups, points, streaks.
 const ACT_TITLE = 'Threshold intervals along the upper fjord switchbacks — long evening session with negative splits';
-const sports = ['running', 'cycling', 'hiking', 'swimming'];
+const sports = ['running', 'cycling', 'climbing', 'swimming', 'football', 'hiking', 'weightlifting',
+  'yoga', 'golf', 'pickleball', 'basketball', 'hockey', 'tennis', 'pilates'];
 const seededActivityUsers = [C, M, ...F.slice(0, 6)];
 for (const [ui, u] of seededActivityUsers.entries()) {
-  for (let i = 0; i < 6; i++) {
+  const activityCount = u === C ? sports.length : 6;
+  for (let i = 0; i < activityCount; i++) {
     await ins('activities', {
       user_id: u, sport: sports[(ui + i) % sports.length],
       title: i % 2 ? ACT_TITLE : 'Short spin',
@@ -142,6 +144,15 @@ for (const [ui, u] of seededActivityUsers.entries()) {
       distance: (8 + i * 3.5) + ' km', notes: i % 3 ? ACT_TITLE : null
     });
   }
+}
+// Reverse equal-height case: one sport plus activity on every elapsed day in
+// the four-week window makes the grid the naturally taller card. The public
+// profile geometry pass proves By sport stretches up to it on desktop.
+for (let i = 0; i < 28; i++) {
+  await ins('activities', {
+    user_id: F[7], sport: 'running', title: 'Full-grid running day ' + (i + 1),
+    date: dt(-i), duration: '00:30:00', distance: '5 km'
+  });
 }
 // earned achievements for creator → .achievement-grid renders earned rows
 for (const b of ['first_steps', 'early_bird', 'regular', 'joined_club', 'challenger', 'hat_trick']) {
@@ -364,7 +375,7 @@ const PAGES = [
         return { ok: lines === 1 && el.scrollWidth <= el.clientWidth + 1,
           lines, scrollWidth: el.scrollWidth, clientWidth: el.clientWidth };
       })()` },
-      { name: 'grid and By sport use the intended responsive row', js: `(() => {
+      { name: 'grid and By sport use the intended responsive row with equal desktop heights', js: `(() => {
         const grid = document.querySelector('.activity-overview-split [data-activity-grid]');
         const sport = document.querySelector('.activity-overview-split [data-by-sport-card]');
         const tracks = [...document.querySelectorAll('.public-sport-hours-track')];
@@ -375,8 +386,52 @@ const PAGES = [
         const layoutOk = mobile
           ? g.bottom <= s.top + 1 && Math.abs(g.width - s.width) <= 2
           : Math.abs(g.top - s.top) <= 2 && g.right <= s.left + 1 && Math.abs(g.width - s.width) <= 2;
-        return { ok: layoutOk && tracksWide, mobile, grid: { x:g.x, y:g.y, width:g.width, bottom:g.bottom },
-          sport: { x:s.x, y:s.y, width:s.width }, trackWidths: tracks.map((track) => track.getBoundingClientRect().width) };
+        const equalDesktopHeight = mobile || Math.abs(g.height - s.height) <= 1;
+        return { ok: layoutOk && tracksWide && equalDesktopHeight, mobile,
+          grid: { x:g.x, y:g.y, width:g.width, height:g.height, bottom:g.bottom },
+          sport: { x:s.x, y:s.y, width:s.width, height:s.height, bottom:s.bottom },
+          heightDelta: Math.abs(g.height - s.height), trackWidths: tracks.map((track) => track.getBoundingClientRect().width) };
+      })()` },
+      { name: 'many-sport stretch leaves grid dots top-aligned with slack below', js: `(() => {
+        const grid = document.querySelector('.activity-overview-split [data-activity-grid]');
+        const body = grid && grid.querySelector('.activity-grid-body');
+        const rows = [...document.querySelectorAll('.activity-overview-split .activity-grid-row')];
+        if (!grid || !body || rows.length !== 4) return { ok: false, missing: true };
+        const mobile = window.innerWidth <= 768;
+        const gaps = rows.slice(1).map((row, i) => row.getBoundingClientRect().top - rows[i].getBoundingClientRect().bottom);
+        const slackBelowBody = grid.getBoundingClientRect().bottom - body.getBoundingClientRect().bottom;
+        const naturalSpacing = gaps.every((gap) => Math.abs(gap - 11) <= 1);
+        return { ok: naturalSpacing && (mobile || slackBelowBody > 20), mobile, gaps, slackBelowBody };
+      })()` }
+    ] },
+  { user: 'member', name: 'athlete-profile-one-sport', path: '/athletes/' + F[7],
+    waitFor: '.activity-overview-split [data-activity-grid]', root: 'body',
+    surfaces: [
+      { name: 'one-sport full-grid rows', sel: '.activity-overview-split .activity-grid-rows', min: 4, max: 4 },
+      { name: 'one-sport By sport row', sel: '[data-by-sport-card] div:has(> .public-sport-hours-row)', min: 1, max: 1 }
+    ],
+    checks: [
+      { name: 'one-sport athlete fills every elapsed grid day', js: `(() => {
+        const cells = [...document.querySelectorAll('.activity-overview-split .activity-grid-cell')];
+        const elapsed = cells.filter((cell) => cell.dataset.state !== 'future');
+        return { ok: cells.length === 28 && elapsed.length > 0 && elapsed.every((cell) => cell.dataset.state === 'active'),
+          cells: cells.length, elapsed: elapsed.length, active: cells.filter((cell) => cell.dataset.state === 'active').length };
+      })()` },
+      { name: 'one-sport reverse case stretches By sport to the grid on desktop', js: `(() => {
+        const grid = document.querySelector('.activity-overview-split [data-activity-grid]');
+        const sport = document.querySelector('.activity-overview-split [data-by-sport-card]');
+        if (!grid || !sport) return { ok: false, missing: true };
+        const g = grid.getBoundingClientRect(), s = sport.getBoundingClientRect();
+        const mobile = window.innerWidth <= 768;
+        const layoutOk = mobile
+          ? g.bottom <= s.top + 1 && Math.abs(g.width - s.width) <= 2
+          : Math.abs(g.top - s.top) <= 2 && g.right <= s.left + 1 && Math.abs(g.width - s.width) <= 2
+            && Math.abs(g.height - s.height) <= 1;
+        const contentBottom = Math.max(...[...sport.children].map((child) => child.getBoundingClientRect().bottom));
+        const slackBelowContent = s.bottom - contentBottom;
+        return { ok: layoutOk && (mobile || slackBelowContent > 20), mobile,
+          grid: { width:g.width, height:g.height, bottom:g.bottom },
+          sport: { width:s.width, height:s.height, bottom:s.bottom }, slackBelowContent };
       })()` }
     ] },
   // Mobile defaults to WEEK view (no .cal-grid) — wait on the shell, then
