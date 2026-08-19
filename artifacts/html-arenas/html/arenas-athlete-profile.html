@@ -30,6 +30,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <script src="/html/arenas-club-create.js"></script>
 <script src="/html/arenas-stat-tiles.js"></script>
 <script src="/html/arenas-activity-card.js"></script>
+<script src="/html/arenas-activity-grid.js"></script>
 <script src="/html/arenas-time.js"></script>
 <style>
 button,select,input,textarea{font-family:var(--font)}
@@ -91,6 +92,7 @@ button,select,input,textarea{font-family:var(--font)}
 .pub-tile{background:white;border:var(--border);border-radius:var(--radius-lg);padding:14px 16px}
 .pub-tile-val{font-size:22px;font-weight:700;font-family:var(--mono);color:var(--gray-900);line-height:1.1}
 .pub-tile-label{font-size:10px;color:var(--gray-500);margin-top:4px;text-transform:uppercase;letter-spacing:.05em}
+.pub-tile-label-long{font-size:9px;letter-spacing:.035em;white-space:nowrap}
 .pub-card{background:white;border:var(--border);border-radius:var(--radius-lg);margin-bottom:16px;overflow:hidden}
 .pub-card-hd{padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between}
 .pub-card-title{font-size:12px;font-weight:600}
@@ -441,13 +443,14 @@ function showToast(msg) {
   } else {
     var st = data.stats || { totalActivities: 0, totalKm: 0, currentStreak: 0, sportsBreakdown: [] };
     ov += '<div class="pub-tiles">' +
-      '<div class="pub-tile"><div class="pub-tile-val">' + st.totalActivities + '</div><div class="pub-tile-label">Activities</div></div>' +
+      '<div class="pub-tile"><div class="pub-tile-val">' + st.totalActivities + '</div><div class="pub-tile-label pub-tile-label-long" data-stat-label="all-time-activities">ALL-TIME ACTIVITIES</div></div>' +
       '<div class="pub-tile"><div class="pub-tile-val">' + st.totalKm + '</div><div class="pub-tile-label">km logged</div></div>' +
       '<div class="pub-tile"><div class="pub-tile-val">' + st.currentStreak + '</div><div class="pub-tile-label">Day streak</div></div>' +
       '<div class="pub-tile"><div class="pub-tile-val">' + st.sportsBreakdown.length + '</div><div class="pub-tile-label">Sports</div></div>' +
     '</div>';
+    var bySportHtml = '';
     if (st.sportsBreakdown.length) {
-      ov += '<div class="pub-card"><div class="pub-card-hd"><div class="pub-card-title">By sport</div></div>' +
+      bySportHtml = '<div class="pub-card" data-by-sport-card><div class="pub-card-hd"><div class="pub-card-title">By sport</div></div>' +
         '<div style="padding:12px 14px;display:flex;gap:6px;flex-wrap:wrap">' +
         st.sportsBreakdown.map(function(sb){
           return window.sportPillHtml(sb.sport, { style: 'font-size:12px' }).replace('</span>', ' · ' + sb.sessions + '</span>');
@@ -463,18 +466,18 @@ function showToast(msg) {
       });
       var maxHours = chartRows.reduce(function(m, sb){ return Math.max(m, sb.hours || 0); }, 0);
       if (maxHours > 0) {
-        ov += '<div style="padding:2px 14px 4px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em">Hours per sport</div>' +
+        bySportHtml += '<div style="padding:2px 14px 4px;font-size:11px;font-weight:600;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em">Hours per sport</div>' +
           '<div style="padding:0 14px 14px;display:flex;flex-direction:column;gap:8px">' +
           chartRows.map(function(sb){
             var reg = byId[sb.sport];
             var hrs = sb.hours || 0;
             var pct = hrs > 0 ? Math.max(2, Math.round((hrs / maxHours) * 100)) : 0;
-            return '<div style="display:flex;align-items:center;gap:8px">' +
+            return '<div class="public-sport-hours-row" style="display:flex;align-items:center;gap:8px">' +
               '<div style="width:96px;flex-shrink:0;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--gray-700);min-width:0">' +
                 '<span style="flex-shrink:0">' + (reg ? reg.emoji : '🏃') + '</span>' +
                 '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (reg ? reg.label : esc(sb.sport)) + '</span>' +
               '</div>' +
-              '<div style="flex:1;min-width:0;height:14px;border-radius:4px;background:var(--gray-100);overflow:hidden">' +
+              '<div class="public-sport-hours-track" style="flex:1;min-width:0;height:14px;border-radius:4px;background:var(--gray-100);overflow:hidden">' +
                 (pct > 0 ? '<div style="width:' + pct + '%;height:100%;border-radius:4px;background:' + (reg ? reg.colors.text : 'var(--gray-400)') + '"></div>' : '') +
               '</div>' +
               '<div style="width:46px;flex-shrink:0;text-align:right;font-size:12px;font-weight:600;color:' + (hrs > 0 ? 'var(--gray-900)' : 'var(--gray-400)') + '">' + (hrs > 0 ? hrs + 'h' : '—') + '</div>' +
@@ -482,8 +485,11 @@ function showToast(msg) {
           }).join('') +
         '</div>';
       }
-      ov += '</div>';
+      bySportHtml += '</div>';
     }
+    var activityGridHtml = window.buildFourWeekActivityGridHtml(st.activityGrid);
+    ov += '<div class="activity-overview-split' + (bySportHtml ? '' : ' activity-overview-single') + '">' +
+      activityGridHtml + bySportHtml + '</div>';
   }
   // Trophy strip — earned badges only; renders in the private state too
   // (badges are public recognition, not raw training data).

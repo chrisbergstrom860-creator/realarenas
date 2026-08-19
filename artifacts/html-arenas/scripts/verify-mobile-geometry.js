@@ -289,11 +289,23 @@ const PAGES = [
       { name: 'modal-hpw', js: `document.querySelector('.hpw-link').click()`,
         waitFor: '#hpw-modal-body', root: '#hpw-modal-overlay' }
     ] },
-  { user: 'creator', name: 'profile', path: '/profile', waitFor: '.hero-inner', root: 'body',
+  { user: 'creator', name: 'profile', path: '/profile', waitFor: '.owner-activity-grid .activity-grid-row', root: 'body',
     // The 📷 edit badge deliberately sits ON the avatar circle (desktop
     // parity) — exempt the wrap from the text-overlap rule only.
     ignoreOverlap: ['.hero-av-wrap'],
-    surfaces: [{ name: 'overview', sel: '#tab-overview', min: 1 }],
+    surfaces: [
+      { name: 'overview', sel: '#tab-overview', min: 1 },
+      { name: 'owner four-week rows', sel: '.owner-activity-grid .activity-grid-rows', min: 4, max: 4 },
+      { name: 'owner weekday headings', sel: '.owner-activity-grid .activity-grid-weekdays', min: 7, max: 7 }
+    ],
+    checks: [
+      { name: 'owner grid is exactly 4 rows by 7 columns', js: `(() => {
+        const rows = [...document.querySelectorAll('.owner-activity-grid .activity-grid-row')];
+        const cells = rows.flatMap((row) => [...row.children]);
+        return { ok: rows.length === 4 && cells.length === 28 && rows.every((row) => row.children.length === 7),
+          rows: rows.length, cells: cells.length };
+      })()` }
+    ],
     steps: [
       { name: 'activities', js: htab('activities'), surfaces: [{ name: 'activities list', sel: '#tab-activities', min: 1 }] },
       // waitFor the goals-vs-actual bars: they arrive in the same innerHTML
@@ -327,6 +339,45 @@ const PAGES = [
         waitFor: '#modal-delete-account .modal-close', root: '#modal-delete-account' },
       { name: 'modal-goal', js: `window.arenasOverlay.close('modal-delete-account'); ` + closeModals + `window.openGoalForm()`,
         waitFor: '#modal-goal .modal-close', root: '#modal-goal' }
+    ] },
+  { user: 'member', name: 'athlete-profile', path: '/athletes/' + C,
+    waitFor: '.activity-overview-split [data-activity-grid]', root: 'body',
+    surfaces: [
+      { name: 'public four-week rows', sel: '.activity-overview-split .activity-grid-rows', min: 4, max: 4 },
+      { name: 'public weekday headings', sel: '.activity-overview-split .activity-grid-weekdays', min: 7, max: 7 },
+      { name: 'public by-sport rows', sel: '[data-by-sport-card] div:has(> .public-sport-hours-row)', min: 1 }
+    ],
+    checks: [
+      { name: 'public grid is exactly 4 rows by 7 columns', js: `(() => {
+        const rows = [...document.querySelectorAll('.activity-overview-split .activity-grid-row')];
+        const cells = rows.flatMap((row) => [...row.children]);
+        const future = cells.filter((cell) => cell.dataset.state === 'future');
+        return { ok: rows.length === 4 && cells.length === 28 && rows.every((row) => row.children.length === 7)
+          && future.every((cell) => cell.children.length === 0),
+          rows: rows.length, cells: cells.length, futureWithDots: future.filter((cell) => cell.children.length).length };
+      })()` },
+      { name: 'ALL-TIME ACTIVITIES stays on one unclipped line', js: `(() => {
+        const el = document.querySelector('[data-stat-label="all-time-activities"]');
+        if (!el) return { ok: false, missing: true };
+        const range = document.createRange(); range.selectNodeContents(el);
+        const lines = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0).length;
+        return { ok: lines === 1 && el.scrollWidth <= el.clientWidth + 1,
+          lines, scrollWidth: el.scrollWidth, clientWidth: el.clientWidth };
+      })()` },
+      { name: 'grid and By sport use the intended responsive row', js: `(() => {
+        const grid = document.querySelector('.activity-overview-split [data-activity-grid]');
+        const sport = document.querySelector('.activity-overview-split [data-by-sport-card]');
+        const tracks = [...document.querySelectorAll('.public-sport-hours-track')];
+        if (!grid || !sport || !tracks.length) return { ok: false, missing: true };
+        const g = grid.getBoundingClientRect(), s = sport.getBoundingClientRect();
+        const tracksWide = tracks.every((track) => track.getBoundingClientRect().width >= 24);
+        const mobile = window.innerWidth <= 768;
+        const layoutOk = mobile
+          ? g.bottom <= s.top + 1 && Math.abs(g.width - s.width) <= 2
+          : Math.abs(g.top - s.top) <= 2 && g.right <= s.left + 1 && Math.abs(g.width - s.width) <= 2;
+        return { ok: layoutOk && tracksWide, mobile, grid: { x:g.x, y:g.y, width:g.width, bottom:g.bottom },
+          sport: { x:s.x, y:s.y, width:s.width }, trackWidths: tracks.map((track) => track.getBoundingClientRect().width) };
+      })()` }
     ] },
   // Mobile defaults to WEEK view (no .cal-grid) — wait on the shell, then
   // audit week (default) plus an explicit switch to month.
@@ -406,6 +457,9 @@ for (const cfg of PAGES) {
   for (const s of out.surfaceReport) {
     console.log(`   surface ${s.ok ? 'RENDERED' : (s.found ? 'EMPTY' : 'MISSING')}  ${s.name} (${s.children} children)`);
     check(`${cfg.name}: surface "${s.name}" rendered content (not an unmeasured empty state)`, s.ok, s);
+  }
+  for (const c of out.checksReport || []) {
+    check(`${cfg.name}: ${c.name}`, c.ok, c.detail);
   }
   let pageFails = 0;
   for (const r of out.results) {

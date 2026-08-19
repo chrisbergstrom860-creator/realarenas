@@ -23,6 +23,7 @@ const {
   addDaysToKey, keyToUtcDate, weekStartKey, monthKey, zoneMidnightUtc,
   computeStreaks
 } = require('./tzdate');
+const { buildFourWeekActivityGrid } = require('./activity-grid');
 
 const app = express();
 // One reverse-proxy hop in every deployment (Replit artifact router in dev,
@@ -409,6 +410,10 @@ app.get(['/html/arenas-stack.js', '/arenas-stack.js'], (req, res) => {
 // feed, my-profile, club-member, and club-dashboard pages. Dual-path as above.
 app.get(['/html/arenas-time.js', '/arenas-time.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-time.js'));
+});
+// Shared four-week activity-dot grid renderer (public + owner profiles).
+app.get(['/html/arenas-activity-grid.js', '/arenas-activity-grid.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-activity-grid.js'));
 });
 
 // Shared athlete-directory card renderer + follow controller — one template
@@ -4446,6 +4451,7 @@ app.get(BASE + '/api/profile/overview', requireAuth, async (req, res) => {
       week: { activities: acts.length, km: weekKm, hours: weekHours, points: weekPoints },
       dayStrip,
       currentStreak,
+      activityGrid: buildFourWeekActivityGrid(allActs || [], tz),
       recentActivities: recentActs || [],
       activeChallenges,
       upcomingRsvps
@@ -5959,7 +5965,13 @@ function computePublicAthleteStats(acts, tz) {
   const sportsBreakdown = Object.keys(bySport)
     .map((sport) => ({ sport, sessions: bySport[sport].sessions, hours: Math.round(bySport[sport].hours * 10) / 10 }))
     .sort((x, y) => y.sessions - x.sessions);
-  return { totalActivities: acts.length, totalKm, currentStreak, sportsBreakdown };
+  return {
+    totalActivities: acts.length,
+    totalKm,
+    currentStreak,
+    sportsBreakdown,
+    activityGrid: buildFourWeekActivityGrid(acts, tz)
+  };
 }
 
 app.get(BASE + '/athletes/:userId', requirePageAuth, async (req, res) => {
@@ -5995,8 +6007,18 @@ app.get(BASE + '/athletes/:userId', requirePageAuth, async (req, res) => {
       supabaseAdmin.from('memberships').select('clubs:club_id (id, name, sport, city, logo_url, visibility)').eq('user_id', targetId),
       // Activities fetched only when the athlete broadcasts training at all;
       // the private branch never reads the table (nothing to accidentally leak).
+      // Page the visible branch instead of capping it: both the explicitly
+      // all-time stats and the four-week activity count must include every row.
+      // The id tiebreaker makes range pagination stable when many activities
+      // share the same training timestamp.
       feedVisible
-        ? supabaseAdmin.from('activities').select('*').eq('user_id', targetId).order('date', { ascending: false }).limit(1000)
+        ? fetchAllRows(
+            'activities',
+            q => q.eq('user_id', targetId)
+              .order('date', { ascending: false })
+              .order('id', { ascending: true }),
+            '*'
+          ).then(data => ({ data }))
         : Promise.resolve({ data: null })
     ]);
 

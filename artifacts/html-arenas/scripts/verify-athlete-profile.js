@@ -82,26 +82,51 @@ const seeded = { clubs: [], acts: [], ach: [], follows: [] };
 async function main() {
   // ── SEED ──
   await mkUser('v');
-  await mkUser('n', { bio: 'Athprof verify bio', sports: ['running'], location: 'Testville' });
+  await mkUser('n', { bio: 'Athprof verify bio', sports: ['running'], location: 'Testville', timezone: 'America/Los_Angeles' });
   await mkUser('o', { prefs: { show_on_leaderboards: false } });
   await mkUser('p', { prefs: { activity_feed_visible: false } });
   await mkUser('d');
   await login('v');
   console.log('MANIFEST users:', Object.keys(users).map((k) => k + '=' + users[k].id).join(' '));
 
-  // N's activities: 5 km + 3 km → totalKm 8.
+  // N's activities deliberately separate scope: two ordinary rows are inside
+  // the four-week window and one is older. Add 1,001 same-day rows as a public
+  // route pagination regression: ALL-TIME ACTIVITIES and the four-week count
+  // must stay complete beyond PostgREST's 1,000-row page size.
+  const nowMs = Date.now();
   const { data: actRows, error: aErr } = await admin.from('activities').insert([
-    { user_id: users.n.id, sport: 'running', title: 'Athprof Morning Run', distance: '5 km', duration: '30:00', date: new Date().toISOString() },
-    { user_id: users.n.id, sport: 'cycling', title: 'Athprof Evening Spin', distance: '3 km', duration: '15:00', date: new Date().toISOString() }
+    { user_id: users.n.id, sport: 'running', title: 'Athprof Morning Run', distance: '5 km', duration: '30:00', date: new Date(nowMs).toISOString() },
+    { user_id: users.n.id, sport: 'cycling', title: 'Athprof Evening Spin', distance: '3 km', duration: '15:00', date: new Date(nowMs - 8 * 86400000).toISOString() },
+    { user_id: users.n.id, sport: 'swimming', title: 'Athprof Old Swim', distance: '2 km', duration: '20:00', date: new Date(nowMs - 35 * 86400000).toISOString() }
   ]).select();
   if (aErr) throw new Error('activities: ' + aErr.message);
   seeded.acts = actRows.map((r) => r.id);
+  const overflowDate = new Date(nowMs - 86400000).toISOString();
+  const overflowRows = Array.from({ length: 1001 }, (_, i) => ({
+    user_id: users.n.id,
+    sport: 'running',
+    title: 'Athprof Volume Session ' + i,
+    distance: '0 km',
+    duration: '0:00',
+    date: overflowDate
+  }));
+  for (let from = 0; from < overflowRows.length; from += 500) {
+    const { error } = await admin.from('activities').insert(overflowRows.slice(from, from + 500));
+    if (error) throw new Error('overflow activities: ' + error.message);
+  }
   // P also trains — but privately.
   const { data: pAct, error: pErr } = await admin.from('activities').insert(
     { user_id: users.p.id, sport: 'running', title: 'Athprof Secret Session', distance: '7 km', duration: '40:00', date: new Date().toISOString() }
   ).select();
   if (pErr) throw new Error('p activity: ' + pErr.message);
   seeded.acts.push(pAct[0].id);
+  // The owner path is separate from the visitor route; seed V so its
+  // /api/profile/overview response proves the same shared grid is present.
+  const { data: vAct, error: vErr } = await admin.from('activities').insert(
+    { user_id: users.v.id, sport: 'running', title: 'Athprof Owner Session', distance: '4 km', duration: '25:00', date: new Date(nowMs).toISOString() }
+  ).select();
+  if (vErr) throw new Error('viewer activity: ' + vErr.message);
+  seeded.acts.push(vAct[0].id);
 
   // N's earned badge (real catalog id: first_activity exists in BADGES).
   const { error: bErr } = await admin.from('achievements').insert({ user_id: users.n.id, badge_id: 'first_steps' });
@@ -140,8 +165,11 @@ async function main() {
   check('normal profile: 200', rn.status === 200, rn.status);
   check('normal profile: name present', bn.includes('Athprof Normal'));
   check('normal profile: activity title present', bn.includes('Athprof Morning Run'));
-  check('normal profile: totalKm computed via shared parser (8)', bn.includes('"totalKm":8'));
-  check('normal profile: totalActivities 2', bn.includes('"totalActivities":2'));
+  check('normal profile: totalKm computed via shared parser (10)', bn.includes('"totalKm":10'));
+  check('normal profile: ALL-TIME count includes >1,000 rows', bn.includes('"totalActivities":1004'));
+  check('normal profile: four-week count includes >1,000 rows', bn.includes('"activityCount":1003'));
+  check('normal profile: four-week grid has four week rows', (bn.match(/"startKey":/g) || []).length >= 5);
+  check('normal profile: exact ALL-TIME ACTIVITIES copy present', bn.includes('ALL-TIME ACTIVITIES'));
   check('normal profile: currentStreak field present', bn.includes('"currentStreak":'));
   check('normal profile: sportsBreakdown present', bn.includes('"sportsBreakdown":'));
   check('normal profile: earned badge in payload', bn.includes('"first_steps"') || bn.includes('first_steps'));
@@ -173,6 +201,7 @@ async function main() {
   check('private-training: activity title ABSENT', !bp.includes('Athprof Secret Session'));
   check('private-training: stats null in payload', bp.includes('"stats":null'));
   check('private-training: activities null in payload', bp.includes('"activities":null'));
+  check('private-training: no grid payload leaks', !bp.includes('"activityGrid":'));
   check('private-training: follow counts still present', bp.includes('"followerCount"'));
 
   // ── 3b. Opt-out is undiscoverable in the directory too ──
@@ -186,13 +215,18 @@ async function main() {
   const rs = await get('v', '/athletes/' + users.v.id);
   check('self → 302', rs.status === 302, rs.status);
   check('self redirect target /profile', String(rs.headers.get('location')).includes('/profile'));
+  const rov = await get('v', '/api/profile/overview');
+  const ov = await rov.json();
+  check('owner overview: 200', rov.status === 200, rov.status);
+  check('owner overview: same four-week grid present', ov.activityGrid && ov.activityGrid.weeks.length === 4);
+  check('owner overview: own current activity counted', ov.activityGrid && ov.activityGrid.activityCount === 1, ov.activityGrid);
   const ru = await fetch(BASE_URL + '/athletes/' + users.n.id, { redirect: 'manual' });
   check('unauthenticated → 302', ru.status === 302, ru.status);
   check('unauth redirect target /landing', String(ru.headers.get('location')).includes('/landing'));
 
   // ── CLEANUP ──
   for (const [f, g] of seeded.follows) await admin.from('follows').delete().eq('follower_id', f).eq('following_id', g);
-  for (const id of seeded.acts) await admin.from('activities').delete().eq('id', id);
+  await admin.from('activities').delete().in('user_id', [users.v.id, users.n.id, users.p.id]);
   await admin.from('achievements').delete().eq('user_id', users.n.id);
   for (const id of seeded.clubs) {
     await admin.from('memberships').delete().eq('club_id', id);

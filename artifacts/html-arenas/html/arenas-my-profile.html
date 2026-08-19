@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <script src="/html/arenas-club-create.js"></script>
 <script src="/html/arenas-stat-tiles.js"></script>
 <script src="/html/arenas-activity-card.js"></script>
+<script src="/html/arenas-activity-grid.js"></script>
 <script src="/html/arenas-athlete-cards.js"></script>
 <script src="/html/arenas-sport-charts.js"></script>
 <script src="/html/arenas-stack.js"></script>
@@ -2367,7 +2368,9 @@ if (logHashMatch) {
           '</div>';
       }
 
-      var empty = goalsHtml === '' && (r.activeChallenges || []).length === 0 && (r.upcomingRsvps || []).length === 0 && (r.recentActivities || []).length === 0;
+      // The four-week grid is itself the honest empty state for training, so
+      // the old motivational placeholder must not appear beneath an empty grid.
+      var empty = !r.activityGrid && goalsHtml === '' && (r.activeChallenges || []).length === 0 && (r.upcomingRsvps || []).length === 0 && (r.recentActivities || []).length === 0;
 
       body.innerHTML =
         '<div style="background:white;border-bottom:var(--border);padding:14px 16px">' +
@@ -2383,6 +2386,7 @@ if (logHashMatch) {
           '</div>' +
           '<div style="display:flex;gap:4px;margin-top:10px">' + dayStripHtml + '</div>' +
         '</div>' +
+        window.buildFourWeekActivityGridHtml(r.activityGrid, { className: 'owner-activity-grid' }) +
         goalsHtml + challengesHtml + eventsHtml + achHtml + actsHtml +
         (empty ? '<div style="text-align:center;padding:40px 24px"><div style="font-size:32px;margin-bottom:10px">👋</div><div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:6px">Your overview is waiting</div><div style="font-size:12px;color:var(--gray-500);line-height:1.6">Log an activity, join a challenge, or RSVP to an event and this page comes alive.</div></div>' : '');
     } catch (err) {

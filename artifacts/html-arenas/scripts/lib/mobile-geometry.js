@@ -145,9 +145,11 @@ export function surfacesExpr(surfaces) {
 }
 
 // Runs one page config across all viewports on an authenticated context.
-// cfg: { name, path, waitFor, root, ignoreOverlap?, surfaces?, steps? }
+// cfg: { name, path, waitFor, root, ignoreOverlap?, surfaces?, checks?, steps? }
 // steps: [{ name, js, waitFor? }] — extra states (tab clicks) audited after
-// the initial one. Returns { results: [{tag, audit}], surfaceReport, errors }.
+// the initial one. `checks` are page-specific browser expressions returning
+// either true or { ok, ...detail }; they supplement the generic geometry audit.
+// Returns { results: [{tag, audit}], surfaceReport, checksReport, errors }.
 export async function auditPage(context, base, cfg) {
   const page = await context.newPage();
   const errors = [];
@@ -155,6 +157,7 @@ export async function auditPage(context, base, cfg) {
   page.on('pageerror', (e) => errors.push(String(e)));
   const results = [];
   const surfaceReport = []; // measured at EVERY viewport — a surface that
+  const checksReport = [];
   // renders at 360px but collapses empty at 414px must not pass unnoticed.
   // GEO_WIDTHS=mobile|desktop splits the run in half (the full 6-width run
   // exceeds a 5-minute shell window; background runs have been killed
@@ -172,6 +175,14 @@ export async function auditPage(context, base, cfg) {
     // desktop) — skip them above 768px.
     const applicable = (list) => (list || []).filter((s) => !(w > 768 && s.mobileOnly));
     if (cfg.surfaces) surfaceReport.push(...(await page.evaluate(surfacesExpr(applicable(cfg.surfaces)))).map((s) => ({ ...s, name: s.name + '@' + w + 'px' })));
+    for (const custom of (cfg.checks || []).filter((c) => !(w > 768 && c.mobileOnly) && !(w <= 768 && c.desktopOnly))) {
+      const detail = await page.evaluate(custom.js);
+      checksReport.push({
+        name: custom.name + '@' + w + 'px',
+        ok: detail === true || !!(detail && detail.ok),
+        detail
+      });
+    }
     results.push({ tag: `${cfg.name}@${w}px`, audit: await page.evaluate(auditExpr(cfg.root || '.main', cfg.ignoreOverlap)),
       hscroll: await page.evaluate('document.documentElement.scrollWidth - window.innerWidth') });
     for (const step of cfg.steps || []) {
@@ -186,5 +197,5 @@ export async function auditPage(context, base, cfg) {
     }
   }
   await page.close();
-  return { results, surfaceReport, errors };
+  return { results, surfaceReport, checksReport, errors };
 }
