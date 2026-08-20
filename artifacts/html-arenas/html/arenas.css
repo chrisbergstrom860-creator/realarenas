@@ -606,6 +606,13 @@ body {
 .ccd-grid{display:grid;gap:12px;padding:16px 20px}
 .ccd-grid.ccd-grid-2{grid-template-columns:1fr 1fr}
 .ccd-card{background:white;border:var(--border);border-radius:var(--radius-lg);padding:16px;display:flex;flex-direction:column;gap:10px;animation:ccd-fade-up .2s ease both;min-width:0}
+.ccd-card[data-clickable="1"]{cursor:pointer}
+@media (hover:hover) and (pointer:fine){
+  .ccd-card[data-clickable="1"]{transition:background .13s,border-color .13s}
+  .ccd-card[data-clickable="1"] .ccd-name{transition:color .13s}
+  .ccd-card[data-clickable="1"]:hover:not(:has(.ccd-btn:hover)){background:var(--gray-50);border-color:var(--gray-300)}
+  .ccd-card[data-clickable="1"]:hover:not(:has(.ccd-btn:hover)) .ccd-name{color:var(--pink-dark)}
+}
 .ccd-head{display:flex;align-items:center;gap:10px}
 .ccd-head-main{flex:1;min-width:0}
 .ccd-tile{width:42px;height:42px;border-radius:9px;background:var(--gray-100);border:var(--border);display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;overflow:hidden}
