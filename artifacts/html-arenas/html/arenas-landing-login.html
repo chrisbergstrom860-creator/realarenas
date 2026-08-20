@@ -11,9 +11,9 @@ document.addEventListener('DOMContentLoaded', function(){
   }
   // Deep-link: /landing#login opens the login page directly (the login page is a
   // hidden SPA panel, so activate it before the browser jumps to #login).
-  if (window.location.hash === '#login' && typeof showPage === 'function') {
+  if ((window.location.hash === '#login' || window.location.hash === '#signup') && typeof showPage === 'function') {
     showPage('login');
-    setMode('login');
+    setMode(window.location.hash === '#signup' ? 'signup' : 'login');
   }
 });
 </script>

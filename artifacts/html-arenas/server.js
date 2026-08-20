@@ -710,6 +710,11 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
     if (clubSport !== 'any' && !SPORTS.some(s => s.id === clubSport)) {
       return res.redirect(BASE + '/for-clubs?error=signup');
     }
+    const normalizedDescription = normalizeClubDescription(req.body.description);
+    const normalizedWebsite = normalizeClubWebsite(req.body.website_url);
+    if (normalizedDescription.error || normalizedWebsite.error) {
+      return res.redirect(BASE + '/for-clubs?error=signup');
+    }
 
     // Create the user with the admin client so the email is auto-confirmed and
     // no confirmation step is required. Same hidden-field timezone capture as
@@ -743,7 +748,15 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
     // Create the club with the service-role client (bypasses RLS).
     const { data: club, error: clubErr } = await supabaseAdmin
       .from('clubs')
-      .insert({ name: club_name, handle, sport, city, owner_id: userId })
+      .insert({
+        name: club_name,
+        handle,
+        sport,
+        city,
+        owner_id: userId,
+        description: normalizedDescription.value,
+        website_url: normalizedWebsite.value
+      })
       .select('id')
       .single();
     if (clubErr || !club) {
@@ -854,6 +867,10 @@ app.post(BASE + '/api/clubs/create', requireAuth, async (req, res) => {
   // deliberately NOT a registry entry so it can never leak into the activity
   // log, goals, or how-points-work as a loggable sport.
   if (sport !== 'any' && !SPORTS.some(s => s.id === sport)) return res.status(400).json({ error: 'invalid_sport' });
+  const normalizedDescription = normalizeClubDescription(body.description);
+  const normalizedWebsite = normalizeClubWebsite(body.website_url);
+  if (normalizedDescription.error) return res.status(400).json(normalizedDescription);
+  if (normalizedWebsite.error) return res.status(400).json(normalizedWebsite);
   // Directory listing, wizard-only field. When present it must be a valid
   // value; when absent the insert omits the column and the DB default
   // ('private') applies — non-wizard create paths stay byte-identical.
@@ -889,11 +906,19 @@ app.post(BASE + '/api/clubs/create', requireAuth, async (req, res) => {
       return res.status(409).json({ error: 'handle_taken' });
     }
 
+    const insertClub = {
+      name,
+      handle,
+      sport,
+      city,
+      owner_id: req.user.id,
+      description: normalizedDescription.value,
+      website_url: normalizedWebsite.value
+    };
+    if (visibility !== undefined) insertClub.visibility = visibility;
     const { data: club, error: clubErr } = await supabaseAdmin
       .from('clubs')
-      .insert(visibility !== undefined
-        ? { name, handle, sport, city, owner_id: req.user.id, visibility }
-        : { name, handle, sport, city, owner_id: req.user.id })
+      .insert(insertClub)
       .select('id')
       .single();
     if (clubErr || !club) {
@@ -6126,6 +6151,40 @@ app.get(BASE + '/athletes/:userId', requirePageAuth, async (req, res) => {
 //   - Direct invite acceptance deletes any pending request for that club/user.
 const JOIN_REQUEST_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 const CLUB_NOT_FOUND = { error: 'Club not found' };
+const CLUB_DESCRIPTION_MAX = 500;
+const CLUB_WEBSITE_MAX = 2048;
+
+// ONE boundary for every club-description writer. The current creation UIs do
+// not expose this field, but both creation routes still validate it so a future
+// input cannot bypass the settings route's 500-character contract.
+function normalizeClubDescription(value) {
+  const description = String(value == null ? '' : value).trim();
+  if (description.length > CLUB_DESCRIPTION_MAX) {
+    return { error: 'description_too_long', max: CLUB_DESCRIPTION_MAX };
+  }
+  return { value: description || null };
+}
+
+// Nullable external website. The stored href is always WHATWG-normalized HTTPS
+// with a real hostname and no embedded credentials. Rendering reparses this
+// exact value and derives BOTH href + visible hostname from that one URL object.
+function normalizeClubWebsite(value) {
+  const raw = String(value == null ? '' : value).trim();
+  if (!raw) return { value: null };
+  if (raw.length > CLUB_WEBSITE_MAX || /[\u0000-\u001f\u007f]/.test(raw)) {
+    return { error: 'invalid_website' };
+  }
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' || !url.hostname || url.username || url.password) {
+      return { error: 'invalid_website' };
+    }
+    if (url.href.length > CLUB_WEBSITE_MAX) return { error: 'invalid_website' };
+    return { value: url.href };
+  } catch (err) {
+    return { error: 'invalid_website' };
+  }
+}
 
 function joinRequestCooldownUntil(row) {
   if (!row || row.status !== 'declined' || !row.resolved_at) return null;
@@ -6140,11 +6199,33 @@ async function getPublicClub(clubId) {
   if (!supabaseAdmin || !clubId) return null;
   const { data } = await supabaseAdmin
     .from('clubs')
-    .select('id, name, handle, sport, city, logo_url, description, visibility, created_at')
+    .select('id, name, handle, sport, city, logo_url, description, website_url, banner_path, visibility, created_at')
     .eq('id', clubId)
     .eq('visibility', 'public')
     .maybeSingle();
   return data || null;
+}
+
+async function buildPublicClubProfile(clubId) {
+  const club = await getPublicClub(clubId);
+  if (!club) return null;
+  const { count, error } = await supabaseAdmin
+    .from('memberships')
+    .select('club_id', { count: 'exact', head: true })
+    .eq('club_id', club.id);
+  if (error) throw new Error('public club member count: ' + error.message);
+  const normalizedWebsite = normalizeClubWebsite(club.website_url);
+  return {
+    id: club.id,
+    name: club.name,
+    sport: club.sport,
+    city: club.city || null,
+    logo_url: club.logo_url || null,
+    description: club.description || null,
+    website_url: normalizedWebsite.error ? null : normalizedWebsite.value,
+    memberCount: count || 0,
+    banner: clubBannerVersion(club.banner_path)
+  };
 }
 
 async function buildClubDirectory(viewerId) {
@@ -6409,7 +6490,7 @@ async function resolveJoinRequestRoute(req, res, action) {
 app.post(BASE + '/api/clubs/:clubId/join-requests/:userId/approve', requireAuth, (req, res) => resolveJoinRequestRoute(req, res, 'approve'));
 app.post(BASE + '/api/clubs/:clubId/join-requests/:userId/decline', requireAuth, (req, res) => resolveJoinRequestRoute(req, res, 'decline'));
 
-// Club directory settings (visibility + description). Admin-only — listing a
+// Club public-profile settings (visibility + description + website). Admin-only — listing a
 // club publicly is an owner-level decision, stricter than the manager set
 // that handles requests. Zero-leak 404 for non-admins/nonexistent clubs.
 app.patch(BASE + '/api/clubs/:clubId/settings', requireAuth, async (req, res) => {
@@ -6427,9 +6508,14 @@ app.patch(BASE + '/api/clubs/:clubId/settings', requireAuth, async (req, res) =>
       update.visibility = body.visibility;
     }
     if (body.description !== undefined) {
-      const desc = String(body.description || '').trim();
-      if (desc.length > 500) return res.status(400).json({ error: 'description_too_long', max: 500 });
-      update.description = desc || null;
+      const normalized = normalizeClubDescription(body.description);
+      if (normalized.error) return res.status(400).json(normalized);
+      update.description = normalized.value;
+    }
+    if (body.website_url !== undefined) {
+      const normalized = normalizeClubWebsite(body.website_url);
+      if (normalized.error) return res.status(400).json(normalized);
+      update.website_url = normalized.value;
     }
     if (!Object.keys(update).length) return res.status(400).json({ error: 'nothing_to_update' });
 
@@ -6437,7 +6523,7 @@ app.patch(BASE + '/api/clubs/:clubId/settings', requireAuth, async (req, res) =>
       .from('clubs')
       .update(update)
       .eq('id', req.params.clubId)
-      .select('id, visibility, description');
+      .select('id, visibility, description, website_url');
     if (error || !updated || !updated.length) {
       return res.status(500).json({ error: 'Could not save settings' });
     }
@@ -6460,7 +6546,12 @@ app.patch(BASE + '/api/clubs/:clubId/settings', requireAuth, async (req, res) =>
       }
     }
 
-    res.json({ success: true, visibility: updated[0].visibility, description: updated[0].description });
+    res.json({
+      success: true,
+      visibility: updated[0].visibility,
+      description: updated[0].description,
+      website_url: updated[0].website_url
+    });
   } catch (err) {
     console.log('Club settings error:', err.message);
     res.status(500).json({ error: 'Could not save settings' });
@@ -6481,7 +6572,7 @@ app.patch(BASE + '/api/clubs/:clubId/settings', requireAuth, async (req, res) =>
 app.delete(BASE + '/api/clubs/:clubId', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
   const { data: club } = await supabaseAdmin
-    .from('clubs').select('id, name, handle, owner_id, logo_url')
+    .from('clubs').select('id, name, handle, owner_id, logo_url, banner_path')
     .eq('id', req.params.clubId).maybeSingle();
   if (!club) return res.status(404).json({ error: 'Club not found' });
   if (club.owner_id !== req.user.id) {
@@ -8954,7 +9045,9 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
     //    secrets and are never exported.
     // Guard: scripts/verify-export-invites.js asserts all of this.
     const ownedClubs = await fetchAllRows('clubs', q => q.eq('owner_id', uid),
-      'id, name, handle, sport, city, created_at, logo_url');
+      // website_url is owner-supplied account data; banner_path is a private
+      // storage capability and is deliberately never selected into exports.
+      'id, name, handle, sport, city, description, website_url, created_at, logo_url');
     const ownedClubIds = ownedClubs.map(c => c.id);
     const [
       activities, posts, postComments, postLikes,
@@ -9259,8 +9352,9 @@ async function destroyClub(club) {
   await del('club_join_requests', q => q.eq('club_id', cid));
   await del('memberships', q => q.eq('club_id', cid));
   await del('subscriptions', q => q.eq('owner_type', 'club').eq('owner_id', cid));
-  if (club.logo_url) await deleteAvatarObject(club.logo_url, 'clubs/' + cid);
   await del('clubs', q => q.eq('id', cid));
+  if (club.logo_url) await deleteAvatarObject(club.logo_url, 'clubs/' + cid);
+  await deleteClubBannerObject(club.banner_path, cid);
   for (const p of clubPosts || []) await deletePostImageObject(p.image_url, p.user_id);
 }
 
@@ -9293,7 +9387,7 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
       .from('memberships').select('club_id, role').eq('user_id', uid).eq('role', 'admin');
     if (amErr) throw new Error('memberships: ' + amErr.message);
     const { data: ownedClubRows, error: ocErr } = await supabaseAdmin
-      .from('clubs').select('id, name, owner_id, logo_url').eq('owner_id', uid);
+      .from('clubs').select('id, name, owner_id, logo_url, banner_path').eq('owner_id', uid);
     if (ocErr) throw new Error('clubs: ' + ocErr.message);
     const relevantClubIds = [...new Set([
       ...(adminMemberships || []).map(m => m.club_id),
@@ -9302,7 +9396,7 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
     const clubById = {};
     if (relevantClubIds.length) {
       const { data: clubRows } = await supabaseAdmin
-        .from('clubs').select('id, name, owner_id, logo_url').in('id', relevantClubIds);
+        .from('clubs').select('id, name, owner_id, logo_url, banner_path').in('id', relevantClubIds);
       for (const c of (clubRows || [])) clubById[c.id] = c;
     }
     const blocked = [];   // clubs that prevent deletion
@@ -9544,6 +9638,23 @@ const AVATAR_BUCKET = 'avatars';
   }
 })();
 
+// ── CLUB BANNERS (Supabase Storage, PRIVATE bucket) ──
+// Paths are server-only: clubs/{clubId}/{ts}.webp. Public visitors can read a
+// banner only through the public-club proxy below, which rechecks visibility on
+// every request and returns the same body for private/nonexistent/imageless.
+const CLUB_BANNER_BUCKET = 'club-banners';
+(async () => {
+  if (!supabaseAdmin) return;
+  try {
+    const { error } = await supabaseAdmin.storage.createBucket(CLUB_BANNER_BUCKET, { public: false });
+    if (error && !/already exists|duplicate/i.test(error.message || '')) {
+      console.log('Club banner bucket setup error:', error.message);
+    }
+  } catch (err) {
+    console.log('Club banner bucket setup error:', err.message);
+  }
+})();
+
 // ── EVENT IMAGES (Supabase Storage, PRIVATE bucket) ──
 // One PRIVATE bucket, path-namespaced events/{eventId}/{ts}.webp. No public
 // URL exists for any object; the ONLY read path is the authenticated proxy
@@ -9638,6 +9749,22 @@ function postImageUploadSingle(req, res, next) {
 function eventImageVersion(imagePath) {
   const m = /^events\/[^/]+\/(\d+)\.webp$/.exec(imagePath || '');
   return m ? m[1] : null;
+}
+
+function clubBannerVersion(imagePath) {
+  const m = /^clubs\/[^/]+\/(\d+)\.webp$/.exec(imagePath || '');
+  return m ? m[1] : null;
+}
+
+async function deleteClubBannerObject(objectPath, clubId) {
+  if (!objectPath || !supabaseAdmin) return;
+  if (!objectPath.startsWith('clubs/' + clubId + '/')) return;
+  try {
+    const { error } = await supabaseAdmin.storage.from(CLUB_BANNER_BUCKET).remove([objectPath]);
+    if (error) console.log('Club banner cleanup failed (ignored):', error.message);
+  } catch (err) {
+    console.log('Club banner cleanup failed (ignored):', err.message);
+  }
 }
 
 // Best-effort object cleanup. Prefix-checked (defense in depth: a corrupted
@@ -10136,6 +10263,142 @@ app.delete(BASE + '/api/profile/banner', requireAuth, async (req, res) => {
   }
 });
 
+// Club banner writes deliberately use the exact settings authority: admin
+// membership only. Coaches and a bare clubs.owner_id match gain no exception.
+// Authorization runs before multer reads the body and denied/nonexistent clubs
+// share the directory's fixed zero-leak 404.
+app.post(BASE + '/api/clubs/:clubId/banner', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  const { clubId } = req.params;
+  const role = await getClubRole(req.user.id, clubId);
+  if (!role || role.role !== 'admin') return res.status(404).json(CLUB_NOT_FOUND);
+
+  avatarUploadSingle(req, res, async () => {
+    if (!req.file || !req.file.buffer) return res.status(400).json({ error: 'No image file received' });
+    const lockKey = 'club-banner:' + clubId;
+    if (avatarUploadsInFlight.has(lockKey)) {
+      return res.status(429).json({ error: 'An upload is already in progress — give it a second' });
+    }
+    avatarUploadsInFlight.add(lockKey);
+    try {
+      // Read the previous pointer only AFTER acquiring the lock. Reading it
+      // before multipart parsing lets two queued replacements both capture the
+      // same stale object and strand the first upload.
+      const { data: club } = await supabaseAdmin
+        .from('clubs').select('id, banner_path').eq('id', clubId).maybeSingle();
+      if (!club) return res.status(404).json(CLUB_NOT_FOUND);
+      let meta;
+      try { meta = await sharp(req.file.buffer).metadata(); } catch (err) { meta = null; }
+      if (!meta || !['jpeg', 'png', 'webp'].includes(meta.format)) {
+        return res.status(400).json({ error: 'That file is not a supported image — upload a JPG, PNG or WebP' });
+      }
+      const webp = await sharp(req.file.buffer).rotate()
+        .resize(1600, 400, { fit: 'cover' }).webp({ quality: 82 }).toBuffer();
+      const objectPath = 'clubs/' + clubId + '/' + Date.now() + '.webp';
+      const { error: upErr } = await supabaseAdmin.storage
+        .from(CLUB_BANNER_BUCKET)
+        .upload(objectPath, webp, { contentType: 'image/webp', upsert: false });
+      if (upErr) {
+        console.log('Club banner storage upload error:', upErr.message);
+        return res.status(500).json({ error: 'Could not store the image — please try again' });
+      }
+      const { data: ptrRows, error: ptrErr } = await supabaseAdmin
+        .from('clubs').update({ banner_path: objectPath }).eq('id', clubId).select('id');
+      if (ptrErr || !ptrRows || !ptrRows.length) {
+        console.log('Club banner pointer write error:', ptrErr ? ptrErr.message : 'club disappeared');
+        await deleteClubBannerObject(objectPath, clubId);
+        return res.status(500).json({ error: 'Could not save the image' });
+      }
+      await deleteClubBannerObject(club.banner_path, clubId);
+      return res.json({ success: true, banner: clubBannerVersion(objectPath) });
+    } catch (err) {
+      console.log('Club banner upload error:', err.message);
+      return res.status(500).json({ error: 'Upload failed' });
+    } finally {
+      avatarUploadsInFlight.delete(lockKey);
+    }
+  });
+});
+
+app.delete(BASE + '/api/clubs/:clubId/banner', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  const { clubId } = req.params;
+  const role = await getClubRole(req.user.id, clubId);
+  if (!role || role.role !== 'admin') return res.status(404).json(CLUB_NOT_FOUND);
+  const lockKey = 'club-banner:' + clubId;
+  if (avatarUploadsInFlight.has(lockKey)) {
+    return res.status(429).json({ error: 'An upload is already in progress — give it a second' });
+  }
+  avatarUploadsInFlight.add(lockKey);
+  try {
+    const { data: club } = await supabaseAdmin
+      .from('clubs').select('id, banner_path').eq('id', clubId).maybeSingle();
+    if (!club) return res.status(404).json(CLUB_NOT_FOUND);
+    if (!club.banner_path) return res.json({ success: true });
+    const { data: cleared, error } = await supabaseAdmin
+      .from('clubs')
+      .update({ banner_path: null })
+      .eq('id', clubId)
+      .eq('banner_path', club.banner_path)
+      .select('id');
+    if (error || !cleared || !cleared.length) return res.status(500).json({ error: 'Could not remove the image' });
+    await deleteClubBannerObject(club.banner_path, clubId);
+    return res.json({ success: true });
+  } catch (err) {
+    console.log('Club banner remove error:', err.message);
+    return res.status(500).json({ error: 'Could not remove the image' });
+  } finally {
+    avatarUploadsInFlight.delete(lockKey);
+  }
+});
+
+// Manager-only preview used by the dashboard. This is intentionally a
+// DIFFERENT route from the public proxy: logged-in status must never make the
+// public URL reveal a private club, while an authorized coach still needs to
+// see the dashboard's existing banner.
+app.get(BASE + '/api/clubs/:clubId/banner/manage', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.status(404).json(CLUB_NOT_FOUND);
+  try {
+    const { clubId } = req.params;
+    const role = await getClubRole(req.user.id, clubId);
+    if (!role || !isClubManagerRole(role.role)) return res.status(404).json(CLUB_NOT_FOUND);
+    const { data: club } = await supabaseAdmin
+      .from('clubs').select('banner_path').eq('id', clubId).maybeSingle();
+    if (!club || !club.banner_path) return res.status(404).json(CLUB_NOT_FOUND);
+    const { data: blob, error } = await supabaseAdmin.storage
+      .from(CLUB_BANNER_BUCKET).download(club.banner_path);
+    if (error || !blob) return res.status(404).json(CLUB_NOT_FOUND);
+    res.set('Content-Type', 'image/webp');
+    res.set('Cache-Control', 'private, no-store');
+    return res.send(Buffer.from(await blob.arrayBuffer()));
+  } catch (err) {
+    return res.status(404).json(CLUB_NOT_FOUND);
+  }
+});
+
+// Public image proxy. getPublicClub is the ONE visibility rule, so a private
+// club, nonexistent club, missing banner, or missing object all answer with the
+// byte-identical CLUB_NOT_FOUND response. no-store is deliberate: if an admin
+// makes the club private, a previously viewed image must be revalidated rather
+// than remain readable from an immutable browser cache.
+app.get(BASE + '/api/clubs/:clubId/banner', async (req, res) => {
+  if (!supabaseAdmin) return res.status(404).json(CLUB_NOT_FOUND);
+  try {
+    const club = await getPublicClub(req.params.clubId);
+    if (!club || !club.banner_path) return res.status(404).json(CLUB_NOT_FOUND);
+    const { data: blob, error } = await supabaseAdmin.storage
+      .from(CLUB_BANNER_BUCKET).download(club.banner_path);
+    if (error || !blob) return res.status(404).json(CLUB_NOT_FOUND);
+    const buf = Buffer.from(await blob.arrayBuffer());
+    res.set('Content-Type', 'image/webp');
+    res.set('Cache-Control', 'private, no-store');
+    return res.send(buf);
+  } catch (err) {
+    console.log('Club banner proxy error:', err.message);
+    return res.status(404).json(CLUB_NOT_FOUND);
+  }
+});
+
 // Upload/replace a club's logo. Authorization (UNCONDITIONAL — independent of
 // PLAN_GATES_ENABLED, per the codified pattern): admin/coach of THIS club only.
 app.post(BASE + '/api/clubs/:clubId/logo', requireAuth, avatarUploadSingle, async (req, res) => {
@@ -10501,7 +10764,7 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
     const pickManagedMembership = async (clubFilter) => {
       let q = supabaseAdmin
         .from('memberships')
-        .select('club_id, role, clubs (id, name, handle, sport, city, logo_url, visibility, description)')
+        .select('club_id, role, clubs (id, name, handle, sport, city, logo_url, visibility, description, website_url, banner_path)')
         .eq('user_id', req.user.id)
         .in('role', ['admin', 'coach']);
       if (clubFilter) q = q.eq('club_id', clubFilter);
@@ -10785,8 +11048,13 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
       }
     }
 
+    const rawManagedClub = (membership && membership.clubs) || null;
+    const dashboardClub = rawManagedClub ? (() => {
+      const { banner_path, ...safeClub } = rawManagedClub;
+      return { ...safeClub, banner: clubBannerVersion(banner_path) };
+    })() : null;
     const clubData = {
-      club: (membership && membership.clubs) || null,
+      club: dashboardClub,
       viewerRole: membership && membership.role,
       joinRequests,
       profile: displayFromUser(req.user),
@@ -11253,6 +11521,58 @@ app.get(BASE + '/clubs/invite', requirePageAuth, async (req, res) => {
   } catch (err) {
     console.log('Invite page data error:', err.message);
     sendPageError(res);
+  }
+});
+
+// Shareable public club profile. This dynamic route is intentionally registered
+// AFTER every explicit /clubs/* page so dashboard/member/invite can never be
+// swallowed as club ids. Optional auth changes only the surrounding chrome;
+// the club payload is exactly the same narrow public contract either way.
+app.get(BASE + '/clubs/:clubId', async (req, res) => {
+  if (!supabaseAdmin) return res.status(404).json(CLUB_NOT_FOUND);
+  try {
+    const [viewer, club] = await Promise.all([
+      getOptionalUser(req),
+      buildPublicClubProfile(req.params.clubId)
+    ]);
+    if (!club) return res.status(404).json(CLUB_NOT_FOUND);
+
+    // ARENAS_DATA is the public payload and is byte-for-byte the same shape for
+    // every visitor. Session-only shell state lives in a separate chrome object
+    // so it can never accidentally widen the public club contract.
+    const pageData = { club };
+    const chromeData = { loggedIn: !!viewer };
+    if (viewer) {
+      chromeData.profile = displayFromUser(viewer);
+      chromeData.clubs = await getSidebarClubs(viewer.id);
+    }
+
+    const sportRow = SPORTS.find(s => s.id === club.sport);
+    const sportLabel = club.sport === 'any' ? 'multi-sport' : ((sportRow && sportRow.label) || club.sport || 'sports');
+    const title = club.name + ' — Arenas';
+    const description = club.name + ' is a ' + sportLabel + ' club' +
+      (club.city ? ' in ' + club.city : '') + ' with ' + club.memberCount +
+      ' member' + (club.memberCount === 1 ? '' : 's') + '.';
+
+    let html = injectArenasData(
+      fs.readFileSync(path.join(HTML, 'arenas-club-public.html'), 'utf8'),
+      pageData
+    );
+    html = injectNamedData(html, 'ARENAS_CHROME', chromeData);
+    html = injectAvatarHelpers(injectAvatarMenu(html));
+    html = html
+      .replaceAll('__CLUB_PAGE_TITLE__', escapeHtml(title))
+      .replaceAll('__CLUB_PAGE_DESCRIPTION__', escapeHtml(description));
+    if (viewer) {
+      html = injectBottomNav(html, 'clubs');
+    }
+    return res
+      .set('Cache-Control', 'private, no-store')
+      .type('html')
+      .send(html);
+  } catch (err) {
+    console.log('Public club profile error:', err.message);
+    return sendPageError(res);
   }
 });
 

@@ -218,7 +218,9 @@ function showToast(msg) {
       },
       noMatch: { t: 'No clubs match your search', s: 'Try a different name, sport or city.' }
     },
-    onCardClick: null,
+    // The card body is the discoverable public profile; its existing action
+    // button stops propagation and keeps request/member behavior unchanged.
+    onCardClick: function (club) { nav('/clubs/' + club.id); },
     toast: window.showToast
   });
 

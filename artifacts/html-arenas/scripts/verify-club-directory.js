@@ -74,6 +74,12 @@ async function api(k, method, path, body) {
 }
 
 async function main() {
+  const { error: profileSchemaErr } = await admin.from('clubs').select('website_url, banner_path').limit(1);
+  if (profileSchemaErr && /website_url|banner_path|column/i.test(profileSchemaErr.message || '')) {
+    console.log('SKIP: public club profile columns are not live yet.');
+    console.log('      Apply scripts/sql/public-club-profiles.sql first.');
+    return;
+  }
   for (const [k, n, h] of [['owner', 'Dir Owner', 'dir_owner'], ['coach', 'Dir Coach', 'dir_coach'], ['member', 'Dir Member', 'dir_member'], ['seeker', 'Dir Seeker', 'dir_seeker'], ['seeker2', 'Dir SeekerTwo', 'dir_seeker2'], ['owner2', 'Dir OwnerTwo', 'dir_owner2']]) {
     await mkUser(k, n, h);
   }
@@ -105,6 +111,16 @@ async function main() {
   check('admin lists club (visibility+description saved)', r.status === 200 && r.body && r.body.visibility === 'public' && r.body.description === 'Weekly track sessions in Oslo.', r);
   r = await api('owner', 'PATCH', '/clubs/' + pubClubId + '/settings', { visibility: 'listed-sorta' });
   check('invalid visibility rejected 400', r.status === 400 && r.body && r.body.error === 'invalid_visibility', r);
+
+  // website_url via settings: accepted HTTPS, rejected non-HTTPS, blank clears.
+  r = await api('owner', 'PATCH', '/clubs/' + pubClubId + '/settings', { website_url: 'https://oslo-runners.example.com' });
+  check('settings: valid https website_url accepted', r.status === 200 && r.body && r.body.website_url === 'https://oslo-runners.example.com/', r);
+  r = await api('owner', 'PATCH', '/clubs/' + pubClubId + '/settings', { website_url: 'http://oslo-runners.example.com' });
+  check('settings: http website_url rejected 400 invalid_website', r.status === 400 && r.body && r.body.error === 'invalid_website', r);
+  r = await api('owner', 'PATCH', '/clubs/' + pubClubId + '/settings', { website_url: 'javascript:void(0)' });
+  check('settings: javascript: website_url rejected 400 invalid_website', r.status === 400 && r.body && r.body.error === 'invalid_website', r);
+  r = await api('owner', 'PATCH', '/clubs/' + pubClubId + '/settings', { website_url: '' });
+  check('settings: blank website_url clears to null', r.status === 200 && r.body && r.body.website_url === null, r);
 
   // ── 3. Directory payload ──
   r = await api('seeker', 'GET', '/clubs/directory');

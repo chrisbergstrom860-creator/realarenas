@@ -74,8 +74,18 @@ const count = async (table, col, val) =>
 (async () => {
   const users = {};
   let clubId = null, activityId = null;
+  // Track the banner object path so cleanup can remove it if a test leaves it behind.
+  let bannerObjectPath = null;
   const cleanup = async () => {
+    if (bannerObjectPath) {
+      await admin.storage.from('club-banners').remove([bannerObjectPath]).catch(() => {});
+    }
     if (clubId) {
+      // Also sweep any remaining banner objects under this club's prefix.
+      const { data: bannerObjs } = await admin.storage.from('club-banners').list('clubs/' + clubId);
+      if (bannerObjs && bannerObjs.length) {
+        await admin.storage.from('club-banners').remove(bannerObjs.map(o => 'clubs/' + clubId + '/' + o.name)).catch(() => {});
+      }
       const { data: chs } = await admin.from('challenges').select('id').eq('club_id', clubId);
       if ((chs || []).length) {
         await admin.from('challenge_participants').delete().in('challenge_id', chs.map(c => c.id));
@@ -96,6 +106,12 @@ const count = async (table, col, val) =>
     }
   };
   try {
+    const { error: profileSchemaErr } = await admin.from('clubs').select('website_url, banner_path').limit(1);
+    if (profileSchemaErr && /website_url|banner_path|column/i.test(profileSchemaErr.message || '')) {
+      console.log('SKIP: public club profile columns are not live yet.');
+      console.log('      Apply scripts/sql/public-club-profiles.sql first.');
+      return;
+    }
     // ── Seed users ──
     const { data: all } = await admin.auth.admin.listUsers({ perPage: 1000 });
     for (const u of all.users) if (Object.values(EMAILS).includes(u.email)) await admin.auth.admin.deleteUser(u.id);
@@ -126,6 +142,16 @@ const count = async (table, col, val) =>
     const logoUrl = admin.storage.from('avatars').getPublicUrl(logoPath).data.publicUrl;
     await admin.from('clubs').update({ logo_url: logoUrl }).eq('id', clubId);
     club.logo_url = logoUrl;
+
+    // Club banner (private bucket clubs/{clubId}/{ts}.webp). The server uses a
+    // WebP encoded via sharp; for the seed we write a raw PNG at the expected
+    // path so the object exists — the deletion sweep only checks the path, not
+    // the bytes. We write it with the timestamp prefix the route produces.
+    const bannerTs = Date.now();
+    const bannerSeedPath = `clubs/${clubId}/${bannerTs}.webp`;
+    await admin.storage.from('club-banners').upload(bannerSeedPath, PNG, { contentType: 'image/png' });
+    await admin.from('clubs').update({ banner_path: bannerSeedPath }).eq('id', clubId);
+    bannerObjectPath = bannerSeedPath;
 
     const ch = await ins('challenges', {
       title: 'ClubDel Challenge', sport: 'running', goal_type: 'distance', goal_target: 50, goal_unit: 'km',
@@ -276,6 +302,7 @@ const count = async (table, col, val) =>
     s = await snapshot();
     check('stripe abort: club FULLY intact', JSON.stringify(s) === JSON.stringify(before), JSON.stringify(s));
     check('stripe abort: challenge image object still present', await objectExists('challenge-images', chImgPath));
+    check('stripe abort: club banner object still present (not deleted on abort)', await objectExists('club-banners', bannerSeedPath));
     const notifsAfterAbort = await count('notifications', 'user_id', users.member);
     check('stripe abort: member notifications retracted (no false alarm)', notifsAfterAbort === 0, String(notifsAfterAbort));
 
@@ -290,6 +317,8 @@ const count = async (table, col, val) =>
     check('event image object gone', !(await objectExists('event-images', evImgPath)));
     check('post image object gone', !(await objectExists('post-images', postImgPath)));
     check('club logo object gone', !(await objectExists('avatars', logoPath)));
+    check('club banner object gone (destroyClub cleans club-banners bucket)', !(await objectExists('club-banners', bannerSeedPath)));
+    bannerObjectPath = null; // successfully deleted — cleanup should not try again
 
     // ── 4. Member boundary ──
     const { data: actRow } = await admin.from('activities').select('id').eq('id', activityId).maybeSingle();

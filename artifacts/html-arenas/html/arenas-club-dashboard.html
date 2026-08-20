@@ -384,6 +384,8 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
 
   <!-- ═══ OVERVIEW TAB ═══ -->
   <div class="tab-content active" id="tab-overview">
+    <!-- Banner -->
+    <div id="overview-banner-container" style="display:none;width:100%;aspect-ratio:4/1;background-color:var(--gray-100);background-size:cover;background-position:center;border-bottom:var(--border);"></div>
     <!-- Greeting header -->
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:var(--border);background:white">
       <div>
@@ -502,9 +504,27 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
             <span style="display:block;font-size:11.5px;color:var(--gray-500);margin-top:1px">Off by default. Turning this off removes the club from the directory and clears pending join requests.</span>
           </span>
         </label>
+
         <div>
-          <div style="font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Directory description</div>
-          <textarea id="cs-description" maxlength="500" rows="3" placeholder="What should athletes know about your club? (shown on your directory card)" style="width:100%;padding:8px 10px;border:var(--border);border-radius:7px;font-size:13px;outline:none;resize:vertical;box-sizing:border-box"></textarea>
+          <div style="font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Public Profile Banner</div>
+          <div style="font-size:11px;color:var(--gray-500);margin-bottom:8px">Shown on your public profile and overview page. Recommended aspect ratio is 4:1.</div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <button class="btn btn-sm" onclick="document.getElementById('cs-banner-file').click()">Upload banner</button>
+            <input type="file" id="cs-banner-file" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="handleBannerUpload(this)">
+            <button id="cs-banner-remove" class="btn btn-sm" style="display:none;color:var(--red)" onclick="removeBanner()">Remove banner</button>
+            <span id="cs-banner-status" style="font-size:11.5px;color:var(--gray-400)"></span>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Website</div>
+          <input type="url" id="cs-website" placeholder="https://example.com" class="form-input" style="width:100%;box-sizing:border-box">
+          <div style="font-size:11px;color:var(--gray-400);margin-top:4px">Optional. HTTPS links only.</div>
+        </div>
+
+        <div>
+          <div style="font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Club description</div>
+          <textarea id="cs-description" maxlength="500" rows="3" placeholder="What should athletes know about your club? (shown on your public profile and directory card)" style="width:100%;padding:8px 10px;border:var(--border);border-radius:7px;font-size:13px;outline:none;resize:vertical;box-sizing:border-box"></textarea>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <button id="cs-save" onclick="saveClubSettings()" style="padding:7px 16px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">Save settings</button>
@@ -3983,8 +4003,12 @@ document.addEventListener('DOMContentLoaded', function () {
     settingsCard.style.display = 'block';
     var visEl = document.getElementById('cs-visibility');
     var descEl = document.getElementById('cs-description');
+    var webEl = document.getElementById('cs-website');
+    var bannerRem = document.getElementById('cs-banner-remove');
     if (visEl) visEl.checked = data.club.visibility === 'public';
     if (descEl) descEl.value = data.club.description || '';
+    if (webEl) webEl.value = data.club.website_url || '';
+    if (bannerRem) bannerRem.style.display = data.club.banner ? 'inline-block' : 'none';
     // Danger zone is OWNER-only (stricter than admin): server injects the
     // boolean; a non-owner admin sees nothing here.
     if (data.isOwner) {
@@ -3996,9 +4020,10 @@ document.addEventListener('DOMContentLoaded', function () {
   window.saveClubSettings = function () {
     var visEl = document.getElementById('cs-visibility');
     var descEl = document.getElementById('cs-description');
+    var webEl = document.getElementById('cs-website');
     var btn = document.getElementById('cs-save');
     var status = document.getElementById('cs-status');
-    if (!visEl || !descEl) return;
+    if (!visEl || !descEl || !webEl) return;
     var goingPrivate = data.club.visibility === 'public' && !visEl.checked;
     if (goingPrivate && queue.length &&
         !window.confirm('Unlisting the club will clear ' + queue.length + ' pending join request' + (queue.length === 1 ? '' : 's') + '. Continue?')) {
@@ -4009,7 +4034,7 @@ document.addEventListener('DOMContentLoaded', function () {
     fetch(B + '/api/clubs/' + clubId + '/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ visibility: visEl.checked ? 'public' : 'private', description: descEl.value })
+      body: JSON.stringify({ visibility: visEl.checked ? 'public' : 'private', description: descEl.value, website_url: webEl.value })
     })
       .then(function (res) { return res.json().then(function (b) { return { status: res.status, body: b }; }); })
       .then(function (res) {
@@ -4017,6 +4042,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (res.status === 200 && res.body && res.body.success) {
           data.club.visibility = res.body.visibility;
           data.club.description = res.body.description;
+          data.club.website_url = res.body.website_url;
           if (res.body.visibility === 'private') { queue = []; renderQueue(); }
           if (status) status.textContent = res.body.visibility === 'public' ? 'Saved — your club is listed in the directory.' : 'Saved — your club is not listed.';
         } else {
@@ -4028,6 +4054,102 @@ document.addEventListener('DOMContentLoaded', function () {
         if (status) status.textContent = 'Could not save — please try again.';
       });
   };
+
+  var cropHandle = null;
+  window.handleBannerUpload = function (input) {
+    if (!input.files || !input.files[0]) return;
+    var file = input.files[0];
+    input.value = '';
+
+    var stat = document.getElementById('cs-banner-status');
+    if (stat) stat.textContent = 'Processing...';
+
+    if (cropHandle) cropHandle.cancel();
+    cropHandle = window.arenasCrop.open({
+      file: file,
+      aspect: 4,
+      outWidth: 1600,
+      outHeight: 400,
+      onDone: function (blob) {
+        cropHandle = null;
+        if (stat) stat.textContent = 'Uploading...';
+
+        var fd = new FormData();
+        fd.append('avatar', blob, 'banner.png');
+
+        fetch(B + '/api/clubs/' + clubId + '/banner', {
+          method: 'POST',
+          body: fd
+        })
+        .then(function (res) { return res.json().then(function (b) { return { status: res.status, body: b }; }); })
+        .then(function (res) {
+          if (res.status === 200 && res.body && res.body.success) {
+            data.club.banner = res.body.banner;
+            if (stat) stat.textContent = '✓ Banner updated';
+            var bannerRem = document.getElementById('cs-banner-remove');
+            if (bannerRem) bannerRem.style.display = 'inline-block';
+            updateOverviewBanner();
+          } else {
+            if (stat) stat.textContent = 'Failed to upload banner.';
+          }
+        })
+        .catch(function () {
+          if (stat) stat.textContent = 'Upload failed.';
+        });
+      },
+      onCancel: function () {
+        cropHandle = null;
+        if (stat) stat.textContent = '';
+      }
+    });
+  };
+
+  window.addEventListener('beforeunload', function () {
+    if (cropHandle) {
+      cropHandle.cancel();
+      cropHandle = null;
+    }
+  });
+
+  window.removeBanner = function () {
+    if (!window.confirm('Remove the club banner?')) return;
+    var stat = document.getElementById('cs-banner-status');
+    var bannerRem = document.getElementById('cs-banner-remove');
+    if (stat) stat.textContent = 'Removing...';
+
+    fetch(B + '/api/clubs/' + clubId + '/banner', {
+      method: 'DELETE'
+    })
+    .then(function (res) { return res.json().then(function (b) { return { status: res.status, body: b }; }); })
+    .then(function (res) {
+      if (res.status === 200 && res.body && res.body.success) {
+        data.club.banner = null;
+        if (stat) stat.textContent = '✓ Banner removed';
+        if (bannerRem) bannerRem.style.display = 'none';
+        updateOverviewBanner();
+      } else {
+        if (stat) stat.textContent = 'Failed to remove.';
+      }
+    })
+    .catch(function () {
+      if (stat) stat.textContent = 'Failed to remove.';
+    });
+  };
+
+  function updateOverviewBanner() {
+    var bannerContainer = document.getElementById('overview-banner-container');
+    if (!bannerContainer) return;
+    if (data.club && data.club.banner) {
+      bannerContainer.style.display = 'block';
+      bannerContainer.style.backgroundImage = 'url("' + B + '/api/clubs/' + data.club.id + '/banner/manage?v=' + data.club.banner + '")';
+    } else {
+      bannerContainer.style.display = 'none';
+      bannerContainer.style.backgroundImage = '';
+    }
+  }
+
+  // Initial call
+  updateOverviewBanner();
 })();
 </script>
 </body>

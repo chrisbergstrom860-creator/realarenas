@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+window.BASE = window.location.pathname.startsWith('/html') ? '/html' : '';
+window.nav = function(path){ window.location.href = window.BASE + path; };
+document.addEventListener('DOMContentLoaded', function(){
+  if (window.BASE === '') {
+    document.querySelectorAll('[href^="/html/"]').forEach(function(el){ el.setAttribute('href', el.getAttribute('href').slice(5)); });
+    document.querySelectorAll('[action^="/html/"]').forEach(function(el){ el.setAttribute('action', el.getAttribute('action').slice(5)); });
+  }
+});
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/html/manifest.webmanifest">
+<meta name="theme-color" content="#FFD21E">
+<link rel="icon" href="/html/favicon.ico" sizes="48x48">
+<link rel="icon" href="/html/arenas-icon.svg" type="image/svg+xml">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Arenas">
+<script src="/html/arenas-pwa.js" defer></script>
+<title>__CLUB_PAGE_TITLE__</title>
+<meta name="description" content="__CLUB_PAGE_DESCRIPTION__">
+<meta property="og:title" content="__CLUB_PAGE_TITLE__">
+<meta property="og:description" content="__CLUB_PAGE_DESCRIPTION__">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/html/arenas.css">
+<style>
+button,select,input,textarea{font-family:var(--font)}
+
+/* Public Shell Overrides */
+body.is-public .app {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+body.is-public .app > .main {
+  grid-column: 1 / -1 !important;
+}
+.public-topbar-actions {
+  display: flex; gap: 8px; margin-left: auto; align-items: center;
+}
+.public-topbar-actions .btn {
+  font-size: 13px; font-weight: 600;
+}
+
+/* Page Specific */
+.main { padding: 0; }
+.cp-banner {
+  width: 100%;
+  aspect-ratio: 4/1;
+  background-color: var(--gray-100);
+  background-size: cover;
+  background-position: center;
+  position: relative;
+}
+.cp-header-wrap {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 24px 32px;
+  position: relative;
+}
+/* Logo overlaps the banner by 1/2 its height. If no banner, no overlap needed. */
+.cp-logo {
+  width: 120px;
+  height: 120px;
+  border-radius: 20px;
+  background: white;
+  border: 4px solid white;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.cp-logo.has-banner {
+  margin-top: -60px;
+}
+.cp-logo img {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.cp-name {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--gray-900);
+  line-height: 1.1;
+  margin-bottom: 12px;
+}
+.cp-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.cp-pill {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+}
+.cp-info {
+  font-size: 14px;
+  color: var(--gray-600);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cp-website {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--blue);
+  text-decoration: none;
+  background: var(--blue-light);
+  padding: 6px 14px;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+.cp-website:hover {
+  background: #DBEAFE;
+}
+.cp-about {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: var(--border);
+}
+.cp-about h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--gray-900);
+  margin-bottom: 12px;
+}
+.cp-about p {
+  font-size: 15px;
+  color: var(--gray-700);
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+@media (max-width: 768px) {
+  .cp-banner {
+    /* Same 4:1 but looks shorter in physical height on narrow screens */
+  }
+  .cp-header-wrap {
+    padding: 0 16px 24px;
+  }
+  .cp-logo {
+    width: 80px; height: 80px; font-size: 32px;
+    border-width: 3px;
+  }
+  .cp-logo.has-banner { margin-top: -40px; margin-bottom: 12px; }
+  .cp-name { font-size: 22px; margin-bottom: 8px; }
+  .cp-meta { gap: 8px; margin-bottom: 12px; }
+  .cp-pill { font-size: 12px; padding: 3px 10px; }
+  .cp-info { font-size: 13px; }
+  .cp-website { font-size: 13px; padding: 5px 12px; }
+  .cp-about { margin-top: 24px; padding-top: 20px; }
+  .cp-about h2 { font-size: 16px; }
+  .cp-about p { font-size: 14px; }
+}
+</style>
+</head>
+<body>
+<div class="app" id="app-root">
+
+<!-- AUTH TOPBAR -->
+<header class="topbar" id="auth-topbar">
+  <div class="topbar-logo" onclick="nav('/feed')" style="cursor:pointer">
+    <img class="logo-icon" src="/html/arenas-icon.svg" alt="">
+    <span class="logo-text">Arenas</span>
+  </div>
+  <div class="topbar-center">
+    <div class="topbar-search">
+      <span style="color:var(--gray-400);font-size:13px">🔍</span>
+      <input type="text" placeholder="Search..." oninput="if(typeof handleSearch === 'function') handleSearch(this.value)">
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <div class="icon-btn" onclick="nav('/notifications')">🔔<div class="notif-dot" style="display:none"></div></div>
+    <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
+      <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">·</div>
+      <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
+        <a href="/html/profile" style="display:block;padding:10px 14px;font-size:13px;color:#111827;text-decoration:none">My profile</a>
+        <a href="/html/auth/logout" style="display:block;padding:10px 14px;font-size:13px;color:#DC2626;text-decoration:none;border-top:1px solid #f3f4f6">Log out</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- PUBLIC TOPBAR -->
+<header class="topbar" id="public-topbar" style="display:none">
+  <div class="topbar-logo" onclick="nav('/landing')" style="cursor:pointer; border-right:none">
+    <img class="logo-icon" src="/html/arenas-icon.svg" alt="">
+    <span class="logo-text">Arenas</span>
+  </div>
+  <div class="public-topbar-actions">
+    <button class="btn btn-ghost" onclick="nav('/landing#login')">Log in</button>
+    <button class="btn btn-yellow" onclick="nav('/landing#signup')">Sign up</button>
+  </div>
+</header>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="auth-sidebar">
+  <div class="nav-section-label">My Arenas</div>
+  <div class="nav-item" onclick="nav('/feed')"><span class="nav-icon">🏠</span> Feed</div>
+  <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">👤</span> My profile</div>
+  <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">🎟️</span> Events</div>
+  <div class="nav-item" onclick="nav('/calendar')"><span class="nav-icon">🗓️</span> Calendar</div>
+  <div class="nav-item" onclick="nav('/leaderboards')"><span class="nav-icon">🏆</span> Leaderboards</div>
+  <div class="nav-item" onclick="nav('/challenges')"><span class="nav-icon">⚡</span> Challenges</div>
+  <div class="nav-item" onclick="nav('/log')"><span class="nav-icon">➕</span> Log activity</div>
+  <div class="nav-item" onclick="nav('/athletes')"><span class="nav-icon">👥</span> Athletes</div>
+  <div class="nav-item active" onclick="nav('/clubs')"><span class="nav-icon">🏟️</span> Clubs</div>
+  <div class="nav-section-label">My clubs</div>
+  <div class="nav-section-label">Account</div>
+  <div class="nav-item" onclick="nav('/billing')"><span class="nav-icon">💳</span> Billing</div>
+  <div class="nav-item" onclick="nav('/profile#settings')"><span class="nav-icon">⚙️</span> Settings</div>
+  <div class="sidebar-footer">
+    <div style="display:flex;align-items:center;gap:9px">
+      <div class="sf-av" style="width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900)">·</div>
+      <div><div style="font-size:12px;font-weight:600;color:var(--gray-900)" id="sf-name">Athlete</div></div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main" id="main-content">
+  <div id="cp-banner" class="cp-banner" style="display:none"></div>
+  
+  <div class="cp-header-wrap">
+    <div id="cp-logo" class="cp-logo">🏟</div>
+    
+    <h1 id="cp-name" class="cp-name">Loading...</h1>
+    
+    <div class="cp-meta">
+      <div id="cp-sport" class="cp-pill" style="display:none"></div>
+      <div id="cp-info" class="cp-info"></div>
+    </div>
+    
+    <div id="cp-website-wrap" style="display:none">
+      <a id="cp-website" href="#" target="_blank" rel="noopener noreferrer nofollow" class="cp-website">
+        <span style="font-size:12px">🔗</span> <span id="cp-website-host"></span>
+      </a>
+    </div>
+    
+    <div id="cp-about" class="cp-about" style="display:none">
+      <h2>About the club</h2>
+      <p id="cp-desc"></p>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+(function(){
+  var data = window.ARENAS_DATA || {};
+  var chrome = window.ARENAS_CHROME || {};
+  var loggedIn = !!chrome.loggedIn;
+  
+  // Shell swap
+  if (!loggedIn) {
+    document.getElementById('auth-topbar').style.display = 'none';
+    document.getElementById('auth-sidebar').style.display = 'none';
+    document.getElementById('public-topbar').style.display = 'flex';
+    document.body.classList.add('is-public');
+  } else {
+    // Update the logged-in user's identity in the sidebar footer.
+    var myName = (chrome.profile && chrome.profile.name) || 'Athlete';
+    var sfName = document.getElementById('sf-name');
+    if (sfName) sfName.textContent = myName;
+    document.querySelectorAll('.user-av, .sf-av').forEach(function (el) {
+      if (window.avatarHtml) el.innerHTML = window.avatarHtml.content((chrome.profile && chrome.profile.avatar_url) || null, myName);
+    });
+    
+    // Auth bell
+    var B = window.BASE || (location.pathname.indexOf("/html") === 0 ? "/html" : "");
+    fetch(B + "/api/notifications").then(function(r){ return r.json(); }).then(function(d){
+      var unread = (d && d.unreadCount) || 0;
+      var dot = document.querySelector(".notif-dot");
+      if (dot) dot.style.display = unread > 0 ? "block" : "none";
+    }).catch(function(){});
+  }
+
+  // Render club data
+  var club = data.club;
+  if (!club) return;
+  
+  // Banner
+  var B = window.BASE || (location.pathname.indexOf("/html") === 0 ? "/html" : "");
+  var bannerEl = document.getElementById('cp-banner');
+  var logoEl = document.getElementById('cp-logo');
+  if (club.banner) {
+    bannerEl.style.display = 'block';
+    bannerEl.style.backgroundImage = 'url("' + B + '/api/clubs/' + club.id + '/banner?v=' + club.banner + '")';
+    logoEl.classList.add('has-banner');
+  }
+  
+  // Logo fallback logic: Use clubTileHtml if available
+  if (club.logo_url && window.clubTileHtml) {
+    logoEl.innerHTML = window.clubTileHtml.content(club.logo_url, club.sport);
+  } else {
+    var icons = window.ARENAS_SPORT_ICONS || {};
+    logoEl.innerHTML = icons[club.sport] || '🏟';
+  }
+  
+  // Name
+  var nameEl = document.getElementById('cp-name');
+  nameEl.textContent = club.name || 'Club';
+  
+  // Sport pill
+  var sportEl = document.getElementById('cp-sport');
+  if (club.sport) {
+    sportEl.style.display = 'inline-flex';
+    var sName = club.sport.charAt(0).toUpperCase() + club.sport.slice(1);
+    var bg = 'var(--gray-100)', txt = 'var(--gray-600)', bdr = 'var(--gray-200)';
+    
+    if (window.ARENAS_SPORTS) {
+      window.ARENAS_SPORTS.forEach(function(s){
+        if(s.id === club.sport) {
+          sName = s.label;
+          bg = s.colors.bg; txt = s.colors.text; bdr = s.colors.border;
+        }
+      });
+    }
+    sportEl.textContent = sName;
+    sportEl.style.backgroundColor = bg;
+    sportEl.style.color = txt;
+    sportEl.style.borderColor = bdr;
+  }
+  
+  // Info (City + Member Count)
+  var infoParts = [];
+  if (club.city) infoParts.push(club.city);
+  if (club.memberCount != null) {
+    infoParts.push(club.memberCount + ' member' + (club.memberCount === 1 ? '' : 's'));
+  }
+  var infoEl = document.getElementById('cp-info');
+  if (infoParts.length > 0) {
+    infoEl.textContent = infoParts.join(' · ');
+  } else {
+    infoEl.style.display = 'none';
+  }
+  
+  // Website
+  if (club.website_url) {
+    try {
+      // Parse once and derive BOTH the destination and label from that exact
+      // object. The server already enforces this; this check is display-layer
+      // defence if a legacy bad row ever reaches the page.
+      var website = new URL(club.website_url);
+      if (website.protocol === 'https:' && website.hostname && !website.username && !website.password) {
+        var webWrap = document.getElementById('cp-website-wrap');
+        var webLink = document.getElementById('cp-website');
+        var webHost = document.getElementById('cp-website-host');
+        webWrap.style.display = 'block';
+        webLink.href = website.href;
+        webHost.textContent = website.hostname;
+      }
+    } catch (e) {}
+  }
+  
+  // Description
+  if (club.description) {
+    var abtWrap = document.getElementById('cp-about');
+    var abtDesc = document.getElementById('cp-desc');
+    abtWrap.style.display = 'block';
+    abtDesc.textContent = club.description;
+  }
+  
+})();
+</script>
+
+<script>
+// Shared "My clubs" sidebar renderer
+(function () {
+  var chrome = window.ARENAS_CHROME || {};
+  if (!chrome.loggedIn) return;
+  var clubs = chrome.clubs || [];
+  var label = null;
+  document.querySelectorAll('.sidebar .nav-section-label').forEach(function (l) {
+    if (/^\s*my clubs\s*$/i.test(l.textContent || '')) label = l;
+  });
+  if (!label) return;
+  var parent = label.parentNode;
+  var anchor = label.nextElementSibling;
+  var sportIcons = window.ARENAS_SPORT_ICONS || {};
+  if (!clubs.length) {
+    var empty = document.createElement('div');
+    empty.className = 'nav-item';
+    empty.style.cssText = 'color:var(--gray-400)';
+    empty.textContent = 'No clubs yet — find one';
+    empty.onclick = function () { if (typeof nav === 'function') nav('/clubs'); };
+    parent.insertBefore(empty, anchor);
+  }
+  clubs.forEach(function (club) {
+    var item = document.createElement('div');
+    item.className = 'nav-item';
+    item.onclick = function () {
+      if (typeof nav !== 'function') return;
+      if (club.role === 'admin' || club.role === 'coach') { nav('/clubs/dashboard?club=' + club.id); }
+      else { nav('/clubs/member/' + club.id); }
+    };
+    var ic = document.createElement('span');
+    ic.className = 'nav-icon';
+    if (club.logo_url && window.clubTileHtml) {
+      ic.style.cssText = 'width:18px;height:18px;border-radius:4px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle';
+      ic.innerHTML = window.clubTileHtml.content(club.logo_url, club.sport);
+    } else {
+      ic.textContent = sportIcons[club.sport] || '🏟';
+    }
+    item.appendChild(ic);
+    item.appendChild(document.createTextNode(' ' + (club.name || 'Club')));
+    if (club.plan === 'club_pro') {
+      var pb = document.createElement('span');
+      pb.className = 'pro-badge';
+      pb.textContent = 'PRO';
+      item.appendChild(pb);
+    }
+    parent.insertBefore(item, anchor);
+  });
+  var create = document.createElement('div');
+  create.className = 'nav-item';
+  create.onclick = function () { if (window.ArenasClubCreate) { window.ArenasClubCreate.open(); } else if (typeof nav === 'function') { nav('/for-clubs?create=1'); } };
+  var cic = document.createElement('span');
+  cic.className = 'nav-icon';
+  cic.textContent = '➕';
+  create.appendChild(cic);
+  create.appendChild(document.createTextNode(' Create club'));
+  parent.insertBefore(create, anchor);
+})();
+</script>
+</body>
+</html>
