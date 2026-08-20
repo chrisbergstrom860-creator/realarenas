@@ -579,8 +579,6 @@ body {
 .adc-location{font-size:11px;color:var(--gray-400);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .adc-tags{display:flex;gap:4px;flex-wrap:wrap}
 .adc-pill{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid transparent;white-space:nowrap;display:inline-block}
-.adc-pill-muted{background:var(--gray-100);color:var(--gray-600);border-color:var(--gray-200)}
-.adc-pill-adv{background:#FAEEDA;color:#633806;border-color:#EF9F27} /* old .p-adv gold */
 .adc-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
 .adc-stat{background:var(--gray-50);border:var(--border);border-radius:6px;padding:6px 8px;text-align:center;min-width:0}
 .adc-stat-val{font-size:14px;font-weight:700;color:var(--gray-900);font-family:var(--mono);line-height:1;display:block}

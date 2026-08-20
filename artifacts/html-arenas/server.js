@@ -5860,7 +5860,6 @@ async function buildAthleteDirectory(viewerId) {
       state: disp.state,
       stateName: disp.stateName,
       sports: Array.isArray(meta.sports) ? meta.sports : [],
-      level: meta.level || null,
       initials,
       createdAt: u.created_at || null,
       postCount: postRows.filter(p => p.user_id === u.id).length,
@@ -6090,7 +6089,6 @@ app.get(BASE + '/athletes/:userId', requirePageAuth, async (req, res) => {
         countryName: tDisp.countryName,
         stateName: tDisp.stateName,
         sports: heroSports,
-        level: meta.level || null,
         memberSince: target.created_at || null,
         pro: (await getUserPlan(targetId)) === 'pro'
       },
@@ -7560,8 +7558,7 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
           avatar_url: disp.avatar_url || null,
           bio: m.bio || null,
           location: m.location || null,
-          sports: Array.isArray(m.sports) ? m.sports : [],
-          level: m.level || null
+          sports: Array.isArray(m.sports) ? m.sports : []
         };
       } catch (err) {
         // Ignore individual lookup failures; the row is simply omitted.
@@ -8878,7 +8875,7 @@ app.post(BASE + '/api/profile/update', requireAuth, async (req, res) => {
       meta.bio = bio;
     }
     // "Your sports" chips (settings). Only registry ids are accepted; deduped
-    // and capped at the registry size (now 12). An empty array clears the list.
+    // and capped at the current registry size. An empty array clears the list.
     if (Array.isArray(body.sports)) {
       const cleaned = [];
       for (const s of body.sports) {

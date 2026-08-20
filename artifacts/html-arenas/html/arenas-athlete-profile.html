@@ -301,7 +301,6 @@ function showToast(msg) {
   var tags = (a.sports || []).map(function(s){
     return '<span class="hero-tag">' + esc(window.arenasSportTag(s) || s) + '</span>';
   });
-  if (a.level) tags.push('<span class="hero-tag" style="background:rgba(16,185,129,.15);color:#6EE7B7;border-color:rgba(16,185,129,.25)">' + esc(a.level) + '</span>');
   document.getElementById('hero-tags').innerHTML = tags.join('');
   if (a.bio) {
     var bioEl = document.getElementById('hero-bio');

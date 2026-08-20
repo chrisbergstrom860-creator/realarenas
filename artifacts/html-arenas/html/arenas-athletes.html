@@ -132,7 +132,7 @@ button,select,input,textarea{font-family:var(--font)}
 .mh-actions{position:relative;z-index:1;display:flex;flex-direction:column;gap:7px;align-self:center}
 .modal-close-btn{position:absolute;top:12px;right:12px;width:28px;height:28px;border-radius:50%;border:1px solid rgba(255,255,255,.2);background:rgba(0,0,0,.2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:rgba(255,255,255,.7);z-index:10;transition:background .1s}
 .modal-close-btn:hover{background:rgba(0,0,0,.4)}
-.modal-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:var(--border);border-radius:var(--radius);overflow:hidden}
+.modal-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:var(--border);border-radius:var(--radius);overflow:hidden}
 .modal-stat{padding:12px;text-align:center;border-right:var(--border)}
 .modal-stat:last-child{border-right:none}
 .modal-stat .mv{font-size:18px;font-weight:700;font-family:var(--mono);color:var(--gray-900);line-height:1}
@@ -439,8 +439,7 @@ function showToast(msg) {
     if (statsEl) statsEl.innerHTML =
       '<div class="modal-stat"><div class="mv">' + (a.followerCount || 0) + '</div><div class="ml">Followers</div></div>' +
       '<div class="modal-stat"><div class="mv">' + (a.postCount || 0) + '</div><div class="ml">Posts</div></div>' +
-      '<div class="modal-stat"><div class="mv">' + (a.sports ? a.sports.length : 0) + '</div><div class="ml">Sports</div></div>' +
-      '<div class="modal-stat"><div class="mv">' + esc(a.level || '—') + '</div><div class="ml">Level</div></div>';
+      '<div class="modal-stat"><div class="mv">' + (a.sports ? a.sports.length : 0) + '</div><div class="ml">Sports</div></div>';
     const bioEl = document.getElementById('modal-bio-section');
     if (bioEl) bioEl.innerHTML = a.bio
       ? '<div><div class="modal-section-title">About</div><div style="font-size:13px;color:var(--gray-600);line-height:1.65">' + esc(a.bio) + '</div></div>'

@@ -71,7 +71,7 @@
   // Country/state fold in as display names + the USPS code so "United
   // States", "California" and "CA" all match; cards still render city-only.
   function searchText(a) {
-    return [a.name, a.location, a.countryName, a.stateName, a.state, (a.sports || []).join(' '), a.level]
+    return [a.name, a.location, a.countryName, a.stateName, a.state, (a.sports || []).join(' ')]
       .join(' ').toLowerCase();
   }
 
@@ -81,7 +81,6 @@
     var primary = sports[0] || null;
     var sportStyle = primary ? sportColorStyle(primary) : '';
     var sportLabel = primary ? (window.arenasSportTag ? window.arenasSportTag(primary) : sportName(primary)) : null;
-    var levelLabel = a.level ? (a.level.charAt(0).toUpperCase() + a.level.slice(1)) : null;
     var followers = a.followerCount || 0;
     return '' +
       '<div class="adc-card" data-user-id="' + esc(a.id) + '"' + (clickable ? ' data-clickable="1"' : '') +
@@ -99,9 +98,6 @@
         '</div>' +
         '<div class="adc-tags">' +
           (sportLabel ? '<span class="adc-pill" style="' + sportStyle + '">' + esc(sportLabel) + '</span>' : '') +
-          // Advanced keeps its pre-extraction gold treatment (old .p-adv);
-          // other levels use the muted pill (old .p-int values).
-          (levelLabel ? '<span class="adc-pill ' + (String(a.level || '').toLowerCase() === 'advanced' ? 'adc-pill-adv' : 'adc-pill-muted') + '">' + esc(levelLabel) + '</span>' : '') +
         '</div>' +
         '<div class="adc-stats">' +
           '<div class="adc-stat"><span class="adc-stat-val">' + followers + '</span><span class="adc-stat-label">followers</span></div>' +
