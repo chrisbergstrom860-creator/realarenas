@@ -91,3 +91,4 @@
 - [html-arenas club billing authority](html-arenas-club-billing.md) — checkout/portal are admin-or-owner via canManageClubBilling/getBillableClubIds (never isClubManagerRole); one server-decided list feeds UI + API.
 - [html-arenas Plausible analytics](html-arenas-analytics.md) — ONE send/sendFile injection middleware + client hostname gate; events via arenasTrack on server-confirmed outcomes only; never paste the snippet per-file.
 - [html-arenas post write gate](html-arenas-post-write-gate.md) — like/comment gated by canUserSeePost (read-path union); zero-leak 404; unlike lost with visibility; one grandfathered like.
+- [html-arenas public club profiles](html-arenas-public-club-profiles.md) — public-only profiles; private/missing parity; banner paths stay server-only; public pages never offer joining.

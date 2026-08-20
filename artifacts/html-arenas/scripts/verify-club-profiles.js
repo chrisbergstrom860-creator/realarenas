@@ -49,6 +49,7 @@
 //   L3. Replacement POST: old object gone, new object present.
 //   L4. Pointer-write failure after storage succeeds: new object removed,
 //       previous pointer/object preserved (local Supabase fault proxy).
+//   L5. Public club page HTML and ARENAS_DATA never expose banner_path.
 //   L5. DELETE clears pointer; object gone; no-banner DELETE is idempotent.
 //
 //   DELETION OBJECT LIFECYCLE
@@ -96,12 +97,10 @@ const check = (name, ok, detail) => {
   }
 };
 
-// Minimal 1×1 WebP binary (lossless, 26 bytes — accepted by sharp as webp)
+// Minimal valid 1×1 WebP binary, independently decoded by the installed Sharp.
 const WEBP = Buffer.from(
-  '524946461a000000574542505650384c' +
-  '0d0000002f000000000000ff00fef836' +
-  '24',
-  'hex'
+  'UklGRjwAAABXRUJQVlA4IDAAAADQAQCdASoQAAQAAUAiJaACdLoB+AADsAD++FC//5T98wA+YAf8p+/+WffH8nCAAAA=',
+  'base64'
 );
 // Minimal valid PNG (1×1, for format-reject test)
 const PNG = Buffer.from(
@@ -264,10 +263,21 @@ async function deleteBanner(k, clubIdTarget) {
 }
 
 async function objectExists(path) {
+  if (!path) return false;
   const dir = path.slice(0, path.lastIndexOf('/'));
   const name = path.slice(path.lastIndexOf('/') + 1);
   const { data } = await admin.storage.from(CLUB_BANNER_BUCKET).list(dir);
   return !!(data || []).find(f => f.name === name);
+}
+
+function extractArenasData(html) {
+  const match = html.match(/window\.ARENAS_DATA\s*=\s*(\{[\s\S]*?\});?\s*<\/script>/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1]);
+  } catch (err) {
+    return null;
+  }
 }
 
 async function clubBannerObjectNames(id) {
@@ -691,6 +701,30 @@ async function schemaReady() {
     check('L3: new object exists', await objectExists(path2), path2);
     check('L3: old object removed', !(await objectExists(path1)), path1);
     bannerPath = path2;
+
+    const publicPageWithBanner = await fetch(BASE_URL + '/clubs/' + clubId);
+    const publicPageWithBannerHtml = await publicPageWithBanner.text();
+    const publicPageWithBannerData = extractArenasData(publicPageWithBannerHtml);
+    const publicBannerPayloadValid = publicPageWithBanner.ok &&
+      publicPageWithBannerData &&
+      publicPageWithBannerData.club &&
+      typeof publicPageWithBannerData.club === 'object';
+    check('L5: public page with a banner returns a parseable public payload',
+      publicBannerPayloadValid,
+      { status: publicPageWithBanner.status, data: publicPageWithBannerData });
+    check('L5: post-upload public payload retains the exact allowlisted key set',
+      publicBannerPayloadValid &&
+      JSON.stringify(Object.keys(publicPageWithBannerData.club).sort()) === JSON.stringify(allowedClubKeys),
+      publicBannerPayloadValid ? Object.keys(publicPageWithBannerData.club).sort() : null);
+    check('L5: stored banner_path is absent from public served HTML',
+      publicBannerPayloadValid &&
+      !publicPageWithBannerHtml.includes(path2) &&
+      !publicPageWithBannerHtml.includes('banner_path'));
+    check('L5: stored banner_path is absent from public ARENAS_DATA payload',
+      publicBannerPayloadValid &&
+      !JSON.stringify(publicPageWithBannerData).includes(path2) &&
+      !Object.prototype.hasOwnProperty.call((publicPageWithBannerData && publicPageWithBannerData.club) || {}, 'banner_path'),
+      publicPageWithBannerData && publicPageWithBannerData.club);
 
     // ── L4. Pointer-write rollback after a successful storage upload ──────────
     // A spawned app talks to Supabase through a local proxy that fails exactly

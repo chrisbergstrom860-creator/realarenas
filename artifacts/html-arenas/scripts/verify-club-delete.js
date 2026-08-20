@@ -112,6 +112,11 @@ const count = async (table, col, val) =>
       console.log('      Apply scripts/sql/public-club-profiles.sql first.');
       return;
     }
+    // Previous interrupted verifier runs used a fixed fake Stripe id. Sweep
+    // only this reserved test prefix so an orphan cannot defeat the unique
+    // constraint and silently turn the Stripe-abort case into a real delete.
+    await admin.from('subscriptions').delete()
+      .like('stripe_subscription_id', 'sub_clubdelverify_bogus%');
     // ── Seed users ──
     const { data: all } = await admin.auth.admin.listUsers({ perPage: 1000 });
     for (const u of all.users) if (Object.values(EMAILS).includes(u.email)) await admin.auth.admin.deleteUser(u.id);
@@ -211,10 +216,13 @@ const count = async (table, col, val) =>
     }
 
     // Fake paid sub (Stripe has never heard of this id → retrieve fails)
-    await admin.from('subscriptions').insert({
+    const fakeStripeSuffix = clubId.replace(/-/g, '');
+    const { error: fakeSubErr } = await admin.from('subscriptions').insert({
       owner_type: 'club', owner_id: clubId, plan: 'club_pro', status: 'active',
-      stripe_customer_id: 'cus_clubdelverify', stripe_subscription_id: 'sub_clubdelverify_bogus'
+      stripe_customer_id: 'cus_clubdelverify_' + fakeStripeSuffix,
+      stripe_subscription_id: 'sub_clubdelverify_bogus_' + fakeStripeSuffix
     });
+    if (fakeSubErr) throw new Error('fake paid subscription seed: ' + fakeSubErr.message);
 
     const snapshot = async () => ({
       clubs: await count('clubs', 'id', clubId),
