@@ -36,11 +36,7 @@
   }
 
   function sportName(id) {
-    if (id === 'any') return 'Any sport'; // club-only pseudo-value
-    var s = (window.ARENAS_SPORTS_BY_ID || {})[id];
-    if (s) return s.label;
-    var t = String(id == null ? '' : id);
-    return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+    return window.arenasSportName(id);
   }
 
   function searchText(c) {

@@ -129,6 +129,14 @@ body.is-public .app > .main {
 .cp-website:hover {
   background: #DBEAFE;
 }
+.cp-headline {
+  margin: 20px 0 0;
+  color: var(--gray-900);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
 .cp-about {
   margin-top: 32px;
   padding-top: 24px;
@@ -164,6 +172,7 @@ body.is-public .app > .main {
   .cp-pill { font-size: 12px; padding: 3px 10px; }
   .cp-info { font-size: 13px; }
   .cp-website { font-size: 13px; padding: 5px 12px; }
+  .cp-headline { margin-top: 16px; font-size: 16px; }
   .cp-about { margin-top: 24px; padding-top: 20px; }
   .cp-about h2 { font-size: 16px; }
   .cp-about p { font-size: 14px; }
@@ -252,6 +261,8 @@ body.is-public .app > .main {
         <span style="font-size:12px">🔗</span> <span id="cp-website-host"></span>
       </a>
     </div>
+
+    <p id="cp-headline" class="cp-headline" style="display:none"></p>
     
     <div id="cp-about" class="cp-about" style="display:none">
       <h2>About the club</h2>
@@ -322,13 +333,12 @@ body.is-public .app > .main {
   var sportEl = document.getElementById('cp-sport');
   if (club.sport) {
     sportEl.style.display = 'inline-flex';
-    var sName = club.sport.charAt(0).toUpperCase() + club.sport.slice(1);
+    var sName = window.arenasSportName(club.sport);
     var bg = 'var(--gray-100)', txt = 'var(--gray-600)', bdr = 'var(--gray-200)';
     
     if (window.ARENAS_SPORTS) {
       window.ARENAS_SPORTS.forEach(function(s){
         if(s.id === club.sport) {
-          sName = s.label;
           bg = s.colors.bg; txt = s.colors.text; bdr = s.colors.border;
         }
       });
@@ -368,6 +378,14 @@ body.is-public .app > .main {
         webHost.textContent = website.hostname;
       }
     } catch (e) {}
+  }
+
+  // Optional lead line: omission is the empty state, so a null headline adds
+  // no height or gap before the unchanged About divider.
+  if (club.headline) {
+    var headlineEl = document.getElementById('cp-headline');
+    headlineEl.style.display = 'block';
+    headlineEl.textContent = club.headline;
   }
   
   // Description

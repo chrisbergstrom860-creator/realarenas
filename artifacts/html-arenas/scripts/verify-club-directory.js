@@ -176,7 +176,7 @@ async function main() {
   surface = await page(null, '/clubs/' + pubClubId);
   surfaceData = injectedData(surface.raw, 'ARENAS_DATA');
   check('public club profile receives edited sport', surface.status === 200 && surfaceData && surfaceData.club && surfaceData.club.sport === 'cycling', surfaceData && surfaceData.club);
-  check('public club profile intentionally does not expose headline yet', surfaceData && surfaceData.club && !Object.prototype.hasOwnProperty.call(surfaceData.club, 'headline'), surfaceData && surfaceData.club);
+  check('public club profile receives explicitly allowlisted headline', surfaceData && surfaceData.club && surfaceData.club.headline === 'Build speed together in Oslo', surfaceData && surfaceData.club);
   r = await api('owner', 'GET', '/notifications');
   const notificationRows = (r.body && r.body.notifications) || [];
   check('notifications remain unaffected (no cached club sport field)', r.status === 200 && notificationRows.every(n => !Object.prototype.hasOwnProperty.call(n, 'sport') && !Object.prototype.hasOwnProperty.call(n, 'clubSport')), notificationRows);
@@ -529,7 +529,8 @@ async function main() {
   check('16: /for-clubs sport select offers Any sport', fcHtml.includes('<option value="any">Any sport</option>'), null);
   // Injected shared helpers know the pseudo-value (label + icon).
   const clubsHtml = await (await fetch(BASE_URL + '/clubs', { headers: { Cookie: users.seeker2.cookie } })).text();
-  check('16: injected arenasSportTag handles any', clubsHtml.includes("'any') return '\uD83C\uDFDF Any sport'"), null);
+  check('16: injected shared sport name handles any', clubsHtml.includes("if (id === 'any') return 'Any sport'"), null);
+  check('16: icon sport tag delegates to shared sport name', clubsHtml.includes('var label = window.arenasSportName(t)'), null);
   check('16: injected icon map carries any \uD83C\uDFDF', /"any":\s*"\uD83C\uDFDF"/.test(clubsHtml), null);
 
   // Put one card into the rare cooldown state so the compact row proves the

@@ -1375,16 +1375,22 @@ const AVATAR_HELPERS_SCRIPT = `<script>(function arenasAvatarHelpers(){
   var sportsById = {};
   window.ARENAS_SPORTS.forEach(function (s) { sportsById[s.id] = s; });
   window.ARENAS_SPORTS_BY_ID = sportsById;
+  // Text-only label shared by plain metadata and colored pills. The club-only
+  // pseudo-value is not in the registry, so it is named explicitly here once.
+  window.arenasSportName = function (id) {
+    if (id === 'any') return 'Any sport';
+    var s = sportsById[id];
+    if (s) return s.label;
+    var t = String(id == null ? '' : id);
+    return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+  };
   // "🏃 Running" for registry sports; legacy icon + Title-case for known
   // drifted values (🔱 Triathlon); plain Title-case text for anything else —
   // existing stored data always keeps rendering (graceful fallback, no 🏅 spam).
   window.arenasSportTag = function (id) {
-    if (id === 'any') return '🏟 Any sport'; // club-only pseudo-value (never a registry id)
-    var s = sportsById[id];
-    if (s) return s.emoji + ' ' + s.label;
     var t = String(id == null ? '' : id);
-    if (!t) return '';
-    var label = t.charAt(0).toUpperCase() + t.slice(1);
+    var label = window.arenasSportName(t);
+    if (!label) return '';
     var icon = window.ARENAS_SPORT_ICONS[t];
     return icon ? icon + ' ' + label : label;
   };
@@ -6223,7 +6229,7 @@ async function getPublicClub(clubId) {
   if (!supabaseAdmin || !clubId) return null;
   const { data } = await supabaseAdmin
     .from('clubs')
-    .select('id, name, handle, sport, city, logo_url, description, website_url, banner_path, visibility, created_at')
+    .select('id, name, handle, sport, city, logo_url, headline, description, website_url, banner_path, visibility, created_at')
     .eq('id', clubId)
     .eq('visibility', 'public')
     .maybeSingle();
@@ -6245,6 +6251,7 @@ async function buildPublicClubProfile(clubId) {
     sport: club.sport,
     city: club.city || null,
     logo_url: club.logo_url || null,
+    headline: club.headline || null,
     description: club.description || null,
     website_url: normalizedWebsite.error ? null : normalizedWebsite.value,
     memberCount: count || 0,

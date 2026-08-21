@@ -8,11 +8,15 @@
 //   P1. Raw 404 body byte-identical for logged-in vs logged-out on private club.
 //   P2. Raw 404 body byte-identical for logged-in vs logged-out on nonexistent id.
 //   P3. ARENAS_DATA.club contains exactly: id, name, sport, city, logo_url,
-//       description, website_url, memberCount, banner — nothing else that would
-//       leak member identities, events, challenges, posts, activity,
+//       headline, description, website_url, memberCount, banner — nothing else
+//       that would leak member identities, events, challenges, posts, activity,
 //       viewerState, join state, management flags, or the raw banner_path.
 //   P4. Normalized website_url is included in ARENAS_DATA.club.website_url
 //       and is rendered safely in HTML (no XSS, no raw < / > / & in data).
+//   P5. Headline is an unlabelled lead line above About: 72 chars wrap without
+//       overflow at 380px; null contributes no box, reserved space, or gap.
+//       The shared text sport label renders the club-only `any` value as
+//       “Any sport,” never bare “Any.”
 //
 //   VIEWER-AWARE BANNER PROXY (GET /api/clubs/:clubId/banner)
 //   ──────────────────────────────────────────────────────────
@@ -90,6 +94,7 @@ const EMAILS = {
   outsider: 'clubprof-outsider@arenas-test.dev'
 };
 const CLUB_BANNER_BUCKET = 'club-banners';
+const HEADLINE_72 = 'Run together, grow stronger, and make every weekend count among friends.';
 const EXTRA_EMAILS = {
   signupOk: 'clubprof-signup-ok@arenas-test.dev',
   signupReject: 'clubprof-signup-reject@arenas-test.dev'
@@ -289,6 +294,119 @@ function extractArenasData(html) {
   }
 }
 
+async function verifyRenderedProfileStates() {
+  const { launchBrowser } = await import('./lib/mobile-geometry.js');
+  const browser = await launchBrowser();
+  try {
+    for (const width of [1280, 380]) {
+      const context = await browser.newContext({ viewport: { width, height: 900 } });
+      const page = await context.newPage();
+      const errors = [];
+      page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+      page.on('pageerror', err => errors.push(String(err)));
+
+      const { error: presentWriteError } = await admin.from('clubs')
+        .update({ headline: HEADLINE_72, sport: 'any' })
+        .eq('id', clubId);
+      if (presentWriteError) throw presentWriteError;
+      await page.goto(BASE_URL + '/clubs/' + clubId, { waitUntil: 'networkidle' });
+      await page.waitForSelector('#cp-headline', { state: 'visible', timeout: 15000 });
+      const present = await page.evaluate(() => {
+        const headline = document.getElementById('cp-headline');
+        const about = document.getElementById('cp-about');
+        const description = document.getElementById('cp-desc');
+        const website = document.getElementById('cp-website-wrap');
+        const meta = document.querySelector('.cp-meta');
+        const hs = getComputedStyle(headline);
+        const ds = getComputedStyle(description);
+        const as = getComputedStyle(about);
+        const hr = headline.getBoundingClientRect();
+        const ar = about.getBoundingClientRect();
+        const leadAnchor = getComputedStyle(website).display === 'none'
+          ? meta.getBoundingClientRect()
+          : website.getBoundingClientRect();
+        return {
+          text: headline.textContent,
+          sport: document.getElementById('cp-sport').textContent,
+          display: hs.display,
+          fontSize: parseFloat(hs.fontSize),
+          bodyFontSize: parseFloat(ds.fontSize),
+          fontWeight: parseInt(hs.fontWeight, 10),
+          lineCount: Math.round(hr.height / parseFloat(hs.lineHeight)),
+          afterIdentity: hr.top >= leadAnchor.bottom - 1,
+          beforeDivider: hr.bottom < ar.top,
+          adjacentToAbout: headline.nextElementSibling === about,
+          dividerWidth: parseFloat(as.borderTopWidth),
+          noHorizontalScroll: document.documentElement.scrollWidth <= window.innerWidth,
+          withinContent: hr.left >= -1 && hr.right <= window.innerWidth + 1,
+          height: hr.height
+        };
+      });
+      check(`P5: @${width} headline text renders exactly`, present.text === HEADLINE_72, present);
+      check(`P5: @${width} sport pill uses shared Any sport label`, present.sport === 'Any sport', present.sport);
+      check(`P5: @${width} headline is a stronger lead than About body`,
+        present.display === 'block' &&
+        present.fontSize > present.bodyFontSize &&
+        present.fontWeight >= 600,
+        present);
+      check(`P5: @${width} headline sits after identity and before divider`,
+        present.afterIdentity &&
+        present.beforeDivider &&
+        present.adjacentToAbout &&
+        present.dividerWidth > 0,
+        present);
+      check(`P5: @${width} headline has no clipping or horizontal overflow`,
+        present.noHorizontalScroll && present.withinContent && present.height > 0,
+        present);
+      check(`P5: @${width} 72-character headline wraps naturally`,
+        width === 380
+          ? present.lineCount >= 2 && present.lineCount <= 3
+          : present.lineCount === 1,
+        present);
+      await page.screenshot({ path: `/tmp/club-profile-headline-present-${width}.png`, fullPage: true });
+
+      const { error: absentWriteError } = await admin.from('clubs')
+        .update({ headline: null })
+        .eq('id', clubId);
+      if (absentWriteError) throw absentWriteError;
+      await page.reload({ waitUntil: 'networkidle' });
+      const absent = await page.evaluate(() => {
+        const headline = document.getElementById('cp-headline');
+        const about = document.getElementById('cp-about');
+        const display = getComputedStyle(headline).display;
+        const rectCount = headline.getClientRects().length;
+        const height = headline.getBoundingClientRect().height;
+        const before = about.getBoundingClientRect().top;
+        headline.remove();
+        const after = about.getBoundingClientRect().top;
+        return {
+          display,
+          rectCount,
+          height,
+          aboutShiftAfterRemoval: Math.abs(after - before),
+          noHorizontalScroll: document.documentElement.scrollWidth <= window.innerWidth
+        };
+      });
+      check(`P5: @${width} null headline is absent with zero footprint`,
+        absent.display === 'none' &&
+        absent.rectCount === 0 &&
+        absent.height === 0 &&
+        absent.aboutShiftAfterRemoval < 0.5,
+        absent);
+      check(`P5: @${width} null-headline page has no horizontal overflow`,
+        absent.noHorizontalScroll,
+        absent);
+      await page.screenshot({ path: `/tmp/club-profile-headline-absent-${width}.png`, fullPage: true });
+      check(`P5: @${width} zero console/page errors across both headline states`,
+        errors.length === 0,
+        errors.join(' | '));
+      await context.close();
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
 async function clubBannerObjectNames(id) {
   const { data } = await admin.storage.from(CLUB_BANNER_BUCKET).list('clubs/' + id);
   return (data || []).map(f => f.name).sort();
@@ -381,10 +499,10 @@ async function precleanStaleFixtures() {
 // ── Schema guard ──────────────────────────────────────────────────────────────
 // Verify columns exist before running any live checks.
 async function schemaReady() {
-  const { data, error } = await admin.from('clubs').select('website_url, banner_path').limit(1);
-  if (error && /website_url|banner_path|column/.test(error.message || '')) {
-    console.log('\nSKIP: clubs.website_url / clubs.banner_path columns do not exist yet.');
-    console.log('      Apply artifacts/html-arenas/scripts/sql/public-club-profiles.sql first.\n');
+  const { data, error } = await admin.from('clubs').select('headline, website_url, banner_path').limit(1);
+  if (error && /headline|website_url|banner_path|column/.test(error.message || '')) {
+    console.log('\nSKIP: clubs.headline / website_url / banner_path columns do not exist yet.');
+    console.log('      Apply the club-headline and public-club-profiles SQL first.\n');
     return false;
   }
   return true;
@@ -459,8 +577,14 @@ async function schemaReady() {
     check('P2: nonexistent 404 body byte-identical logged-in vs logged-out', fakeInBody === fakeOutBody, { in: fakeInBody.slice(0, 120), out: fakeOutBody.slice(0, 120) });
 
     // ── P3. ARENAS_DATA.club narrow payload ───────────────────────────────────
-    // Set description + website so they appear in payload
-    await admin.from('clubs').update({ description: 'Test club description', website_url: 'https://clubprof.example.com' }).eq('id', clubId);
+    // Set every optional identity field plus the club-only pseudo-sport so the
+    // exact payload and the rendered shared label are both exercised.
+    await admin.from('clubs').update({
+      sport: 'any',
+      headline: HEADLINE_72,
+      description: 'Test club description',
+      website_url: 'https://clubprof.example.com'
+    }).eq('id', clubId);
 
     const profilePage = await fetch(BASE_URL + '/clubs/' + clubId, { headers: { Cookie: users.outsider.cookie } });
     check('P3: public club page → 200', profilePage.status === 200, profilePage.status);
@@ -473,15 +597,16 @@ async function schemaReady() {
     // Required fields
     check('P3: club.id present', typeof c.id === 'string' && c.id === clubId, c.id);
     check('P3: club.name present', c.name === 'ClubProf Public', c.name);
-    check('P3: club.sport present', c.sport === 'running', c.sport);
+    check('P3: club.sport present', c.sport === 'any', c.sport);
     check('P3: club.city present', c.city === 'Oslo', c.city);
+    check('P3: club.headline present', c.headline === HEADLINE_72, c.headline);
     check('P3: club.description present', c.description === 'Test club description', c.description);
     check('P3: club.website_url present', c.website_url === 'https://clubprof.example.com/', c.website_url);
     check('P3: club.memberCount present (number)', typeof c.memberCount === 'number', c.memberCount);
     check('P3: club.logo_url present (null or string)', c.logo_url === null || typeof c.logo_url === 'string', c.logo_url);
     check('P3: club.banner field present (null or string)', 'banner' in c, Object.keys(c));
     const allowedClubKeys = [
-      'banner', 'city', 'description', 'id', 'logo_url',
+      'banner', 'city', 'description', 'headline', 'id', 'logo_url',
       'memberCount', 'name', 'sport', 'website_url'
     ];
     check(
@@ -502,6 +627,10 @@ async function schemaReady() {
     check('P3: top-level pageData has no joinRequests', !pageData.joinRequests, Object.keys(pageData));
     check('P3: top-level pageData has no memberList', !pageData.memberList, Object.keys(pageData));
     check('P3: ARENAS_DATA top-level has exactly club', JSON.stringify(Object.keys(pageData).sort()) === '["club"]', Object.keys(pageData));
+
+    // Rendered geometry and omission checks at the exact requested widths.
+    await verifyRenderedProfileStates();
+    await admin.from('clubs').update({ headline: HEADLINE_72 }).eq('id', clubId);
 
     // ── P4. website_url rendered safely in HTML ────────────────────────────────
     // The URL is trusted (we stored it), but the page must not create XSS vectors.
