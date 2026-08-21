@@ -71,3 +71,6 @@ attached_assets/Pasted-*
 # Promo-video artifacts kept outside the app repository
 *.mp4
 /artifacts/arenas-promo/
+
+# Presented screenshots and other attached assets stay outside source control.
+attached_assets/
