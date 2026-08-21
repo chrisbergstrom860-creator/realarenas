@@ -9756,6 +9756,15 @@ function clubBannerVersion(imagePath) {
   return m ? m[1] : null;
 }
 
+// Club rows may select the private Storage pointer server-side, but clients see
+// only the version token needed to form a proxy URL. Keep this transformation
+// shared so every payload strips banner_path before serialization.
+function clubWithBannerToken(club) {
+  if (!club) return null;
+  const { banner_path, ...safeClub } = club;
+  return { ...safeClub, banner: clubBannerVersion(banner_path) };
+}
+
 async function deleteClubBannerObject(objectPath, clubId) {
   if (!objectPath || !supabaseAdmin) return;
   if (!objectPath.startsWith('clubs/' + clubId + '/')) return;
@@ -10352,10 +10361,10 @@ app.delete(BASE + '/api/clubs/:clubId/banner', requireAuth, async (req, res) => 
   }
 });
 
-// Manager-only preview used by the dashboard. This is intentionally a
-// DIFFERENT route from the public proxy: logged-in status must never make the
-// public URL reveal a private club, while an authorized coach still needs to
-// see the dashboard's existing banner.
+// Manager-only preview used by the dashboard. It remains unchanged for now and
+// is intentionally stricter than the viewer-aware proxy below: admin/coach is a
+// strict subset of any club membership. Consolidating the dashboard onto the
+// broader proxy is cleanup, not part of the member-home banner feature.
 app.get(BASE + '/api/clubs/:clubId/banner/manage', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.status(404).json(CLUB_NOT_FOUND);
   try {
@@ -10376,15 +10385,38 @@ app.get(BASE + '/api/clubs/:clubId/banner/manage', requireAuth, async (req, res)
   }
 });
 
-// Public image proxy. getPublicClub is the ONE visibility rule, so a private
-// club, nonexistent club, missing banner, or missing object all answer with the
-// byte-identical CLUB_NOT_FOUND response. no-store is deliberate: if an admin
-// makes the club private, a previously viewed image must be revalidated rather
-// than remain readable from an immutable browser cache.
+// Resolve the private Storage pointer only when the club is public OR the
+// optional authenticated viewer has any membership in that same club. All
+// denial/read-error paths return null so the proxy can keep one zero-leak 404.
+async function getClubBannerForViewer(req, clubId) {
+  if (!supabaseAdmin || !clubId) return null;
+  try {
+    const { data: club, error } = await supabaseAdmin
+      .from('clubs')
+      .select('id, visibility, banner_path')
+      .eq('id', clubId)
+      .maybeSingle();
+    if (error || !club) return null;
+    if (club.visibility === 'public') return club;
+
+    const viewer = await getOptionalUser(req);
+    if (!viewer) return null;
+    const membership = await getClubRole(viewer.id, clubId);
+    return membership ? club : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+// Viewer-aware image proxy. Public clubs are readable anonymously; private
+// clubs are readable only to their own members. Anonymous-private,
+// nonmember-private, nonexistent-club, missing-pointer, and missing-object paths
+// all answer with the byte-identical CLUB_NOT_FOUND response. no-store is
+// deliberate: visibility or membership can change between requests.
 app.get(BASE + '/api/clubs/:clubId/banner', async (req, res) => {
   if (!supabaseAdmin) return res.status(404).json(CLUB_NOT_FOUND);
   try {
-    const club = await getPublicClub(req.params.clubId);
+    const club = await getClubBannerForViewer(req, req.params.clubId);
     if (!club || !club.banner_path) return res.status(404).json(CLUB_NOT_FOUND);
     const { data: blob, error } = await supabaseAdmin.storage
       .from(CLUB_BANNER_BUCKET).download(club.banner_path);
@@ -11129,11 +11161,12 @@ app.get(BASE + '/clubs/member/:clubId', requirePageAuth, async (req, res) => {
     // Confirm the viewer is a member of the requested club before showing it.
     const { data: membership } = await supabaseAdmin
       .from('memberships')
-      .select('role, clubs:club_id (id, name, handle, sport, logo_url)')
+      .select('role, clubs:club_id (id, name, handle, sport, logo_url, banner_path)')
       .eq('user_id', req.user.id)
       .eq('club_id', req.params.clubId)
       .maybeSingle();
-    const club = membership && (Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs);
+    const clubRow = membership && (Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs);
+    const club = clubWithBannerToken(clubRow);
     if (!club) {
       // Not a member of this club — fall back to their own first club, else the
       // feed. Guard against redirecting back to the same id (avoids a loop).
@@ -11214,11 +11247,12 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
     if (!myMembership) return res.json({ error: 'Not a member of this club' });
 
     // Club details.
-    const { data: club } = await supabaseAdmin
+    const { data: clubRow } = await supabaseAdmin
       .from('clubs')
-      .select('id, name, handle, sport, city, logo_url')
+      .select('id, name, handle, sport, city, logo_url, banner_path')
       .eq('id', clubId)
       .maybeSingle();
+    const club = clubWithBannerToken(clubRow);
 
     // Full roster, ordered by join time. Names resolved from auth metadata.
     const { data: members } = await supabaseAdmin

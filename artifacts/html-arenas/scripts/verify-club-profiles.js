@@ -14,12 +14,21 @@
 //   P4. Normalized website_url is included in ARENAS_DATA.club.website_url
 //       and is rendered safely in HTML (no XSS, no raw < / > / & in data).
 //
-//   BANNER PROXY (GET /api/clubs/:clubId/banner)
-//   ─────────────────────────────────────────────
+//   VIEWER-AWARE BANNER PROXY (GET /api/clubs/:clubId/banner)
+//   ──────────────────────────────────────────────────────────
 //   B1. Public club with banner → image/webp bytes; no auth required.
-//   B2. Public club with NO banner → same 404 JSON as private/nonexistent.
-//   B3. Private club → 404 JSON byte-identical to nonexistent id.
-//   B4. Nonexistent id → 404 JSON byte-identical to private club.
+//   B2. Private club with banner → image/webp for an ordinary member.
+//   B3. Anonymous-private, logged-in-nonmember-private, nonexistent club,
+//       and missing Storage object → byte-identical raw 404 bodies.
+//   B4. Public club with NO banner → the same fixed 404 JSON.
+//   B5. /banner/manage remains the strict manager-only subset: ordinary member
+//       denied with fixed 404, while admin and coach previews still succeed.
+//
+//   MEMBER HOME
+//   ───────────
+//   M1. Both successful member reads expose only a banner version token.
+//   M2. banner_path and the stored object path are absent from served member
+//       HTML and parseable member-home JSON (checks cannot pass on an error).
 //
 //   SETTINGS (PATCH /api/clubs/:clubId/settings)
 //   ─────────────────────────────────────────────
@@ -414,13 +423,17 @@ async function schemaReady() {
       { club_id: clubId, user_id: users.coach.id, role: 'coach' }
     ]);
 
-    // Private club (owner only, for zero-leak tests)
+    // Private club (admin + ordinary member). The ordinary member proves the
+    // viewer-aware proxy does not accidentally require manager authority.
     const { data: priv, error: pErr } = await admin.from('clubs')
       .insert({ name: 'ClubProf Private', handle: 'clubprofpriv', sport: 'cycling', city: 'Bergen', owner_id: users.owner.id, visibility: 'private' })
       .select().single();
     if (pErr) throw new Error('priv club insert: ' + pErr.message);
     privClubId = priv.id;
-    await admin.from('memberships').insert({ club_id: privClubId, user_id: users.owner.id, role: 'admin' });
+    await admin.from('memberships').insert([
+      { club_id: privClubId, user_id: users.owner.id, role: 'admin' },
+      { club_id: privClubId, user_id: users.coach.id, role: 'member' }
+    ]);
 
     const fakeId = '00000000-0000-4000-8000-000000000999';
     const CLUB_NOT_FOUND_RAW = JSON.stringify({ error: 'Club not found' });
@@ -660,8 +673,15 @@ async function schemaReady() {
 
     // ── B1. Banner proxy: public+banner → image/webp (no auth required) ───────
     // (Already proven by L2 above — banner proxy needs no cookie)
+    const publicCoachManage = await fetch(BASE_URL + '/api/clubs/' + clubId + '/banner/manage', {
+      headers: { Cookie: users.coach.cookie }
+    });
+    check('B5: coach retains manager-preview access',
+      publicCoachManage.status === 200 &&
+      (publicCoachManage.headers.get('content-type') || '').includes('image/webp'),
+      { status: publicCoachManage.status, contentType: publicCoachManage.headers.get('content-type') });
 
-    // ── B2. Banner proxy: public + NO banner → 404 JSON ──────────────────────
+    // ── B4. Banner proxy: public + NO banner → 404 JSON ──────────────────────
     const { data: noBannerClub } = await admin.from('clubs')
       .insert({ name: 'ClubProf NoBanner', handle: 'clubprofnobanner', sport: 'running', city: 'Oslo', owner_id: users.owner.id, visibility: 'public' })
       .select().single();
@@ -670,12 +690,104 @@ async function schemaReady() {
     extraClubIds.add(noBannerClubId);
     const proxyNoBanner = await fetch(BASE_URL + '/api/clubs/' + noBannerClubId + '/banner');
     const proxyNoBannerBody = await proxyNoBanner.text();
-    check('B2: public + no banner → 404', proxyNoBanner.status === 404, proxyNoBanner.status);
-    check('B2: no-banner 404 body = CLUB_NOT_FOUND', proxyNoBannerBody === CLUB_NOT_FOUND_RAW, proxyNoBannerBody.slice(0, 120));
-    // Clean up immediately
-    await admin.from('clubs').delete().eq('id', noBannerClubId);
+    check('B4: public + no banner → 404', proxyNoBanner.status === 404, proxyNoBanner.status);
+    check('B4: no-banner 404 body = CLUB_NOT_FOUND', proxyNoBannerBody === CLUB_NOT_FOUND_RAW, proxyNoBannerBody.slice(0, 120));
 
-    // ── B3 & B4. Banner proxy: private/nonexistent byte-identical ─────────────
+    // A real pointer whose Storage object does not exist must take the same
+    // response path as every authorization/existence denial.
+    const missingObjectPath = 'clubs/' + noBannerClubId + '/9999999999999.webp';
+    await admin.from('clubs').update({ banner_path: missingObjectPath }).eq('id', noBannerClubId);
+    const proxyMissingObject = await fetch(BASE_URL + '/api/clubs/' + noBannerClubId + '/banner');
+    const proxyMissingObjectBody = await proxyMissingObject.text();
+
+    // ── B2. Private banner is readable by an ordinary member ─────────────────
+    const privateUpload = await uploadBanner('owner', privClubId, WEBP, 'image/webp');
+    check('B2-setup: private banner upload succeeds',
+      privateUpload.status === 200 && privateUpload.body && privateUpload.body.success && privateUpload.body.banner,
+      privateUpload);
+    const { data: privateAfterUpload } = await admin.from('clubs')
+      .select('banner_path').eq('id', privClubId).maybeSingle();
+    const privateBannerPath = privateAfterUpload && privateAfterUpload.banner_path;
+    check('B2-setup: private banner_path stored server-side',
+      typeof privateBannerPath === 'string' && privateBannerPath.startsWith('clubs/' + privClubId + '/'),
+      privateBannerPath);
+    const proxyPrivateMember = await fetch(BASE_URL + '/api/clubs/' + privClubId + '/banner', {
+      headers: { Cookie: users.coach.cookie }
+    });
+    check('B2: ordinary member can read private club banner',
+      proxyPrivateMember.status === 200 &&
+      (proxyPrivateMember.headers.get('content-type') || '').includes('image/webp'),
+      { status: proxyPrivateMember.status, contentType: proxyPrivateMember.headers.get('content-type') });
+    const proxyPrivateMemberManage = await fetch(BASE_URL + '/api/clubs/' + privClubId + '/banner/manage', {
+      headers: { Cookie: users.coach.cookie }
+    });
+    const proxyPrivateMemberManageBody = await proxyPrivateMemberManage.text();
+    check('B5: ordinary member is denied by stricter manager-preview proxy',
+      proxyPrivateMemberManage.status === 404 &&
+      proxyPrivateMemberManageBody === CLUB_NOT_FOUND_RAW,
+      { status: proxyPrivateMemberManage.status, body: proxyPrivateMemberManageBody });
+    const proxyPrivateAdminManage = await fetch(BASE_URL + '/api/clubs/' + privClubId + '/banner/manage', {
+      headers: { Cookie: users.owner.cookie }
+    });
+    check('B5: admin retains manager-preview access',
+      proxyPrivateAdminManage.status === 200 &&
+      (proxyPrivateAdminManage.headers.get('content-type') || '').includes('image/webp'),
+      { status: proxyPrivateAdminManage.status, contentType: proxyPrivateAdminManage.headers.get('content-type') });
+
+    // ── M1 & M2. Both successful member reads expose token, never path ────────
+    const memberPage = await fetch(BASE_URL + '/clubs/member/' + privClubId, {
+      headers: { Cookie: users.coach.cookie }
+    });
+    const memberPageHtml = await memberPage.text();
+    const memberPageData = extractArenasData(memberPageHtml);
+    const memberPageValid = memberPage.status === 200 &&
+      memberPageData &&
+      memberPageData.club &&
+      typeof memberPageData.club === 'object';
+    check('M1: member page returns 200 with parseable ARENAS_DATA',
+      memberPageValid,
+      { status: memberPage.status, data: memberPageData });
+    check('M1: member page exposes the banner version token',
+      memberPageValid && memberPageData.club.banner === privateUpload.body.banner,
+      memberPageValid ? memberPageData.club : null);
+    check('M2: successful member HTML contains neither banner_path nor stored path',
+      memberPageValid &&
+      !memberPageHtml.includes('banner_path') &&
+      !memberPageHtml.includes(privateBannerPath),
+      memberPageValid ? memberPageData.club : { status: memberPage.status });
+    check('M2: parsed member ARENAS_DATA has no banner_path property',
+      memberPageValid &&
+      !Object.prototype.hasOwnProperty.call(memberPageData.club, 'banner_path'),
+      memberPageValid ? memberPageData.club : null);
+
+    const memberHomeResponse = await fetch(BASE_URL + '/api/clubs/' + privClubId + '/member-home', {
+      headers: { Cookie: users.coach.cookie }
+    });
+    const memberHomeRaw = await memberHomeResponse.text();
+    let memberHomeData = null;
+    try { memberHomeData = JSON.parse(memberHomeRaw); } catch (err) {}
+    const memberHomeValid = memberHomeResponse.status === 200 &&
+      memberHomeData &&
+      !memberHomeData.error &&
+      memberHomeData.club &&
+      typeof memberHomeData.club === 'object';
+    check('M1: member-home API returns 200 with parseable success JSON',
+      memberHomeValid,
+      { status: memberHomeResponse.status, body: memberHomeData });
+    check('M1: member-home JSON exposes the banner version token',
+      memberHomeValid && memberHomeData.club.banner === privateUpload.body.banner,
+      memberHomeValid ? memberHomeData.club : null);
+    check('M2: successful member-home JSON contains neither banner_path nor stored path',
+      memberHomeValid &&
+      !memberHomeRaw.includes('banner_path') &&
+      !memberHomeRaw.includes(privateBannerPath),
+      memberHomeValid ? memberHomeData.club : { status: memberHomeResponse.status, raw: memberHomeRaw.slice(0, 160) });
+    check('M2: parsed member-home club has no banner_path property',
+      memberHomeValid &&
+      !Object.prototype.hasOwnProperty.call(memberHomeData.club, 'banner_path'),
+      memberHomeValid ? memberHomeData.club : null);
+
+    // ── B3. All four denied/missing paths have byte-identical raw bodies ─────
     const proxyPriv = await fetch(BASE_URL + '/api/clubs/' + privClubId + '/banner');
     const proxyPrivLoggedIn = await fetch(BASE_URL + '/api/clubs/' + privClubId + '/banner', {
       headers: { Cookie: users.outsider.cookie }
@@ -684,13 +796,39 @@ async function schemaReady() {
     const proxyPrivBody = await proxyPriv.text();
     const proxyPrivLoggedInBody = await proxyPrivLoggedIn.text();
     const proxyFakeBody = await proxyFake.text();
-    check('B3: private club banner proxy → 404', proxyPriv.status === 404, proxyPriv.status);
-    check('B3: private banner stays hidden from logged-in visitor',
-      proxyPrivLoggedIn.status === 404 && proxyPrivLoggedInBody === proxyPrivBody,
-      { status: proxyPrivLoggedIn.status, body: proxyPrivLoggedInBody });
-    check('B4: nonexistent club banner proxy → 404', proxyFake.status === 404, proxyFake.status);
-    check('B3+B4: private vs nonexistent banner proxy byte-identical', proxyPrivBody === proxyFakeBody && proxyPrivBody === CLUB_NOT_FOUND_RAW,
-      { priv: proxyPrivBody.slice(0, 120), fake: proxyFakeBody.slice(0, 120) });
+    check('B3: all four denied/missing banner paths → 404',
+      proxyPriv.status === 404 &&
+      proxyPrivLoggedIn.status === 404 &&
+      proxyFake.status === 404 &&
+      proxyMissingObject.status === 404,
+      {
+        anonymousPrivate: proxyPriv.status,
+        nonmemberPrivate: proxyPrivLoggedIn.status,
+        nonexistent: proxyFake.status,
+        missingObject: proxyMissingObject.status
+      });
+    check('B3: anonymous-private, nonmember-private, nonexistent, and missing-object raw bodies are byte-identical',
+      proxyPrivBody === proxyPrivLoggedInBody &&
+      proxyPrivBody === proxyFakeBody &&
+      proxyPrivBody === proxyMissingObjectBody &&
+      proxyPrivBody === CLUB_NOT_FOUND_RAW,
+      {
+        anonymousPrivate: proxyPrivBody,
+        nonmemberPrivate: proxyPrivLoggedInBody,
+        nonexistent: proxyFakeBody,
+        missingObject: proxyMissingObjectBody
+      });
+
+    // Restore the private fixture's original sole-member shape before the later
+    // account-deletion lifecycle tests; otherwise the intentional ordinary
+    // member above correctly triggers the unrelated sole-admin safeguard.
+    await admin.from('memberships')
+      .delete()
+      .eq('club_id', privClubId)
+      .eq('user_id', users.coach.id);
+
+    // Clean up the no-banner/missing-object fixture now that parity is proved.
+    await admin.from('clubs').delete().eq('id', noBannerClubId);
 
     // ── L3. Replacement: old object gone, new present ─────────────────────────
     const upload2 = await uploadBanner('owner', clubId, WEBP, 'image/webp');
