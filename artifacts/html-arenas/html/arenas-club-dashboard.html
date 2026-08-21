@@ -487,16 +487,22 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
 
     </div>
 
-  <!-- Club settings: directory listing (admin-only; hidden for coaches).
-       visibility='public' lists the club in /clubs for request-and-approve
-       joining; going private clears any pending requests (server-side). -->
+  <!-- Club settings (admin-only; hidden for coaches). Sport options derive
+       from the injected registry; visibility='public' lists the club in /clubs
+       and going private clears pending requests (server-side). -->
   <div class="tab-content-settings-card" id="club-settings-card" style="display:none;padding:0 20px 20px">
     <div class="card" style="margin-top:16px">
       <div style="padding:12px 14px;border-bottom:var(--border)">
-        <div style="font-size:13px;font-weight:600;color:var(--gray-900)">Club settings — directory listing</div>
-        <div style="font-size:11px;color:var(--gray-400);margin-top:2px">Listed clubs appear in the member-facing club directory. Joining is request-and-approve — you review every request in the Members tab.</div>
+        <div style="font-size:13px;font-weight:600;color:var(--gray-900)">Club settings</div>
+        <div style="font-size:11px;color:var(--gray-400);margin-top:2px">Set your club identity and directory listing. Joining listed clubs is request-and-approve — you review every request in the Members tab.</div>
       </div>
       <div style="padding:14px;display:flex;flex-direction:column;gap:12px">
+        <div>
+          <label for="cs-sport" style="display:block;font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Primary sport</label>
+          <select id="cs-sport" class="form-input" style="width:100%;box-sizing:border-box"></select>
+          <div style="font-size:11px;color:var(--gray-400);margin-top:4px">Used for club labels and discovery. Existing activities, challenges, and results are unchanged.</div>
+        </div>
+
         <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
           <input type="checkbox" id="cs-visibility" style="margin-top:2px;width:16px;height:16px;accent-color:var(--yellow-dark);cursor:pointer">
           <span>
@@ -3798,7 +3804,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Registry emoji + legacy drift entries; unknown/legacy sports fall back to 🏟.
   var sportIcons = window.ARENAS_SPORT_ICONS || {};
-  var fallbackIcon = (club && sportIcons[(club.sport || '').toLowerCase()]) || '🏟';
+  function currentFallbackIcon() {
+    return (club && sportIcons[(club.sport || '').toLowerCase()]) || '🏟';
+  }
 
   var tile = document.querySelector('.sidebar-footer .club-icon');
   var preview = document.getElementById('cl-logo-preview');
@@ -3811,7 +3819,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // No managed club injected (placeholder dashboard) — hide the affordance.
   if (!club || !club.id) {
     if (editBtn) editBtn.style.display = 'none';
-    if (tile) tile.textContent = fallbackIcon;
+    if (tile) tile.textContent = currentFallbackIcon();
     return;
   }
 
@@ -3825,7 +3833,7 @@ document.addEventListener('DOMContentLoaded', function () {
       img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block';
       el.appendChild(img);
     } else {
-      el.textContent = fallbackIcon;
+      el.textContent = currentFallbackIcon();
     }
   }
   function applyLogo(url) {
@@ -3998,13 +4006,64 @@ document.addEventListener('DOMContentLoaded', function () {
   renderQueue();
 
   // ── Club settings card (Overview tab, admin-only) ──
+  function setSavedClubSport(select, value) {
+    if (!select) return;
+    select.value = value || '';
+    select.setAttribute('data-saved-value', value || '');
+    Array.prototype.forEach.call(select.options, function (option) {
+      option.defaultSelected = option.value === value;
+    });
+  }
+
+  function populateClubSportSelect(select, value) {
+    if (!select) return;
+    select.textContent = '';
+    (window.ARENAS_SPORTS || []).forEach(function (sport) {
+      var option = document.createElement('option');
+      option.value = sport.id;
+      option.textContent = (sport.emoji ? sport.emoji + ' ' : '') + sport.label;
+      select.appendChild(option);
+    });
+    var anyOption = document.createElement('option');
+    anyOption.value = 'any';
+    anyOption.textContent = '🏟 Any sport';
+    select.appendChild(anyOption);
+    setSavedClubSport(select, value);
+  }
+
+  function refreshDashboardClubSport() {
+    if (!data.club) return;
+    (data.clubs || []).forEach(function (club) {
+      if (club.id === data.club.id) club.sport = data.club.sport;
+    });
+
+    if (!window.clubTileHtml) return;
+    var tileContent = window.clubTileHtml.content(data.club.logo_url || null, data.club.sport);
+    var sidebarTile = document.querySelector('.sidebar-footer .club-icon');
+    var logoPreview = document.getElementById('cl-logo-preview');
+    if (sidebarTile) sidebarTile.innerHTML = tileContent;
+    if (logoPreview) logoPreview.innerHTML = tileContent;
+
+    Array.prototype.forEach.call(document.querySelectorAll('.menu-club-item'), function (item) {
+      if (item.getAttribute('data-club-id') !== data.club.id) return;
+      var menuTile = item.querySelector('.menu-club-icon');
+      if (menuTile) {
+        menuTile.innerHTML = tileContent;
+        var sportDef = (window.ARENAS_SPORTS_BY_ID || {})[data.club.sport];
+        menuTile.style.background = sportDef ? sportDef.colors.bg : '#FFF7ED';
+      }
+    });
+  }
+
   var settingsCard = document.getElementById('club-settings-card');
   if (settingsCard && data.viewerRole === 'admin') {
     settingsCard.style.display = 'block';
+    var sportEl = document.getElementById('cs-sport');
     var visEl = document.getElementById('cs-visibility');
     var descEl = document.getElementById('cs-description');
     var webEl = document.getElementById('cs-website');
     var bannerRem = document.getElementById('cs-banner-remove');
+    populateClubSportSelect(sportEl, data.club.sport);
     if (visEl) visEl.checked = data.club.visibility === 'public';
     if (descEl) descEl.value = data.club.description || '';
     if (webEl) webEl.value = data.club.website_url || '';
@@ -4018,12 +4077,13 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   window.saveClubSettings = function () {
+    var sportEl = document.getElementById('cs-sport');
     var visEl = document.getElementById('cs-visibility');
     var descEl = document.getElementById('cs-description');
     var webEl = document.getElementById('cs-website');
     var btn = document.getElementById('cs-save');
     var status = document.getElementById('cs-status');
-    if (!visEl || !descEl || !webEl) return;
+    if (!sportEl || !visEl || !descEl || !webEl) return;
     var goingPrivate = data.club.visibility === 'public' && !visEl.checked;
     if (goingPrivate && queue.length &&
         !window.confirm('Unlisting the club will clear ' + queue.length + ' pending join request' + (queue.length === 1 ? '' : 's') + '. Continue?')) {
@@ -4034,15 +4094,18 @@ document.addEventListener('DOMContentLoaded', function () {
     fetch(B + '/api/clubs/' + clubId + '/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ visibility: visEl.checked ? 'public' : 'private', description: descEl.value, website_url: webEl.value })
+      body: JSON.stringify({ sport: sportEl.value, visibility: visEl.checked ? 'public' : 'private', description: descEl.value, website_url: webEl.value })
     })
       .then(function (res) { return res.json().then(function (b) { return { status: res.status, body: b }; }); })
       .then(function (res) {
         if (btn) btn.disabled = false;
         if (res.status === 200 && res.body && res.body.success) {
+          data.club.sport = res.body.sport;
           data.club.visibility = res.body.visibility;
           data.club.description = res.body.description;
           data.club.website_url = res.body.website_url;
+          setSavedClubSport(sportEl, res.body.sport);
+          refreshDashboardClubSport();
           if (res.body.visibility === 'private') { queue = []; renderQueue(); }
           if (status) status.textContent = res.body.visibility === 'public' ? 'Saved — your club is listed in the directory.' : 'Saved — your club is not listed.';
         } else {

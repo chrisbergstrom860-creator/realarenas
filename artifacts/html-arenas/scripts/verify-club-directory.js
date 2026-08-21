@@ -73,6 +73,23 @@ async function api(k, method, path, body) {
   return { status: r.status, body: json, raw: text };
 }
 
+function injectedData(html, varName) {
+  const marker = 'window.' + varName + ' = ';
+  const start = html.indexOf(marker);
+  if (start === -1) return null;
+  const jsonStart = start + marker.length;
+  const end = html.indexOf(';</script>', jsonStart);
+  if (end === -1) return null;
+  try { return JSON.parse(html.slice(jsonStart, end)); } catch (e) { return null; }
+}
+
+async function page(k, path) {
+  const r = await fetch(BASE_URL + path, {
+    headers: k ? { Cookie: users[k].cookie } : {}
+  });
+  return { status: r.status, raw: await r.text() };
+}
+
 async function main() {
   const { error: profileSchemaErr } = await admin.from('clubs').select('website_url, banner_path').limit(1);
   if (profileSchemaErr && /website_url|banner_path|column/i.test(profileSchemaErr.message || '')) {
@@ -104,11 +121,23 @@ async function main() {
   const listedIds0 = ((r.body && r.body.clubs) || []).map(c => c.id);
   check('new clubs default private (absent from directory)', !listedIds0.includes(pubClubId) && !listedIds0.includes(privClubId), listedIds0);
 
-  // ── 2. Settings gate: coach PATCH → 404 (admin-only); admin lists club ──
-  r = await api('coach', 'PATCH', '/clubs/' + pubClubId + '/settings', { visibility: 'public' });
+  // ── 2. Settings gate + club-sport edit contract ──
+  r = await api('coach', 'PATCH', '/clubs/' + pubClubId + '/settings', { sport: 'cycling' });
   check('coach settings PATCH → 404 Club not found', r.status === 404 && r.raw === JSON.stringify({ error: 'Club not found' }), r);
-  r = await api('owner', 'PATCH', '/clubs/' + pubClubId + '/settings', { visibility: 'public', description: 'Weekly track sessions in Oslo.' });
-  check('admin lists club (visibility+description saved)', r.status === 200 && r.body && r.body.visibility === 'public' && r.body.description === 'Weekly track sessions in Oslo.', r);
+  r = await api('owner', 'PATCH', '/clubs/' + pubClubId + '/settings', { sport: 'cycling', visibility: 'public', description: 'Weekly track sessions in Oslo.' });
+  check('admin lists club and changes sport', r.status === 200 && r.body && r.body.sport === 'cycling' && r.body.visibility === 'public' && r.body.description === 'Weekly track sessions in Oslo.', r);
+  let { data: storedSport } = await admin.from('clubs').select('sport').eq('id', pubClubId).maybeSingle();
+  check('settings sport stored directly as cycling', storedSport && storedSport.sport === 'cycling', storedSport);
+  r = await api('owner', 'PATCH', '/clubs/' + pubClubId + '/settings', { sport: 'Running' });
+  check('settings preserves exact-case contract (Running rejected)', r.status === 400 && r.body && r.body.error === 'invalid_sport', r);
+  ({ data: storedSport } = await admin.from('clubs').select('sport').eq('id', pubClubId).maybeSingle());
+  check('invalid settings sport has zero effect', storedSport && storedSport.sport === 'cycling', storedSport);
+  r = await api('owner', 'PATCH', '/clubs/' + pubClubId + '/settings', { sport: 'any' });
+  check('settings accepts club-only any', r.status === 200 && r.body && r.body.sport === 'any', r);
+  ({ data: storedSport } = await admin.from('clubs').select('sport').eq('id', pubClubId).maybeSingle());
+  check('settings any round-trips to storage', storedSport && storedSport.sport === 'any', storedSport);
+  r = await api('owner', 'PATCH', '/clubs/' + pubClubId + '/settings', { sport: 'cycling' });
+  check('settings restores canonical registry sport', r.status === 200 && r.body && r.body.sport === 'cycling', r);
   r = await api('owner', 'PATCH', '/clubs/' + pubClubId + '/settings', { visibility: 'listed-sorta' });
   check('invalid visibility rejected 400', r.status === 400 && r.body && r.body.error === 'invalid_visibility', r);
 
@@ -126,9 +155,22 @@ async function main() {
   r = await api('seeker', 'GET', '/clubs/directory');
   let dir = (r.body && r.body.clubs) || [];
   const card = dir.find(c => c.id === pubClubId);
-  check('public club listed with card fields', card && card.name === 'Dir Public Club' && card.sport === 'running' && card.city === 'Oslo' && card.description === 'Weekly track sessions in Oslo.' && card.memberCount === 3, card);
+  check('public club listed with edited sport and card fields', card && card.name === 'Dir Public Club' && card.sport === 'cycling' && card.city === 'Oslo' && card.description === 'Weekly track sessions in Oslo.' && card.memberCount === 3, card);
   check('private club still absent', !dir.some(c => c.id === privClubId), dir.map(c => c.id));
   check('seeker viewerState none', card && card.viewerState === 'none', card && card.viewerState);
+  let surface = await page('member', '/clubs/member/' + pubClubId);
+  let surfaceData = injectedData(surface.raw, 'ARENAS_DATA');
+  check('member home receives edited sport for labels and logoless tiles', surface.status === 200 && surfaceData && surfaceData.club && surfaceData.club.sport === 'cycling', surfaceData && surfaceData.club);
+  check('member sidebar clubs receive edited sport', surfaceData && (surfaceData.clubs || []).some(c => c.id === pubClubId && c.sport === 'cycling'), surfaceData && surfaceData.clubs);
+  surface = await page('owner', '/clubs/invite?club=' + pubClubId);
+  surfaceData = injectedData(surface.raw, 'INVITE_DATA');
+  check('invite console receives edited sport for club identity', surface.status === 200 && surfaceData && surfaceData.club && surfaceData.club.sport === 'cycling', surfaceData && surfaceData.club);
+  surface = await page(null, '/clubs/' + pubClubId);
+  surfaceData = injectedData(surface.raw, 'ARENAS_DATA');
+  check('public club profile receives edited sport', surface.status === 200 && surfaceData && surfaceData.club && surfaceData.club.sport === 'cycling', surfaceData && surfaceData.club);
+  r = await api('owner', 'GET', '/notifications');
+  const notificationRows = (r.body && r.body.notifications) || [];
+  check('notifications remain unaffected (no cached club sport field)', r.status === 200 && notificationRows.every(n => !Object.prototype.hasOwnProperty.call(n, 'sport') && !Object.prototype.hasOwnProperty.call(n, 'clubSport')), notificationRows);
   r = await api('member', 'GET', '/clubs/directory');
   const memberCard = ((r.body && r.body.clubs) || []).find(c => c.id === pubClubId);
   check('existing member sees viewerState member (card does not vanish)', memberCard && memberCard.viewerState === 'member' && memberCard.viewerRole === 'member', memberCard);
@@ -161,12 +203,11 @@ async function main() {
   // Dashboard payload carries the queue.
   const dashRes = await fetch(BASE_URL + '/clubs/dashboard?club=' + pubClubId, { headers: { Cookie: users.owner.cookie } });
   const dashHtml = await dashRes.text();
-  const dm = dashHtml.match(/window\.ARENAS_DATA\s*=\s*(\{[\s\S]*?\});?\s*<\/script>/);
-  let dashData = {};
-  try { dashData = JSON.parse(dm[1]); } catch (e) {}
+  const dashData = injectedData(dashHtml, 'ARENAS_DATA') || {};
   const jr = (dashData.joinRequests || []).find(x => x.user_id === users.seeker.id);
   check('dashboard joinRequests queue carries requester (name from auth metadata)', jr && jr.name === 'Dir Seeker', dashData.joinRequests);
-  check('dashboard club payload carries visibility + description', dashData.club && dashData.club.visibility === 'public' && dashData.club.description === 'Weekly track sessions in Oslo.', dashData.club);
+  check('dashboard club payload carries edited sport + listing settings', dashData.club && dashData.club.sport === 'cycling' && dashData.club.visibility === 'public' && dashData.club.description === 'Weekly track sessions in Oslo.', dashData.club);
+  check('dashboard sidebar payload carries edited sport', (dashData.clubs || []).some(c => c.id === pubClubId && c.sport === 'cycling'), dashData.clubs);
 
   // ── 6. Authorization: member/outsider resolve → byte-identical 404; coach OK ──
   const rMem = await api('member', 'POST', '/clubs/' + pubClubId + '/join-requests/' + users.seeker.id + '/approve');
@@ -456,6 +497,8 @@ async function main() {
   });
   let sr = await signupClub({ email: 'clubdir-badsport@arenas-test.dev', password: PW, name: 'Dir Bad', club_name: 'Bad Sport Club', handle: 'dirbadsport', sport: 'surfing', city: 'Oslo' });
   check('16: signup-club rejects non-registry sport (302 error, no account)', sr.status === 302 && /error=signup/.test(sr.headers.get('location') || ''), { status: sr.status, loc: sr.headers.get('location') });
+  sr = await signupClub({ email: 'clubdir-badsport@arenas-test.dev', password: PW, name: 'Dir Bad', club_name: 'Bad Case Club', handle: 'dirbadcase', sport: 'Running', city: 'Oslo' });
+  check('16: signup-club keeps exact-case contract (Running → 302 error)', sr.status === 302 && /error=signup/.test(sr.headers.get('location') || ''), { status: sr.status, loc: sr.headers.get('location') });
   const { data: badList } = await admin.auth.admin.listUsers({ perPage: 1000 });
   check('16: no account created for rejected signup', !((badList && badList.users) || []).some(u => u.email === 'clubdir-badsport@arenas-test.dev'), null);
   sr = await signupClub({ email: 'clubdir-anysignup@arenas-test.dev', password: PW, name: 'Dir AnySignup', club_name: 'Signup Any Club', handle: 'diranysignup', sport: 'any', city: 'Oslo' });
@@ -511,7 +554,10 @@ async function main() {
         }, opt);
         check(`16: @${width} any club appears under filter "${opt}"`, visible.some(t => t.includes('Dir Any Club')), visible.length);
         if (opt === 'cycling') {
-          check(`16: @${width} running club correctly absent under cycling`, !visible.some(t => t.includes('Dir Public Club')), null);
+          check(`16: @${width} edited club appears under cycling`, visible.some(t => t.includes('Dir Public Club')), null);
+        }
+        if (opt === 'running') {
+          check(`16: @${width} edited club no longer appears under running`, !visible.some(t => t.includes('Dir Public Club')), null);
         }
       }
       await page.screenshot({ path: `/tmp/any-club-directory-${width}.png` });
@@ -534,8 +580,73 @@ async function main() {
       check(`16: @${width} profile Clubs tab never shows "Malmo \u00b7 Any" bare`, !/Malmo \u00b7 Any(?! sport)/.test(metaText), metaText.slice(0, 200));
       if (width === 380) await page2.screenshot({ path: `/tmp/any-club-profile-${width}.png` });
       check(`16: @${width} zero console errors on profile Clubs tab`, errors2.length === 0, errors2.join(' | '));
+
+      // Dashboard settings: registry-backed select, exact in-place state, and
+      // logoless tiles all update after the confirmed PATCH response.
+      const context3 = await browser.newContext({ viewport: { width, height: 900 } });
+      await context3.addCookies(toCookies(users.coach.cookie));
+      const page3 = await context3.newPage();
+      const errors3 = [];
+      page3.on('console', (m) => { if (m.type() === 'error') errors3.push(m.text()); });
+      page3.on('pageerror', (e) => errors3.push(String(e)));
+      await page3.goto(`https://${DOMAIN}/html/clubs/dashboard?club=${anyClubId}`, { waitUntil: 'domcontentloaded' });
+      await page3.waitForFunction(() => {
+        const select = document.getElementById('cs-sport');
+        return select && select.options.length > 0;
+      }, null, { timeout: 15000 });
+      const selectState = await page3.evaluate(() => {
+        const select = document.getElementById('cs-sport');
+        return {
+          values: Array.from(select.options).map(o => o.value),
+          registryCount: (window.ARENAS_SPORTS || []).length,
+          value: select.value,
+          saved: select.getAttribute('data-saved-value')
+        };
+      });
+      check(`16: @${width} settings select is 14 registry sports + any`, selectState.registryCount === 14 && selectState.values.length === 15 && selectState.values[14] === 'any', selectState);
+      check(`16: @${width} settings select initializes any as saved`, selectState.value === 'any' && selectState.saved === 'any', selectState);
+      await page3.locator('#cs-sport').scrollIntoViewIfNeeded();
+      await page3.screenshot({ path: `/tmp/club-sport-settings-${width}.png` });
+
+      await page3.locator('#cs-sport').selectOption('cycling');
+      await page3.locator('#cs-save').click();
+      await page3.waitForFunction(() => {
+        const select = document.getElementById('cs-sport');
+        return window.ARENAS_DATA.club.sport === 'cycling' &&
+          select.value === 'cycling' &&
+          select.getAttribute('data-saved-value') === 'cycling';
+      }, null, { timeout: 15000 });
+      const cyclingUi = await page3.evaluate((id) => {
+        const menuItem = Array.from(document.querySelectorAll('.menu-club-item')).find(el => el.getAttribute('data-club-id') === id);
+        return {
+          dataSport: window.ARENAS_DATA.club.sport,
+          selectValue: document.getElementById('cs-sport').value,
+          savedValue: document.getElementById('cs-sport').getAttribute('data-saved-value'),
+          sidebarTile: document.querySelector('.sidebar-footer .club-icon').textContent.trim(),
+          menuTile: menuItem && menuItem.querySelector('.menu-club-icon').textContent.trim()
+        };
+      }, anyClubId);
+      check(`16: @${width} confirmed save updates data + select saved state in place`, cyclingUi.dataSport === 'cycling' && cyclingUi.selectValue === 'cycling' && cyclingUi.savedValue === 'cycling', cyclingUi);
+      check(`16: @${width} confirmed save updates logoless dashboard tiles in place`, cyclingUi.sidebarTile === '🚴' && cyclingUi.menuTile === '🚴', cyclingUi);
+      let { data: browserStored } = await admin.from('clubs').select('sport').eq('id', anyClubId).maybeSingle();
+      check(`16: @${width} browser save stored cycling directly`, browserStored && browserStored.sport === 'cycling', browserStored);
+
+      await page3.locator('#cs-sport').selectOption('any');
+      await page3.locator('#cs-save').click();
+      await page3.waitForFunction(() => {
+        const select = document.getElementById('cs-sport');
+        return window.ARENAS_DATA.club.sport === 'any' &&
+          select.value === 'any' &&
+          select.getAttribute('data-saved-value') === 'any' &&
+          document.querySelector('.sidebar-footer .club-icon').textContent.trim() === '🏟';
+      }, null, { timeout: 15000 });
+      ({ data: browserStored } = await admin.from('clubs').select('sport').eq('id', anyClubId).maybeSingle());
+      check(`16: @${width} browser any round-trips and restores the tile`, browserStored && browserStored.sport === 'any', browserStored);
+      check(`16: @${width} zero console errors on club settings`, errors3.length === 0, errors3.join(' | '));
+
       await context.close();
       await context2.close();
+      await context3.close();
     }
   } finally {
     await browser.close();

@@ -25,6 +25,16 @@ const {
 } = require('./tzdate');
 const { buildFourWeekActivityGrid } = require('./activity-grid');
 
+// Exact club-sport contract shared by BOTH creation paths and the settings
+// editor. Deliberately trims but does NOT lowercase: canonical registry ids and
+// the club-only 'any' pseudo-value are accepted; legacy casing stays invalid.
+function normalizeClubSport(value) {
+  const sport = typeof value === 'string' ? value.trim() : '';
+  return sport === 'any' || SPORTS.some(s => s.id === sport)
+    ? { value: sport }
+    : { error: 'invalid_sport' };
+}
+
 const app = express();
 // One reverse-proxy hop in every deployment (Replit artifact router in dev,
 // Railway's edge in prod), so req.ip must come from X-Forwarded-For's last
@@ -706,8 +716,8 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
     // club-only 'any' pseudo-value. The wizard's select can only submit these,
     // so a mismatch means a hand-crafted POST — reject before creating the
     // account (nothing to roll back yet).
-    const clubSport = typeof sport === 'string' ? sport.trim() : '';
-    if (clubSport !== 'any' && !SPORTS.some(s => s.id === clubSport)) {
+    const normalizedSport = normalizeClubSport(sport);
+    if (normalizedSport.error) {
       return res.redirect(BASE + '/for-clubs?error=signup');
     }
     const normalizedDescription = normalizeClubDescription(req.body.description);
@@ -751,7 +761,7 @@ app.post(BASE + '/auth/signup-club', async (req, res) => {
       .insert({
         name: club_name,
         handle,
-        sport,
+        sport: normalizedSport.value,
         city,
         owner_id: userId,
         description: normalizedDescription.value,
@@ -859,14 +869,15 @@ app.post(BASE + '/api/clubs/create', requireAuth, async (req, res) => {
   const body = req.body || {};
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   const handle = typeof body.handle === 'string' ? body.handle.trim().toLowerCase() : '';
-  const sport = typeof body.sport === 'string' ? body.sport.trim() : '';
+  const normalizedSport = normalizeClubSport(body.sport);
+  const sport = normalizedSport.value;
   const city = typeof body.city === 'string' ? body.city.trim().slice(0, 80) : '';
   if (!name || name.length > 80) return res.status(400).json({ error: 'invalid_name' });
   if (!/^[a-z0-9]{2,20}$/.test(handle)) return res.status(400).json({ error: 'invalid_handle' });
   // 'any' is a club-only pseudo-value (mirrors challenges.sport === 'any'),
   // deliberately NOT a registry entry so it can never leak into the activity
   // log, goals, or how-points-work as a loggable sport.
-  if (sport !== 'any' && !SPORTS.some(s => s.id === sport)) return res.status(400).json({ error: 'invalid_sport' });
+  if (normalizedSport.error) return res.status(400).json(normalizedSport);
   const normalizedDescription = normalizeClubDescription(body.description);
   const normalizedWebsite = normalizeClubWebsite(body.website_url);
   if (normalizedDescription.error) return res.status(400).json(normalizedDescription);
@@ -1306,9 +1317,11 @@ const MANAGED_CLUBS_MENU_SCRIPT = `<script>(function buildManagedClubsMenu(){
     managed.forEach(function(c){
       var item = document.createElement('div');
       item.className = 'menu-club-item';
+      item.setAttribute('data-club-id', c.id || '');
       item.style.cssText = 'display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer';
       item.onclick = function(){ if (typeof nav === 'function') nav('/clubs/dashboard?club=' + encodeURIComponent(c.id)); };
       var ic = document.createElement('div');
+      ic.className = 'menu-club-icon';
       ic.style.cssText = 'width:26px;height:26px;border-radius:7px;background:' + (bgs[c.sport] || '#FFF7ED') + ';display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;overflow:hidden';
       if (window.clubTileHtml) { ic.innerHTML = window.clubTileHtml.content(c.logo_url || null, c.sport); }
       else { ic.textContent = icons[c.sport] || '🏟'; }
@@ -6490,9 +6503,9 @@ async function resolveJoinRequestRoute(req, res, action) {
 app.post(BASE + '/api/clubs/:clubId/join-requests/:userId/approve', requireAuth, (req, res) => resolveJoinRequestRoute(req, res, 'approve'));
 app.post(BASE + '/api/clubs/:clubId/join-requests/:userId/decline', requireAuth, (req, res) => resolveJoinRequestRoute(req, res, 'decline'));
 
-// Club public-profile settings (visibility + description + website). Admin-only — listing a
-// club publicly is an owner-level decision, stricter than the manager set
-// that handles requests. Zero-leak 404 for non-admins/nonexistent clubs.
+// Club settings (sport + visibility + description + website). Admin-only —
+// stricter than the manager set that handles requests. Zero-leak 404 for
+// non-admins/nonexistent clubs.
 app.patch(BASE + '/api/clubs/:clubId/settings', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
   try {
@@ -6501,6 +6514,11 @@ app.patch(BASE + '/api/clubs/:clubId/settings', requireAuth, async (req, res) =>
 
     const body = req.body || {};
     const update = {};
+    if (body.sport !== undefined) {
+      const normalized = normalizeClubSport(body.sport);
+      if (normalized.error) return res.status(400).json(normalized);
+      update.sport = normalized.value;
+    }
     if (body.visibility !== undefined) {
       if (body.visibility !== 'public' && body.visibility !== 'private') {
         return res.status(400).json({ error: 'invalid_visibility' });
@@ -6523,7 +6541,7 @@ app.patch(BASE + '/api/clubs/:clubId/settings', requireAuth, async (req, res) =>
       .from('clubs')
       .update(update)
       .eq('id', req.params.clubId)
-      .select('id, visibility, description, website_url');
+      .select('id, sport, visibility, description, website_url');
     if (error || !updated || !updated.length) {
       return res.status(500).json({ error: 'Could not save settings' });
     }
@@ -6548,6 +6566,7 @@ app.patch(BASE + '/api/clubs/:clubId/settings', requireAuth, async (req, res) =>
 
     res.json({
       success: true,
+      sport: updated[0].sport,
       visibility: updated[0].visibility,
       description: updated[0].description,
       website_url: updated[0].website_url
