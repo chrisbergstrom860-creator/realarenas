@@ -103,7 +103,8 @@ button,select,input,textarea{font-family:var(--font)}/* ── LAYOUT ── *//
 .wb-title{font-size:16px;font-weight:700;color:white;margin-bottom:3px}
 .wb-sub{font-size:13px;color:var(--gray-400)}
 .wb-actions{display:flex;gap:8px;flex-shrink:0;position:relative;z-index:1}
-.member-club-banner{display:block;width:calc(100% - 24px);aspect-ratio:4/1;object-fit:cover;object-position:center;border-radius:var(--radius-lg);margin:12px 12px 0}
+.member-club-identity{margin:12px;border-radius:var(--radius-lg);overflow:hidden;background:var(--gray-900)}
+.member-club-banner{display:block;width:100%;aspect-ratio:4/1;object-fit:cover;object-position:center}
 
 /* ── ACTIVITY FEED ── */
 .activity-card{background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden;transition:border-color .13s;cursor:pointer}
@@ -489,16 +490,16 @@ function showToast(msg) {
       var sportLabel = c.sport === 'any' ? 'Any-sport club'
         : c.sport ? (c.sport.charAt(0).toUpperCase() + c.sport.slice(1) + ' club') : 'Club';
 
-      // Hero + stats
-      // The owner-supplied image is a separate identity strip, never a text
-      // background. No version token means no node, height, frame, or margin.
+      // Hero + stats. The shared wrapper owns the outer corners in both
+      // states; the optional image and dark identity band meet with no seam.
       var bannerHtml = c.banner
         ? '<img id="cm-club-banner" class="member-club-banner" src="' +
           esc(B + '/api/clubs/' + encodeURIComponent(c.id) + '/banner?v=' + encodeURIComponent(c.banner)) +
           '" alt="" onerror="this.remove()">'
         : '';
-      var html = bannerHtml +
-        '<div id="cm-sec-overview" style="margin:12px;background:var(--gray-900);border-radius:var(--radius-lg);padding:16px;color:white">' +
+      var html = '<div class="member-club-identity">' +
+        bannerHtml +
+        '<div id="cm-sec-overview" style="background:var(--gray-900);padding:16px;color:white">' +
           '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">' +
             window.clubTileHtml(c.logo_url || null, c.sport, '', 'width:46px;height:46px;border-radius:12px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0') +
             '<div style="flex:1;min-width:0">' +
@@ -528,7 +529,8 @@ function showToast(msg) {
               '<div style="font-size:9px;color:rgba(255,255,255,.45);margin-top:3px;text-transform:uppercase">Your rank</div>' +
             '</div>' +
           '</div>' +
-        '</div>';
+        '</div>' +
+      '</div>';
 
       // Standing
       if (s.rank) {
