@@ -91,10 +91,10 @@ async function page(k, path) {
 }
 
 async function main() {
-  const { error: profileSchemaErr } = await admin.from('clubs').select('website_url, banner_path').limit(1);
-  if (profileSchemaErr && /website_url|banner_path|column/i.test(profileSchemaErr.message || '')) {
-    console.log('SKIP: public club profile columns are not live yet.');
-    console.log('      Apply scripts/sql/public-club-profiles.sql first.');
+  const { error: profileSchemaErr } = await admin.from('clubs').select('website_url, banner_path, headline').limit(1);
+  if (profileSchemaErr && /website_url|banner_path|headline|column/i.test(profileSchemaErr.message || '')) {
+    console.log('SKIP: club directory/profile columns are not live yet.');
+    console.log('      Apply scripts/sql/public-club-profiles.sql and scripts/sql/club-headline.sql first.');
     return;
   }
   for (const [k, n, h] of [['owner', 'Dir Owner', 'dir_owner'], ['coach', 'Dir Coach', 'dir_coach'], ['member', 'Dir Member', 'dir_member'], ['seeker', 'Dir Seeker', 'dir_seeker'], ['seeker2', 'Dir SeekerTwo', 'dir_seeker2'], ['owner2', 'Dir OwnerTwo', 'dir_owner2']]) {
@@ -122,10 +122,18 @@ async function main() {
   check('new clubs default private (absent from directory)', !listedIds0.includes(pubClubId) && !listedIds0.includes(privClubId), listedIds0);
 
   // ── 2. Settings gate + club-sport edit contract ──
-  r = await api('coach', 'PATCH', '/clubs/' + pubClubId + '/settings', { sport: 'cycling' });
+  r = await api('coach', 'PATCH', '/clubs/' + pubClubId + '/settings', { headline: 'Coach should not write this' });
   check('coach settings PATCH → 404 Club not found', r.status === 404 && r.raw === JSON.stringify({ error: 'Club not found' }), r);
-  r = await api('owner', 'PATCH', '/clubs/' + pubClubId + '/settings', { sport: 'cycling', visibility: 'public', description: 'Weekly track sessions in Oslo.' });
-  check('admin lists club and changes sport', r.status === 200 && r.body && r.body.sport === 'cycling' && r.body.visibility === 'public' && r.body.description === 'Weekly track sessions in Oslo.', r);
+  r = await api('owner', 'PATCH', '/clubs/' + pubClubId + '/settings', { sport: 'cycling', visibility: 'public', headline: 'Build speed together in Oslo', description: 'Weekly track sessions in Oslo.' });
+  check('admin lists club and changes directory fields', r.status === 200 && r.body && r.body.sport === 'cycling' && r.body.visibility === 'public' && r.body.headline === 'Build speed together in Oslo' && r.body.description === 'Weekly track sessions in Oslo.', r);
+  r = await api('owner', 'PATCH', '/clubs/' + pubClubId + '/settings', { headline: 'x'.repeat(73) });
+  check('settings rejects headline over 72 chars', r.status === 400 && r.body && r.body.error === 'headline_too_long' && r.body.max === 72, r);
+  let { data: storedHeadline } = await admin.from('clubs').select('headline').eq('id', pubClubId).maybeSingle();
+  check('overlong headline has zero effect', storedHeadline && storedHeadline.headline === 'Build speed together in Oslo', storedHeadline);
+  r = await api('owner', 'PATCH', '/clubs/' + pubClubId + '/settings', { headline: '   ' });
+  check('blank headline clears to null', r.status === 200 && r.body && r.body.headline === null, r);
+  r = await api('owner', 'PATCH', '/clubs/' + pubClubId + '/settings', { headline: 'Build speed together in Oslo' });
+  check('headline can be restored', r.status === 200 && r.body && r.body.headline === 'Build speed together in Oslo', r);
   let { data: storedSport } = await admin.from('clubs').select('sport').eq('id', pubClubId).maybeSingle();
   check('settings sport stored directly as cycling', storedSport && storedSport.sport === 'cycling', storedSport);
   r = await api('owner', 'PATCH', '/clubs/' + pubClubId + '/settings', { sport: 'Running' });
@@ -155,7 +163,7 @@ async function main() {
   r = await api('seeker', 'GET', '/clubs/directory');
   let dir = (r.body && r.body.clubs) || [];
   const card = dir.find(c => c.id === pubClubId);
-  check('public club listed with edited sport and card fields', card && card.name === 'Dir Public Club' && card.sport === 'cycling' && card.city === 'Oslo' && card.description === 'Weekly track sessions in Oslo.' && card.memberCount === 3, card);
+  check('public club listed with edited sport and card fields', card && card.name === 'Dir Public Club' && card.sport === 'cycling' && card.city === 'Oslo' && card.headline === 'Build speed together in Oslo' && card.description === 'Weekly track sessions in Oslo.' && card.memberCount === 3, card);
   check('private club still absent', !dir.some(c => c.id === privClubId), dir.map(c => c.id));
   check('seeker viewerState none', card && card.viewerState === 'none', card && card.viewerState);
   let surface = await page('member', '/clubs/member/' + pubClubId);
@@ -168,6 +176,7 @@ async function main() {
   surface = await page(null, '/clubs/' + pubClubId);
   surfaceData = injectedData(surface.raw, 'ARENAS_DATA');
   check('public club profile receives edited sport', surface.status === 200 && surfaceData && surfaceData.club && surfaceData.club.sport === 'cycling', surfaceData && surfaceData.club);
+  check('public club profile intentionally does not expose headline yet', surfaceData && surfaceData.club && !Object.prototype.hasOwnProperty.call(surfaceData.club, 'headline'), surfaceData && surfaceData.club);
   r = await api('owner', 'GET', '/notifications');
   const notificationRows = (r.body && r.body.notifications) || [];
   check('notifications remain unaffected (no cached club sport field)', r.status === 200 && notificationRows.every(n => !Object.prototype.hasOwnProperty.call(n, 'sport') && !Object.prototype.hasOwnProperty.call(n, 'clubSport')), notificationRows);
@@ -206,7 +215,7 @@ async function main() {
   const dashData = injectedData(dashHtml, 'ARENAS_DATA') || {};
   const jr = (dashData.joinRequests || []).find(x => x.user_id === users.seeker.id);
   check('dashboard joinRequests queue carries requester (name from auth metadata)', jr && jr.name === 'Dir Seeker', dashData.joinRequests);
-  check('dashboard club payload carries edited sport + listing settings', dashData.club && dashData.club.sport === 'cycling' && dashData.club.visibility === 'public' && dashData.club.description === 'Weekly track sessions in Oslo.', dashData.club);
+  check('dashboard club payload carries edited sport + listing settings', dashData.club && dashData.club.sport === 'cycling' && dashData.club.visibility === 'public' && dashData.club.headline === 'Build speed together in Oslo' && dashData.club.description === 'Weekly track sessions in Oslo.', dashData.club);
   check('dashboard sidebar payload carries edited sport', (dashData.clubs || []).some(c => c.id === pubClubId && c.sport === 'cycling'), dashData.clubs);
 
   // ── 6. Authorization: member/outsider resolve → byte-identical 404; coach OK ──
@@ -523,6 +532,13 @@ async function main() {
   check('16: injected arenasSportTag handles any', clubsHtml.includes("'any') return '\uD83C\uDFDF Any sport'"), null);
   check('16: injected icon map carries any \uD83C\uDFDF', /"any":\s*"\uD83C\uDFDF"/.test(clubsHtml), null);
 
+  // Put one card into the rare cooldown state so the compact row proves the
+  // deliberately wider, unambiguous label at both desktop and mobile widths.
+  r = await api('seeker2', 'POST', '/clubs/' + pubClubId + '/join-request');
+  check('16: compact-row cooldown setup request succeeds', r.status === 200 && r.body && r.body.success, r);
+  r = await api('owner', 'POST', '/clubs/' + pubClubId + '/join-requests/' + users.seeker2.id + '/decline');
+  check('16: compact-row cooldown setup decline succeeds', r.status === 200 && r.body && r.body.status === 'declined', r);
+
   // Browser: directory filter + labels at 1280 and 380, profile Clubs tab label.
   const { launchBrowser } = await import('./lib/mobile-geometry.js');
   const DOMAIN = process.env.REPLIT_DEV_DOMAIN;
@@ -543,7 +559,56 @@ async function main() {
       await page.waitForFunction(() => document.querySelectorAll('#club-grid .ccd-card').length > 0, null, { timeout: 15000 });
       const unfiltered = await page.evaluate(() => Array.from(document.querySelectorAll('#club-grid .ccd-card')).map(c => c.textContent));
       check(`16: @${width} any club visible unfiltered`, unfiltered.some(t => t.includes('Dir Any Club')), unfiltered.length);
-      check(`16: @${width} pill labels Any sport (never bare Any)`, unfiltered.some(t => t.includes('Any sport')), null);
+      check(`16: @${width} metadata labels Any sport (never bare Any)`, unfiltered.some(t => t.includes('Any sport')), null);
+
+      const compact = await page.evaluate(() => {
+        const cards = Array.from(document.querySelectorAll('#club-grid .ccd-card'));
+        const publicCard = cards.find(c => c.textContent.includes('Dir Public Club'));
+        const anyCard = cards.find(c => c.textContent.includes('Dir Any Club'));
+        const headline = publicCard && publicCard.querySelector('.ccd-headline');
+        const meta = publicCard && publicCard.querySelector('.ccd-sub');
+        const cooldown = publicCard && publicCard.querySelector('.ccd-btn-cooldown');
+        const request = anyCard && anyCard.querySelector('.ccd-btn-request');
+        const cardRect = publicCard && publicCard.getBoundingClientRect();
+        const actionRect = cooldown && cooldown.getBoundingClientRect();
+        const headlineStyle = headline && getComputedStyle(headline);
+        return {
+          flexDirection: publicCard && getComputedStyle(publicCard).flexDirection,
+          headlineText: headline && headline.textContent.trim(),
+          headlineWhiteSpace: headlineStyle && headlineStyle.whiteSpace,
+          headlineOverflow: headlineStyle && headlineStyle.overflow,
+          headlineTextOverflow: headlineStyle && headlineStyle.textOverflow,
+          anyHeadlineCount: anyCard ? anyCard.querySelectorAll('.ccd-headline').length : -1,
+          oldDescriptionCount: document.querySelectorAll('#club-grid .ccd-desc').length,
+          oldPillCount: document.querySelectorAll('#club-grid .ccd-pill').length,
+          metaText: meta && meta.textContent.trim(),
+          cooldownText: cooldown && cooldown.textContent.trim(),
+          cooldownFits: !!(cardRect && actionRect && actionRect.right <= cardRect.right - 11),
+          requestText: request && request.innerText.trim(),
+          horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
+        };
+      });
+      check(`16: @${width} cards use compact row layout`, compact.flexDirection === 'row', compact);
+      check(`16: @${width} headline renders one-line ellipsis`, compact.headlineText === 'Build speed together in Oslo' && compact.headlineWhiteSpace === 'nowrap' && compact.headlineOverflow === 'hidden' && compact.headlineTextOverflow === 'ellipsis', compact);
+      check(`16: @${width} null headline renders no element`, compact.anyHeadlineCount === 0, compact);
+      check(`16: @${width} description and sport pill are absent from cards`, compact.oldDescriptionCount === 0 && compact.oldPillCount === 0, compact);
+      check(`16: @${width} sport is plain metadata with city and members`, /^Cycling · Oslo · \d+ members?$/.test(compact.metaText || ''), compact);
+      check(`16: @${width} cooldown copy is clear and fits`, /^Declined — retry [A-Z][a-z]{2} \d{1,2}$/.test(compact.cooldownText || '') && compact.cooldownFits, compact);
+      check(`16: @${width} request label is responsive`, compact.requestText === (width === 380 ? 'Request' : 'Request to join'), compact);
+      check(`16: @${width} directory has no horizontal overflow`, !compact.horizontalOverflow, compact);
+
+      const headlineMatches = await page.evaluate(() => {
+        window.handleSearch('build speed together');
+        return Array.from(document.querySelectorAll('#club-grid .ccd-card')).map(c => c.textContent);
+      });
+      check(`16: @${width} headline participates in search`, headlineMatches.length === 1 && headlineMatches[0].includes('Dir Public Club'), headlineMatches);
+      const descriptionMatches = await page.evaluate(() => {
+        window.handleSearch('weekly track sessions');
+        return Array.from(document.querySelectorAll('#club-grid .ccd-card')).map(c => c.textContent);
+      });
+      check(`16: @${width} hidden description remains searchable`, descriptionMatches.length === 1 && descriptionMatches[0].includes('Dir Public Club'), descriptionMatches);
+      await page.evaluate(() => window.handleSearch(''));
+
       // Under EVERY sport filter option the any club stays visible.
       const options = await page.evaluate(() => Array.from(document.querySelectorAll('#sport-select option')).map(o => o.value).filter(Boolean));
       check(`16: @${width} filter dropdown has no Any chip but has sports`, options.length > 0 && !options.includes('any'), options);
@@ -605,14 +670,23 @@ async function main() {
       });
       check(`16: @${width} settings select is 14 registry sports + any`, selectState.registryCount === 14 && selectState.values.length === 15 && selectState.values[14] === 'any', selectState);
       check(`16: @${width} settings select initializes any as saved`, selectState.value === 'any' && selectState.saved === 'any', selectState);
+      const headlineSettings = await page3.evaluate(() => ({
+        maxLength: document.getElementById('cs-headline').maxLength,
+        value: document.getElementById('cs-headline').value,
+        descriptionHelp: document.querySelector('label[for="cs-description"]').parentElement.textContent
+      }));
+      check(`16: @${width} headline input is nullable and capped at 72`, headlineSettings.maxLength === 72 && headlineSettings.value === '', headlineSettings);
+      check(`16: @${width} description helper names only public-profile About`, headlineSettings.descriptionHelp.includes('Shown as About on your public club profile.') && !headlineSettings.descriptionHelp.includes('directory card'), headlineSettings);
       await page3.locator('#cs-sport').scrollIntoViewIfNeeded();
       await page3.screenshot({ path: `/tmp/club-sport-settings-${width}.png` });
 
       await page3.locator('#cs-sport').selectOption('cycling');
+      await page3.locator('#cs-headline').fill('Everyone belongs on the start line');
       await page3.locator('#cs-save').click();
       await page3.waitForFunction(() => {
         const select = document.getElementById('cs-sport');
         return window.ARENAS_DATA.club.sport === 'cycling' &&
+          window.ARENAS_DATA.club.headline === 'Everyone belongs on the start line' &&
           select.value === 'cycling' &&
           select.getAttribute('data-saved-value') === 'cycling';
       }, null, { timeout: 15000 });
@@ -620,28 +694,31 @@ async function main() {
         const menuItem = Array.from(document.querySelectorAll('.menu-club-item')).find(el => el.getAttribute('data-club-id') === id);
         return {
           dataSport: window.ARENAS_DATA.club.sport,
+          dataHeadline: window.ARENAS_DATA.club.headline,
           selectValue: document.getElementById('cs-sport').value,
           savedValue: document.getElementById('cs-sport').getAttribute('data-saved-value'),
           sidebarTile: document.querySelector('.sidebar-footer .club-icon').textContent.trim(),
           menuTile: menuItem && menuItem.querySelector('.menu-club-icon').textContent.trim()
         };
       }, anyClubId);
-      check(`16: @${width} confirmed save updates data + select saved state in place`, cyclingUi.dataSport === 'cycling' && cyclingUi.selectValue === 'cycling' && cyclingUi.savedValue === 'cycling', cyclingUi);
+      check(`16: @${width} confirmed save updates headline + sport state in place`, cyclingUi.dataSport === 'cycling' && cyclingUi.dataHeadline === 'Everyone belongs on the start line' && cyclingUi.selectValue === 'cycling' && cyclingUi.savedValue === 'cycling', cyclingUi);
       check(`16: @${width} confirmed save updates logoless dashboard tiles in place`, cyclingUi.sidebarTile === '🚴' && cyclingUi.menuTile === '🚴', cyclingUi);
-      let { data: browserStored } = await admin.from('clubs').select('sport').eq('id', anyClubId).maybeSingle();
-      check(`16: @${width} browser save stored cycling directly`, browserStored && browserStored.sport === 'cycling', browserStored);
+      let { data: browserStored } = await admin.from('clubs').select('sport, headline').eq('id', anyClubId).maybeSingle();
+      check(`16: @${width} browser save stored sport + headline directly`, browserStored && browserStored.sport === 'cycling' && browserStored.headline === 'Everyone belongs on the start line', browserStored);
 
       await page3.locator('#cs-sport').selectOption('any');
+      await page3.locator('#cs-headline').fill('');
       await page3.locator('#cs-save').click();
       await page3.waitForFunction(() => {
         const select = document.getElementById('cs-sport');
         return window.ARENAS_DATA.club.sport === 'any' &&
+          window.ARENAS_DATA.club.headline === null &&
           select.value === 'any' &&
           select.getAttribute('data-saved-value') === 'any' &&
           document.querySelector('.sidebar-footer .club-icon').textContent.trim() === '🏟';
       }, null, { timeout: 15000 });
-      ({ data: browserStored } = await admin.from('clubs').select('sport').eq('id', anyClubId).maybeSingle());
-      check(`16: @${width} browser any round-trips and restores the tile`, browserStored && browserStored.sport === 'any', browserStored);
+      ({ data: browserStored } = await admin.from('clubs').select('sport, headline').eq('id', anyClubId).maybeSingle());
+      check(`16: @${width} browser any + blank headline round-trip`, browserStored && browserStored.sport === 'any' && browserStored.headline === null, browserStored);
       check(`16: @${width} zero console errors on club settings`, errors3.length === 0, errors3.join(' | '));
 
       await context.close();

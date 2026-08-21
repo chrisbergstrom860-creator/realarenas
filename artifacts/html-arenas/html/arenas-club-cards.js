@@ -6,7 +6,7 @@
 // the ccd- prefix.
 //
 // Data contract: club objects come from buildClubDirectory() in server.js
-// (id, name, handle, sport, city, logo_url, description, createdAt,
+// (id, name, handle, sport, city, logo_url, headline, description, createdAt,
 // memberCount, plan, viewerState, viewerRole, cooldownUntil) — served to the
 // page via ARENAS_DATA.clubsDirectory and to scripts via
 // GET /api/clubs/directory. viewerState is SERVER-DECIDED
@@ -43,15 +43,8 @@
     return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
   }
 
-  function sportColorStyle(id) {
-    if (id === 'any') return 'background:var(--gray-100);color:var(--gray-600);border-color:var(--gray-200)';
-    var found = null;
-    (window.ARENAS_SPORTS || []).forEach(function (s) { if (s.id === id) found = s; });
-    return found ? 'background:' + found.colors.bg + ';color:' + found.colors.text + ';border-color:' + found.colors.border : '';
-  }
-
   function searchText(c) {
-    return [c.name, c.handle, c.city, sportName(c.sport), c.description]
+    return [c.name, c.handle, c.city, sportName(c.sport), c.headline, c.description]
       .filter(Boolean).join(' ').toLowerCase();
   }
 
@@ -67,12 +60,12 @@
       return '<button class="ccd-btn ccd-btn-member" data-act="open" data-id="' + esc(c.id) + '">✓ Member</button>';
     }
     if (c.viewerState === 'pending') {
-      return '<button class="ccd-btn ccd-btn-pending" data-act="cancel" data-id="' + esc(c.id) + '">Requested — cancel?</button>';
+      return '<button class="ccd-btn ccd-btn-pending" data-act="cancel" data-id="' + esc(c.id) + '"><span class="ccd-label-wide">Requested — cancel?</span><span class="ccd-label-mobile">Cancel request</span></button>';
     }
     if (c.viewerState === 'cooldown') {
-      return '<button class="ccd-btn ccd-btn-cooldown" disabled>Declined — try again ' + esc(fmtDate(c.cooldownUntil)) + '</button>';
+      return '<button class="ccd-btn ccd-btn-cooldown" disabled>Declined — retry ' + esc(fmtDate(c.cooldownUntil)) + '</button>';
     }
-    return '<button class="ccd-btn ccd-btn-request" data-act="request" data-id="' + esc(c.id) + '">Request to join</button>';
+    return '<button class="ccd-btn ccd-btn-request" data-act="request" data-id="' + esc(c.id) + '"><span class="ccd-label-wide">Request to join</span><span class="ccd-label-mobile">Request</span></button>';
   }
 
   function tileHTML(c) {
@@ -82,16 +75,17 @@
   }
 
   function cardHTML(c, i, clickable) {
-    var proBadge = c.plan === 'club_pro' ? ' <span class="pro-badge">CLUB PRO</span>' : '';
+    var proBadge = c.plan === 'club_pro' ? '<span class="pro-badge">CLUB PRO</span>' : '';
+    var meta = [sportName(c.sport), c.city, c.memberCount + ' member' + (c.memberCount === 1 ? '' : 's')]
+      .filter(Boolean).map(esc).join(' · ');
     return '<div class="ccd-card" data-club-id="' + esc(c.id) + '"' + (clickable ? ' data-clickable="1"' : '') + ' style="animation-delay:' + Math.min(i * 25, 250) + 'ms">'
-      + '<div class="ccd-head">' + tileHTML(c)
-      + '<div class="ccd-head-main">'
-      + '<div class="ccd-name">' + esc(c.name) + proBadge + '</div>'
-      + '<div class="ccd-sub">' + esc(c.city || '') + (c.city ? ' · ' : '') + esc(c.memberCount) + ' member' + (c.memberCount === 1 ? '' : 's') + '</div>'
-      + '</div></div>'
-      + '<div class="ccd-tags"><span class="ccd-pill" style="' + sportColorStyle(c.sport) + '">' + esc(sportName(c.sport)) + '</span></div>'
-      + (c.description ? '<div class="ccd-desc">' + esc(c.description) + '</div>' : '')
-      + '<div class="ccd-foot">' + buttonHTML(c) + '</div>'
+      + tileHTML(c)
+      + '<div class="ccd-main">'
+      + '<div class="ccd-title-row"><div class="ccd-name">' + esc(c.name) + '</div>' + proBadge + '</div>'
+      + (c.headline ? '<div class="ccd-headline" title="' + esc(c.headline) + '">' + esc(c.headline) + '</div>' : '')
+      + '<div class="ccd-sub">' + meta + '</div>'
+      + '</div>'
+      + '<div class="ccd-action">' + buttonHTML(c) + '</div>'
       + '</div>';
   }
 

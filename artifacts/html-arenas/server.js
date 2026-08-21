@@ -6164,8 +6164,19 @@ app.get(BASE + '/athletes/:userId', requirePageAuth, async (req, res) => {
 //   - Direct invite acceptance deletes any pending request for that club/user.
 const JOIN_REQUEST_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 const CLUB_NOT_FOUND = { error: 'Club not found' };
+const CLUB_HEADLINE_MAX = 72;
 const CLUB_DESCRIPTION_MAX = 500;
 const CLUB_WEBSITE_MAX = 2048;
+
+// Optional single-line directory headline. Storage stays nullable; this
+// boundary owns the semantic authoring cap for every settings write.
+function normalizeClubHeadline(value) {
+  const headline = String(value == null ? '' : value).trim();
+  if (headline.length > CLUB_HEADLINE_MAX) {
+    return { error: 'headline_too_long', max: CLUB_HEADLINE_MAX };
+  }
+  return { value: headline || null };
+}
 
 // ONE boundary for every club-description writer. The current creation UIs do
 // not expose this field, but both creation routes still validate it so a future
@@ -6245,7 +6256,7 @@ async function buildClubDirectory(viewerId) {
   if (!supabaseAdmin) return { clubs: [] };
   const { data: clubRows, error } = await supabaseAdmin
     .from('clubs')
-    .select('id, name, handle, sport, city, logo_url, description, created_at')
+    .select('id, name, handle, sport, city, logo_url, headline, description, created_at')
     .eq('visibility', 'public')
     .order('name', { ascending: true })
     .limit(100);
@@ -6287,6 +6298,7 @@ async function buildClubDirectory(viewerId) {
       sport: c.sport,
       city: c.city || null,
       logo_url: c.logo_url || null,
+      headline: c.headline || null,
       description: c.description || null,
       createdAt: c.created_at || null,
       memberCount: countRows.filter(m => m.club_id === c.id).length,
@@ -6503,7 +6515,7 @@ async function resolveJoinRequestRoute(req, res, action) {
 app.post(BASE + '/api/clubs/:clubId/join-requests/:userId/approve', requireAuth, (req, res) => resolveJoinRequestRoute(req, res, 'approve'));
 app.post(BASE + '/api/clubs/:clubId/join-requests/:userId/decline', requireAuth, (req, res) => resolveJoinRequestRoute(req, res, 'decline'));
 
-// Club settings (sport + visibility + description + website). Admin-only —
+// Club settings (sport + visibility + headline + description + website). Admin-only —
 // stricter than the manager set that handles requests. Zero-leak 404 for
 // non-admins/nonexistent clubs.
 app.patch(BASE + '/api/clubs/:clubId/settings', requireAuth, async (req, res) => {
@@ -6525,6 +6537,11 @@ app.patch(BASE + '/api/clubs/:clubId/settings', requireAuth, async (req, res) =>
       }
       update.visibility = body.visibility;
     }
+    if (body.headline !== undefined) {
+      const normalized = normalizeClubHeadline(body.headline);
+      if (normalized.error) return res.status(400).json(normalized);
+      update.headline = normalized.value;
+    }
     if (body.description !== undefined) {
       const normalized = normalizeClubDescription(body.description);
       if (normalized.error) return res.status(400).json(normalized);
@@ -6541,7 +6558,7 @@ app.patch(BASE + '/api/clubs/:clubId/settings', requireAuth, async (req, res) =>
       .from('clubs')
       .update(update)
       .eq('id', req.params.clubId)
-      .select('id, sport, visibility, description, website_url');
+      .select('id, sport, visibility, headline, description, website_url');
     if (error || !updated || !updated.length) {
       return res.status(500).json({ error: 'Could not save settings' });
     }
@@ -6568,6 +6585,7 @@ app.patch(BASE + '/api/clubs/:clubId/settings', requireAuth, async (req, res) =>
       success: true,
       sport: updated[0].sport,
       visibility: updated[0].visibility,
+      headline: updated[0].headline,
       description: updated[0].description,
       website_url: updated[0].website_url
     });
@@ -10815,7 +10833,7 @@ app.get(BASE + '/clubs/dashboard', requirePageAuth, async (req, res) => {
     const pickManagedMembership = async (clubFilter) => {
       let q = supabaseAdmin
         .from('memberships')
-        .select('club_id, role, clubs (id, name, handle, sport, city, logo_url, visibility, description, website_url, banner_path)')
+        .select('club_id, role, clubs (id, name, handle, sport, city, logo_url, visibility, headline, description, website_url, banner_path)')
         .eq('user_id', req.user.id)
         .in('role', ['admin', 'coach']);
       if (clubFilter) q = q.eq('club_id', clubFilter);

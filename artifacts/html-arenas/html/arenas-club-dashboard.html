@@ -529,8 +529,15 @@ button, select, input { font-family: var(--font); }/* ─── LAYOUT ───
         </div>
 
         <div>
-          <div style="font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Club description</div>
-          <textarea id="cs-description" maxlength="500" rows="3" placeholder="What should athletes know about your club? (shown on your public profile and directory card)" style="width:100%;padding:8px 10px;border:var(--border);border-radius:7px;font-size:13px;outline:none;resize:vertical;box-sizing:border-box"></textarea>
+          <label for="cs-headline" style="display:block;font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Club headline</label>
+          <input type="text" id="cs-headline" maxlength="72" placeholder="A short line about what makes your club unique" class="form-input" style="width:100%;box-sizing:border-box">
+          <div style="font-size:11px;color:var(--gray-400);margin-top:4px">Optional. Shown as one line on your directory card.</div>
+        </div>
+
+        <div>
+          <label for="cs-description" style="display:block;font-size:11px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px">Club description</label>
+          <textarea id="cs-description" maxlength="500" rows="3" placeholder="What should athletes know about your club?" style="width:100%;padding:8px 10px;border:var(--border);border-radius:7px;font-size:13px;outline:none;resize:vertical;box-sizing:border-box"></textarea>
+          <div style="font-size:11px;color:var(--gray-400);margin-top:4px">Shown as About on your public club profile.</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <button id="cs-save" onclick="saveClubSettings()" style="padding:7px 16px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">Save settings</button>
@@ -4060,11 +4067,13 @@ document.addEventListener('DOMContentLoaded', function () {
     settingsCard.style.display = 'block';
     var sportEl = document.getElementById('cs-sport');
     var visEl = document.getElementById('cs-visibility');
+    var headlineEl = document.getElementById('cs-headline');
     var descEl = document.getElementById('cs-description');
     var webEl = document.getElementById('cs-website');
     var bannerRem = document.getElementById('cs-banner-remove');
     populateClubSportSelect(sportEl, data.club.sport);
     if (visEl) visEl.checked = data.club.visibility === 'public';
+    if (headlineEl) headlineEl.value = data.club.headline || '';
     if (descEl) descEl.value = data.club.description || '';
     if (webEl) webEl.value = data.club.website_url || '';
     if (bannerRem) bannerRem.style.display = data.club.banner ? 'inline-block' : 'none';
@@ -4079,11 +4088,12 @@ document.addEventListener('DOMContentLoaded', function () {
   window.saveClubSettings = function () {
     var sportEl = document.getElementById('cs-sport');
     var visEl = document.getElementById('cs-visibility');
+    var headlineEl = document.getElementById('cs-headline');
     var descEl = document.getElementById('cs-description');
     var webEl = document.getElementById('cs-website');
     var btn = document.getElementById('cs-save');
     var status = document.getElementById('cs-status');
-    if (!sportEl || !visEl || !descEl || !webEl) return;
+    if (!sportEl || !visEl || !headlineEl || !descEl || !webEl) return;
     var goingPrivate = data.club.visibility === 'public' && !visEl.checked;
     if (goingPrivate && queue.length &&
         !window.confirm('Unlisting the club will clear ' + queue.length + ' pending join request' + (queue.length === 1 ? '' : 's') + '. Continue?')) {
@@ -4094,7 +4104,7 @@ document.addEventListener('DOMContentLoaded', function () {
     fetch(B + '/api/clubs/' + clubId + '/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sport: sportEl.value, visibility: visEl.checked ? 'public' : 'private', description: descEl.value, website_url: webEl.value })
+      body: JSON.stringify({ sport: sportEl.value, visibility: visEl.checked ? 'public' : 'private', headline: headlineEl.value, description: descEl.value, website_url: webEl.value })
     })
       .then(function (res) { return res.json().then(function (b) { return { status: res.status, body: b }; }); })
       .then(function (res) {
@@ -4102,6 +4112,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (res.status === 200 && res.body && res.body.success) {
           data.club.sport = res.body.sport;
           data.club.visibility = res.body.visibility;
+          data.club.headline = res.body.headline;
           data.club.description = res.body.description;
           data.club.website_url = res.body.website_url;
           setSavedClubSport(sportEl, res.body.sport);
