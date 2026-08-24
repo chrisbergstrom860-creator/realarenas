@@ -1285,9 +1285,20 @@ function clubMemberBottomNav(activeKey) {
     + clubBnItem(activeKey, 'members', 'members', '👥', 'Members')
     + '</nav>' + CLUB_BN_SCRIPT;
 }
+function clubMemberLeaderboardBottomNav() {
+  const clubId = "encodeURIComponent(((window.ARENAS_DATA||{}).club||{}).id||'')";
+  return '<nav class="bottom-nav" aria-label="Primary">'
+    + bnItem(null, 'club', "nav('/clubs/member/'+" + clubId + ')', '📊', 'Club', false)
+    + bnItem(null, 'events', "nav('/events')", '🎟️', 'Events', false)
+    + bnItem(null, 'log', "nav('/log')", '➕', 'Log', true)
+    + bnItem('ranks', 'ranks', "nav('/clubs/member/'+" + clubId + "+'/leaderboard')", '🏆', 'Ranks', false)
+    + bnItem(null, 'profile', "nav('/profile')", '👤', 'Profile', false)
+    + '</nav>';
+}
 function bottomNavFor(pageKey) {
   if (pageKey === 'club-dashboard') return clubDashboardBottomNav('overview');
   if (pageKey === 'club-member') return clubMemberBottomNav('overview');
+  if (pageKey === 'club-member-leaderboard') return clubMemberLeaderboardBottomNav();
   if (Object.prototype.hasOwnProperty.call(ATHLETE_NAV_ACTIVE, pageKey)) return athleteBottomNav(ATHLETE_NAV_ACTIVE[pageKey]);
   return '';
 }
@@ -2671,14 +2682,18 @@ function getDateRange(period, tz) {
 // bucket by user_id; never query per-user). Sport is optional. `tz` is the
 // requesting VIEWER's zone (window boundaries follow the viewer, per the
 // timezone boundary policy).
-async function fetchActivitiesForUsers(userIds, period, sport, tz) {
+async function fetchActivitiesForUsers(userIds, period, sport, tz, options) {
   if (!supabaseAdmin || !userIds.length) return [];
-  const { start } = getDateRange(period, tz);
+  const { start, end } = getDateRange(period, tz);
   let q = supabaseAdmin
     .from('activities')
     .select('user_id, sport, distance, date')
     .in('user_id', userIds);
   if (start) q = q.gte('date', start);
+  // New club-member boards are explicitly "to date": future-dated activities
+  // must not alter month-to-date or all-time standing. This is opt-in so the
+  // existing global leaderboard/API behavior remains byte-for-byte untouched.
+  if (options && options.capAtNow && end) q = q.lte('date', end);
   if (sport && sport !== 'all') q = q.eq('sport', sport);
   const { data, error } = await q;
   if (error) return [];
@@ -2731,6 +2746,54 @@ async function buildUserProfileMap(ids) {
     }
   }));
   return map;
+}
+
+// Canonical points ranking for one explicit club roster. Callers supply current
+// membership rows and the matching profile map so authorization and club lookup
+// stay at the route boundary. Ranking visibility is intentionally narrower than
+// membership: opted-out members keep their membership and management analytics,
+// but hold no public/member-facing rank (including their own self row).
+async function buildClubPointsLeaderboard(memberRows, profileMap, period, viewer) {
+  const orderedMemberIds = [...new Set((memberRows || []).map((m) => m.user_id).filter(Boolean))];
+  const orderIndex = new Map(orderedMemberIds.map((id, index) => [id, index]));
+  const rankedMemberIds = orderedMemberIds.filter((id) => (
+    !(profileMap[id] && profileMap[id].prefs && !profileMap[id].prefs.show_on_leaderboards)
+  ));
+  const byUser = bucketActivities(await fetchActivitiesForUsers(
+    rankedMemberIds,
+    period,
+    'all',
+    getUserTimezone(viewer),
+    { capAtNow: true }
+  ));
+  const leaderboard = rankedMemberIds.map((id) => {
+    const p = profileMap[id] || { name: 'Member', handle: 'member', sports: [], location: null };
+    const acts = byUser[id] || [];
+    return {
+      userId: id,
+      name: p.name,
+      handle: p.handle,
+      avatar_url: p.avatar_url || null,
+      sports: p.sports,
+      location: p.location,
+      profilePublic: p.profilePublic !== false,
+      points: calculatePoints(acts),
+      activityCount: acts.length,
+      isMe: id === viewer.id
+    };
+  })
+    .sort((a, b) => b.points - a.points || orderIndex.get(a.userId) - orderIndex.get(b.userId))
+    .map((row, index) => ({ ...row, rank: index + 1 }));
+  const mine = leaderboard.find((row) => row.userId === viewer.id);
+  return {
+    leaderboard,
+    viewer: mine ? {
+      rank: mine.rank,
+      total: leaderboard.length,
+      points: mine.points,
+      activityCount: mine.activityCount
+    } : null
+  };
 }
 
 // Platform-wide leaderboard. Enumerates all auth users (name/handle/sports read
@@ -2846,6 +2909,58 @@ app.get(BASE + '/api/leaderboard/club', requireAuth, async (req, res) => {
   }
 });
 
+async function getCurrentClubMembership(userId, clubId) {
+  const { data, error } = await supabaseAdmin
+    .from('memberships')
+    .select('role')
+    .eq('user_id', userId)
+    .eq('club_id', clubId)
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+// Member-visible leaderboard for one explicit club. The membership gate is
+// deliberately completed before the club row is read; inaccessible and missing
+// IDs therefore share one byte-identical 404 response.
+app.get(BASE + '/api/clubs/:clubId/leaderboard', requireAuth, async (req, res) => {
+  const period = req.query.period || 'month';
+  const notFound = () => res.status(404).json({ error: 'Club not found' });
+  if (period !== 'month' && period !== 'all') {
+    return res.status(400).json({ error: 'Invalid period' });
+  }
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
+  try {
+    const membership = await getCurrentClubMembership(req.user.id, req.params.clubId);
+    if (!membership) return notFound();
+
+    const { data: clubRow, error: clubError } = await supabaseAdmin
+      .from('clubs')
+      .select('id, name, handle, sport, city, logo_url')
+      .eq('id', req.params.clubId)
+      .maybeSingle();
+    if (clubError) throw clubError;
+    if (!clubRow) return notFound();
+
+    const { data: members, error: membersError } = await supabaseAdmin
+      .from('memberships')
+      .select('user_id, created_at')
+      .eq('club_id', req.params.clubId)
+      .order('created_at', { ascending: true });
+    if (membersError) throw membersError;
+    const memberRows = members || [];
+    const profileMap = await buildUserProfileMap(memberRows.map((m) => m.user_id));
+    const board = await buildClubPointsLeaderboard(memberRows, profileMap, period, req.user);
+    // Close the check/read race: if the viewer left or was removed while the
+    // roster/profile/activity reads were in flight, fail closed before sending.
+    if (!await getCurrentClubMembership(req.user.id, req.params.clubId)) return notFound();
+    res.json({ club: clubRow, leaderboard: board.leaderboard, viewer: board.viewer, period });
+  } catch (err) {
+    console.log('Club member leaderboard error:', err.message);
+    res.status(503).json({ error: 'Could not load leaderboard' });
+  }
+});
+
 // Club dashboard leaderboard (coach/admin only): distance & session rankings plus
 // at-risk members (no activity in 5+ days, computed from the full roster so
 // zero-activity members are included).
@@ -2866,21 +2981,30 @@ app.get(BASE + '/api/leaderboard/club-dashboard', requireAuth, async (req, res) 
     const { data: members } = await supabaseAdmin
       .from('memberships').select('user_id').eq('club_id', clubId);
     const memberIds = [...new Set((members || []).map((m) => m.user_id).filter(Boolean))];
-    const acts = await fetchActivitiesForUsers(memberIds, period, 'all', getUserTimezone(req.user));
+    const acts = await fetchActivitiesForUsers(
+      memberIds,
+      period,
+      'all',
+      getUserTimezone(req.user),
+      { capAtNow: true }
+    );
     const byUser = bucketActivities(acts);
     const profileMap = await buildUserProfileMap(memberIds);
+    const rankedMemberIds = memberIds.filter((id) => (
+      !(profileMap[id] && profileMap[id].prefs && !profileMap[id].prefs.show_on_leaderboards)
+    ));
 
     // At-risk: no activity in the last 5 days, regardless of the selected period.
     // Always a rolling instant window — a Monday-bound 'week' would clip to
     // less than 5 days early in the week and mark active members at-risk.
-    const recent = await fetchActivitiesForUsers(memberIds, 'rolling7', 'all');
+    const recent = await fetchActivitiesForUsers(memberIds, 'rolling7', 'all', undefined, { capAtNow: true });
     const fiveDaysAgo = new Date(); fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
     const recentUserIds = new Set((recent || []).filter((a) => new Date(a.date) >= fiveDaysAgo).map((a) => a.user_id));
     const atRisk = memberIds
       .filter((id) => !recentUserIds.has(id) && id !== req.user.id) // exclude the viewing coach (matches the nudge recipient set)
       .map((id) => ({ userId: id, name: (profileMap[id] && profileMap[id].name) || 'Member', avatar_url: (profileMap[id] && profileMap[id].avatar_url) || null, daysInactive: 5 }));
 
-    const stats = memberIds.map((id) => {
+    const statsFor = (id) => {
       const a = byUser[id] || [];
       let totalKm = 0; a.forEach((x) => { totalKm += parseDistanceKmUnitAware(x.distance); });
       return {
@@ -2891,12 +3015,14 @@ app.get(BASE + '/api/leaderboard/club-dashboard', requireAuth, async (req, res) 
         totalKm,
         sessionCount: a.length
       };
-    });
-    const byDistance = [...stats].sort((a, b) => b.totalKm - a.totalKm);
-    const bySessions = [...stats].sort((a, b) => b.sessionCount - a.sessionCount);
-    const totalKm = Math.round(stats.reduce((s, u) => s + u.totalKm, 0));
-    const totalSessions = stats.reduce((s, u) => s + u.sessionCount, 0);
-    const activeCount = stats.filter((u) => u.sessionCount > 0).length;
+    };
+    const fullRosterStats = memberIds.map(statsFor);
+    const rankingStats = rankedMemberIds.map(statsFor);
+    const byDistance = [...rankingStats].sort((a, b) => b.totalKm - a.totalKm);
+    const bySessions = [...rankingStats].sort((a, b) => b.sessionCount - a.sessionCount);
+    const totalKm = Math.round(fullRosterStats.reduce((s, u) => s + u.totalKm, 0));
+    const totalSessions = fullRosterStats.reduce((s, u) => s + u.sessionCount, 0);
+    const activeCount = fullRosterStats.filter((u) => u.sessionCount > 0).length;
     // Mixed endpoint: Starter rankings AND the Pro at-risk data share this
     // response, so a locked club is NEVER 403'd here — the Pro fields (atRisk
     // + stats.atRiskCount) are simply omitted and the rankings stay untouched.
@@ -2941,7 +3067,7 @@ app.post(BASE + '/api/clubs/:clubId/nudge-atrisk', requireAuth, async (req, res)
     const { data: members } = await supabaseAdmin
       .from('memberships').select('user_id').eq('club_id', clubId);
     const memberIds = [...new Set((members || []).map((m) => m.user_id).filter(Boolean))];
-    const recent = await fetchActivitiesForUsers(memberIds, 'rolling7', 'all');
+    const recent = await fetchActivitiesForUsers(memberIds, 'rolling7', 'all', undefined, { capAtNow: true });
     const fiveDaysAgo = new Date(); fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
     const recentUserIds = new Set((recent || []).filter((a) => new Date(a.date) >= fiveDaysAgo).map((a) => a.user_id));
     const atRiskIds = memberIds.filter((id) => !recentUserIds.has(id) && id !== req.user.id);
@@ -11198,6 +11324,47 @@ app.get(BASE + '/clubs/member', requirePageAuth, async (req, res) => {
     return res.redirect(BASE + '/feed');
   }
 });
+app.get(BASE + '/clubs/member/:clubId/leaderboard', requirePageAuth, async (req, res) => {
+  const notFound = () => res.status(404).type('text/plain').send('Not found');
+  try {
+    if (!supabaseAdmin) return res.status(503).type('text/plain').send('Service unavailable');
+    // Membership-only lookup first: no club row is read until the viewer has
+    // proved current membership in this exact requested club.
+    const membership = await getCurrentClubMembership(req.user.id, req.params.clubId);
+    if (!membership) return notFound();
+
+    const { data: club, error: clubError } = await supabaseAdmin
+      .from('clubs')
+      .select('id, name, handle, sport, city, logo_url')
+      .eq('id', req.params.clubId)
+      .maybeSingle();
+    if (clubError) throw clubError;
+    if (!club) return notFound();
+
+    const pageData = {
+      club,
+      role: membership.role,
+      profile: displayFromUser(req.user),
+      clubs: await getSidebarClubs(req.user.id),
+      userId: req.user.id,
+      userEmail: req.user.email
+    };
+    const html = injectProBadge(
+      injectBottomNav(
+        injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-club-member-leaderboard.html'), 'utf8'), pageData),
+        'club-member-leaderboard'
+      ),
+      (await getUserPlan(req.user.id)) === 'pro'
+    );
+    // The page can perform several async reads after its first membership gate.
+    // Recheck immediately before the response so a mid-request removal closes.
+    if (!await getCurrentClubMembership(req.user.id, req.params.clubId)) return notFound();
+    res.type('html').send(html);
+  } catch (err) {
+    console.log('Club member leaderboard page error:', err.message);
+    sendPageError(res);
+  }
+});
 app.get(BASE + '/clubs/member/:clubId', requirePageAuth, async (req, res) => {
   try {
     // No service-role client means we can't verify membership — never serve the
@@ -11270,7 +11437,7 @@ app.get(BASE + '/clubs/member/:clubId', requirePageAuth, async (req, res) => {
 
 // ── CLUB MEMBER HOME DATA (API) ──
 // Everything a member sees about ONE club, in a single payload: hero stats,
-// their weekly leaderboard standing, recent coach announcements, upcoming
+// their month-to-date leaderboard standing, recent coach announcements, upcoming
 // events (with the viewer's RSVP), active challenges (with the viewer's
 // progress), and the roster. Membership-gated. Display names come from auth
 // metadata via buildUserProfileMap (there is no profiles table); points reuse
@@ -11307,7 +11474,6 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
       .order('created_at', { ascending: true });
     const memberRows = members || [];
     const memberIds = memberRows.map((m) => m.user_id);
-    const safeIds = memberIds.length ? memberIds : [PLACEHOLDER];
     const profileMap = await buildUserProfileMap(memberIds);
     const nameOf = (id) => (profileMap[id] && profileMap[id].name) || 'Member';
     const handleOf = (id) => (profileMap[id] && profileMap[id].handle) || 'member';
@@ -11468,22 +11634,11 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
       });
     }
 
-    // The viewer's standing in the club's weekly points leaderboard.
-    const weekStart = new Date();
-    weekStart.setDate(weekStart.getDate() - 7);
-    const { data: weekActs } = await supabaseAdmin
-      .from('activities')
-      .select('user_id, sport, distance, duration, date')
-      .in('user_id', safeIds)
-      .gte('date', weekStart.toISOString());
-    const ptsByUser = {};
-    memberIds.forEach((id) => { ptsByUser[id] = []; });
-    (weekActs || []).forEach((a) => { if (ptsByUser[a.user_id]) ptsByUser[a.user_id].push(a); });
-    const standings = memberIds.map((id) => ({ userId: id, points: calculatePoints(ptsByUser[id]) }))
-      .sort((a, b) => b.points - a.points);
-    const myRankIdx = standings.findIndex((s) => s.userId === userId);
-    const myRank = myRankIdx >= 0 ? myRankIdx + 1 : null;
-    const myPoints = myRankIdx >= 0 ? standings[myRankIdx].points : 0;
+    // The compact summary is not a second leaderboard implementation: it reads
+    // the exact canonical month-to-date board used by the dedicated member page.
+    const pointsBoard = await buildClubPointsLeaderboard(memberRows, profileMap, 'month', req.user);
+    const myRank = pointsBoard.viewer ? pointsBoard.viewer.rank : null;
+    const myPoints = pointsBoard.viewer ? pointsBoard.viewer.points : 0;
     const myActiveChallenges = challengesOut.filter((c) => c.joined).length;
 
     res.json({
@@ -11494,7 +11649,13 @@ app.get(BASE + '/api/clubs/:clubId/member-home', requireAuth, async (req, res) =
         challengeCount: challengesOut.length,
         myRank, myPoints
       },
-      standing: { rank: myRank, total: memberRows.length, points: myPoints, activeChallenges: myActiveChallenges },
+      standing: {
+        rank: myRank,
+        total: pointsBoard.leaderboard.length,
+        points: myPoints,
+        activeChallenges: myActiveChallenges,
+        period: 'month'
+      },
       announcements: announcementsOut,
       events: eventsOut,
       challenges: challengesOut,
