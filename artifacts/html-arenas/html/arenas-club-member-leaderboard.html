@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>
+window.BASE = window.location.pathname.startsWith('/html') ? '/html' : '';
+window.nav = function(path){ window.location.href = window.BASE + path; };
+document.addEventListener('DOMContentLoaded', function(){
+  if (window.BASE === '') {
+    document.querySelectorAll('[href^="/html/"]').forEach(function(el){ el.setAttribute('href', el.getAttribute('href').slice(5)); });
+    document.querySelectorAll('[action^="/html/"]').forEach(function(el){ el.setAttribute('action', el.getAttribute('action').slice(5)); });
+  }
+});
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/html/manifest.webmanifest">
+<meta name="theme-color" content="#FFD21E">
+<link rel="icon" href="/html/favicon.ico" sizes="48x48">
+<link rel="icon" href="/html/arenas-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/html/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Arenas">
+<script src="/html/arenas-pwa.js" defer></script>
+<script src="/html/arenas-athlete-link.js"></script>
+<title>Arenas — Club Leaderboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/html/arenas.css">
+<style>
+button,select,input,textarea{font-family:var(--font)}
+
+/* ── SVG ICONS ── */
+.svg-icon { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+.nav-icon { display: flex; align-items: center; justify-content: center; width: 20px; flex-shrink: 0; }
+.nav-icon svg { width: 16px; height: 16px; }
+
+/* ── SIDEBAR ── */
+.club-sidebar-header{padding:12px 16px 8px;display:flex;align-items:center;gap:8px;border-bottom:var(--border);margin-bottom:4px}
+.club-sb-icon{width:32px;height:32px;border-radius:8px;background:var(--gray-200);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;color:var(--gray-500)}
+.club-sb-name{font-size:13px;font-weight:600;color:var(--gray-900)}
+.club-sb-meta{font-size:11px;color:var(--gray-500)}
+.sf-row{display:flex;align-items:center;gap:8px}
+.sf-av{width:30px;height:30px;border-radius:50%;background:var(--gray-200);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900);flex-shrink:0;overflow:hidden}
+.sf-name{font-size:12px;font-weight:600;color:var(--gray-900)}
+.sf-role{font-size:10px;color:var(--gray-500)}
+
+/* ── TOPBAR ── */
+.tc-icon{width:20px;height:20px;border-radius:5px;background:var(--gray-200);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;color:var(--gray-500)}
+.tc-name{font-size:12px;font-weight:500;color:var(--gray-800)}
+.topbar-club-pill{display:flex;align-items:center;gap:6px;background:var(--gray-100);border:var(--border);border-radius:20px;padding:4px 12px 4px 6px;cursor:pointer;transition:background 0.1s}
+.topbar-club-pill:hover{background:var(--gray-200)}
+@media (max-width:768px){
+  body:has(.bottom-nav) .topbar-club-pill .tc-name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+}
+
+/* ── MAIN ── */
+.main{padding:0;overflow-y:auto}
+
+/* ── LEADERBOARD ── */
+.lb-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 28px 24px;
+}
+.lb-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+.lb-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lb-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--gray-900);
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+.lb-subtitle {
+  font-size: 13px;
+  color: var(--gray-500);
+}
+.lb-period-toggle {
+  display: flex;
+  background: var(--gray-100);
+  border-radius: 9px;
+  padding: 3px;
+  border: var(--border);
+}
+.lb-period-btn {
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gray-500);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.lb-period-btn:hover {
+  color: var(--gray-800);
+}
+.lb-period-btn.active {
+  background: white;
+  color: var(--gray-900);
+  box-shadow: var(--shadow);
+}
+
+.lb-viewer-card {
+  background: var(--gray-900);
+  border-radius: var(--radius-lg);
+  padding: 24px 28px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 20px;
+  color: white;
+  position: relative;
+  overflow: hidden;
+}
+.lb-viewer-card::before {
+  content: '';
+  position: absolute;
+  top: -80px;
+  right: -80px;
+  width: 280px;
+  height: 280px;
+  background: radial-gradient(circle, rgba(255,210,30,0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+.lb-viewer-rank {
+  font-family: var(--mono);
+  font-size: 38px;
+  font-weight: 700;
+  color: var(--yellow);
+  line-height: 1;
+  min-width: 60px;
+  position: relative;
+  z-index: 1;
+}
+.lb-viewer-info {
+  flex: 1;
+  position: relative;
+  z-index: 1;
+}
+.lb-viewer-name {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.lb-viewer-meta {
+  font-size: 13px;
+  color: var(--gray-400);
+}
+.lb-viewer-stats {
+  display: flex;
+  gap: 32px;
+  text-align: right;
+  position: relative;
+  z-index: 1;
+}
+.lb-viewer-stat {
+  display: flex;
+  flex-direction: column;
+}
+.lb-viewer-stat-val {
+  font-family: var(--mono);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.lb-viewer-stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gray-400);
+  font-weight: 600;
+}
+
+.lb-table-wrap {
+  background: white;
+  border: var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.lb-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.lb-table th {
+  text-align: left;
+  padding: 12px 20px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gray-400);
+  border-bottom: var(--border);
+  background: var(--gray-50);
+}
+.lb-table th.right { text-align: right; }
+.lb-table th.center { text-align: center; }
+.lb-table td {
+  padding: 14px 20px;
+  border-bottom: var(--border);
+  vertical-align: middle;
+}
+.lb-table tr:last-child td { border-bottom: none; }
+.lb-table tbody tr { transition: background 0.1s; }
+.lb-table tbody tr[data-athlete-link]:hover { background: var(--gray-50); cursor: pointer; }
+.lb-table tr.is-me { background: #FFFBEB; }
+.lb-table tr.is-me:hover { background: #FEF9E0; }
+
+.rank-cell {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-400);
+  width: 70px;
+  text-align: center;
+}
+.rank-1 { color: #D97706; }
+.rank-2 { color: #6B7280; }
+.rank-3 { color: #B45309; }
+
+.athlete-cell { display: flex; align-items: center; gap: 12px; }
+.athlete-av {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--gray-200);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-700);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.athlete-av img { width: 100%; height: 100%; object-fit: cover; }
+.athlete-name { font-size: 14px; font-weight: 600; color: var(--gray-900); }
+.athlete-meta {
+  font-size: 12px;
+  color: var(--gray-500);
+  margin-top: 2px;
+}
+.points-cell {
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--gray-900);
+}
+.activities-cell {
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--gray-500);
+  width: 100px;
+}
+.you-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--yellow);
+  color: var(--gray-900);
+  margin-left: 6px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.lb-message {
+  padding: 60px 24px;
+  text-align: center;
+  color: var(--gray-500);
+  font-size: 14px;
+}
+.lb-message-icon {
+  margin-bottom: 12px;
+  color: var(--gray-300);
+}
+
+@media (max-width: 640px) {
+  .lb-container { padding: 16px; }
+  .lb-header { flex-direction: column; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
+  .lb-viewer-card { flex-direction: column; align-items: flex-start; gap: 16px; padding: 18px 20px; }
+  .lb-viewer-stats { width: 100%; justify-content: flex-start; gap: 40px; }
+  .lb-table-wrap .table-scroll-inner, .lb-table { min-width: 0; }
+  .activities-cell, .activities-col { display: none; }
+  .points-cell { width: 70px; }
+  .lb-table td { padding: 12px 14px; }
+  .lb-table th { padding: 12px 14px; }
+  .rank-cell { width: 50px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <div class="topbar-logo" onclick="nav('/feed')" style="cursor:pointer">
+    <img class="logo-icon" src="/html/arenas-icon.svg" alt="">
+    <span class="logo-text">Arenas</span>
+  </div>
+  <div class="topbar-center">
+    <div class="topbar-search">
+      <svg class="svg-icon" style="color:var(--gray-400)" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input type="text" placeholder="Search athletes…" onkeydown="if(event.key==='Enter'&&!event.isComposing&&this.value.trim())nav('/athletes?q='+encodeURIComponent(this.value.trim()))">
+    </div>
+    <div class="topbar-club-pill" id="topbar-club-pill">
+      <div class="tc-icon" id="topbar-club-icon">
+        <svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+      </div>
+      <span class="tc-name" id="topbar-club-name">Club</span>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <div class="notif-btn" onclick="nav('/notifications')">
+      <svg class="svg-icon" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+      <div class="notif-dot" style="display:none"></div>
+    </div>
+    <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
+      <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer" id="topbar-user-av">
+        <svg class="svg-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+      </div>
+      <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
+        <a href="/html/profile" style="display:block;padding:10px 14px;font-size:13px;color:#111827;text-decoration:none">My profile</a>
+        <a href="/html/auth/logout" style="display:block;padding:10px 14px;font-size:13px;color:#DC2626;text-decoration:none;border-top:1px solid #f3f4f6">Log out</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="nav-section-label">My Arenas</div>
+  <div class="nav-item" onclick="nav('/feed')"><span class="nav-icon"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg></span> My feed</div>
+  <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></span> My profile</div>
+  <div class="nav-item" onclick="nav('/events')"><span class="nav-icon"><svg class="svg-icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></span> Events</div>
+  <div class="nav-item" onclick="nav('/billing')"><span class="nav-icon"><svg class="svg-icon" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg></span> Billing</div>
+
+  <div class="nav-section-label" id="club-name-label" style="margin-top:4px">Club</div>
+  <div class="club-sidebar-header">
+    <div class="club-sb-icon" id="sidebar-club-icon">
+      <svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+    </div>
+    <div>
+      <div class="club-sb-name" id="sidebar-club-name">Club Name</div>
+      <div class="club-sb-meta" id="sidebar-club-meta"></div>
+    </div>
+  </div>
+  <div class="nav-item" id="nav-overview" onclick="navToClub()"><span class="nav-icon"><svg class="svg-icon" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg></span> Overview</div>
+  <div class="nav-item active" id="nav-leaderboard"><span class="nav-icon"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path></svg></span> Leaderboard</div>
+
+  <div class="sidebar-footer">
+    <div class="sf-row">
+      <div class="sf-av" id="sidebar-user-av">
+        <svg class="svg-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+      </div>
+      <div>
+        <div class="sf-name" id="sidebar-user-name">Member</div>
+        <div class="sf-role" id="sidebar-user-role">Member</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN CONTENT -->
+<main class="main">
+  <div class="lb-container">
+    <div class="lb-header">
+      <div class="lb-title-wrap">
+        <h1 class="lb-title">Club Leaderboard</h1>
+        <p class="lb-subtitle" id="lb-subtitle">Month-to-date standings</p>
+      </div>
+      <div class="lb-period-toggle">
+        <button class="lb-period-btn active" id="btn-period-month" aria-pressed="true" onclick="setPeriod('month')">This month</button>
+        <button class="lb-period-btn" id="btn-period-all" aria-pressed="false" onclick="setPeriod('all')">All time</button>
+      </div>
+    </div>
+
+    <div id="lb-content">
+      <div class="lb-message">
+        <div class="lb-message-icon"><svg class="svg-icon" style="width:24px;height:24px;margin:0 auto" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
+        Loading leaderboard...
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+
+<script>
+// Notification badge
+(function(){
+  var B = window.BASE || (location.pathname.indexOf("/html") === 0 ? "/html" : "");
+  fetch(B + "/api/notifications").then(function(r){ return r.json(); }).then(function(data){
+    var unread = (data && data.unreadCount) || 0;
+    var dot = document.querySelector(".notif-dot");
+    if (dot) dot.style.display = unread > 0 ? "block" : "none";
+  }).catch(function(){});
+})();
+
+var currentPeriod = 'month';
+var D = window.ARENAS_DATA || {};
+var clubId = (D.club && D.club.id) || '';
+var loadSequence = 0;
+
+document.getElementById('topbar-club-pill').onclick = function() { nav('/clubs/member/' + clubId); };
+function navToClub() { nav('/clubs/member/' + clubId); }
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+    return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+  });
+}
+
+function ini(name) {
+  return (name || 'M').trim().split(/\s+/).map(function(n){ return n[0]; }).join('').slice(0, 2).toUpperCase();
+}
+
+function fmt(n) { return (Number(n) || 0).toLocaleString(); }
+
+function renderAvatar(url, name, className, id) {
+  var idAttr = id ? ' id="' + id + '"' : '';
+  if (url) {
+    return '<div class="' + className + '"' + idAttr + '><img src="' + esc(url) + '" alt=""></div>';
+  }
+  return '<div class="' + className + '"' + idAttr + '>' + esc(ini(name)) + '</div>';
+}
+
+function updateAvatar(elId, url, name) {
+  var el = document.getElementById(elId);
+  if (!el) return;
+  if (url) {
+    el.innerHTML = '<img src="' + esc(url) + '" alt="" style="width:100%;height:100%;object-fit:cover;">';
+    el.style.backgroundColor = 'transparent';
+  } else {
+    el.innerHTML = esc(ini(name));
+    el.style.backgroundColor = 'var(--yellow)';
+  }
+}
+
+function setPeriod(p) {
+  if (p !== 'month' && p !== 'all') return;
+  currentPeriod = p;
+  document.getElementById('btn-period-month').classList.toggle('active', p === 'month');
+  document.getElementById('btn-period-all').classList.toggle('active', p === 'all');
+  document.getElementById('btn-period-month').setAttribute('aria-pressed', p === 'month' ? 'true' : 'false');
+  document.getElementById('btn-period-all').setAttribute('aria-pressed', p === 'all' ? 'true' : 'false');
+  document.getElementById('lb-subtitle').textContent = (p === 'month') ? 'Month-to-date standings' : 'All-time standings';
+  loadLeaderboard();
+}
+
+function loadLeaderboard() {
+  var sequence = ++loadSequence;
+  var content = document.getElementById('lb-content');
+  content.innerHTML = '<div class="lb-message"><div class="lb-message-icon"><svg class="svg-icon" style="width:24px;height:24px;margin:0 auto" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>Loading leaderboard...</div>';
+
+  if (!clubId) {
+    content.innerHTML = '<div class="lb-message">Club not found.</div>';
+    return;
+  }
+
+  fetch(window.BASE + '/api/clubs/' + encodeURIComponent(clubId) + '/leaderboard?period=' + encodeURIComponent(currentPeriod))
+    .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+    .then(function(result) {
+      if (sequence !== loadSequence) return;
+      var data = result.data;
+      if (!result.ok || data.error) {
+        content.innerHTML = '<div class="lb-message">' + esc(data.error || 'Leaderboard unavailable.') + '</div>';
+        return;
+      }
+      renderData(data);
+    })
+    .catch(function(err) {
+      if (sequence !== loadSequence) return;
+      content.innerHTML = '<div class="lb-message">Leaderboard unavailable.</div>';
+    });
+}
+
+function renderData(data) {
+  var content = document.getElementById('lb-content');
+  var club = data.club || {};
+  var rows = data.leaderboard || [];
+  var viewer = data.viewer || null;
+
+  if (club.name) {
+    document.getElementById('topbar-club-name').textContent = club.name;
+    document.getElementById('sidebar-club-name').textContent = club.name;
+    document.getElementById('club-name-label').textContent = club.name;
+    document.title = 'Arenas — ' + club.name + ' Leaderboard';
+  }
+  if (club.logo_url) {
+    var imgStr = '<img src="' + esc(club.logo_url) + '" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">';
+    document.getElementById('topbar-club-icon').innerHTML = imgStr;
+    document.getElementById('topbar-club-icon').style.backgroundColor = 'transparent';
+    document.getElementById('sidebar-club-icon').innerHTML = imgStr;
+    document.getElementById('sidebar-club-icon').style.backgroundColor = 'transparent';
+  }
+
+  var html = '';
+
+  if (viewer) {
+    html += '<div class="lb-viewer-card">';
+    html += '  <div class="lb-viewer-rank">#' + esc(viewer.rank) + '</div>';
+    html += '  <div class="lb-viewer-info">';
+    html += '    <div class="lb-viewer-name">Your Position</div>';
+    html += '    <div class="lb-viewer-meta">Out of ' + esc(viewer.total) + ' ranked members</div>';
+    html += '  </div>';
+    html += '  <div class="lb-viewer-stats">';
+    html += '    <div class="lb-viewer-stat">';
+    html += '      <span class="lb-viewer-stat-val">' + fmt(viewer.points) + '</span>';
+    html += '      <span class="lb-viewer-stat-label">Points</span>';
+    html += '    </div>';
+    html += '    <div class="lb-viewer-stat">';
+    html += '      <span class="lb-viewer-stat-val">' + fmt(viewer.activityCount) + '</span>';
+    html += '      <span class="lb-viewer-stat-label">Activities</span>';
+    html += '    </div>';
+    html += '  </div>';
+    html += '</div>';
+  } else {
+    html += '<div class="lb-viewer-card" style="background:var(--gray-800);color:var(--gray-300);">';
+    html += '  <div class="lb-viewer-rank" style="color:var(--gray-500)">—</div>';
+    html += '  <div class="lb-viewer-info">';
+    html += '    <div class="lb-viewer-name" style="color:white">Not Ranked</div>';
+    html += '    <div class="lb-viewer-meta">You\u2019re hidden from leaderboards in your profile settings</div>';
+    html += '  </div>';
+    html += '</div>';
+  }
+
+  if (rows.length === 0) {
+    html += '<div class="lb-table-wrap"><div class="lb-message">No members are currently shown on this leaderboard.</div></div>';
+  } else {
+    html += '<div class="lb-table-wrap">';
+    html += '<div class="table-scroll"><div class="table-scroll-inner">';
+    html += '<table class="lb-table">';
+    html += '<thead><tr>';
+    html += '  <th class="center" style="width:70px">Rank</th>';
+    html += '  <th>Athlete</th>';
+    html += '  <th class="right activities-col">Activities</th>';
+    html += '  <th class="right">Points</th>';
+    html += '</tr></thead>';
+    html += '<tbody>';
+
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var isMeCls = r.isMe ? ' is-me' : '';
+      var rankCls = 'rank-cell';
+      if (r.rank === 1) rankCls += ' rank-1';
+      else if (r.rank === 2) rankCls += ' rank-2';
+      else if (r.rank === 3) rankCls += ' rank-3';
+
+      var metaParts = [];
+      if (r.location) metaParts.push(esc(r.location));
+      if (r.sports && r.sports.length > 0) {
+        metaParts.push(r.sports.map(function(s) {
+          return esc(window.arenasSportName ? window.arenasSportName(s) : s);
+        }).join(', '));
+      }
+      var metaStr = metaParts.join(' · ');
+
+      html += '<tr class="' + isMeCls + '" ' + ((!r.profilePublic && !r.isMe) ? '' : 'data-athlete-link="' + esc(r.userId) + '"') + '>';
+      html += '  <td class="' + rankCls + '">#' + esc(r.rank) + '</td>';
+      html += '  <td>';
+      html += '    <div class="athlete-cell">';
+      html += renderAvatar(r.avatar_url, r.name, 'athlete-av');
+      html += '      <div>';
+      html += '        <div class="athlete-name">' + esc(r.name) + (r.isMe ? '<span class="you-tag">YOU</span>' : '') + '</div>';
+      if (metaStr) {
+        html += '        <div class="athlete-meta">' + metaStr + '</div>';
+      }
+      html += '      </div>';
+      html += '    </div>';
+      html += '  </td>';
+      html += '  <td class="activities-cell activities-col">' + fmt(r.activityCount) + '</td>';
+      html += '  <td class="points-cell">' + fmt(r.points) + '</td>';
+      html += '</tr>';
+    }
+
+    html += '</tbody></table></div></div></div>';
+  }
+
+  content.innerHTML = html;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  if (D.profile) {
+    document.getElementById('sidebar-user-name').textContent = D.profile.name || 'Member';
+    var roleStr = (D.role ? D.role.charAt(0).toUpperCase() + D.role.slice(1) : 'Member');
+    document.getElementById('sidebar-user-role').textContent = roleStr;
+    updateAvatar('sidebar-user-av', D.profile.avatar_url, D.profile.name);
+    updateAvatar('topbar-user-av', D.profile.avatar_url, D.profile.name);
+  }
+  loadLeaderboard();
+});
+
+</script>
+</body>
+</html>
