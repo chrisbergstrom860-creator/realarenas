@@ -2392,7 +2392,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function loadClubLeaderboard() {
     var set = function (id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };
-    fetch(B + '/api/leaderboard/club-dashboard?period=' + encodeURIComponent(lbPeriod))
+    if (!clubId) return;
+    fetch(B + '/api/leaderboard/club-dashboard?period=' + encodeURIComponent(lbPeriod) + '&clubId=' + encodeURIComponent(clubId))
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (!j || j.error) {

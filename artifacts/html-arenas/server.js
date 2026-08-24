@@ -2853,17 +2853,18 @@ app.get(BASE + '/api/leaderboard/club-dashboard', requireAuth, async (req, res) 
   const period = req.query.period || 'week';
   if (!supabaseAdmin) return res.json({ error: 'Server is not configured' });
   try {
+    const clubId = typeof req.query.clubId === 'string' ? req.query.clubId.trim() : '';
+    if (!clubId) return res.json({ error: 'Not authorised' });
     const { data: membership } = await supabaseAdmin
       .from('memberships')
       .select('club_id')
       .eq('user_id', req.user.id)
+      .eq('club_id', clubId)
       .in('role', ['admin', 'coach'])
-      .order('created_at', { ascending: false })
-      .limit(1)
       .maybeSingle();
     if (!membership || !membership.club_id) return res.json({ error: 'Not authorised' });
     const { data: members } = await supabaseAdmin
-      .from('memberships').select('user_id').eq('club_id', membership.club_id);
+      .from('memberships').select('user_id').eq('club_id', clubId);
     const memberIds = [...new Set((members || []).map((m) => m.user_id).filter(Boolean))];
     const acts = await fetchActivitiesForUsers(memberIds, period, 'all', getUserTimezone(req.user));
     const byUser = bucketActivities(acts);
