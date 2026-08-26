@@ -4,9 +4,11 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 const { createClient } = require('@supabase/supabase-js');
 
 const BASE_URL = 'http://localhost:80/html';
+const TASK89_BASELINE = process.env.TASK89_BASELINE === '1';
 const MANIFEST = '/tmp/verify-club-member-leaderboard-manifest.json';
 const PW = 'ArenasTest!234';
 const TZ = 'America/Los_Angeles';
@@ -85,11 +87,20 @@ async function listAllAuthUsers() {
 async function cleanupEntries(entries) {
   const activityIds = entries.filter((x) => x.type === 'activity').map((x) => x.id);
   const subscriptionIds = entries.filter((x) => x.type === 'subscription').map((x) => x.id);
+  const postIds = entries.filter((x) => x.type === 'post').map((x) => x.id);
+  const eventIds = entries.filter((x) => x.type === 'event').map((x) => x.id);
+  const challengeIds = entries.filter((x) => x.type === 'challenge').map((x) => x.id);
   const clubIds = [...new Set(entries.filter((x) => x.type === 'club').map((x) => x.id))];
   const userIds = [...new Set(entries.filter((x) => x.type === 'user').map((x) => x.id))];
 
   if (activityIds.length) await admin.from('activities').delete().in('id', activityIds);
   if (subscriptionIds.length) await admin.from('subscriptions').delete().in('id', subscriptionIds);
+  if (postIds.length) await admin.from('posts').delete().in('id', postIds);
+  if (eventIds.length) await admin.from('events').delete().in('id', eventIds);
+  if (challengeIds.length) {
+    await admin.from('challenge_participants').delete().in('challenge_id', challengeIds);
+    await admin.from('challenges').delete().in('id', challengeIds);
+  }
   for (const clubId of clubIds) {
     await admin.from('notifications').delete().eq('entity_id', clubId);
     await admin.from('club_join_requests').delete().eq('club_id', clubId);
@@ -225,6 +236,139 @@ function rowFor(payload, id) {
   return ((payload && payload.leaderboard) || []).find((row) => row.userId === id);
 }
 
+async function verifyMemberShellInBrowser(clubId) {
+  const { chromium } = await import('playwright-core');
+  const executablePath = process.env.CHROMIUM_BIN ||
+    execSync('command -v chromium || command -v chromium-browser').toString().trim();
+  const browser = await chromium.launch({ executablePath, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+  const styleReport = {};
+  try {
+    for (const width of [1280, 380]) {
+      const context = await browser.newContext({ viewport: { width, height: 900 } });
+      const cookiePairs = users.viewer.cookie.split(';').map((part) => part.trim()).filter(Boolean);
+      await context.addCookies(cookiePairs.map((pair) => {
+        const split = pair.indexOf('=');
+        return { name: pair.slice(0, split), value: pair.slice(split + 1), url: BASE_URL };
+      }));
+      styleReport[width] = {};
+      for (const cfg of [
+        { key: 'member-home', route: '/clubs/member/' + clubId, wait: '#cm-sec-members' },
+        { key: 'member-leaderboard', route: '/clubs/member/' + clubId + '/leaderboard', wait: '.lb-table-wrap' }
+      ]) {
+        const p = await context.newPage();
+        const browserErrors = [];
+        p.on('console', (message) => {
+          if (message.type() === 'error') browserErrors.push('console: ' + message.text());
+        });
+        p.on('pageerror', (error) => browserErrors.push('pageerror: ' + error.message));
+        await p.goto(BASE_URL + cfg.route, { waitUntil: 'domcontentloaded' });
+        await p.waitForSelector(cfg.wait);
+        styleReport[width][cfg.key] = await p.evaluate(() => {
+          const take = (selector) => {
+            const el = document.querySelector(selector);
+            if (!el) return null;
+            const s = getComputedStyle(el);
+            return {
+              width: s.width, height: s.height, borderRadius: s.borderRadius,
+              overflow: s.overflow, backgroundColor: s.backgroundColor,
+              display: s.display, objectFit: s.objectFit
+            };
+          };
+          return {
+            topbarTile: take('.tc-icon'),
+            topbarImage: take('.tc-icon img'),
+            sidebarTile: take('.club-sb-icon'),
+            sidebarImage: take('.club-sb-icon img')
+          };
+        });
+        const phase = TASK89_BASELINE ? 'before' : 'after';
+        await p.screenshot({ path: `/tmp/task89-${phase}-${cfg.key}-${width}.png`, fullPage: true });
+        check(`8: ${cfg.key} has no browser errors at ${width}`, browserErrors.length === 0, browserErrors);
+        await p.close();
+      }
+      if (!TASK89_BASELINE) {
+        check('8: shared shell computed logo styles match at ' + width,
+          JSON.stringify(styleReport[width]['member-home']) === JSON.stringify(styleReport[width]['member-leaderboard']),
+          styleReport[width]);
+        check('8: both logo wrappers clip rounded corners at ' + width,
+          ['member-home', 'member-leaderboard'].every((key) => {
+            const styles = styleReport[width][key];
+            return styles.topbarTile.overflow === 'hidden' && styles.topbarTile.borderRadius === '5px' &&
+              styles.sidebarTile.overflow === 'hidden' && styles.sidebarTile.borderRadius === '8px';
+          }), styleReport[width]);
+      }
+      await context.close();
+    }
+    fs.writeFileSync(
+      `/tmp/task89-${TASK89_BASELINE ? 'before' : 'after'}-computed-styles.json`,
+      JSON.stringify(styleReport, null, 2)
+    );
+
+    if (TASK89_BASELINE) return;
+    const sectionCases = [
+      ['feed', 'announcements'], ['challenges', 'challenges'],
+      ['events', 'club-events'], ['members', 'members']
+    ];
+    for (const [internalId, canonicalHash] of sectionCases) {
+      // Keep a desktop-width but deliberately short viewport so each middle
+      // destination has enough document below it to align independently.
+      const context = await browser.newContext({ viewport: { width: 1280, height: 500 } });
+      const cookiePairs = users.viewer.cookie.split(';').map((part) => part.trim()).filter(Boolean);
+      await context.addCookies(cookiePairs.map((pair) => {
+        const split = pair.indexOf('=');
+        return { name: pair.slice(0, split), value: pair.slice(split + 1), url: BASE_URL };
+      }));
+      const p = await context.newPage();
+      const browserErrors = [];
+      p.on('console', (message) => {
+        if (message.type() === 'error') browserErrors.push('console: ' + message.text());
+      });
+      p.on('pageerror', (error) => browserErrors.push('pageerror: ' + error.message));
+      await p.route('**/api/clubs/' + clubId + '/member-home', async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 900));
+        await route.continue();
+      });
+      await p.goto(BASE_URL + '/clubs/member/' + clubId + '/leaderboard');
+      await p.click('#nav-' + internalId);
+      await p.waitForURL('**/clubs/member/' + clubId + '#' + canonicalHash);
+      await p.waitForTimeout(150);
+      const absentDuringDelay = await p.locator('#cm-sec-' + internalId).count() === 0;
+      await p.waitForSelector('#cm-sec-' + internalId);
+      await p.waitForTimeout(1800);
+      const landed = await p.evaluate((id) => {
+        const target = document.getElementById('cm-sec-' + id);
+        const active = document.getElementById('nav-' + id);
+        const rect = target && target.getBoundingClientRect();
+        const topbar = document.querySelector('.topbar').getBoundingClientRect();
+        const scroll = document.scrollingElement;
+        const expectedTop = topbar.bottom + 8;
+        const maxScrollTop = scroll.scrollHeight - scroll.clientHeight;
+        const absoluteTargetTop = scroll.scrollTop + rect.top;
+        const expectedScrollTop = Math.min(maxScrollTop, Math.max(0, absoluteTargetTop - expectedTop));
+        return {
+          active: !!active && active.classList.contains('active'),
+          visible: !!rect && rect.bottom > topbar.bottom && rect.top < window.innerHeight,
+          aligned: !!rect && Math.abs(rect.top - expectedTop) <= 6,
+          targetScrollMatched: Math.abs(scroll.scrollTop - expectedScrollTop) <= 4,
+          targetTop: rect && rect.top,
+          expectedTop,
+          scrollTop: scroll.scrollTop,
+          expectedScrollTop,
+          maxScrollTop
+        };
+      }, internalId);
+      check('8: delayed leaderboard link lands on rendered ' + canonicalHash,
+        absentDuringDelay && landed.active && landed.visible && landed.targetScrollMatched,
+        { absentDuringDelay, landed });
+      check('8: delayed ' + canonicalHash + ' navigation has no browser errors',
+        browserErrors.length === 0, browserErrors);
+      await context.close();
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
 async function verifyClean(created) {
   const ids = created.filter((x) => x.type === 'user').map((x) => x.id);
   const clubs = created.filter((x) => x.type === 'club').map((x) => x.id);
@@ -272,6 +416,13 @@ async function run() {
   // points at B, while every meaningful seeded statistic belongs to A.
   const clubA = await createClub('Club LB Explicit Alpha', 'clblbalpha');
   const clubB = await createClub('Club LB Latest Beta', 'clblbbeta');
+  // Opaque corner markers make missing wrapper clipping immediately visible:
+  // the yellow/blue squares occupy the SVG's extreme corners.
+  const cornerLogo = 'data:image/svg+xml,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#ef4444"/><rect width="14" height="14" fill="#fde047"/><rect x="50" y="50" width="14" height="14" fill="#2563eb"/></svg>'
+  );
+  const { error: logoError } = await admin.from('clubs').update({ logo_url: cornerLogo }).eq('id', clubA);
+  if (logoError) throw new Error('set corner-visible club logo: ' + logoError.message);
 
   const { data: subscription, error: subscriptionError } = await admin.from('subscriptions').insert({
     owner_type: 'club',
@@ -293,6 +444,27 @@ async function run() {
   ];
   const { error: membershipError } = await admin.from('memberships').insert(joined);
   if (membershipError) throw new Error('create memberships: ' + membershipError.message);
+
+  const { data: shellPost, error: shellPostError } = await admin.from('posts').insert({
+    user_id: users.manager.id, club_id: clubA, content: 'Shell navigation announcement'
+  }).select('id').single();
+  if (shellPostError) throw new Error('create shell announcement: ' + shellPostError.message);
+  saveManifest({ type: 'post', id: shellPost.id });
+  const { data: shellEvent, error: shellEventError } = await admin.from('events').insert({
+    created_by: users.manager.id, club_id: clubA, title: 'Shell navigation club event',
+    sport: 'running', event_type: 'training', visibility: 'club',
+    date: new Date(Date.now() + 7 * 86400000).toISOString(), location: 'Test track'
+  }).select('id').single();
+  if (shellEventError) throw new Error('create shell event: ' + shellEventError.message);
+  saveManifest({ type: 'event', id: shellEvent.id });
+  const { data: shellChallenge, error: shellChallengeError } = await admin.from('challenges').insert({
+    created_by: users.manager.id, club_id: clubA, title: 'Shell navigation challenge',
+    visibility: 'club', sport: 'running', goal_type: 'distance', goal_target: 10,
+    goal_unit: 'km', start_date: new Date(Date.now() - 86400000).toISOString(),
+    end_date: new Date(Date.now() + 14 * 86400000).toISOString()
+  }).select('id').single();
+  if (shellChallengeError) throw new Error('create shell challenge: ' + shellChallengeError.message);
+  saveManifest({ type: 'challenge', id: shellChallenge.id });
 
   const boundary = monthBoundaryUtc(TZ);
   await createActivity(users.viewer.id, 'LB just before viewer month', new Date(boundary - 60000).toISOString(), '2 km');
@@ -407,12 +579,70 @@ async function run() {
     count(currentPage.raw, '>All time<') === 1 &&
     count(currentPage.raw, '>This week<') === 0,
     { status: currentPage.status, month: count(currentPage.raw, '>This month<'), all: count(currentPage.raw, '>All time<'), week: count(currentPage.raw, '>This week<') });
+  const currentHome = await page('viewer', '/clubs/member/' + clubA);
+  const expectedOrder = ['nav-overview', 'nav-feed', 'nav-leaderboard', 'nav-challenges', 'nav-events', 'nav-members'];
+  const orderIn = (raw) => expectedOrder.map((id) => raw.indexOf('id="' + id + '"'));
+  const strictlyOrdered = (indexes) => indexes.every((value, i) => value >= 0 && (i === 0 || value > indexes[i - 1]));
+  if (!TASK89_BASELINE) {
+    check('8: both pages use one complete ordered member navigation',
+      strictlyOrdered(orderIn(currentHome.raw)) && strictlyOrdered(orderIn(currentPage.raw)) &&
+      currentHome.raw.includes('id="nav-overview"') && currentHome.raw.includes('id="nav-overview" onclick=') &&
+      currentPage.raw.includes('nav-item active" id="nav-leaderboard"') &&
+      !currentHome.raw.includes('<!-- CLUB_MEMBER_') && !currentPage.raw.includes('<!-- CLUB_MEMBER_'),
+      { home: orderIn(currentHome.raw), leaderboard: orderIn(currentPage.raw) });
+    const serverSource = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+    const occurrences = (source, text) => source.split(text).length - 1;
+    check('8: one shared member-nav loader is called by exactly both page routes',
+      occurrences(serverSource, 'function loadClubMemberNavState(') === 1 &&
+      occurrences(serverSource, 'await loadClubMemberNavState(club.id)') === 2,
+      {
+        definitions: occurrences(serverSource, 'function loadClubMemberNavState('),
+        routeCalls: occurrences(serverSource, 'await loadClubMemberNavState(club.id)')
+      });
+    const boardRouteStart = serverSource.indexOf("app.get(BASE + '/clubs/member/:clubId/leaderboard'");
+    const homeRouteStart = serverSource.indexOf("app.get(BASE + '/clubs/member/:clubId'", boardRouteStart + 1);
+    const homeRouteEnd = serverSource.indexOf("// ── CLUB MEMBER HOME DATA", homeRouteStart);
+    const finalMembershipCheck = 'if (!await getCurrentClubMembership(req.user.id, req.params.clubId))';
+    check('8: both member pages revalidate membership after async shell reads',
+      occurrences(serverSource.slice(boardRouteStart, homeRouteStart), finalMembershipCheck) === 1 &&
+      occurrences(serverSource.slice(homeRouteStart, homeRouteEnd), finalMembershipCheck) === 1,
+      {
+        leaderboard: occurrences(serverSource.slice(boardRouteStart, homeRouteStart), finalMembershipCheck),
+        home: occurrences(serverSource.slice(homeRouteStart, homeRouteEnd), finalMembershipCheck)
+      });
+    check('8: both existing mobile member nav variants keep their item sets',
+      serverSource.includes("clubBnItem(activeKey, 'overview', 'overview', '📊', 'Overview')") &&
+      serverSource.includes("clubBnItem(activeKey, 'feed', 'feed', '📣', 'News')") &&
+      serverSource.includes("clubBnItem(activeKey, 'challenges', 'challenges', '⚡', 'Goals')") &&
+      serverSource.includes("clubBnItem(activeKey, 'events', 'events', '🎟️', 'Events')") &&
+      serverSource.includes("clubBnItem(activeKey, 'members', 'members', '👥', 'Members')") &&
+      serverSource.includes("bnItem(null, 'club', \"nav('/clubs/member/'") &&
+      serverSource.includes("bnItem('ranks', 'ranks', \"nav('/clubs/member/'"),
+      null);
+    const emptyHome = await page('manager', '/clubs/member/' + clubB);
+    const emptyBoard = await page('manager', '/clubs/member/' + clubB + '/leaderboard');
+    const hasOnlyRequiredMemberNav = (raw) =>
+      raw.includes('id="nav-overview"') &&
+      raw.includes('id="nav-leaderboard"') &&
+      raw.includes('id="nav-members"') &&
+      !raw.includes('id="nav-feed"') &&
+      !raw.includes('id="nav-challenges"') &&
+      !raw.includes('id="nav-events"');
+    check('8: shared false-state hides all optional nav on both pages',
+      hasOnlyRequiredMemberNav(emptyHome.raw) && hasOnlyRequiredMemberNav(emptyBoard.raw),
+      { homeStatus: emptyHome.status, boardStatus: emptyBoard.status });
+  }
+  await verifyMemberShellInBrowser(clubA);
   await admin.from('memberships').delete().eq('club_id', clubA).eq('user_id', users.viewer.id);
   const removedApi = await api('viewer', 'GET', '/clubs/' + clubA + '/leaderboard');
   const removedPage = await page('viewer', '/clubs/member/' + clubA + '/leaderboard');
+  const removedHome = await page('viewer', '/clubs/member/' + clubA);
   check('8: removed member fails closed on API and page',
     removedApi.status === 404 && removedPage.status === 404,
     { api: removedApi.status + ':' + removedApi.raw, page: removedPage.status + ':' + removedPage.raw });
+  check('8: removed member cannot receive member-home shell',
+    removedHome.status === 302 && removedHome.location === '/html/feed',
+    { status: removedHome.status, location: removedHome.location });
 
   // 9: guard the independent overall board and server's canonical branch.
   const htmlRoot = path.join(__dirname, '..');
