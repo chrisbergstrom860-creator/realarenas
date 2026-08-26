@@ -2801,7 +2801,7 @@ async function buildClubPointsLeaderboard(memberRows, profileMap, period, viewer
 // the period. Only users with activity are shown.
 app.get(BASE + '/api/leaderboard/platform', requireAuth, async (req, res) => {
   const period = req.query.period || 'week';
-  const sport = req.query.sport || 'all';
+  const sport = 'all';
   if (!supabaseAdmin) return res.json({ leaderboard: [], period, sport });
   try {
     // "Show on leaderboards" opt-outs are excluded for EVERY viewer, including
@@ -2810,8 +2810,14 @@ app.get(BASE + '/api/leaderboard/platform', requireAuth, async (req, res) => {
     const users = (await listAllAuthUsers())
       .filter((u) => prefsFromMeta(u.user_metadata).show_on_leaderboards);
     const userIds = users.map((u) => u.id);
-    const byUser = bucketActivities(await fetchActivitiesForUsers(userIds, period, sport, getUserTimezone(req.user)));
-    const leaderboard = users.map((u) => {
+    const byUser = bucketActivities(await fetchActivitiesForUsers(
+      userIds,
+      period,
+      sport,
+      getUserTimezone(req.user),
+      { capAtNow: true }
+    ));
+    const rankedUsers = users.map((u) => {
       const m = u.user_metadata || {};
       const disp = displayFromUser(u);
       const acts = byUser[u.id] || [];
@@ -2828,84 +2834,25 @@ app.get(BASE + '/api/leaderboard/platform', requireAuth, async (req, res) => {
       };
     })
       .filter((u) => u.activityCount > 0)
-      .sort((a, b) => b.points - a.points)
-      .map((u, i) => ({ ...u, rank: i + 1 }));
+      .sort((a, b) => (
+        b.points - a.points ||
+        b.activityCount - a.activityCount ||
+        a.name.localeCompare(b.name) ||
+        a.userId.localeCompare(b.userId)
+      ));
+    let previousPoints = null;
+    let sharedRank = 0;
+    const leaderboard = rankedUsers.map((u, i) => {
+      // Competition ranking: equal points share a rank, and the next
+      // athlete's rank reflects how many athletes are ahead (1, 1, 3).
+      if (i === 0 || u.points !== previousPoints) sharedRank = i + 1;
+      previousPoints = u.points;
+      return { ...u, rank: sharedRank };
+    });
     res.json({ leaderboard, period, sport });
   } catch (err) {
     console.log('Platform leaderboard error:', err.message);
     res.json({ leaderboard: [], period, sport });
-  }
-});
-
-// Leaderboard across the people the viewer follows (plus themselves). The full
-// curated set is shown even at zero points so the viewer always sees their circle.
-app.get(BASE + '/api/leaderboard/following', requireAuth, async (req, res) => {
-  const period = req.query.period || 'week';
-  const sport = req.query.sport || 'all';
-  if (!supabaseAdmin) return res.json({ leaderboard: [], period, sport });
-  try {
-    const { data: following } = await supabaseAdmin
-      .from('follows').select('following_id').eq('follower_id', req.user.id);
-    const allIds = [...new Set([...(following || []).map((f) => f.following_id), req.user.id].filter(Boolean))];
-    const profileMap = await buildUserProfileMap(allIds);
-    // Leaderboard opt-outs drop out here too (universal exclusion — including
-    // the viewer's own row if THEY opted out). Failed lookups stay ranked.
-    const userIds = allIds.filter((id) => !(profileMap[id] && profileMap[id].prefs && !profileMap[id].prefs.show_on_leaderboards));
-    const byUser = bucketActivities(await fetchActivitiesForUsers(userIds, period, sport, getUserTimezone(req.user)));
-    const leaderboard = userIds.map((id) => {
-      const p = profileMap[id] || { name: 'Athlete', handle: 'athlete', sports: [], location: null };
-      const acts = byUser[id] || [];
-      return {
-        userId: id, name: p.name, handle: p.handle, avatar_url: p.avatar_url || null, sports: p.sports, location: p.location,
-        points: calculatePoints(acts), activityCount: acts.length, isMe: id === req.user.id
-      };
-    })
-      .sort((a, b) => b.points - a.points)
-      .map((u, i) => ({ ...u, rank: i + 1 }));
-    res.json({ leaderboard, period, sport });
-  } catch (err) {
-    console.log('Following leaderboard error:', err.message);
-    res.json({ leaderboard: [], period, sport });
-  }
-});
-
-// Leaderboard across the viewer's club members. Returns an empty board (no club)
-// for athletes without a membership.
-app.get(BASE + '/api/leaderboard/club', requireAuth, async (req, res) => {
-  const period = req.query.period || 'week';
-  const sport = req.query.sport || 'all';
-  if (!supabaseAdmin) return res.json({ leaderboard: [], clubName: null, period, sport });
-  try {
-    const { data: membership } = await supabaseAdmin
-      .from('memberships')
-      .select('club_id, clubs:club_id (name)')
-      .eq('user_id', req.user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!membership || !membership.club_id) return res.json({ leaderboard: [], clubName: null, period, sport });
-    const club = Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs;
-    const { data: members } = await supabaseAdmin
-      .from('memberships').select('user_id').eq('club_id', membership.club_id);
-    const allMemberIds = [...new Set((members || []).map((m) => m.user_id).filter(Boolean))];
-    const profileMap = await buildUserProfileMap(allMemberIds);
-    // Same universal opt-out exclusion as the platform/following scopes.
-    const memberIds = allMemberIds.filter((id) => !(profileMap[id] && profileMap[id].prefs && !profileMap[id].prefs.show_on_leaderboards));
-    const byUser = bucketActivities(await fetchActivitiesForUsers(memberIds, period, sport, getUserTimezone(req.user)));
-    const leaderboard = memberIds.map((id) => {
-      const p = profileMap[id] || { name: 'Member', handle: 'member', sports: [], location: null };
-      const acts = byUser[id] || [];
-      return {
-        userId: id, name: p.name, handle: p.handle, avatar_url: p.avatar_url || null, sports: p.sports, location: p.location,
-        points: calculatePoints(acts), activityCount: acts.length, isMe: id === req.user.id
-      };
-    })
-      .sort((a, b) => b.points - a.points)
-      .map((u, i) => ({ ...u, rank: i + 1 }));
-    res.json({ leaderboard, clubName: (club && club.name) || 'Your club', period, sport });
-  } catch (err) {
-    console.log('Club leaderboard error:', err.message);
-    res.json({ leaderboard: [], clubName: null, period, sport });
   }
 });
 
