@@ -36,25 +36,6 @@ button,select,input,textarea{font-family:var(--font)}
 .nav-icon { display: flex; align-items: center; justify-content: center; width: 20px; flex-shrink: 0; }
 .nav-icon svg { width: 16px; height: 16px; }
 
-/* ── SIDEBAR ── */
-.club-sidebar-header{padding:12px 16px 8px;display:flex;align-items:center;gap:8px;border-bottom:var(--border);margin-bottom:4px}
-.club-sb-icon{width:32px;height:32px;border-radius:8px;background:var(--gray-200);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;color:var(--gray-500)}
-.club-sb-name{font-size:13px;font-weight:600;color:var(--gray-900)}
-.club-sb-meta{font-size:11px;color:var(--gray-500)}
-.sf-row{display:flex;align-items:center;gap:8px}
-.sf-av{width:30px;height:30px;border-radius:50%;background:var(--gray-200);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900);flex-shrink:0;overflow:hidden}
-.sf-name{font-size:12px;font-weight:600;color:var(--gray-900)}
-.sf-role{font-size:10px;color:var(--gray-500)}
-
-/* ── TOPBAR ── */
-.tc-icon{width:20px;height:20px;border-radius:5px;background:var(--gray-200);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;color:var(--gray-500)}
-.tc-name{font-size:12px;font-weight:500;color:var(--gray-800)}
-.topbar-club-pill{display:flex;align-items:center;gap:6px;background:var(--gray-100);border:var(--border);border-radius:20px;padding:4px 12px 4px 6px;cursor:pointer;transition:background 0.1s}
-.topbar-club-pill:hover{background:var(--gray-200)}
-@media (max-width:768px){
-  body:has(.bottom-nav) .topbar-club-pill .tc-name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-}
-
 /* ── MAIN ── */
 .main{padding:0;overflow-y:auto}
 
@@ -307,74 +288,8 @@ button,select,input,textarea{font-family:var(--font)}
 <body>
 <div class="app">
 
-<!-- TOPBAR -->
-<header class="topbar">
-  <div class="topbar-logo" onclick="nav('/feed')" style="cursor:pointer">
-    <img class="logo-icon" src="/html/arenas-icon.svg" alt="">
-    <span class="logo-text">Arenas</span>
-  </div>
-  <div class="topbar-center">
-    <div class="topbar-search">
-      <svg class="svg-icon" style="color:var(--gray-400)" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-      <input type="text" placeholder="Search athletes…" onkeydown="if(event.key==='Enter'&&!event.isComposing&&this.value.trim())nav('/athletes?q='+encodeURIComponent(this.value.trim()))">
-    </div>
-    <div class="topbar-club-pill" id="topbar-club-pill">
-      <div class="tc-icon" id="topbar-club-icon">
-        <svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-      </div>
-      <span class="tc-name" id="topbar-club-name">Club</span>
-    </div>
-  </div>
-  <div class="topbar-actions">
-    <div class="notif-btn" onclick="nav('/notifications')">
-      <svg class="svg-icon" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
-      <div class="notif-dot" style="display:none"></div>
-    </div>
-    <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
-      <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer" id="topbar-user-av">
-        <svg class="svg-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-      </div>
-      <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
-        <a href="/html/profile" style="display:block;padding:10px 14px;font-size:13px;color:#111827;text-decoration:none">My profile</a>
-        <a href="/html/auth/logout" style="display:block;padding:10px 14px;font-size:13px;color:#DC2626;text-decoration:none;border-top:1px solid #f3f4f6">Log out</a>
-      </div>
-    </div>
-  </div>
-</header>
-
-<!-- SIDEBAR -->
-<aside class="sidebar">
-  <div class="nav-section-label">My Arenas</div>
-  <div class="nav-item" onclick="nav('/feed')"><span class="nav-icon"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg></span> My feed</div>
-  <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></span> My profile</div>
-  <div class="nav-item" onclick="nav('/events')"><span class="nav-icon"><svg class="svg-icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></span> Events</div>
-  <div class="nav-item" onclick="nav('/billing')"><span class="nav-icon"><svg class="svg-icon" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg></span> Billing</div>
-
-  <div class="nav-section-label" id="club-name-label" style="margin-top:4px">Club</div>
-  <div class="club-sidebar-header">
-    <div class="club-sb-icon" id="sidebar-club-icon">
-      <svg class="svg-icon" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-    </div>
-    <div>
-      <div class="club-sb-name" id="sidebar-club-name">Club Name</div>
-      <div class="club-sb-meta" id="sidebar-club-meta"></div>
-    </div>
-  </div>
-  <div class="nav-item" id="nav-overview" onclick="navToClub()"><span class="nav-icon"><svg class="svg-icon" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg></span> Overview</div>
-  <div class="nav-item active" id="nav-leaderboard"><span class="nav-icon"><svg class="svg-icon" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path></svg></span> Leaderboard</div>
-
-  <div class="sidebar-footer">
-    <div class="sf-row">
-      <div class="sf-av" id="sidebar-user-av">
-        <svg class="svg-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-      </div>
-      <div>
-        <div class="sf-name" id="sidebar-user-name">Member</div>
-        <div class="sf-role" id="sidebar-user-role">Member</div>
-      </div>
-    </div>
-  </div>
-</aside>
+<!-- CLUB_MEMBER_TOPBAR -->
+<!-- CLUB_MEMBER_SIDEBAR -->
 
 <!-- MAIN CONTENT -->
 <main class="main">
@@ -415,9 +330,6 @@ var currentPeriod = 'month';
 var D = window.ARENAS_DATA || {};
 var clubId = (D.club && D.club.id) || '';
 var loadSequence = 0;
-
-document.getElementById('topbar-club-pill').onclick = function() { nav('/clubs/member/' + clubId); };
-function navToClub() { nav('/clubs/member/' + clubId); }
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
@@ -495,19 +407,7 @@ function renderData(data) {
   var rows = data.leaderboard || [];
   var viewer = data.viewer || null;
 
-  if (club.name) {
-    document.getElementById('topbar-club-name').textContent = club.name;
-    document.getElementById('sidebar-club-name').textContent = club.name;
-    document.getElementById('club-name-label').textContent = club.name;
-    document.title = 'Arenas — ' + club.name + ' Leaderboard';
-  }
-  if (club.logo_url) {
-    var imgStr = '<img src="' + esc(club.logo_url) + '" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">';
-    document.getElementById('topbar-club-icon').innerHTML = imgStr;
-    document.getElementById('topbar-club-icon').style.backgroundColor = 'transparent';
-    document.getElementById('sidebar-club-icon').innerHTML = imgStr;
-    document.getElementById('sidebar-club-icon').style.backgroundColor = 'transparent';
-  }
+  if (club.name) document.title = 'Arenas — ' + club.name + ' Leaderboard';
 
   var html = '';
 
@@ -595,13 +495,6 @@ function renderData(data) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-  if (D.profile) {
-    document.getElementById('sidebar-user-name').textContent = D.profile.name || 'Member';
-    var roleStr = (D.role ? D.role.charAt(0).toUpperCase() + D.role.slice(1) : 'Member');
-    document.getElementById('sidebar-user-role').textContent = roleStr;
-    updateAvatar('sidebar-user-av', D.profile.avatar_url, D.profile.name);
-    updateAvatar('topbar-user-av', D.profile.avatar_url, D.profile.name);
-  }
   loadLeaderboard();
 });
 

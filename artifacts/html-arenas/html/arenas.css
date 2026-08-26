@@ -253,6 +253,26 @@ body {
   color: var(--red);
 }
 
+/* Shared club-member shell only. Dashboard, invite and public-club chrome keep
+   their own visual rules. Both member routes receive these exact elements from
+   renderClubMemberShell(), so their computed shell styles remain identical. */
+.club-member-shell .topbar-search{display:flex;align-items:center;gap:8px;background:var(--gray-50);border:var(--border);border-radius:7px;padding:6px 12px;width:240px}
+.club-member-shell .topbar-search input{background:none;border:none;outline:none;font-size:13px;color:var(--gray-700);width:100%}
+.club-member-shell .topbar-search input::placeholder{color:var(--gray-400)}
+.club-member-shell .club-member-search-icon{color:var(--gray-400);font-size:13px}
+.club-member-shell .topbar-club-pill{display:flex;align-items:center;gap:6px;background:var(--gray-100);border:var(--border);border-radius:20px;padding:4px 12px 4px 6px;cursor:pointer;transition:background .1s}
+.club-member-shell .topbar-club-pill:hover{background:var(--gray-200)}
+.club-member-shell .tc-icon{width:20px;height:20px;border-radius:5px;background:var(--orange-light);display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;overflow:hidden}
+.club-member-shell .tc-name{font-size:12px;font-weight:500;color:var(--gray-800)}
+.club-member-shell .club-sidebar-header{padding:12px 16px 8px;display:flex;align-items:center;gap:8px;border-bottom:var(--border);margin-bottom:4px}
+.club-member-shell .club-sb-icon{width:32px;height:32px;border-radius:8px;background:var(--orange-light);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;overflow:hidden}
+.club-member-shell .club-sb-name{font-size:13px;font-weight:600;color:var(--gray-900)}
+.club-member-shell .club-sb-meta{font-size:11px;color:var(--gray-500)}
+.club-member-shell .sf-row{display:flex;align-items:center;gap:8px}
+.club-member-shell .sf-av{width:30px;height:30px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--gray-900);flex-shrink:0;overflow:hidden}
+.club-member-shell .sf-name{font-size:12px;font-weight:600;color:var(--gray-900)}
+.club-member-shell .sf-role{font-size:10px;color:var(--gray-500)}
+
 /* Individual Pro plan badge. Server-injected only for Pro subscribers —
    free users' pages never contain this markup. */
 .pro-badge {
@@ -389,6 +409,7 @@ body {
 .bottom-nav { display: none; }
 
 @media (max-width: 768px) {
+  body:has(.bottom-nav) .club-member-shell .topbar-club-pill .tc-name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* Collapse the shell grid to a single column and drop the sidebar */
   body:has(.bottom-nav) .app {
     grid-template-columns: minmax(0, 1fr);

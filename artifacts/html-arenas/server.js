@@ -1233,6 +1233,115 @@ function injectArenasData(html, dataObj) {
   return html.replace('</head>', `<script>window.ARENAS_DATA = ${json};</script></head>`);
 }
 
+// Club-member shell navigation is decided once, server-side, after membership
+// has been established. Both member pages call this loader, so visibility and
+// the member count cannot drift between the home and leaderboard shells.
+async function loadClubMemberNavState(clubId) {
+  const now = new Date().toISOString();
+  const [members, announcements, challenges, events] = await Promise.all([
+    supabaseAdmin.from('memberships').select('*', { count: 'exact', head: true }).eq('club_id', clubId),
+    supabaseAdmin.from('posts').select('*', { count: 'exact', head: true }).eq('club_id', clubId),
+    supabaseAdmin.from('challenges').select('*', { count: 'exact', head: true }).eq('club_id', clubId).gte('end_date', now),
+    supabaseAdmin.from('events').select('*', { count: 'exact', head: true }).eq('club_id', clubId).gte('date', now)
+  ]);
+  for (const result of [members, announcements, challenges, events]) {
+    if (result.error) throw result.error;
+  }
+  return {
+    memberCount: members.count || 0,
+    showAnnouncements: (announcements.count || 0) > 0,
+    showChallenges: (challenges.count || 0) > 0,
+    showEvents: (events.count || 0) > 0
+  };
+}
+
+function clubMemberShellNavItem({ id, icon, label, active, onclick }) {
+  return `<div class="nav-item${active ? ' active' : ''}" id="nav-${id}" onclick="${escapeHtml(onclick)}"><span class="nav-icon">${icon}</span> ${label}</div>`;
+}
+
+// One markup source for the club-member topbar and desktop sidebar. The static
+// templates contain only tokens. Logo content is filled through clubTileHtml,
+// the same image/error/fallback helper used elsewhere in the app.
+function renderClubMemberShell(pageData, navState, activeKey) {
+  const club = pageData.club;
+  const profile = pageData.profile || {};
+  const clubId = encodeURIComponent(club.id);
+  const homePath = `/clubs/member/${clubId}`;
+  const canonicalHash = { overview: 'overview', feed: 'announcements', challenges: 'challenges', events: 'club-events', members: 'members' };
+  const sectionAction = (section) => activeKey === 'overview'
+    ? `setTab('${section}',this)`
+    : `nav('${homePath}#${canonicalHash[section]}')`;
+  const cap = (value) => {
+    const text = String(value || '');
+    return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
+  };
+  const memberLabel = `${navState.memberCount} member${navState.memberCount === 1 ? '' : 's'}`;
+  const roleLabel = cap(pageData.role) || 'Member';
+  const sportLabel = club.sport === 'any' ? 'Any sport' : cap(club.sport);
+  const pillAction = activeKey === 'overview'
+    ? "setTab('overview',document.getElementById('nav-overview'))"
+    : `nav('${homePath}')`;
+  const topbar = `<header class="topbar club-member-shell">
+  <div class="topbar-logo" onclick="nav('/feed')" style="cursor:pointer">
+    <img class="logo-icon" src="/html/arenas-icon.svg" alt="">
+    <span class="logo-text">Arenas</span>
+  </div>
+  <div class="topbar-center">
+    <div class="topbar-search">
+      <span class="club-member-search-icon">🔍</span>
+      <input type="text" placeholder="Search athletes…" onkeydown="if(event.key==='Enter'&&!event.isComposing&&this.value.trim())nav('/athletes?q='+encodeURIComponent(this.value.trim()))">
+    </div>
+    <div class="topbar-club-pill" id="topbar-club-pill" onclick="${escapeHtml(pillAction)}">
+      <div class="tc-icon club-member-club-tile">🏃</div>
+      <span class="tc-name">${escapeHtml(club.name || 'Club')}</span>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <div class="notif-btn" onclick="nav('/notifications')">🔔<div class="notif-dot"></div></div>
+    <div style="position:relative">
+      <div class="user-av" onclick="var d=document.getElementById('userMenu');d.style.display=(d.style.display==='block'?'none':'block')" style="cursor:pointer">·</div>
+      <div id="userMenu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);min-width:170px;z-index:300;overflow:hidden">
+        <a href="/html/profile" style="display:block;padding:10px 14px;font-size:13px;color:#111827;text-decoration:none">My profile</a>
+        <a href="/html/auth/logout" style="display:block;padding:10px 14px;font-size:13px;color:#DC2626;text-decoration:none;border-top:1px solid #f3f4f6">Log out</a>
+      </div>
+    </div>
+  </div>
+</header>`;
+  const clubNav = [
+    clubMemberShellNavItem({ id: 'overview', icon: '📊', label: 'Overview', active: activeKey === 'overview', onclick: sectionAction('overview') }),
+    navState.showAnnouncements ? clubMemberShellNavItem({ id: 'feed', icon: '📣', label: 'Announcements', active: false, onclick: sectionAction('feed') }) : '',
+    clubMemberShellNavItem({ id: 'leaderboard', icon: '🏆', label: 'Leaderboard', active: activeKey === 'leaderboard', onclick: activeKey === 'leaderboard' ? "void(0)" : `nav('${homePath}/leaderboard')` }),
+    navState.showChallenges ? clubMemberShellNavItem({ id: 'challenges', icon: '⚡', label: 'Challenges', active: false, onclick: sectionAction('challenges') }) : '',
+    navState.showEvents ? clubMemberShellNavItem({ id: 'events', icon: '🎟️', label: 'Club events', active: false, onclick: sectionAction('events') }) : '',
+    clubMemberShellNavItem({ id: 'members', icon: '👥', label: 'Members', active: false, onclick: sectionAction('members') })
+  ].join('');
+  const sidebar = `<aside class="sidebar club-member-shell">
+  <div class="nav-section-label">My Arenas</div>
+  <div class="nav-item" onclick="nav('/feed')"><span class="nav-icon">🏠</span> My feed</div>
+  <div class="nav-item" onclick="nav('/profile')"><span class="nav-icon">👤</span> My profile</div>
+  <div class="nav-item" onclick="nav('/events')"><span class="nav-icon">🎟️</span> Events</div>
+  <div class="nav-item" onclick="nav('/billing')"><span class="nav-icon">💳</span> Billing</div>
+  <div class="nav-section-label" id="club-name-label" style="margin-top:4px">${escapeHtml(club.name || 'Club')}</div>
+  <div class="club-sidebar-header">
+    <div class="club-sb-icon club-member-club-tile">🏃</div>
+    <div><div class="club-sb-name">${escapeHtml(club.name || 'Club')}</div><div class="club-sb-meta">${memberLabel}</div></div>
+  </div>
+  ${clubNav}
+  <div class="sidebar-footer">
+    <div class="sf-row"><div class="sf-av">·</div><div><div class="sf-name">${escapeHtml(profile.name || 'Member')}</div><div class="sf-role">${escapeHtml(sportLabel ? roleLabel + ' · ' + sportLabel : roleLabel)}</div></div></div>
+  </div>
+</aside>
+<script>(function renderClubMemberTiles(){var d=window.ARENAS_DATA||{},c=d.club||{};if(!window.clubTileHtml)return;document.querySelectorAll('.club-member-club-tile').forEach(function(el){el.innerHTML=window.clubTileHtml.content(c.logo_url||null,c.sport);});})();</script>`;
+  return { topbar, sidebar };
+}
+
+function injectClubMemberShell(html, pageData, navState, activeKey) {
+  const shell = renderClubMemberShell(pageData, navState, activeKey);
+  return html
+    .replace('<!-- CLUB_MEMBER_TOPBAR -->', shell.topbar)
+    .replace('<!-- CLUB_MEMBER_SIDEBAR -->', shell.sidebar);
+}
+
 // Mobile bottom navigation. Single server-side source of truth injected before
 // </body> on shell pages so the markup is not duplicated across the static HTML.
 // It is hidden on desktop and only shown <=768px (see arenas.css). The athlete
@@ -11282,9 +11391,13 @@ app.get(BASE + '/clubs/member/:clubId/leaderboard', requirePageAuth, async (req,
       userId: req.user.id,
       userEmail: req.user.email
     };
+    const memberNav = await loadClubMemberNavState(club.id);
     const html = injectProBadge(
       injectBottomNav(
-        injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-club-member-leaderboard.html'), 'utf8'), pageData),
+        injectArenasData(
+          injectClubMemberShell(fs.readFileSync(path.join(HTML, 'arenas-club-member-leaderboard.html'), 'utf8'), pageData, memberNav, 'leaderboard'),
+          { ...pageData, memberNav }
+        ),
         'club-member-leaderboard'
       ),
       (await getUserPlan(req.user.id)) === 'pro'
@@ -11358,7 +11471,17 @@ app.get(BASE + '/clubs/member/:clubId', requirePageAuth, async (req, res) => {
       canLeave,
       clubPrivate
     };
-    const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-club-member.html'), 'utf8'), clubData), 'club-member'), (await getUserPlan(req.user.id)) === 'pro');
+    const memberNav = await loadClubMemberNavState(club.id);
+    const html = injectProBadge(injectBottomNav(injectArenasData(
+      injectClubMemberShell(fs.readFileSync(path.join(HTML, 'arenas-club-member.html'), 'utf8'), clubData, memberNav, 'overview'),
+      { ...clubData, memberNav }
+    ), 'club-member'), (await getUserPlan(req.user.id)) === 'pro');
+    // As on the standalone leaderboard page, close the revocation window
+    // created by the shell/sidebar/plan reads before sending protected club
+    // identity and activity-presence metadata.
+    if (!await getCurrentClubMembership(req.user.id, req.params.clubId)) {
+      return res.redirect(BASE + '/feed');
+    }
     res.type('html').send(html);
   } catch (err) {
     console.log('Club member data error:', err.message);
