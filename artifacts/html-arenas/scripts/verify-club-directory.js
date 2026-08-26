@@ -405,8 +405,10 @@ async function main() {
   // Presence in standings BEFORE the member leaves.
   r = await api('owner', 'GET', '/challenges/' + lvCh.id + '/leaderboard');
   check('13: seeker ranked in challenge standings before leaving', ((r.body && r.body.leaderboard) || []).some(e => e.userId === users.seeker.id), r.body && r.body.leaderboard);
-  r = await api('member', 'GET', '/leaderboard/club');
-  check('13: seeker on club leaderboard before leaving', ((r.body && r.body.leaderboard) || []).some(e => e.userId === users.seeker.id), r.body && (r.body.clubName || r.body.leaderboard));
+  r = await api('seeker', 'GET', '/clubs/' + pubClubId + '/leaderboard');
+  check('13: seeker on explicit club leaderboard before leaving',
+    r.status === 200 && ((r.body && r.body.leaderboard) || []).some(e => e.userId === users.seeker.id),
+    r.body && r.body.leaderboard);
 
   // The member leaves.
   r = await api('seeker', 'POST', '/clubs/' + pubClubId + '/leave');
@@ -432,8 +434,9 @@ async function main() {
   // Absent from standings after leaving.
   r = await api('owner', 'GET', '/challenges/' + lvCh.id + '/leaderboard');
   check('13: seeker absent from challenge standings after leaving', !((r.body && r.body.leaderboard) || []).some(e => e.userId === users.seeker.id), r.body && r.body.leaderboard);
-  r = await api('member', 'GET', '/leaderboard/club');
-  check('13: seeker absent from club leaderboard after leaving', !((r.body && r.body.leaderboard) || []).some(e => e.userId === users.seeker.id), r.body && r.body.leaderboard);
+  r = await api('seeker', 'GET', '/clubs/' + pubClubId + '/leaderboard');
+  check('13: departed seeker cannot read explicit club leaderboard',
+    r.status === 404 && r.body && r.body.error === 'Club not found', r);
   // Admins notified exactly once (owner is the only admin; coach left).
   const { data: seekerLeaveNotifs } = await admin.from('notifications').select('user_id, body').eq('type', 'club').eq('title', 'Member left').eq('actor_id', users.seeker.id).eq('entity_id', pubClubId);
   check('13: admins notified exactly once of member leave', (seekerLeaveNotifs || []).length === 1 && seekerLeaveNotifs[0].user_id === users.owner.id && /Dir Seeker left Dir Public Club/.test(seekerLeaveNotifs[0].body), seekerLeaveNotifs);

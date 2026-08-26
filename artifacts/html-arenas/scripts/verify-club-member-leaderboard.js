@@ -414,18 +414,25 @@ async function run() {
     removedApi.status === 404 && removedPage.status === 404,
     { api: removedApi.status + ':' + removedApi.raw, page: removedPage.status + ':' + removedPage.raw });
 
-  // 9: guard the independent global weekly board and server's canonical branch.
+  // 9: guard the independent overall board and server's canonical branch.
   const htmlRoot = path.join(__dirname, '..');
   const globalSource = fs.readFileSync(path.join(htmlRoot, 'html', 'arenas-leaderboards.html'), 'utf8');
   const serverSource = fs.readFileSync(path.join(htmlRoot, 'server.js'), 'utf8');
-  check('9: global leaderboard remains weekly',
-    /state\s*=\s*\{\s*scope:\s*'platform',\s*period:\s*'week'/.test(globalSource) &&
+  check('9: global leaderboard is platform-only with week/month/all periods',
+    /state\s*=\s*\{\s*period:\s*'week'\s*\}/.test(globalSource) &&
     globalSource.includes("setPeriod('week', this)") &&
-    globalSource.includes('weekly board starts fresh every Monday'), null);
-  check('9: canonical server week branch still exists',
+    globalSource.includes("setPeriod('month', this)") &&
+    globalSource.includes("setPeriod('alltime', this)") &&
+    globalSource.includes('/api/leaderboard/platform?') &&
+    !globalSource.includes('/api/leaderboard/following') &&
+    !globalSource.includes('/api/leaderboard/club'), null);
+  check('9: canonical server period branch and future cap still exist',
     serverSource.includes("if (period === 'week')") &&
     serverSource.includes('weekStartKey(now, zone)') &&
-    serverSource.includes("fetchActivitiesForUsers(userIds, period, sport"), null);
+    serverSource.includes("fetchActivitiesForUsers(") &&
+    serverSource.includes("{ capAtNow: true }") &&
+    !serverSource.includes("app.get(BASE + '/api/leaderboard/following'") &&
+    !serverSource.includes("app.get(BASE + '/api/leaderboard/club'"), null);
   const apiStart = serverSource.indexOf("app.get(BASE + '/api/clubs/:clubId/leaderboard'");
   const apiEnd = serverSource.indexOf("// Club dashboard leaderboard", apiStart);
   const pageStart = serverSource.indexOf("app.get(BASE + '/clubs/member/:clubId/leaderboard'");

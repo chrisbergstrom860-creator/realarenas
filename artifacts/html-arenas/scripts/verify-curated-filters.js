@@ -89,16 +89,17 @@ async function loginCookies(email) {
       return { page, errors };
     };
 
-    // ── 1. Leaderboards tabs ──
+    // ── 1. Overall leaderboards have periods only ──
     const ctxA = await ctxFor(EMAILS.a);
     {
       const { page, errors } = await openPage(ctxA, `https://${DOMAIN}/html/leaderboards`);
-      await page.waitForSelector('.sport-nav-tab');
-      const tabs = await page.locator('.sport-nav-tab').allTextContents();
-      check('lb: sports user sees Tennis + Pilates tabs', /Tennis/.test(tabs.join()) && /Pilates/.test(tabs.join()), tabs.join('|'));
-      check('lb: no curated Running tab for tennis user', !/Running/.test(tabs.join()), tabs.join('|'));
-      // Per-sport board actually loads for a derived tab (server takes any ?sport=)
-      await page.locator('.sport-nav-tab', { hasText: 'Tennis' }).click();
+      await page.waitForSelector('.board-container');
+      const periods = await page.locator('.period-tab').allTextContents();
+      const removedControls = await page.locator('.sport-nav-tab, .scope-select, .metric-select').count();
+      check('lb: exactly week/month/all period tabs remain',
+        periods.length === 3 && periods.join('|') === 'This week|This month|All time', periods.join('|'));
+      check('lb: sport/scope/metric controls removed', removedControls === 0, removedControls);
+      await page.locator('.period-tab', { hasText: 'This month' }).click();
       await page.waitForTimeout(800);
       check('lb: zero console errors (user A)', errors.length === 0, errors.join(' | '));
       await page.close();
@@ -106,9 +107,9 @@ async function loginCookies(email) {
     const ctxB = await ctxFor(EMAILS.b);
     {
       const { page, errors } = await openPage(ctxB, `https://${DOMAIN}/html/leaderboards`);
-      await page.waitForSelector('.sport-nav-tab');
-      const tabs = await page.locator('.sport-nav-tab').allTextContents();
-      check('lb: sport-less user falls back to trio', /Running/.test(tabs.join()) && /Cycling/.test(tabs.join()) && /Climbing/.test(tabs.join()), tabs.join('|'));
+      await page.waitForSelector('.board-container');
+      check('lb: sport-less user receives the same overall board',
+        await page.locator('.sport-nav-tab, .scope-select, .metric-select').count() === 0, null);
       check('lb: zero console errors (user B)', errors.length === 0, errors.join(' | '));
       await page.close();
     }
@@ -193,11 +194,11 @@ async function loginCookies(email) {
       await page.close();
     }
 
-    // 360px sanity: leaderboards tab bar scrolls, feed pills wrap — no overflow.
+    // 360px sanity: overall board and feed pills — no overflow.
     {
       const nctx = await ctxFor(EMAILS.a, 360);
       const { page, errors } = await openPage(nctx, `https://${DOMAIN}/html/leaderboards`);
-      await page.waitForSelector('.sport-nav-tab');
+      await page.waitForSelector('.board-container');
       const overflowX = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       check('lb @360: no page-level horizontal overflow', overflowX <= 1, String(overflowX));
       check('lb @360: zero console errors', errors.length === 0, errors.join(' | '));

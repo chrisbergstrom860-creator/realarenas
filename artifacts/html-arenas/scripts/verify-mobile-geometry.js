@@ -289,10 +289,25 @@ const PAGES = [
         waitFor: '#arenas-crop-overlay #ac-slider', root: '#arenas-crop-overlay',
         surfaces: [{ name: 'crop overlay panel', sel: '#arenas-crop-overlay > div', min: 4 }] }
     ] },
-  { user: 'creator', name: 'leaderboards', path: '/leaderboards', waitFor: '.lb-row', root: 'body',
+  { user: 'creator', name: 'leaderboards', path: '/leaderboards', waitFor: '.board-container', root: 'body',
     surfaces: [
-      { name: 'podium', sel: '.podium-stage', min: 3 },
-      { name: 'table rows', sel: '.lb-table-header ~ *', min: 1 }
+      { name: 'overall board', sel: '.board-container', min: 1 },
+      { name: 'podium region', sel: '.board-podium', min: 1 },
+      { name: 'ranked-list region', sel: '.board-list', min: 1 }
+    ],
+    checks: [
+      { name: 'podium uses vertical cards only on narrow phones', js: `(() => {
+        const cols = [...document.querySelectorAll('.podium-col')];
+        if (cols.length < 2) return { ok: true, skipped: 'fewer than two ranked athletes' };
+        const rects = cols.map((el) => el.getBoundingClientRect());
+        const centers = rects.map((r) => r.left + r.width / 2);
+        const xSpread = Math.max(...centers) - Math.min(...centers);
+        const vertical = xSpread < 8 && new Set(rects.map((r) => Math.round(r.top))).size === rects.length;
+        const horizontal = xSpread > Math.max(...rects.map((r) => r.width));
+        const mobile = window.innerWidth <= 480;
+        return { ok: mobile ? vertical : horizontal, mobile, xSpread,
+          rects: rects.map((r) => ({ x: r.x, y: r.y, w: r.width })) };
+      })()` }
     ],
     steps: [
       // Shared "How points work" modal (arenas-hpw-modal.js) — one
