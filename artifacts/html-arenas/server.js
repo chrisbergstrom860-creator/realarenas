@@ -7632,31 +7632,17 @@ app.get(BASE + '/events', requirePageAuth, async (req, res) => {
     sendPageError(res);
   }
 });
-// Leaderboards page. Injects the viewer's identity + club name so the client can
-// highlight "you" and label the club scope. There is no `profiles` table, so the
-// name comes from auth metadata.
+// Overall leaderboards page. Injects the viewer identity so the client can
+// highlight "you". There is no `profiles` table, so the name comes from auth
+// metadata.
 app.get(BASE + '/leaderboards', requirePageAuth, async (req, res) => {
   try {
     if (!supabaseAdmin) return sendPageError(res);
-    let clubName = null;
-    const { data: membership } = await supabaseAdmin
-      .from('memberships')
-      .select('clubs:club_id (name)')
-      .eq('user_id', req.user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (membership && membership.clubs) {
-      const c = Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs;
-      clubName = (c && c.name) || null;
-    }
     const clubs = await getSidebarClubs(req.user.id);
     const lbData = {
-      userId: req.user.id, profile: displayFromUser(req.user), clubName, clubs,
-      // Viewer's own profile sports — the sport tab row derives from these
-      // (Session ② pattern from the feed pills), so new registry sports show
-      // up automatically for the athletes who actually do them.
-      sports: Array.isArray((req.user.user_metadata || {}).sports) ? req.user.user_metadata.sports : []
+      userId: req.user.id,
+      profile: displayFromUser(req.user),
+      clubs
     };
     const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-leaderboards.html'), 'utf8'), lbData), 'leaderboards'), (await getUserPlan(req.user.id)) === 'pro');
     res.type('html').send(html);

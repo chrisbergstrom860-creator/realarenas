@@ -29,17 +29,9 @@ document.addEventListener('DOMContentLoaded', function(){
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/html/arenas.css">
 <script src="/html/arenas-club-create.js"></script>
-<style>/* ── TOPBAR ── */
-.topbar-inner { max-width: 1280px; margin: 0 auto; padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 24px; }
-.logo { display: flex; align-items: center; gap: 8px; text-decoration: none; flex-shrink: 0; cursor: pointer; }
-.topnav { display: flex; align-items: center; gap: 2px; flex: 1; }
-.topnav a { padding: 6px 12px; border-radius: 6px; font-size: 14px; font-weight: 500; color: var(--gray-600); text-decoration: none; transition: background 0.1s; }
-.topnav a:hover { background: var(--gray-100); color: var(--gray-900); }
-.topnav a.active { background: var(--yellow-light); color: var(--gray-900); }
-.avatar-sm { width: 30px; height: 30px; border-radius: 50%; background: var(--yellow); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: var(--gray-900); cursor: pointer; }
-
+<style>
 /* ── PAGE HEADER ── */
-.page-header { background: white; border-bottom: var(--border); padding: 28px 24px; }
+.page-header { grid-column: 1 / -1; margin: -24px -24px 20px -24px; background: white; border-bottom: var(--border); padding: 28px 24px; }
 .page-header-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
 .page-header-left h1 { font-size: 26px; font-weight: 700; color: var(--gray-900); margin-bottom: 4px; letter-spacing: -0.01em; }
 .page-header-left p { font-size: 14px; color: var(--gray-500); }
@@ -48,113 +40,68 @@ document.addEventListener('DOMContentLoaded', function(){
 .period-tab { padding: 6px 16px; border-radius: 7px; font-size: 13px; font-weight: 500; border: none; background: transparent; color: var(--gray-500); cursor: pointer; font-family: var(--font); transition: all 0.12s; }
 .period-tab.active { background: white; color: var(--gray-900); box-shadow: var(--shadow); }
 
-/* ── SPORT FILTER BAR ── */
-.sport-bar { background: white; border-bottom: var(--border); padding: 0 24px; position: sticky; top: var(--topbar-h); z-index: 100; }
-.sport-bar-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: center; gap: 0; overflow-x: auto; }
-.sport-bar-inner::-webkit-scrollbar { display: none; }
-.sport-nav-tab { padding: 13px 18px; font-size: 14px; font-weight: 500; color: var(--gray-500); border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; transition: color 0.1s, border-color 0.1s; display: flex; align-items: center; gap: 7px; flex-shrink: 0; border-top: none; border-left: none; border-right: none; background: transparent; font-family: var(--font); }
-.sport-nav-tab:hover { color: var(--gray-800); }
-.sport-nav-tab.active { color: var(--gray-900); border-bottom-color: var(--gray-900); }
-.sport-bar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 8px 0; flex-shrink: 0; }
-.metric-select { padding: 6px 10px; border: var(--border); border-radius: 7px; font-size: 13px; font-family: var(--font); color: var(--gray-600); background: white; outline: none; cursor: pointer; }
-.scope-select { padding: 6px 10px; border: var(--border); border-radius: 7px; font-size: 13px; font-family: var(--font); color: var(--gray-600); background: white; outline: none; cursor: pointer; }
+/* ── BOARD CONTAINER ── */
+.board-container { background: white; border: var(--border); border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column; }
+.board-podium { padding: 32px 24px 0 24px; display: flex; justify-content: center; background: linear-gradient(180deg, white 0%, var(--gray-50) 100%); }
+.board-podium.is-empty { padding: 0; background: white; }
+.podium-layout { display: flex; align-items: flex-end; justify-content: center; gap: 12px; width: 100%; max-width: 500px; }
+.podium-layout.p-3 .p-rank-2 { order: -1; }
 
-/* ── MAIN LAYOUT ── */
-.main { max-width: 1280px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: 1fr 296px; gap: 20px; align-items: start; }
+.podium-col { display: flex; flex-direction: column; align-items: center; flex: 1; cursor: pointer; transition: transform 0.15s; min-width: 0; }
+.podium-col:hover { transform: translateY(-4px); }
 
-/* ── YOUR POSITION BANNER ── */
-.your-banner {
-  background: var(--gray-900); border-radius: var(--radius-lg); padding: 20px 24px;
-  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
-  position: relative; overflow: hidden; margin-bottom: 4px;
-}
-.your-banner::before { content: ''; position: absolute; top: -80px; right: -80px; width: 280px; height: 280px; background: radial-gradient(circle, rgba(255,210,30,0.12) 0%, transparent 70%); pointer-events: none; }
-.yb-avatar { width: 48px; height: 48px; border-radius: 50%; background: var(--yellow); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: var(--gray-900); flex-shrink: 0; position: relative; z-index: 1; border: 2px solid rgba(255,210,30,0.4); }
-.yb-info { flex: 1; position: relative; z-index: 1; }
-.yb-name { font-size: 15px; font-weight: 600; color: white; }
-.yb-sub { font-size: 12px; color: var(--gray-400); margin-top: 2px; }
-.yb-stats { display: flex; gap: 20px; position: relative; z-index: 1; }
-.yb-stat { text-align: center; }
-.yb-stat-num { font-size: 22px; font-weight: 700; color: white; font-family: var(--mono); line-height: 1; }
-.yb-stat-label { font-size: 11px; color: var(--gray-500); margin-top: 3px; }
-.yb-progress-wrap { flex: 1; min-width: 200px; position: relative; z-index: 1; }
-.yb-progress-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--gray-400); margin-bottom: 7px; }
-.yb-progress-bar { height: 5px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; }
-.yb-progress-fill { height: 100%; border-radius: 3px; background: var(--yellow); transition: width 0.5s ease; }
-.yb-next-label { font-size: 11px; color: var(--gray-500); margin-top: 5px; }
+.podium-avatar-wrap { margin-bottom: 12px; position: relative; display: flex; justify-content: center; }
+.podium-avatar { border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; background: var(--gray-200); color: var(--gray-700); border: 3px solid white; box-shadow: var(--shadow); }
+.p-rank-1 .podium-avatar { width: 64px; height: 64px; border-color: var(--yellow); }
+.p-rank-2 .podium-avatar { width: 52px; height: 52px; border-color: var(--gray-300); }
+.p-rank-3 .podium-avatar { width: 52px; height: 52px; border-color: var(--orange); }
 
-/* ── PODIUM ── */
-.podium-wrap { background: white; border: var(--border); border-radius: var(--radius-lg); overflow: hidden; }
-.podium-header { padding: 16px 20px 0; display: flex; align-items: center; justify-content: space-between; }
-.podium-header-left { display: flex; align-items: center; gap: 10px; }
-.podium-sport-icon { width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
-.podium-title { font-size: 16px; font-weight: 600; color: var(--gray-900); }
-.podium-subtitle { font-size: 12px; color: var(--gray-500); margin-top: 1px; }
+.podium-info { display: flex; flex-direction: column; align-items: center; width: 100%; margin-bottom: 16px; }
+.podium-name-row { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-width: 0; }
+.podium-name { font-size: 14px; font-weight: 600; color: var(--gray-900); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.podium-pts { font-size: 15px; font-weight: 700; color: var(--gray-900); font-family: var(--mono); margin-top: 2px; }
+.podium-acts { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
 
-.podium-stage { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 24px 20px 0; align-items: end; gap: 8px; }
-.podium-col { display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; padding: 8px; border-radius: var(--radius); transition: background 0.1s; min-width: 0; }
-.podium-col:hover { background: var(--gray-50); }
-.place-emoji { font-size: 22px; margin-bottom: 2px; }
-.podium-avatar { width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; border: 3px solid transparent; }
-.podium-avatar.gold { border-color: #F59E0B; box-shadow: 0 0 0 3px #FFFBEB; }
-.podium-avatar.silver { border-color: #9CA3AF; box-shadow: 0 0 0 3px #F9FAFB; }
-.podium-avatar.bronze { border-color: #B45309; box-shadow: 0 0 0 3px #FFFBEB; }
-.podium-pname { font-size: 13px; font-weight: 600; color: var(--gray-900); text-align: center; max-width: 100%; overflow-wrap: anywhere; }
-.podium-ploc { font-size: 11px; color: var(--gray-400); text-align: center; }
-.podium-pscore { font-size: 15px; font-weight: 600; color: var(--gray-900); font-family: var(--mono); text-align: center; margin-top: 2px; }
-.podium-pstat { font-size: 11px; color: var(--gray-500); text-align: center; }
-.podium-block { width: 100%; border-radius: 4px 4px 0 0; margin-top: 10px; }
-.block-gold { height: 64px; background: linear-gradient(180deg, #FEF9C3 0%, #FDE68A 100%); border: 1px solid #FCD34D; }
-.block-silver { height: 44px; background: linear-gradient(180deg, #F3F4F6 0%, #D1D5DB 100%); border: 1px solid #D1D5DB; }
-.block-bronze { height: 30px; background: linear-gradient(180deg, #FEF3C7 0%, #D97706 100%); border: 1px solid #D97706; }
+.podium-block { width: 100%; border-radius: 8px 8px 0 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 12px; border: 1px solid transparent; border-bottom: none; position: relative; }
+.p-rank-1 .podium-block { background: linear-gradient(180deg, var(--yellow-light) 0%, white 100%); border-color: var(--yellow-dark); height: 110px; }
+.p-rank-2 .podium-block { background: linear-gradient(180deg, var(--gray-100) 0%, white 100%); border-color: var(--gray-200); height: 80px; }
+.p-rank-3 .podium-block { background: linear-gradient(180deg, var(--orange-light) 0%, white 100%); border-color: var(--orange); height: 60px; }
+.podium-rank-lbl { font-size: 24px; font-weight: 700; font-family: var(--mono); color: var(--gray-900); opacity: 0.2; line-height: 1; }
 
-/* ── LEADERBOARD TABLE ── */
-.lb-table { background: white; border: var(--border); border-radius: var(--radius-lg); overflow: hidden; }
-.lb-table-header { display: grid; grid-template-columns: 40px 1fr 110px 80px 60px; padding: 8px 20px; background: var(--gray-50); border-bottom: var(--border); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--gray-500); align-items: center; gap: 8px; }
-.lb-row { display: grid; grid-template-columns: 40px 1fr 110px 80px 60px; padding: 12px 20px; border-bottom: var(--border); align-items: center; gap: 8px; cursor: pointer; transition: background 0.1s; position: relative; }
-.lb-row:last-child { border-bottom: none; }
-.lb-row:hover { background: var(--gray-50); }
-.lb-row.is-you { background: #FFFBEB; }
-.lb-row.is-you:hover { background: #FEF9E0; }
-.lb-rank { font-size: 14px; font-weight: 600; color: var(--gray-500); font-family: var(--mono); text-align: center; }
-.lb-rank.top-1 { color: #D97706; }
-.lb-rank.top-2 { color: var(--gray-500); }
-.lb-rank.top-3 { color: #B45309; }
-.lb-athlete { display: flex; align-items: center; gap: 10px; }
-.lb-av { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0; }
-.lb-name { font-size: 14px; font-weight: 600; color: var(--gray-900); }
-.lb-detail { font-size: 12px; color: var(--gray-500); margin-top: 1px; }
-.lb-score-cell { text-align: right; }
-.lb-score-num { font-size: 14px; font-weight: 600; color: var(--gray-900); font-family: var(--mono); }
-.lb-score-lbl { font-size: 11px; color: var(--gray-500); }
-.lb-trend-cell { display: flex; justify-content: center; }
-.trend-chip { font-size: 11px; font-family: var(--mono); font-weight: 500; padding: 2px 7px; border-radius: 5px; display: flex; align-items: center; gap: 2px; }
-.trend-up { background: #EAF3DE; color: #3B6D11; }
-.trend-dn { background: #FCEBEB; color: #A32D2D; }
-.trend-eq { background: var(--gray-100); color: var(--gray-500); }
-.you-tag { position: absolute; right: 20px; top: 50%; transform: translateY(-50%); font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: var(--yellow-light); color: #7a5c00; border: 1px solid #fde68a; }
-.lb-activity-bar { height: 4px; background: var(--gray-100); border-radius: 2px; margin-top: 4px; overflow: hidden; }
-.lb-activity-fill { height: 100%; border-radius: 2px; background: var(--gray-300); }
-.lb-load-btn { width: 100%; padding: 12px; border: none; background: transparent; color: var(--gray-500); font-size: 13px; cursor: pointer; border-top: var(--border); transition: background 0.1s; font-family: var(--font); }
-.lb-load-btn:hover { background: var(--gray-50); color: var(--gray-700); }
+.you-tag { display: inline-block; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 10px; background: var(--yellow-dark); color: var(--gray-900); margin-left: 6px; vertical-align: middle; line-height: 1; }
+.podium-name-row .you-tag { flex-shrink: 0; background: var(--gray-900); color: white; border: 1px solid white; }
 
-/* ── RIGHT SIDEBAR ── */
+.board-list { background: white; }
+.list-row { display: flex; align-items: center; padding: 12px 24px; border-top: var(--border); cursor: pointer; transition: background 0.1s; }
+.list-row:hover { background: var(--gray-50); }
+.list-row.is-you { background: var(--yellow-light); }
+.list-row.is-you:hover { background: var(--yellow-light); }
+
+.list-rank { width: 40px; font-family: var(--mono); font-size: 14px; font-weight: 600; color: var(--gray-500); text-align: center; margin-right: 12px; }
+.list-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--gray-200); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; margin-right: 12px; flex-shrink: 0; color: var(--gray-700); }
+.list-info { flex: 1; min-width: 0; }
+.list-name { font-size: 14px; font-weight: 600; color: var(--gray-900); display: flex; align-items: center; gap: 6px; min-width: 0; }
+.list-name-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.list-name .you-tag { flex-shrink: 0; margin-left: 0; }
+.list-acts { font-size: 12px; color: var(--gray-500); margin-top: 1px; }
+.list-pts { text-align: right; margin-left: 12px; }
+.list-pts-val { font-size: 15px; font-weight: 600; color: var(--gray-900); font-family: var(--mono); }
+.list-pts-lbl { font-size: 11px; color: var(--gray-500); }
+
+.list-break { padding: 8px 24px; text-align: center; color: var(--gray-400); font-size: 18px; letter-spacing: 4px; background: var(--gray-50); border-top: var(--border); line-height: 1; }
+.unranked-state { padding: 24px; text-align: center; border-top: var(--border); background: var(--gray-50); }
+.unranked-title, .empty-title { color: var(--gray-900); font-size: 14px; font-weight: 600; }
+.unranked-copy, .empty-copy { color: var(--gray-500); font-size: 13px; margin-top: 4px; }
+.empty-state { padding: 60px 24px; text-align: center; width: 100%; }
+
 .right-col { display: flex; flex-direction: column; gap: 14px; }
-/* Mobile: the single "Active challenges" rail card would stack below the whole
-   leaderboard where nobody sees it; its content is the /challenges page itself,
-   which stays reachable via the feed's Quick actions card — hide it (CSS-only,
-   same rationale as the /challenges rail hide). */
-@media (max-width:768px){
-  body:has(.bottom-nav) .right-col{display:none}
-}
+@media (max-width:768px){ body:has(.bottom-nav) .right-col{display:none} }
 .side-card { background: white; border: var(--border); border-radius: var(--radius-lg); overflow: hidden; }
 .side-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--gray-500); padding: 14px 16px 8px; }
-
-/* Challenges */
 .challenge-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: var(--border); cursor: pointer; transition: background 0.1s; }
 .challenge-row:last-child { border-bottom: none; }
 .challenge-row:hover { background: var(--gray-50); }
-.ch-icon { width: 34px; height: 34px; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+.ch-icon { width: 34px; height: 34px; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--gray-900); flex-shrink: 0; }
 .ch-info { flex: 1; min-width: 0; }
 .ch-name { font-size: 13px; font-weight: 600; color: var(--gray-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ch-bar-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
@@ -162,22 +109,45 @@ document.addEventListener('DOMContentLoaded', function(){
 .ch-bar-fill { height: 100%; border-radius: 2px; }
 .ch-pct { font-size: 10px; font-family: var(--mono); color: var(--gray-400); flex-shrink: 0; }
 
-/* ── TOAST ── */
+.hpw-link{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--gray-500);text-decoration:none}
+.hpw-link:hover{color:var(--gray-700);text-decoration:underline}
 
-/* ── ANIMATIONS ── */
-@keyframes fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-.fade-in { animation: fade-in 0.25s ease forwards; }
+@media (max-width: 480px) {
+    .board-podium { padding: 16px 16px 0 16px; background: white; }
+    .podium-layout { flex-direction: column; align-items: stretch; gap: 8px; }
+    .podium-layout.p-3 .p-rank-2 { order: 0; }
+    .podium-col { flex-direction: row; align-items: center; background: white; border: var(--border); border-radius: var(--radius); padding: 12px; }
+    .podium-col:hover { transform: none; background: var(--gray-50); }
+    .podium-col.is-you { background: var(--yellow-light); border-color: var(--yellow-dark); }
+    .podium-col.is-you:hover { background: var(--yellow-light); }
+    .podium-block { display: none; }
+    .podium-avatar-wrap { margin-bottom: 0; margin-right: 12px; }
+    .podium-avatar { border-width: 2px; box-shadow: none; }
+    .p-rank-1 .podium-avatar { width: 44px; height: 44px; font-size: 14px; }
+    .p-rank-2 .podium-avatar, .p-rank-3 .podium-avatar { width: 40px; height: 40px; font-size: 13px; }
+    .podium-info { align-items: flex-start; margin-bottom: 0; flex: 1; min-width: 0; }
+    .podium-name-row { justify-content: flex-start; }
+    .podium-name { text-align: left; }
+    .podium-pts { font-size: 14px; margin-top: 1px; }
+    .podium-acts { display: none; }
+    .podium-name-row .you-tag { border: none; background: var(--yellow-dark); color: var(--gray-900); }
+    .podium-col::before { content: attr(data-rank); font-family: var(--mono); font-size: 14px; font-weight: 600; color: var(--gray-500); width: 32px; text-align: center; flex-shrink: 0; margin-right: 8px; }
+    .p-rank-1::before { color: var(--yellow-dark); }
+    .p-rank-2::before { color: var(--gray-500); }
+    .p-rank-3::before { color: var(--orange); }
+    .list-row { padding: 12px 16px; }
+    .list-break { padding: 8px 16px; }
+    .unranked-state { padding: 20px 16px; }
+    .list-rank { width: 32px; margin-right: 8px; }
+}
 
-/* ── FOOTER ── */
-/* ── APP SHELL ── */
+.main { max-width: 1280px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: 1fr 296px; gap: 20px; align-items: start; }
+/* shell */
 .topbar-search { display: flex; align-items: center; gap: 8px; background: var(--gray-50); border: var(--border); border-radius: 7px; padding: 6px 12px; width: 260px; }
 .topbar-search input { background: none; border: none; outline: none; font-size: 13px; color: var(--gray-700); width: 100%; }
 .topbar-search input::placeholder { color: var(--gray-400); }
 .icon-btn { width: 44px; height: 44px; border-radius: 8px; border: var(--border); background: white; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 19px; position: relative; }
 .main { overflow-y: auto; }
-/* "ⓘ How points work" link — same treatment on leaderboards, challenges and profile. */
-.hpw-link{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--gray-500);text-decoration:none}
-.hpw-link:hover{color:var(--gray-700);text-decoration:underline}
 </style>
 </head>
 <body>
@@ -230,12 +200,10 @@ document.addEventListener('DOMContentLoaded', function(){
 </aside>
 
 <main class="main">
-
-<!-- PAGE HEADER -->
 <div class="page-header">
   <div class="page-header-inner">
     <div class="page-header-left">
-      <h1>Leaderboards 🏆</h1>
+      <h1>Leaderboards</h1>
       <p>Rankings across your sports — the weekly board starts fresh every Monday in your timezone.</p>
       <a class="hpw-link" href="/html/how-points-work" style="margin-top:6px">ⓘ How points work</a>
     </div>
@@ -249,158 +217,31 @@ document.addEventListener('DOMContentLoaded', function(){
   </div>
 </div>
 
-<!-- SPORT TABS BAR -->
-<div class="sport-bar">
-  <div class="sport-bar-inner">
-    <button class="sport-nav-tab active" data-sport="all" onclick="setSport('all', this)" id="sport-tab-all">
-      🏅 All my sports
-    </button>
-    <script>
-    // Sport tabs rendered from the sports registry. Session ③: the tab set is
-    // the viewer's OWN profile sports (ARENAS_DATA.sports, server-injected) —
-    // same derivation as the feed filter pills, so registry additions appear
-    // automatically for the athletes who do them. Users who haven't picked
-    // sports yet fall back to the historic curated trio.
-    (function () {
-      var mine = (window.ARENAS_DATA && window.ARENAS_DATA.sports) || [];
-      var by0 = window.ARENAS_SPORTS_BY_ID || {};
-      var TAB_SPORTS = mine.filter(function (id) { return by0[id]; });
-      if (!TAB_SPORTS.length) TAB_SPORTS = ['running', 'cycling', 'climbing'];
-      var allTab = document.getElementById('sport-tab-all');
-      if (!allTab) return;
-      var by = window.ARENAS_SPORTS_BY_ID || {};
-      TAB_SPORTS.slice().reverse().forEach(function (id) {
-        var s = by[id]; if (!s) return;
-        allTab.insertAdjacentHTML('afterend',
-          '<button class="sport-nav-tab" data-sport="' + s.id + '" onclick="setSport(\'' + s.id + '\', this)">' + s.emoji + ' ' + s.label + '</button>');
-      });
-    })();
-    </script>
-    <div style="flex:1"></div>
-    <div class="sport-bar-right">
-      <select class="scope-select" onchange="setScope(this.value)">
-        <option value="platform">🌍 Everyone</option>
-        <option value="following">👥 People you follow</option>
-        <option value="club">🏠 My club</option>
-      </select>
-      <select class="metric-select" id="metric-select" onchange="setMetric(this.value)">
-        <option value="pts">Ranked by: Points</option>
-        <option value="acts">Ranked by: Activities</option>
-      </select>
+<div class="board-container">
+  <div class="board-podium" id="board-podium"></div>
+  <div class="board-list" id="board-list"></div>
+</div>
+
+<div class="right-col">
+  <div class="side-card">
+    <div class="side-title">Active challenges</div>
+    <div id="active-challenges-list">
+      <div style="padding:16px;text-align:center;color:var(--gray-400);font-size:12px">Loading…</div>
+    </div>
+    <div style="padding:10px 16px">
+      <button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:13px" onclick="nav('/challenges')">Browse all challenges →</button>
     </div>
   </div>
 </div>
-
-  <div style="display:flex;flex-direction:column;gap:14px">
-
-    <!-- Your position banner -->
-    <div class="your-banner" id="your-banner">
-      <div class="yb-avatar">·</div>
-      <div class="yb-info">
-        <div class="yb-name">Jamie K.</div>
-        <div class="yb-sub" id="yb-sport-label">Running · Cycling · Climbing · Advanced</div>
-      </div>
-      <div class="yb-stats">
-        <div class="yb-stat">
-          <div class="yb-stat-num" id="yb-rank">#4</div>
-          <div class="yb-stat-label">Your rank</div>
-        </div>
-        <div class="yb-stat">
-          <div class="yb-stat-num" id="yb-pts">16,980</div>
-          <div class="yb-stat-label">Points</div>
-        </div>
-        <div class="yb-stat">
-          <div class="yb-stat-num" id="yb-acts">8</div>
-          <div class="yb-stat-label">Activities</div>
-        </div>
-      </div>
-      <div class="yb-progress-wrap">
-        <div class="yb-progress-label">
-          <span id="yb-progress-label">Progress to rank #3</span>
-          <span id="yb-progress-frac" style="font-family:var(--mono)">16,980 / 18,410</span>
-        </div>
-        <div class="yb-progress-bar">
-          <div class="yb-progress-fill" id="yb-fill" style="width:92%"></div>
-        </div>
-        <div class="yb-next-label" id="yb-next">1,430 pts to overtake Alena L. — log one more ride to get there.</div>
-      </div>
-    </div>
-
-    <!-- Podium -->
-    <div class="podium-wrap" id="podium-wrap">
-      <div class="podium-header">
-        <div class="podium-header-left">
-          <div class="podium-sport-icon" id="podium-icon" style="background:#FFF9E0">🏅</div>
-          <div>
-            <div class="podium-title" id="podium-title">All sports — Weekly top 3</div>
-            <div class="podium-subtitle" id="podium-sub">Combined score across Running, Cycling & Climbing · Local</div>
-          </div>
-        </div>
-      </div>
-      <div class="podium-stage" id="podium-stage"></div>
-      <div style="height:1px;background:var(--gray-100);margin:0 20px;margin-top:0"></div>
-    </div>
-
-    <!-- Full leaderboard table -->
-    <div class="lb-table" id="lb-table">
-      <div class="table-scroll"><div class="table-scroll-inner">
-      <div class="lb-table-header">
-        <div style="text-align:center">Rank</div>
-        <div>Athlete</div>
-        <div style="text-align:right" id="col-header">Points</div>
-        <div style="text-align:center">Change</div>
-        <div></div>
-      </div>
-      <div id="lb-rows"></div>
-      </div></div>
-      <button class="lb-load-btn" onclick="loadMore()">↓ Show more athletes</button>
-    </div>
-
-  </div>
-
-  <!-- RIGHT SIDEBAR -->
-  <div class="right-col">
-
-    <!-- Challenges (real data — fetched from GET /api/challenges on load) -->
-    <div class="side-card">
-      <div class="side-title">Active challenges</div>
-      <div id="active-challenges-list">
-        <div style="padding:16px;text-align:center;color:var(--gray-400);font-size:12px">Loading…</div>
-      </div>
-      <div style="padding:10px 16px">
-        <button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:13px" onclick="nav('/challenges')">Browse all challenges →</button>
-      </div>
-    </div>
-
-  </div>
 </main>
 
 
 <div class="toast" id="toast"></div>
 
 <script>
-// ── ATHLETE LEADERBOARD (live data) ──
-// Replaces the previous mock dataset. Reuses the exact same DOM ids / CSS classes
-// the static markup expected, but renders rankings fetched from the server.
-// Scope select is repurposed into Platform / Following / My club (3 endpoints);
-// period + sport drive query params; metric (Points / Activities) re-sorts client
-// side. There are no historical rank snapshots, so the Change column is always "—".
 (function () {
   var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
-  var data = window.ARENAS_DATA || {};
-  var myId = data.userId || null;
-
-  var avColors = [
-    { bg: '#FEF9C3', c: '#854D0E' }, { bg: '#FCE7F3', c: '#9D174D' },
-    { bg: '#E0F2FE', c: '#0369A1' }, { bg: '#F5F3FF', c: '#5B21B6' },
-    { bg: '#ECFDF5', c: '#065F46' }, { bg: '#FAEEDA', c: '#633806' },
-    { bg: '#FFF7ED', c: '#9A3412' }, { bg: '#FBEAF0', c: '#72243E' }
-  ];
-  var sportIcons = window.ARENAS_SPORT_ICONS || {}; // derived from the sports registry
-  var periodLabel = { week: 'Weekly', month: 'Monthly', alltime: 'All time' };
-  var scopeLabel = { platform: 'Everyone', following: 'People you follow', club: (data.clubName || 'Your club') };
-
-  var state = { scope: 'platform', period: 'week', sport: 'all', metric: 'points' };
+  var state = { period: 'week' };
   var cache = [];
 
   function esc(s) {
@@ -411,216 +252,156 @@ document.addEventListener('DOMContentLoaded', function(){
   function initials(name) {
     return String(name || 'A').trim().split(/\s+/).map(function (w) { return w[0]; }).join('').slice(0, 2).toUpperCase();
   }
-  function cap(s) { return String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1); }
   function apiPeriod(p) { return p === 'alltime' ? 'all' : p; }
   function fmt(n) { return (Number(n) || 0).toLocaleString(); }
 
-  function metricKey() { return state.metric === 'activities' ? 'activityCount' : 'points'; }
-  function metricName() { return state.metric === 'activities' ? 'Activities' : 'Points'; }
-
-  function sorted() {
-    var key = metricKey();
-    return cache.slice().sort(function (a, b) {
-      return (b[key] || 0) - (a[key] || 0);
-    }).map(function (u, i) {
-      var copy = {};
-      for (var k in u) copy[k] = u[k];
-      copy._rank = i + 1;
-      copy._val = u[key] || 0;
-      return copy;
-    });
-  }
+  window.setPeriod = function(p, btn) {
+    document.querySelectorAll('.period-tab').forEach(function(e) { e.classList.remove('active'); });
+    if (btn) btn.classList.add('active');
+    state.period = p;
+    load();
+  };
 
   function load() {
-    var ep = state.scope === 'platform' ? '/api/leaderboard/platform'
-      : state.scope === 'following' ? '/api/leaderboard/following'
-        : '/api/leaderboard/club';
-    var qs = 'period=' + encodeURIComponent(apiPeriod(state.period)) + '&sport=' + encodeURIComponent(state.sport);
-    fetch(B + ep + '?' + qs)
+    var qs = 'period=' + encodeURIComponent(apiPeriod(state.period));
+    fetch(B + '/api/leaderboard/platform?' + qs)
       .then(function (r) { return r.json(); })
       .then(function (j) { cache = (j && j.leaderboard) || []; renderAll(); })
       .catch(function () { cache = []; renderAll(); });
   }
 
+  function renderPodiumCol(row, displayRank) {
+    var avContent = row.avatar_url && window.avatarHtml
+      ? window.avatarHtml.content(row.avatar_url, row.name)
+      : initials(row.name);
+
+    var clickAttr = window.athleteLinkAttrs ? window.athleteLinkAttrs(row.userId, true) : '';
+
+    return '<div class="podium-col p-rank-' + displayRank + (row.isMe ? ' is-you' : '') + '"' + clickAttr + ' data-rank="' + row.rank + '">' +
+             '<div class="podium-avatar-wrap">' +
+                 '<div class="podium-avatar">' + avContent + '</div>' +
+             '</div>' +
+             '<div class="podium-info">' +
+                 '<div class="podium-name-row"><div class="podium-name">' + esc(row.name) + '</div>' +
+                   (row.isMe ? '<span class="you-tag">YOU</span>' : '') + '</div>' +
+                 '<div class="podium-pts">' + fmt(row.points) + ' pts</div>' +
+                 '<div class="podium-acts">' + fmt(row.activityCount) + ' activities</div>' +
+             '</div>' +
+             '<div class="podium-block">' +
+                 '<div class="podium-rank-lbl">' + row.rank + '</div>' +
+             '</div>' +
+           '</div>';
+  }
+
+  function renderListRow(row) {
+    var avContent = row.avatar_url && window.avatarHtml
+      ? window.avatarHtml.content(row.avatar_url, row.name)
+      : initials(row.name);
+
+    var clickAttr = window.athleteLinkAttrs ? window.athleteLinkAttrs(row.userId, true) : '';
+
+    return '<div class="list-row' + (row.isMe ? ' is-you' : '') + '"' + clickAttr + '>' +
+             '<div class="list-rank">' + row.rank + '</div>' +
+             '<div class="list-avatar">' + avContent + '</div>' +
+             '<div class="list-info">' +
+                 '<div class="list-name"><span class="list-name-text">' + esc(row.name) + '</span>' +
+                   (row.isMe ? '<span class="you-tag">YOU</span>' : '') + '</div>' +
+                 '<div class="list-acts">' + fmt(row.activityCount) + ' activities</div>' +
+             '</div>' +
+             '<div class="list-pts">' +
+                 '<div class="list-pts-val">' + fmt(row.points) + '</div>' +
+                 '<div class="list-pts-lbl">pts</div>' +
+             '</div>' +
+           '</div>';
+  }
+
   function renderAll() {
-    var rows = sorted();
-    renderBanner(rows);
-    renderPodium(rows);
-    renderRows(rows);
+    var rows = cache.slice();
+    var viewer = null;
+    var viewerIndex = -1;
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].isMe) {
+        viewer = rows[i];
+        viewerIndex = i;
+        break;
+      }
+    }
 
-    var ch = document.getElementById('col-header');
-    if (ch) ch.textContent = metricName();
+    var podiumCount = Math.min(rows.length, 3);
+    var podiumRows = rows.slice(0, podiumCount);
 
-    var meta = state.sport === 'all'
-      ? { icon: '🏅', bg: '#FFF9E0', label: 'All sports' }
-      : { icon: sportIcons[state.sport] || '🏅', bg: '#FFF9E0', label: (window.ARENAS_SPORTS_BY_ID && window.ARENAS_SPORTS_BY_ID[state.sport] && window.ARENAS_SPORTS_BY_ID[state.sport].label) || cap(state.sport) };
-    var pi = document.getElementById('podium-icon');
-    if (pi) { pi.textContent = meta.icon; pi.style.background = meta.bg; }
-    var pt = document.getElementById('podium-title');
-    if (pt) pt.textContent = meta.label + ' — ' + periodLabel[state.period] + ' top 3';
-    var ps = document.getElementById('podium-sub');
-    if (ps) ps.textContent = scopeLabel[state.scope] + ' · ranked by ' + metricName().toLowerCase();
-  }
+    var listRows = [];
+    if (rows.length > 3) listRows.push(rows[3]);
+    if (rows.length > 4) listRows.push(rows[4]);
 
-  function renderBanner(rows) {
-    var set = function (id, v) { var e = document.getElementById(id); if (e) e.textContent = v; };
-    var nameEl = document.querySelector('.yb-name');
-    if (nameEl && data.profile) nameEl.textContent = data.profile.name || 'You';
-    var avEl = document.querySelector('.yb-avatar');
-    if (avEl && data.profile && window.avatarHtml) avEl.innerHTML = window.avatarHtml.content(data.profile.avatar_url || null, data.profile.name || 'You');
+    var needsViewer = false;
+    var visualBreak = false;
 
-    var me = null;
-    for (var i = 0; i < rows.length; i++) { if (myId && rows[i].userId === myId) { me = rows[i]; break; } }
+    if (viewer && viewerIndex > 4) {
+      needsViewer = true;
+      visualBreak = true;
+    }
 
-    if (!me) {
-      set('yb-rank', '—'); set('yb-pts', '0'); set('yb-acts', '0');
-      set('yb-sport-label', '');
-      set('yb-progress-label', 'No ranking yet'); set('yb-progress-frac', '');
-      var f0 = document.getElementById('yb-fill'); if (f0) f0.style.width = '0%';
-      set('yb-next', 'Log an activity to join the leaderboard.');
+    var pStage = document.getElementById('board-podium');
+    var lStage = document.getElementById('board-list');
+
+    if (rows.length === 0) {
+      var emptyCopy = state.period === 'week'
+        ? 'No qualifying activities have been logged this week.'
+        : state.period === 'month'
+          ? 'No qualifying activities have been logged this month.'
+          : 'No qualifying activities have been logged yet.';
+      pStage.innerHTML =
+        '<div class="empty-state">' +
+          '<div class="empty-title">No rankings yet</div>' +
+          '<div class="empty-copy">' + emptyCopy + '</div>' +
+        '</div>';
+      pStage.className = 'board-podium is-empty';
+      lStage.innerHTML = renderNotRanked();
       return;
     }
-    set('yb-rank', '#' + me._rank);
-    set('yb-pts', fmt(state.metric === 'activities' ? me.activityCount : me.points));
-    set('yb-acts', me.activityCount || 0);
-    set('yb-sport-label', (me.sports && me.sports.length)
-      ? me.sports.map(cap).join(' · ')
-      : '');
+    pStage.className = 'board-podium';
 
-    var ahead = null;
-    for (var j = 0; j < rows.length; j++) { if (rows[j]._rank === me._rank - 1) { ahead = rows[j]; break; } }
-    if (ahead) {
-      var gap = ahead._val - me._val;
-      var pct = ahead._val > 0 ? Math.round((me._val / ahead._val) * 100) : 0;
-      set('yb-progress-label', 'Progress to rank #' + ahead._rank);
-      set('yb-progress-frac', fmt(me._val) + ' / ' + fmt(ahead._val));
-      var f1 = document.getElementById('yb-fill'); if (f1) f1.style.width = Math.min(100, pct) + '%';
-      set('yb-next', gap > 0
-        ? fmt(gap) + ' ' + (state.metric === 'activities' ? 'activities' : 'points') + ' to overtake ' + ahead.name + '.'
-        : "You're tied — one more push takes the spot.");
-    } else {
-      set('yb-progress-label', 'Top of the leaderboard');
-      set('yb-progress-frac', '');
-      var f2 = document.getElementById('yb-fill'); if (f2) f2.style.width = '100%';
-      set('yb-next', "You're #1 — nobody ahead of you. 🏆");
+    var pHtml = '';
+    podiumRows.forEach(function(r, idx) {
+      pHtml += renderPodiumCol(r, idx + 1);
+    });
+
+    pStage.innerHTML = '<div class="podium-layout p-' + podiumRows.length + '">' + pHtml + '</div>';
+
+    var lHtml = '';
+    listRows.forEach(function(r) { lHtml += renderListRow(r); });
+
+    if (needsViewer) {
+      if (visualBreak) {
+        lHtml += '<div class="list-break"><span>Your position</span></div>';
+      }
+      lHtml += renderListRow(viewer);
     }
-  }
 
-  function renderPodium(rows) {
-    var wrap = document.getElementById('podium-wrap');
-    var stage = document.getElementById('podium-stage');
-    if (!stage) return;
-    if (rows.length < 3) { if (wrap) wrap.style.display = 'none'; stage.innerHTML = ''; return; }
-    if (wrap) wrap.style.display = '';
-    var top3 = rows.slice(0, 3);
-    var order = [top3[1], top3[0], top3[2]];
-    var places = ['🥈', '🥇', '🥉'];
-    var blocks = ['block-silver', 'block-gold', 'block-bronze'];
-    var rankCls = ['silver', 'gold', 'bronze'];
-    var colors = [{ bg: '#FCE7F3', c: '#9D174D' }, { bg: '#FEF9C3', c: '#854D0E' }, { bg: '#E0F2FE', c: '#0369A1' }];
-    stage.innerHTML = order.map(function (a, i) {
-      if (!a) return '';
-      var isYou = myId && a.userId === myId;
-      var val = state.metric === 'activities' ? (a._val + ' acts') : fmt(a._val);
-      return '' +
-        '<div class="podium-col fade-in">' +
-        '<div class="place-emoji">' + places[i] + '</div>' +
-        // Leaderboard payloads exclude opted-out athletes server-side, so
-        // everyone listed here has a reachable public profile.
-        '<span' + window.athleteLinkAttrs(a.userId, true) + ' style="display:contents">' +
-        window.avatarHtml(a.avatar_url || null, a.name || 'Athlete', 'podium-avatar ' + rankCls[i], 'background:' + colors[i].bg + ';color:' + colors[i].c) +
-        '</span>' +
-        '<div class="podium-pname"' + window.athleteLinkAttrs(a.userId, true) + '>' + esc(a.name) + (isYou ? ' (you)' : '') + '</div>' +
-        '<div class="podium-ploc">' + (a.location ? esc(a.location) : '—') + '</div>' +
-        '<div class="podium-pscore">' + val + '</div>' +
-        '<div class="podium-pstat">' + (a.activityCount || 0) + ' ' + ((a.activityCount === 1) ? 'activity' : 'activities') + '</div>' +
-        '<div class="podium-block ' + blocks[i] + '"></div>' +
-        '</div>';
-    }).join('');
-  }
-
-  function renderRows(rows) {
-    var el = document.getElementById('lb-rows');
-    if (!el) return;
-    if (!rows.length) {
-      var msg = state.scope === 'following'
-        ? "The people you follow haven't logged anything this period."
-        : state.scope === 'club'
-          ? (data.clubName ? "Your club hasn't logged anything this period." : "You're not part of a club yet.")
-          : 'No activities logged for this period yet.';
-      el.innerHTML = '<div style="text-align:center;padding:48px 24px">' +
-        '<div style="font-size:34px;margin-bottom:10px">🏆</div>' +
-        '<div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:4px">No activity yet</div>' +
-        '<div style="font-size:13px;color:var(--gray-500)">' + msg + '</div></div>';
-      return;
+    if (!viewer) {
+      lHtml += renderNotRanked();
     }
-    var max = rows[0]._val || 1;
-    var rankCls = { 1: 'top-1', 2: 'top-2', 3: 'top-3' };
-    var label = state.metric === 'activities' ? 'activities' : 'points';
-    el.innerHTML = rows.map(function (r, i) {
-      var av = avColors[i % avColors.length];
-      var isYou = myId && r.userId === myId;
-      var pct = Math.round((r._val / max) * 100);
-      var sportTags = (r.sports || []).slice(0, 3).map(function (s) {
-        return sportIcons[s] || '';
-      }).filter(Boolean).join(' ');
-      var detailParts = [];
-      if (r.location) detailParts.push(esc(r.location));
-      detailParts.push((r.activityCount || 0) + ' ' + ((r.activityCount === 1) ? 'activity' : 'activities'));
-      var detail = detailParts.join(' · ') + (sportTags ? ' · ' + sportTags : '');
-      return '' +
-        '<div class="lb-row' + (isYou ? ' is-you' : '') + ' fade-in">' +
-        '<div class="lb-rank ' + (rankCls[r._rank] || '') + '">' + r._rank + '</div>' +
-        '<div class="lb-athlete">' +
-        '<span' + window.athleteLinkAttrs(r.userId, true) + ' style="display:contents">' +
-        window.avatarHtml(r.avatar_url || null, r.name || 'Athlete', 'lb-av', 'background:' + av.bg + ';color:' + av.c) +
-        '</span>' +
-        '<div>' +
-        '<div class="lb-name"' + window.athleteLinkAttrs(r.userId, true) + '>' + esc(r.name) + (isYou ? ' <span style="font-size:10px;color:var(--gray-400);font-weight:400">(you)</span>' : '') + '</div>' +
-        '<div class="lb-detail">' + detail + '</div>' +
-        '<div class="lb-activity-bar"><div class="lb-activity-fill" style="width:' + pct + '%;background:' + (isYou ? '#F59E0B' : 'var(--gray-300)') + '"></div></div>' +
-        '</div>' +
-        '</div>' +
-        '<div class="lb-score-cell">' +
-        '<div class="lb-score-num">' + fmt(r._val) + '</div>' +
-        '<div class="lb-score-lbl">' + label + '</div>' +
-        '</div>' +
-        '<div class="lb-trend-cell"><span class="trend-chip trend-eq">—</span></div>' +
-        '<div>' + (isYou ? '<span class="you-tag">you</span>' : '') + '</div>' +
-        '</div>';
-    }).join('');
+
+    lStage.innerHTML = lHtml;
   }
 
-  window.setPeriod = function (period, el) {
-    state.period = period;
-    document.querySelectorAll('.period-tab').forEach(function (t) { t.classList.remove('active'); });
-    if (el) el.classList.add('active');
-    load();
-    showToast('Showing ' + (periodLabel[period] || period).toLowerCase() + ' rankings');
-  };
-  window.setSport = function (sport, el) {
-    state.sport = sport;
-    document.querySelectorAll('.sport-nav-tab').forEach(function (t) { t.classList.remove('active'); });
-    if (el) el.classList.add('active');
-    load();
-  };
-  window.setScope = function (val) {
-    state.scope = val;
-    load();
-    showToast('Showing ' + (scopeLabel[val] || val) + ' rankings');
-  };
-  window.setMetric = function (val) {
-    state.metric = (val === 'acts' || val === 'activities') ? 'activities' : 'points';
-    renderAll();
-  };
-  window.loadMore = function () { showToast('All athletes are shown.'); };
-  window.showToast = function (msg) {
-    var t = document.getElementById('toast');
-    if (!t) return;
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(function () { t.classList.remove('show'); }, 2800);
-  };
+  function renderNotRanked() {
+    var title = state.period === 'week'
+      ? 'Not ranked this week'
+      : state.period === 'month'
+        ? 'Not ranked this month'
+        : 'Not ranked yet';
+    var copy = state.period === 'week'
+      ? 'Log an activity this week to join the overall leaderboard.'
+      : state.period === 'month'
+        ? 'Log an activity this month to join the overall leaderboard.'
+        : 'Log your first activity to join the overall leaderboard.';
+    return '<div class="unranked-state" data-viewer-ranked="false">' +
+      '<div class="unranked-title">' + title + '</div>' +
+      '<div class="unranked-copy">' + copy + '</div>' +
+    '</div>';
+  }
 
   load();
 })();
@@ -755,7 +536,7 @@ document.addEventListener('DOMContentLoaded', function(){
   // bg tile tints are NOT part of the distinguishability contract — the emoji
   // carries identity on the tile — so they stay near-indistinguishable pales.
   var CHALLENGE_ACCENTS = {
-    running:       { bg: '#FFF7ED', bar: '#EA580C' },
+    running:       { bg: 'var(--orange-light)', bar: '#EA580C' },
     cycling:       { bg: '#EFF6FF', bar: '#2563EB' },
     climbing:      { bg: '#F5F3FF', bar: '#A78BFA' },
     swimming:      { bg: '#ECFEFF', bar: '#14B8A6' },
@@ -767,7 +548,7 @@ document.addEventListener('DOMContentLoaded', function(){
     pilates:       { bg: '#FDF2F8', bar: '#DB2777' },
     golf:          { bg: '#ECFDF5', bar: '#34D399' },
     hockey:        { bg: '#F1F5F9', bar: '#0F172A' },
-    basketball:    { bg: '#FFEDD5', bar: '#9A3412' },
+    basketball:    { bg: 'var(--orange)', bar: '#9A3412' },
     pickleball:    { bg: '#E0F2FE', bar: '#22D3EE' }
   };
   var sportStyle = {};
