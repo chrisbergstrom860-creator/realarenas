@@ -1,7 +1,8 @@
 // One-shot seeded verification of challenge creator edit/delete routes.
-// Creates 4 test users + 5 challenges, runs the server matrix over real
-// logged-in HTTP sessions, prints PASS/FAIL. Cleanup: test-data-sweep.js.
+// Creates 4 test users + 6 challenges, runs the server matrix over real
+// logged-in HTTP sessions, then proves its complete fixture manifest is gone.
 import { createClient } from '@supabase/supabase-js';
+import fs from 'node:fs';
 
 const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const BASE = `https://${process.env.REPLIT_DEV_DOMAIN}/html`;
@@ -13,11 +14,33 @@ const emails = {
   stranger: 'edstranger@arenas-test.dev'
 };
 
-let failures = 0;
+let failures = 0, cleanupFailures = 0;
 const check = (name, ok, detail) => {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${ok ? '' : '  → ' + JSON.stringify(detail)}`);
   if (!ok) failures++;
 };
+const manifest = {
+  users: [],
+  challenges: [],
+  participants: [],
+  activities: [],
+  notifications: [],
+  invites: []
+};
+const MANIFEST_PATH = '/tmp/verify-challenge-edit-delete-manifest.json';
+const saveManifest = () => fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2));
+const cleanupCheck = (name, ok, detail) => {
+  console.log(`${ok ? 'CLEAN' : 'CLEANUP FAIL'}  ${name}${ok ? '' : '  → ' + JSON.stringify(detail)}`);
+  if (!ok) cleanupFailures++;
+};
+async function checkedDelete(name, query) {
+  try {
+    const { error } = await query;
+    cleanupCheck(name, !error, error && error.message);
+  } catch (error) {
+    cleanupCheck(name, false, error.message);
+  }
+}
 
 const users = {}; // key -> { id, cookie }
 async function mkUser(key) {
@@ -27,6 +50,8 @@ async function mkUser(key) {
   });
   if (error) throw new Error(key + ': ' + error.message);
   users[key] = { id: data.user.id };
+  manifest.users.push({ key, id: data.user.id, email: emails[key] });
+  saveManifest();
 }
 async function login(key) {
   const r = await fetch(BASE + '/auth/login', {
@@ -58,8 +83,14 @@ async function mkChallenge(fields, participantKeys) {
     description: null, club_id: null, ...fields
   }).select().single();
   if (error) throw new Error(error.message);
+  manifest.challenges.push(data.id);
+  saveManifest();
   for (const k of participantKeys) {
-    await admin.from('challenge_participants').insert({ challenge_id: data.id, user_id: users[k].id });
+    const row = { challenge_id: data.id, user_id: users[k].id };
+    const inserted = await admin.from('challenge_participants').insert(row);
+    if (inserted.error) throw new Error('participant ' + k + ': ' + inserted.error.message);
+    manifest.participants.push(row);
+    saveManifest();
   }
   return data;
 }
@@ -69,25 +100,174 @@ const notifCount = async (key, title) => {
   return (data || []).filter((n) => !title || n.title === title).length;
 };
 
-for (const k of Object.keys(emails)) { await mkUser(k); await login(k); }
-console.log('MANIFEST users:', JSON.stringify(Object.fromEntries(Object.entries(users).map(([k, v]) => [k, v.id]))));
+async function captureGeneratedRows() {
+  const challengeIds = manifest.challenges;
+  const userIds = manifest.users.map((row) => row.id);
+  if (challengeIds.length) {
+    try {
+      const invites = await admin.from('challenge_invites').select('challenge_id, invitee_id, inviter_id').in('challenge_id', challengeIds);
+      cleanupCheck('capture generated challenge invites', !invites.error, invites.error && invites.error.message);
+      if (!invites.error) manifest.invites = invites.data || [];
+    } catch (error) {
+      cleanupCheck('capture generated challenge invites', false, error.message);
+    }
+  }
+  if (userIds.length) {
+    try {
+      const notifications = await admin.from('notifications').select('id, user_id, actor_id, type, title')
+        .eq('type', 'challenge')
+        .or(`user_id.in.(${userIds.join(',')}),actor_id.in.(${userIds.join(',')})`);
+      cleanupCheck('capture generated challenge notifications', !notifications.error, notifications.error && notifications.error.message);
+      if (!notifications.error) manifest.notifications = notifications.data || [];
+    } catch (error) {
+      cleanupCheck('capture generated challenge notifications', false, error.message);
+    }
+  }
+  try {
+    saveManifest();
+  } catch (error) {
+    cleanupCheck('persist generated-row manifest', false, error.message);
+  }
+}
 
-const cb = users.creator.id;
-const X = await mkChallenge({ created_by: cb, title: 'ED-X started multi', start_date: iso(-2), end_date: iso(10), visibility: 'public' }, ['creator', 'p1', 'p2']);
-const Y = await mkChallenge({ created_by: cb, title: 'ED-Y prestart', start_date: iso(2), end_date: iso(12), visibility: 'public' }, ['creator', 'p1']);
-const Z = await mkChallenge({ created_by: cb, title: 'ED-Z solo', start_date: iso(-1), end_date: iso(9), visibility: 'public' }, ['creator']);
-const W = await mkChallenge({ created_by: cb, title: 'ED-W discover', start_date: iso(-1), end_date: iso(9), visibility: 'public' }, ['creator', 'p2']);
-const V = await mkChallenge({ created_by: cb, title: 'ED-V private solo', start_date: iso(-1), end_date: iso(9), visibility: 'private' }, ['creator']);
-// Q: live challenge the CREATOR has personally completed (goal 100km, creator
-// logs 150km) while it remains live for p1 — mutations must gate on
-// challenge-level end_date only, never per-viewer completion.
-const Q = await mkChallenge({ created_by: cb, title: 'ED-Q creator-done live', start_date: iso(-1), end_date: iso(9), visibility: 'public' }, ['creator', 'p1']);
-await admin.from('activities').insert({ user_id: cb, sport: 'running', distance: '150 km', duration: '01:00:00', date: new Date().toISOString(), title: 'ED seed long run' });
-console.log('MANIFEST challenges:', JSON.stringify([X.id, Y.id, Z.id, W.id, V.id, Q.id]));
+async function verifyNoResidue() {
+  const challengeIds = manifest.challenges;
+  const userIds = manifest.users.map((row) => row.id);
+  const activityIds = manifest.activities;
+  const notificationIds = manifest.notifications.map((row) => row.id);
+  if (challengeIds.length) {
+    const challenges = await admin.from('challenges').select('id').in('id', challengeIds);
+    cleanupCheck('manifest challenges absent', !challenges.error && !(challenges.data || []).length, challenges);
+    const participants = await admin.from('challenge_participants').select('challenge_id,user_id').in('challenge_id', challengeIds);
+    cleanupCheck('manifest participants absent', !participants.error && !(participants.data || []).length, participants);
+    const invites = await admin.from('challenge_invites').select('challenge_id,invitee_id').in('challenge_id', challengeIds);
+    cleanupCheck('manifest/generated challenge invites absent', !invites.error && !(invites.data || []).length, invites);
+  }
+  if (activityIds.length) {
+    const activities = await admin.from('activities').select('id').in('id', activityIds);
+    cleanupCheck('manifest activities absent', !activities.error && !(activities.data || []).length, activities);
+  }
+  if (userIds.length) {
+    const userActivities = await admin.from('activities').select('id,user_id').in('user_id', userIds);
+    cleanupCheck('fixture-user activities absent',
+      !userActivities.error && !(userActivities.data || []).length, userActivities);
+    const userParticipants = await admin.from('challenge_participants').select('challenge_id,user_id').in('user_id', userIds);
+    cleanupCheck('fixture-user participants absent',
+      !userParticipants.error && !(userParticipants.data || []).length, userParticipants);
+    const userInvites = await admin.from('challenge_invites').select('challenge_id,invitee_id,inviter_id')
+      .or(`invitee_id.in.(${userIds.join(',')}),inviter_id.in.(${userIds.join(',')})`);
+    cleanupCheck('fixture-user challenge invites absent',
+      !userInvites.error && !(userInvites.data || []).length, userInvites);
+    const userNotifications = await admin.from('notifications').select('id,user_id,actor_id,type')
+      .eq('type', 'challenge')
+      .or(`user_id.in.(${userIds.join(',')}),actor_id.in.(${userIds.join(',')})`);
+    cleanupCheck('fixture-user challenge notifications absent',
+      !userNotifications.error && !(userNotifications.data || []).length, userNotifications);
+  }
+  if (notificationIds.length) {
+    const notifications = await admin.from('notifications').select('id').in('id', notificationIds);
+    cleanupCheck('manifest/generated challenge notifications absent',
+      !notifications.error && !(notifications.data || []).length, notifications);
+  }
+  const authRows = [];
+  for (let page = 1; ; page++) {
+    const listed = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    if (listed.error) {
+      cleanupCheck('manifest auth users absent', false, listed.error.message);
+      break;
+    }
+    authRows.push(...listed.data.users);
+    if (listed.data.users.length < 200) {
+      const residue = authRows.filter((row) => userIds.includes(row.id) || manifest.users.some((item) => item.email === row.email));
+      cleanupCheck('manifest auth users absent', residue.length === 0, residue.map((row) => ({ id: row.id, email: row.email })));
+      break;
+    }
+  }
+}
 
-let r;
+async function cleanupManifest() {
+  await captureGeneratedRows();
+  const leaveOne = process.env.VERIFY_CLEANUP_LEAVE_ONE === 'challenge-activity';
+  const challengeIds = manifest.challenges;
+  const userIds = manifest.users.map((row) => row.id);
+  for (const row of manifest.notifications) {
+    await checkedDelete('notification ' + row.id, admin.from('notifications').delete().eq('id', row.id));
+  }
+  if (userIds.length) {
+    await checkedDelete('challenge notifications for fixture users',
+      admin.from('notifications').delete().eq('type', 'challenge')
+        .or(`user_id.in.(${userIds.join(',')}),actor_id.in.(${userIds.join(',')})`));
+  }
+  for (const row of manifest.invites) {
+    await checkedDelete('challenge invite ' + row.challenge_id + '/' + row.invitee_id,
+      admin.from('challenge_invites').delete().eq('challenge_id', row.challenge_id).eq('invitee_id', row.invitee_id));
+  }
+  if (challengeIds.length) {
+    await checkedDelete('challenge invites for fixture challenges',
+      admin.from('challenge_invites').delete().in('challenge_id', challengeIds));
+  }
+  for (const row of manifest.participants) {
+    await checkedDelete('participant ' + row.challenge_id + '/' + row.user_id,
+      admin.from('challenge_participants').delete().eq('challenge_id', row.challenge_id).eq('user_id', row.user_id));
+  }
+  for (const id of manifest.activities) {
+    if (leaveOne && id === manifest.activities[0]) {
+      console.log('FAULT INJECTION  deliberately retaining activity ' + id);
+      continue;
+    }
+    await checkedDelete('activity ' + id, admin.from('activities').delete().eq('id', id));
+  }
+  if (leaveOne && manifest.activities.length) {
+    const retainedId = manifest.activities[0];
+    const retained = await admin.from('activities').select('id,user_id').eq('id', retainedId);
+    cleanupCheck('fault-injected retained activity absent',
+      !retained.error && !(retained.data || []).length, retained);
+    // Remove the deliberate residue after proving the guard so this negative
+    // test cannot itself contaminate later verifier runs.
+    await checkedDelete('fault-injected retained activity remediation',
+      admin.from('activities').delete().eq('id', retainedId));
+  }
+  for (const id of manifest.challenges) {
+    await checkedDelete('challenge ' + id, admin.from('challenges').delete().eq('id', id));
+  }
+  for (const row of manifest.users) {
+    try {
+      const deleted = await admin.auth.admin.deleteUser(row.id);
+      cleanupCheck('auth user ' + row.email, !deleted.error, deleted.error && deleted.error.message);
+    } catch (error) {
+      cleanupCheck('auth user ' + row.email, false, error.message);
+    }
+  }
+  await verifyNoResidue();
+}
+
+async function run() {
+  try {
+    for (const k of Object.keys(emails)) { await mkUser(k); await login(k); }
+    console.log('MANIFEST users:', JSON.stringify(Object.fromEntries(Object.entries(users).map(([k, v]) => [k, v.id]))));
+
+    const cb = users.creator.id;
+    const X = await mkChallenge({ created_by: cb, title: 'ED-X started multi', start_date: iso(-2), end_date: iso(10), visibility: 'public' }, ['creator', 'p1', 'p2']);
+    const Y = await mkChallenge({ created_by: cb, title: 'ED-Y prestart', start_date: iso(2), end_date: iso(12), visibility: 'public' }, ['creator', 'p1']);
+    const Z = await mkChallenge({ created_by: cb, title: 'ED-Z solo', start_date: iso(-1), end_date: iso(9), visibility: 'public' }, ['creator']);
+    const W = await mkChallenge({ created_by: cb, title: 'ED-W discover', start_date: iso(-1), end_date: iso(9), visibility: 'public' }, ['creator', 'p2']);
+    const V = await mkChallenge({ created_by: cb, title: 'ED-V private solo', start_date: iso(-1), end_date: iso(9), visibility: 'private' }, ['creator']);
+    // Q: live challenge the CREATOR has personally completed (goal 100km, creator
+    // logs 150km) while it remains live for p1 — mutations must gate on
+    // challenge-level end_date only, never per-viewer completion.
+    const Q = await mkChallenge({ created_by: cb, title: 'ED-Q creator-done live', start_date: iso(-1), end_date: iso(9), visibility: 'public' }, ['creator', 'p1']);
+    const activity = await admin.from('activities').insert({
+      user_id: cb, sport: 'running', distance: '150 km', duration: '01:00:00',
+      date: new Date().toISOString(), title: 'ED seed long run'
+    }).select('id').single();
+    if (activity.error) throw new Error('activity: ' + activity.error.message);
+    manifest.activities.push(activity.data.id);
+    saveManifest();
+    console.log('MANIFEST challenges:', JSON.stringify([X.id, Y.id, Z.id, W.id, V.id, Q.id]));
+
+    let r;
 // 1. hard delete refused when others involved
-r = await api('creator', 'DELETE', `/challenges/${X.id}`);
+    r = await api('creator', 'DELETE', `/challenges/${X.id}`);
 check('delete X refused not_alone (2 participants)', r.body?.error === 'not_alone' && r.body.participants === 2, r);
 // 2. stranger on public → 403 not_authorized (no data leak needed, it's public)
 r = await api('stranger', 'PATCH', `/challenges/${X.id}`, { title: 'hax' });
@@ -181,7 +361,20 @@ check('Z fully gone (challenge + participants)', !gone.data && !(goneParts.data 
 r = await api('stranger', 'GET', '/challenges');
 const discoverIds = JSON.stringify(r.body);
 check('W absent from stranger challenge payload (removed from Discover)', !discoverIds.includes(W.id), {});
-check('Z absent from stranger challenge payload (deleted)', !discoverIds.includes(Z.id), {});
+    check('Z absent from stranger challenge payload (deleted)', !discoverIds.includes(Z.id), {});
+  } catch (error) {
+    failures++;
+    console.error('FATAL TEST ERROR', error);
+  } finally {
+    await cleanupManifest();
+  }
 
-console.log(failures ? `\n${failures} FAILURE(S)` : '\nALL PASS');
-process.exit(failures ? 1 : 0);
+  const totalFailures = failures + cleanupFailures;
+  console.log(totalFailures ? `\n${totalFailures} FAILURE(S)` : '\nALL PASS');
+  process.exit(totalFailures ? 1 : 0);
+}
+
+run().catch((error) => {
+  console.error('FATAL CLEANUP ERROR', error);
+  process.exit(1);
+});

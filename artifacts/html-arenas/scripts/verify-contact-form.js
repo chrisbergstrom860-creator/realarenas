@@ -28,6 +28,18 @@ const ok = (c, l, x) => { console.log((c ? '  ok  ' : '  FAIL ') + l + (x ? ' �
 const noLeak = (s, label) => ok(!(INBOX && String(s).includes(INBOX)) && !String(s).includes('support@realarenas'), label + ' contains no inbox address');
 
 const FIXTURE_EMAIL = 'contact-form-verify@arenas-test.dev';
+const MANIFEST_PATH = '/tmp/verify-contact-form-manifest.json';
+const manifest = {
+  users: [],
+  messages: [],
+  messageEmails: ['verify-nokey@arenas-test.dev', 'hp@spam.dev', 'a@b.co'],
+  preexistingMessageIds: []
+};
+const saveManifest = () => fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2));
+const cleanupOk = (condition, label, detail) => {
+  console.log((condition ? '  CLEAN ' : '  CLEANUP FAIL ') + label + (detail ? ' — ' + detail : ''));
+  if (!condition) cleanupFails++;
+};
 async function precleanFixtureUser() {
   try {
     const { data } = await admin.auth.admin.listUsers({ perPage: 200 });
@@ -66,10 +78,13 @@ function spawnNoKeyServer(port, extraEnv) {
 }
 
 (async () => {
-  const ids = { users: [], messages: [] };
-  const save = () => fs.writeFileSync('/tmp/verify-contact-form-manifest.json', JSON.stringify(ids, null, 2));
   let spawned = null;
   try {
+    const baselineMessages = await admin.from('contact_messages').select('id').in('from_email', manifest.messageEmails);
+    if (baselineMessages.error) throw baselineMessages.error;
+    manifest.preexistingMessageIds = (baselineMessages.data || []).map((row) => row.id);
+    saveManifest();
+
     // ── 1. Served pages leak nothing ──
     const loggedOut = await (await fetch(BASE + '/contact')).text();
     noLeak(loggedOut, 'logged-out /contact HTML+JS');
@@ -87,7 +102,7 @@ function spawnNoKeyServer(port, extraEnv) {
       user_metadata: { name: 'Contact Verify', sports: ['running'] },
     });
     if (ue) throw ue;
-    ids.users.push(ud.user.id); save();
+    manifest.users.push({ id: ud.user.id, email: FIXTURE_EMAIL }); saveManifest();
     const cookie = await login(FIXTURE_EMAIL);
     const loggedIn = await (await fetch(BASE + '/contact', { headers: { Cookie: cookie } })).text();
     ok(loggedIn.includes('window.ARENAS_CONTACT_EMAIL = ' + JSON.stringify(FIXTURE_EMAIL)), 'logged-in page injects session email for prefill');
@@ -130,7 +145,10 @@ function spawnNoKeyServer(port, extraEnv) {
     noLeak(realBody, 'no-key failure response');
     const { data: rec } = await admin.from('contact_messages').select('id, send_status').eq('from_email', 'verify-nokey@arenas-test.dev').order('created_at', { ascending: false }).limit(1);
     ok(rec && rec.length === 1 && rec[0].send_status === 'failed_config', 'message still recorded with send_status failed_config', rec && rec[0] && rec[0].send_status);
-    if (rec && rec[0]) { ids.messages.push(rec[0].id); save(); }
+    if (rec && rec[0]) {
+      manifest.messages.push({ id: rec[0].id, from_email: 'verify-nokey@arenas-test.dev' });
+      saveManifest();
+    }
     try { spawned.proc.kill('SIGKILL'); } catch (e) { /* ignore */ }
     spawned = null;
 
@@ -152,22 +170,77 @@ function spawnNoKeyServer(port, extraEnv) {
     ok(sameIp.status === 429, 'exhausted IP stays rate-limited', 'got ' + sameIp.status);
   } finally {
     if (spawned) { try { spawned.proc.kill('SIGKILL'); } catch (e) { /* already dead */ } }
-    for (const id of ids.messages) {
-      try {
-        const { error } = await admin.from('contact_messages').delete().eq('id', id);
-        if (error) { cleanupFails++; console.log('cleanup fail message', id, error.message); }
-      } catch (e) { cleanupFails++; console.log('cleanup fail message', id, e.message); }
-    }
-    // Belt-and-braces: remove any residue rows this script's addresses created.
+    const leaveOne = process.env.VERIFY_CLEANUP_LEAVE_ONE === 'contact-message';
     try {
-      const { error } = await admin.from('contact_messages').delete().in('from_email', ['verify-nokey@arenas-test.dev', 'hp@spam.dev', 'a@b.co']);
-      if (error) { cleanupFails++; console.log('cleanup fail residue rows:', error.message); }
-    } catch (e) { cleanupFails++; console.log('cleanup fail residue rows:', e.message); }
-    for (const id of ids.users) {
-      try { await admin.auth.admin.deleteUser(id); }
-      catch (e) { cleanupFails++; console.log('cleanup fail user', id, e.message); }
+      const generated = await admin.from('contact_messages').select('id,from_email')
+        .in('from_email', manifest.messageEmails);
+      cleanupOk(!generated.error, 'capture generated contact messages', generated.error && generated.error.message);
+      if (!generated.error) {
+        const baseline = new Set(manifest.preexistingMessageIds);
+        for (const row of generated.data || []) {
+          if (!baseline.has(row.id) && !manifest.messages.some((item) => item.id === row.id)) {
+            manifest.messages.push(row);
+          }
+        }
+        saveManifest();
+      }
+    } catch (e) {
+      cleanupOk(false, 'capture generated contact messages', e.message);
     }
-    if (cleanupFails) console.log('CLEANUP RESIDUE — see /tmp/verify-contact-form-manifest.json');
+    for (const row of manifest.messages) {
+      if (leaveOne && row.id === manifest.messages[0]?.id) {
+        console.log('  FAULT INJECTION deliberately retaining contact message ' + row.id);
+        continue;
+      }
+      try {
+        const { error } = await admin.from('contact_messages').delete().eq('id', row.id);
+        cleanupOk(!error, 'delete contact message ' + row.id, error && error.message);
+      } catch (e) { cleanupOk(false, 'delete contact message ' + row.id, e.message); }
+    }
+    for (const row of manifest.users) {
+      try {
+        const deleted = await admin.auth.admin.deleteUser(row.id);
+        cleanupOk(!deleted.error, 'delete auth user ' + row.email, deleted.error && deleted.error.message);
+      } catch (e) { cleanupOk(false, 'delete auth user ' + row.email, e.message); }
+    }
+    try {
+      const messageIds = manifest.messages.map((row) => row.id);
+      const byId = messageIds.length
+        ? await admin.from('contact_messages').select('id,from_email').in('id', messageIds)
+        : { data: [], error: null };
+      cleanupOk(!byId.error && !(byId.data || []).length,
+        'manifest contact messages absent', byId.error ? byId.error.message : JSON.stringify(byId.data || []));
+      const byEmail = await admin.from('contact_messages').select('id,from_email').in('from_email', manifest.messageEmails);
+      const unexpected = (byEmail.data || []).filter((row) => !manifest.preexistingMessageIds.includes(row.id));
+      cleanupOk(!byEmail.error && !unexpected.length,
+        'contact-message set restored to pre-run baseline',
+        byEmail.error ? byEmail.error.message : JSON.stringify(unexpected));
+      if (leaveOne && manifest.messages.length) {
+        const retainedId = manifest.messages[0].id;
+        const remediated = await admin.from('contact_messages').delete().eq('id', retainedId);
+        cleanupOk(!remediated.error, 'fault-injected contact message remediation',
+          remediated.error && remediated.error.message);
+      }
+    } catch (e) {
+      cleanupOk(false, 'contact-message residue query', e.message);
+    }
+    try {
+      const authRows = [];
+      for (let page = 1; ; page++) {
+        const listed = await admin.auth.admin.listUsers({ page, perPage: 200 });
+        if (listed.error) throw listed.error;
+        authRows.push(...listed.data.users);
+        if (listed.data.users.length < 200) break;
+      }
+      const userIds = manifest.users.map((row) => row.id);
+      const authResidue = authRows.filter((row) =>
+        userIds.includes(row.id) || manifest.users.some((item) => item.email === row.email));
+      cleanupOk(authResidue.length === 0, 'manifest auth users absent',
+        JSON.stringify(authResidue.map((row) => ({ id: row.id, email: row.email }))));
+    } catch (e) {
+      cleanupOk(false, 'auth-user residue query', e.message);
+    }
+    if (cleanupFails) console.log('CLEANUP RESIDUE — see ' + MANIFEST_PATH);
   }
   console.log(fails || cleanupFails ? (fails + cleanupFails) + ' FAILURE(S)' : 'ALL PASS');
   process.exit(fails || cleanupFails ? 1 : 0);
