@@ -66,6 +66,25 @@ function check(label, ok, detail) {
     check(`${file} has ${n} “ⓘ How points work” link(s)`, count === n, `got ${count}`);
     check(`${file} link href points at /how-points-work`, src.includes('/how-points-work'));
   });
+  const challengesSrc = fs.readFileSync(path.join(HTML_DIR, 'arenas-challenges.html'), 'utf8');
+  const headerStats = (challengesSrc.match(/<div class="header-stats">([\s\S]*?)<\/div>\s*<\/div>\s*<div style=/) || [])[1] || '';
+  const retainedStatIds = [...headerStats.matchAll(/<strong id="([^"]+)"/g)].map((m) => m[1]);
+  check('challenges header keeps exactly the three approved stats in order',
+    JSON.stringify(retainedStatIds) === JSON.stringify(['active-count', 'pts-month', 'challenges-available']),
+    JSON.stringify(retainedStatIds));
+  check('challenges header stat values precede their labels',
+    /<strong id="active-count">[^<]*<\/strong><span id="active-count-label">/.test(headerStats) &&
+    /<strong id="pts-month">[^<]*<\/strong><span>/.test(headerStats) &&
+    /<strong id="challenges-available">[^<]*<\/strong><span id="challenges-available-label">/.test(headerStats));
+  check('challenges header removes colored stat-dot markup and CSS',
+    !challengesSrc.includes('class="stat-dot"') && !/\.stat-dot\s*\{/.test(challengesSrc));
+  check('challenges header removes only the longest-streak binding',
+    !headerStats.includes('longest-streak') &&
+    !challengesSrc.includes("setStat('longest-streak'") &&
+    challengesSrc.includes('const best = result.longestStreak || 0;') &&
+    challengesSrc.includes('renderStreakCard(result);'));
+  check('challenges header stats use value-over-label columns',
+    /\.header-stat\s*\{[^}]*flex-direction:\s*column/.test(challengesSrc));
 
   // ── 5. Footer links on all public pages + the page itself ──
   ['arenas-landing-login.html', 'arenas-about.html', 'arenas-terms.html',
