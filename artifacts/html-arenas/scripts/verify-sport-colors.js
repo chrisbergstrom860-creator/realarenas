@@ -90,17 +90,14 @@ SPORTS.forEach((s) => {
 //     precisely how the pre-palette landing/blog hexes were caught.
 //
 // EXPLICIT WHITELIST — deliberate, separately-designed accent palettes only.
-// Each entry names a specific palette in a specific file; adding a third
+// Each entry names a specific palette in a specific file; adding another
 // palette means adding a conscious entry here, not widening a pattern.
 //   - PROGRESS_COLORS  (arenas-challenges.html):  challenge progress-bar
 //     accents, commented in-page as "not part of the registry".
-//   - CHALLENGE_ACCENTS (arenas-leaderboards.html): challenge-card bg/bar
-//     accents, commented in-page as "deliberately different hexes".
 const fs = require('fs');
 const ROOT = path.join(__dirname, '..');
 const WHITELIST = [
-  { file: 'html/arenas-challenges.html', name: 'PROGRESS_COLORS' },
-  { file: 'html/arenas-leaderboards.html', name: 'CHALLENGE_ACCENTS' }
+  { file: 'html/arenas-challenges.html', name: 'PROGRESS_COLORS' }
 ];
 const byWord = {};
 SPORTS.forEach((s) => { byWord[s.id.toLowerCase()] = s; byWord[s.label.toLowerCase()] = s; });

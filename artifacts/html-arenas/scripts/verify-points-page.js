@@ -58,7 +58,7 @@ function check(label, ok, detail) {
 
   // ── 4. Entry links present in source pages (served to authed users) ──
   const surfaces = [
-    ['arenas-leaderboards.html', 1], ['arenas-challenges.html', 2], ['arenas-my-profile.html', 1]
+    ['arenas-leaderboards.html', 1], ['arenas-challenges.html', 1], ['arenas-my-profile.html', 1]
   ];
   surfaces.forEach(([file, n]) => {
     const src = fs.readFileSync(path.join(HTML_DIR, file), 'utf8');
@@ -85,6 +85,13 @@ function check(label, ok, detail) {
     challengesSrc.includes('renderStreakCard(result);'));
   check('challenges header stats use value-over-label columns',
     /\.header-stat\s*\{[^}]*flex-direction:\s*column/.test(challengesSrc));
+  const leaderboardsSrc = fs.readFileSync(path.join(HTML_DIR, 'arenas-leaderboards.html'), 'utf8');
+  check('points breakdown belongs to leaderboards only',
+    leaderboardsSrc.includes('id="pts-breakdown-body"') &&
+    !challengesSrc.includes('id="pts-breakdown-body"'));
+  check('leaderboards active-challenges rail is removed',
+    !leaderboardsSrc.includes('active-challenges-list') &&
+    !leaderboardsSrc.includes('CHALLENGE_ACCENTS'));
 
   // ── 5. Footer links on all public pages + the page itself ──
   ['arenas-landing-login.html', 'arenas-about.html', 'arenas-terms.html',

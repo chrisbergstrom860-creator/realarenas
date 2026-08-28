@@ -1,6 +1,4 @@
-// Before/after screenshots for the two challenge accent palettes:
-//   - /challenges cards (PROGRESS_COLORS bar fills)
-//   - /leaderboards right-rail active-challenge rows (CHALLENGE_ACCENTS bar + tile)
+// Before/after screenshots for challenge cards (PROGRESS_COLORS bar fills).
 // Seeds ONE athlete joined to 14 session challenges (one per registry sport)
 // each at 50% progress so every bar renders a visible fill. Usage:
 //   node scripts/shot-palette-cards.js before|after   → screenshots/palette-cards/<label>-*.png
@@ -72,7 +70,7 @@ try {
     await fetch(`${base}/auth/login`, { method: 'POST', body, redirect: 'manual' });
   }, { base: BASE, email: EMAIL, pw: PW });
 
-  for (const [path, name] of [['/challenges', 'challenges'], ['/leaderboards', 'leaderboards']]) {
+  for (const [path, name] of [['/challenges', 'challenges']]) {
     for (const w of [1280, 360]) {
       await page.setViewportSize({ width: w, height: w === 360 ? 800 : 900 });
       await page.goto(BASE + path, { waitUntil: 'networkidle' });

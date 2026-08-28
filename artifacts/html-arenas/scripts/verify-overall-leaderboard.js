@@ -30,7 +30,8 @@ const defs = {
 };
 const email = (k) => `overall-lb-${k}@arenas-test.dev`;
 const users = {}, records = [];
-let failures = 0, browser, page, browserRows = [];
+let failures = 0, browser, page, browserRows = [], browserBreakdowns = {};
+let routeDelays = {}, routeFailures = {};
 function check(name, ok, detail) {
   if (ok) console.log('  ok  ' + name);
   else { failures++; console.log('FAIL  ' + name + (detail ? ' — ' + JSON.stringify(detail).slice(0, 500) : '')); }
@@ -97,14 +98,18 @@ function browserCookies(header) {
     return { name: part.slice(0, eq).trim(), value: part.slice(eq + 1), domain: 'localhost', path: '/' };
   }).filter((c) => c.name);
 }
-async function api(period) {
+async function api(period, key = 'viewer') {
   const r = await fetch(BASE + '/api/leaderboard/platform?period=' + period,
-    { headers: { Cookie: users.viewer.cookie } });
+    { headers: { Cookie: users[key].cookie } });
   return { status: r.status, body: await r.json() };
 }
-async function activity(k, distance, date, title) {
+async function challengesApi() {
+  const r = await fetch(BASE + '/api/challenges', { headers: { Cookie: users.viewer.cookie } });
+  return { status: r.status, body: await r.json() };
+}
+async function activity(k, distance, date, title, sport = 'running') {
   const { data, error } = await admin.from('activities').insert({
-    user_id: users[k].id, sport: 'running', title: title || 'Overall leaderboard seed',
+    user_id: users[k].id, sport, title: title || 'Overall leaderboard seed',
     distance: distance + ' km', duration: '00:30:00', date: date.toISOString()
   }).select('id').single();
   if (error) throw new Error('activity ' + k + ': ' + error.message);
@@ -156,8 +161,8 @@ async function openBoard(period, width, label) {
   }
   await page.waitForFunction(() => document.querySelector('#board-podium .podium-layout, #board-podium .empty-state'));
   await page.waitForFunction(() => {
-    const rail = document.querySelector('#active-challenges-list');
-    return rail && !/Loading/.test(rail.textContent || '');
+    const breakdown = document.querySelector('#pts-breakdown-body');
+    return breakdown && !/Loading/.test(breakdown.textContent || '');
   });
   await page.screenshot({ path: path.join(SHOTS, label + '-' + width + '.png'), fullPage: true });
   return page.evaluate(() => ({
@@ -167,7 +172,13 @@ async function openBoard(period, width, label) {
     breakCount: document.querySelectorAll('.list-break').length,
     unranked: document.querySelector('.unranked-state') && document.querySelector('.unranked-state').textContent.trim(),
     boardText: (document.querySelector('.board-container') || {}).innerText || '',
-    layout: document.querySelector('#board-podium .podium-layout') && document.querySelector('#board-podium .podium-layout').className
+    layout: document.querySelector('#board-podium .podium-layout') && document.querySelector('#board-podium .podium-layout').className,
+    breakdownTitle: (document.querySelector('#pts-breakdown-title') || {}).textContent || '',
+    breakdownTotal: (document.querySelector('.pts-total strong') || {}).textContent || '',
+    breakdownRows: [...document.querySelectorAll('.pts-row')].filter((el) => getComputedStyle(el).display !== 'none').map((el) => el.textContent.trim()),
+    breakdownTop: document.querySelector('.points-card').getBoundingClientRect().top,
+    boardTop: document.querySelector('.board-container').getBoundingClientRect().top,
+    viewportHeight: innerHeight
   }));
 }
 async function main() {
@@ -176,6 +187,7 @@ async function main() {
   await recover(); fs.mkdirSync(SHOTS, { recursive: true });
   for (const k of Object.keys(defs)) await makeUser(k);
   await login('viewer');
+  await login('opted');
 
   // Date filtering is deliberately tested with rows immediately either side of
   // the UTC boundaries (all seeded users use UTC), plus a future row.
@@ -201,6 +213,41 @@ async function main() {
     row(boundaryAll.body, 'boundary').activityCount === 3,
     { week: row(boundaryWeek.body, 'boundary'), month: row(boundaryMonth.body, 'boundary'),
       all: row(boundaryAll.body, 'boundary'), monday, month });
+  const optedBoard = await api('week', 'opted');
+  check('opted-out viewer has no public rank but keeps a truthful private breakdown',
+    !optedBoard.body.leaderboard.some((item) => item.userId === users.opted.id) &&
+    optedBoard.body.viewerBreakdown.total === 990 &&
+    optedBoard.body.viewerBreakdown.rows.length === 1 &&
+    optedBoard.body.viewerBreakdown.rows[0].sport === 'running',
+    optedBoard.body);
+
+  // The Challenges header and Leaderboards month breakdown must share the
+  // viewer's month-start-through-now activity set. A future-dated row inside
+  // the current calendar month is the regression case that previously drifted.
+  await clearActivities();
+  const sevenSports = [
+    ['running', 10], ['cycling', 10], ['climbing', 1], ['swimming', 1],
+    ['hockey', 1], ['basketball', 1], ['hiking', 1]
+  ];
+  for (const [sport, distance] of sevenSports) {
+    await activity('viewer', distance, now, 'seven-sport ' + sport, sport);
+  }
+  const futureInMonth = new Date(Math.min(
+    Date.now() + 86400000,
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1) - 1000
+  ));
+  await activity('viewer', 999, futureInMonth, 'future current-month excluded', 'running');
+  const sevenMonth = await api('month');
+  const challengeMonth = await challengesApi();
+  const expectedSevenTotal = 355;
+  check('future-dated current-month activity excluded identically by both account surfaces',
+    sevenMonth.body.viewerBreakdown.total === expectedSevenTotal &&
+    challengeMonth.body.pointsThisMonth === expectedSevenTotal,
+    { leaderboard: sevenMonth.body.viewerBreakdown, challenges: challengeMonth.body.pointsThisMonth, futureInMonth });
+  check('month API returns seven positive real sport rows whose sum equals total',
+    sevenMonth.body.viewerBreakdown.rows.length === 7 &&
+    sevenMonth.body.viewerBreakdown.rows.reduce((sum, item) => sum + item.points, 0) === sevenMonth.body.viewerBreakdown.total,
+    sevenMonth.body.viewerBreakdown);
 
   // Real API tie ordering: activity count, then display name, then user ID.
   await clearActivities();
@@ -230,10 +277,20 @@ async function main() {
   page = await context.newPage();
   await page.route('**/api/leaderboard/platform?*', async (route) => {
     const period = new URL(route.request().url()).searchParams.get('period') || 'week';
+    if (routeDelays[period]) await new Promise((resolve) => setTimeout(resolve, routeDelays[period]));
+    if (routeFailures[period]) {
+      await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'temporary' }) });
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ leaderboard: browserRows, period, sport: 'all' })
+      body: JSON.stringify({
+        leaderboard: browserRows,
+        period,
+        sport: 'all',
+        viewerBreakdown: browserBreakdowns[period] || { total: 0, rows: [] }
+      })
     });
   });
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
@@ -248,13 +305,76 @@ async function main() {
     uiRow('delta', 4, 700, 7),
     uiRow('echo', 5, 600, 6)
   ];
+  browserBreakdowns = {
+    week: { total: 100, rows: [{ sport: 'running', points: 100 }] },
+    month: sevenMonth.body.viewerBreakdown,
+    all: { total: 220, rows: [{ sport: 'cycling', points: 120 }, { sport: 'running', points: 100 }] }
+  };
   for (const period of ['week', 'month', 'all']) {
     for (const width of [1280, 380]) {
       const d = await openBoard(period, width, period + '-inside');
       check(period + ' inside ' + width + ': five population rows and viewer once',
         d.podium + d.rows === 5 && d.mine === 1 && d.breakCount === 0, d);
+      check(period + ' inside ' + width + ': selector updates matching breakdown title and total',
+        d.breakdownTitle.toLowerCase().includes(period === 'all' ? 'all time' : 'this ' + period) &&
+        d.breakdownTotal === (period === 'week' ? '100 pts' : period === 'month' ? '355 pts' : '220 pts'), d);
+      if (width === 380) {
+        check(period + ' mobile: compact breakdown is above the board and board begins in the initial viewport',
+          d.breakdownTop < d.boardTop && d.boardTop < d.viewportHeight, d);
+      }
     }
   }
+  const monthUi = await openBoard('month', 1280, 'month-seven-sports');
+  const monthDisplayed = monthUi.breakdownRows;
+  const displayedValues = monthDisplayed.map((text) => Number((text.match(/([\d,]+)\s*pts$/) || [])[1].replace(/,/g, '')));
+  check('desktop seven-sport breakdown displays six sport rows plus Other sports',
+    monthDisplayed.length === 7 &&
+    monthDisplayed.filter((text) => !text.startsWith('Other sports')).length === 6 &&
+    monthDisplayed.some((text) => text.startsWith('Other sports')), monthDisplayed);
+  check('displayed sport rows plus Other sports equal the exact total',
+    displayedValues.every(Number.isFinite) &&
+    displayedValues.reduce((sum, value) => sum + value, 0) === sevenMonth.body.viewerBreakdown.total,
+    { monthDisplayed, displayedValues, total: sevenMonth.body.viewerBreakdown.total });
+
+  // An older slow request must not overwrite the newer selected period.
+  routeDelays = { week: 250, month: 0 };
+  await page.setViewportSize({ width: 380, height: 900 });
+  await page.goto(BASE + '/leaderboards', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'This month' }).click();
+  await page.waitForFunction(() => /this month/i.test((document.querySelector('#pts-breakdown-title') || {}).textContent || ''));
+  await page.waitForTimeout(350);
+  const raceState = await page.evaluate(() => ({
+    active: (document.querySelector('.period-tab.active') || {}).textContent || '',
+    title: (document.querySelector('#pts-breakdown-title') || {}).textContent || '',
+    total: (document.querySelector('.pts-total strong') || {}).textContent || ''
+  }));
+  check('out-of-order responses cannot overwrite the newly selected period',
+    raceState.active.trim() === 'This month' &&
+    /this month/i.test(raceState.title) &&
+    raceState.total === '355 pts',
+    raceState);
+  routeDelays = {};
+
+  // A failed request is unavailable, never a fabricated zero-activity period.
+  const errorsBeforeFailureTest = errors.length;
+  routeFailures = { week: true };
+  await page.goto(BASE + '/leaderboards', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(() => /unavailable/i.test((document.querySelector('#pts-breakdown-body') || {}).textContent || ''));
+  const errorState = await page.evaluate(() => ({
+    breakdown: (document.querySelector('#pts-breakdown-body') || {}).textContent || '',
+    board: (document.querySelector('.board-container') || {}).textContent || ''
+  }));
+  check('request failure renders unavailable states without a fake zero total',
+    /unavailable/i.test(errorState.breakdown) &&
+    /Rankings unavailable/.test(errorState.board) &&
+    !/0\s*pts/.test(errorState.breakdown),
+    errorState);
+  const simulatedFailureErrors = errors.slice(errorsBeforeFailureTest);
+  check('only the deliberately simulated 503 reached the browser console during failure test',
+    simulatedFailureErrors.length === 1 && /503/.test(simulatedFailureErrors[0]),
+    simulatedFailureErrors);
+  errors.splice(errorsBeforeFailureTest);
+  routeFailures = {};
   // Move viewer below fifth place. The sixth rank is a shared rank only if its
   // points tie; API rank, rather than visual position, is the asserted contract.
   browserRows = [
@@ -304,6 +424,30 @@ async function main() {
     html.includes('/api/leaderboard/platform?'), null);
   check('platform route defines no following or club API dependency', !/following|follows|clubs/.test(route), null);
   check('browser had zero page/console errors and no following/club API calls', errors.length === 0 && badRoutes.length === 0, { errors, badRoutes });
+
+  // Challenges keeps its monthly header stat and three remaining rail cards;
+  // the removed breakdown must leave no blank placeholder or duplicate link.
+  for (const width of [1280, 380]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(BASE + '/challenges', { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => {
+      const body = document.querySelector('#suggested-body');
+      return body && !/Loading/.test(body.textContent || '');
+    });
+    await page.screenshot({ path: path.join(SHOTS, 'challenges-after-' + width + '.png'), fullPage: true });
+    const challengeLayout = await page.evaluate(() => ({
+      breakdowns: document.querySelectorAll('#pts-breakdown-body').length,
+      pointsLinks: [...document.querySelectorAll('.hpw-link')].filter((el) => getComputedStyle(el).display !== 'none').length,
+      railCards: document.querySelectorAll('.right-col .side-card').length,
+      pointsStat: (document.querySelector('#pts-month') || {}).textContent || ''
+    }));
+    check('challenges after removal ' + width + ': monthly stat retained and breakdown absent',
+      challengeLayout.breakdowns === 0 &&
+      challengeLayout.pointsLinks === 1 &&
+      challengeLayout.railCards === 3 &&
+      /^\d[\d,]*$/.test(challengeLayout.pointsStat),
+      challengeLayout);
+  }
 }
 
 (async () => {
