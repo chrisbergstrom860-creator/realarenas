@@ -31,7 +31,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <script src="/html/arenas-club-create.js"></script>
 <style>
 /* ── PAGE HEADER ── */
-.page-header { grid-column: 1 / -1; margin: -24px -24px 20px -24px; background: white; border-bottom: var(--border); padding: 28px 24px; }
+.page-header { grid-column: 1 / -1; margin: -24px -24px 0; background: white; border-bottom: var(--border); padding: 28px 24px; }
 .page-header-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
 .page-header-left h1 { font-size: 26px; font-weight: 700; color: var(--gray-900); margin-bottom: 4px; letter-spacing: -0.01em; }
 .page-header-left p { font-size: 14px; color: var(--gray-500); }
@@ -147,7 +147,7 @@ document.addEventListener('DOMContentLoaded', function(){
     .list-rank { width: 32px; margin-right: 8px; }
 }
 
-.main { max-width: 1280px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: 1fr 296px; gap: 20px; align-items: start; }
+.main { width: 100%; max-width: 1280px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: 1fr 296px; gap: 20px; align-items: start; align-content: start; }
 /* shell */
 .topbar-search { display: flex; align-items: center; gap: 8px; background: var(--gray-50); border: var(--border); border-radius: 7px; padding: 6px 12px; width: 260px; }
 .topbar-search input { background: none; border: none; outline: none; font-size: 13px; color: var(--gray-700); width: 100%; }
