@@ -211,15 +211,6 @@ document.addEventListener('DOMContentLoaded', function(){
 .side-card { background: white; border: var(--border); border-radius: var(--radius-lg); overflow: hidden; }
 .side-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--gray-500); padding: 14px 16px 8px; }
 
-/* Points breakdown */
-.pts-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: var(--border); font-size: 13px; }
-.pts-row:last-child { border-bottom: none; }
-.pts-sport { display: flex; align-items: center; gap: 8px; color: var(--gray-700); }
-.pts-sport-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.pts-val { font-family: var(--mono); font-weight: 600; color: var(--gray-900); }
-.pts-total { padding: 10px 16px; background: var(--gray-50); border-top: var(--border); display: flex; justify-content: space-between; font-size: 13px; }
-.pts-total strong { font-family: var(--mono); font-size: 16px; color: var(--gray-900); }
-
 /* Suggested challenges */
 .sug-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: var(--border); cursor: pointer; transition: background 0.1s; }
 .sug-row:last-child { border-bottom: none; }
@@ -409,17 +400,6 @@ document.addEventListener('DOMContentLoaded', function(){
 
   <!-- RIGHT SIDEBAR -->
   <div class="right-col">
-
-    <!-- Points breakdown (real: per-sport points for the current month) -->
-    <div class="side-card">
-      <div style="display:flex;align-items:baseline;justify-content:space-between;padding-right:16px">
-        <div class="side-title" id="pts-breakdown-title">Points breakdown</div>
-        <a class="hpw-link" href="/html/how-points-work">ⓘ How points work</a>
-      </div>
-      <div id="pts-breakdown-body">
-        <div style="padding:14px 16px;color:var(--gray-400);font-size:13px">Loading…</div>
-      </div>
-    </div>
 
     <!-- Suggested for you (real: public challenges from the same fetch) -->
     <div class="side-card">
@@ -780,26 +760,6 @@ function showToast(msg) {
   // ── RIGHT SIDEBAR (all real, same load path; honest empty on error/empty) ──
   const monthName = () => new Date().toLocaleString('en-US', { month: 'long' });
 
-  function renderPointsBreakdown(result) {
-    const title = document.getElementById('pts-breakdown-title');
-    const body = document.getElementById('pts-breakdown-body');
-    if (title) title.textContent = 'Points breakdown — ' + monthName();
-    if (!body) return;
-    const bySport = result.pointsBySport || [];
-    const total = result.pointsThisMonth || 0;
-    if (!bySport.length) {
-      body.innerHTML = '<div style="padding:12px 16px;color:var(--gray-500);font-size:13px">No points logged yet this month.</div>'
-        + '<div class="pts-total"><span style="color:var(--gray-600)">Total this month</span><strong>0 pts</strong></div>';
-      return;
-    }
-    const rows = bySport.map(function (s) {
-      const label = s.sport === 'any' ? 'Any sport' : cap(s.sport);
-      return '<div class="pts-row"><div class="pts-sport"><div class="pts-sport-dot" style="background:' + progressColor(s.sport) + '"></div> ' + esc(label) + '</div><span class="pts-val">' + (s.points || 0).toLocaleString() + ' pts</span></div>';
-    }).join('');
-    body.innerHTML = rows
-      + '<div class="pts-total"><span style="color:var(--gray-600)">Total this month</span><strong>' + total.toLocaleString() + ' pts</strong></div>';
-  }
-
   function suggestSchedule(c) {
     const start = new Date(c.start_date), now = new Date();
     if (start > now) {
@@ -889,7 +849,6 @@ function showToast(msg) {
   }
 
   function renderSidebar(result) {
-    renderPointsBreakdown(result);
     renderSuggested(result);
     renderFriendsCard(result);
     renderStreakCard(result);

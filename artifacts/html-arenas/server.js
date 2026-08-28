@@ -2764,6 +2764,29 @@ function calculatePoints(activities) {
   return Math.round(total);
 }
 
+// One points summary contract for every surface that describes a user's
+// selected activity set. Rows include only positive-point sports and remain
+// untruncated; presentation layers may collapse the tail into "Other sports".
+function summarizePoints(activities) {
+  const bySport = {};
+  (activities || []).forEach((activity) => {
+    const sport = activity.sport || 'other';
+    (bySport[sport] = bySport[sport] || []).push(activity);
+  });
+  const rows = Object.keys(bySport)
+    .map((sport) => ({ sport, points: calculatePoints(bySport[sport]) }))
+    .filter((row) => row.points > 0)
+    .sort((a, b) => b.points - a.points || a.sport.localeCompare(b.sport));
+  const total = calculatePoints(activities);
+  // calculatePoints rounds once across the complete set, while rows round per
+  // sport. Reconcile that at most-small rounding delta into the leading row so
+  // the breakdown both matches the ranked total and adds up exactly on screen.
+  if (rows.length) {
+    rows[0].points += total - rows.reduce((sum, row) => sum + row.points, 0);
+  }
+  return { total, rows };
+}
+
 // ISO bounds for a leaderboard period, resolved in the VIEWER's timezone:
 // 'week' starts Monday 00:00 in `tz` (matching the feed/profile Monday-week
 // stats and the leaderboards page copy), 'month' starts on the 1st of the
@@ -2911,7 +2934,7 @@ async function buildClubPointsLeaderboard(memberRows, profileMap, period, viewer
 app.get(BASE + '/api/leaderboard/platform', requireAuth, async (req, res) => {
   const period = req.query.period || 'week';
   const sport = 'all';
-  if (!supabaseAdmin) return res.json({ leaderboard: [], period, sport });
+  if (!supabaseAdmin) return res.json({ leaderboard: [], period, sport, viewerBreakdown: { total: 0, rows: [] } });
   try {
     // "Show on leaderboards" opt-outs are excluded for EVERY viewer, including
     // themselves — a self-only rank that nobody else sees would be a lie. The
@@ -2919,8 +2942,11 @@ app.get(BASE + '/api/leaderboard/platform', requireAuth, async (req, res) => {
     const users = (await listAllAuthUsers())
       .filter((u) => prefsFromMeta(u.user_metadata).show_on_leaderboards);
     const userIds = users.map((u) => u.id);
+    // Always include the authenticated viewer in the activity query so their
+    // private breakdown remains truthful even when they opt out of public rank.
+    const activityUserIds = [...new Set([...userIds, req.user.id])];
     const byUser = bucketActivities(await fetchActivitiesForUsers(
-      userIds,
+      activityUserIds,
       period,
       sport,
       getUserTimezone(req.user),
@@ -2958,10 +2984,11 @@ app.get(BASE + '/api/leaderboard/platform', requireAuth, async (req, res) => {
       previousPoints = u.points;
       return { ...u, rank: sharedRank };
     });
-    res.json({ leaderboard, period, sport });
+    const viewerBreakdown = summarizePoints(byUser[req.user.id] || []);
+    res.json({ leaderboard, period, sport, viewerBreakdown });
   } catch (err) {
     console.log('Platform leaderboard error:', err.message);
-    res.json({ leaderboard: [], period, sport });
+    res.status(500).json({ error: 'Could not load leaderboard' });
   }
 });
 
@@ -4695,7 +4722,7 @@ app.get(BASE + '/api/profile/overview', requireAuth, async (req, res) => {
 // `profiles` table, no FK embeds).
 app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
   if (!supabaseAdmin) {
-    return res.json({ myChallenges: [], friendsChallenges: [], publicChallenges: [], publicCount: 0, myJoinedIds: [], pointsThisMonth: 0, longestStreak: 0, currentStreak: 0, pointsBySport: [], weekGrid: [], friendsInChallenges: [], followsAnyone: false });
+    return res.json({ myChallenges: [], friendsChallenges: [], publicChallenges: [], publicCount: 0, myJoinedIds: [], pointsThisMonth: 0, longestStreak: 0, currentStreak: 0, weekGrid: [], friendsInChallenges: [], followsAnyone: false });
   }
   const userId = req.user.id;
   const PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
@@ -4892,7 +4919,7 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
     // Best-effort: a failure here must never break the challenges payload, so it
     // degrades to honest zeros/empties rather than throwing.
     let pointsThisMonth = 0, longestStreak = 0, currentStreak = 0;
-    let pointsBySport = [], weekGrid = [];
+    let weekGrid = [];
     try {
       const { data: userActs } = await supabaseAdmin
         .from('activities').select('sport, distance, date')
@@ -4900,18 +4927,16 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
       const acts = userActs || [];
       const hdrTz = getUserTimezone(req.user);
       const mNow = new Date();
-      const nowMonth = monthKey(mNow, hdrTz);
-      const monthActs = acts.filter((a) => monthKey(a.date, hdrTz) === nowMonth);
+      const monthRange = getDateRange('month', hdrTz);
+      const monthStart = new Date(monthRange.start).getTime();
+      const monthEnd = new Date(monthRange.end).getTime();
+      const monthActs = acts.filter((a) => {
+        const at = new Date(a.date).getTime();
+        return Number.isFinite(at) && at >= monthStart && at <= monthEnd;
+      });
       // "pts earned this month" — same SPORT_POINTS model used by leaderboards
       // and profile stats, over the user's-zone current calendar month.
-      pointsThisMonth = calculatePoints(monthActs);
-      // Per-sport breakdown of that exact monthly total (only sports with points).
-      const bySport = {};
-      monthActs.forEach((a) => { const s = a.sport || 'other'; (bySport[s] = bySport[s] || []).push(a); });
-      pointsBySport = Object.keys(bySport)
-        .map((sport) => ({ sport, points: calculatePoints(bySport[sport]) }))
-        .filter((x) => x.points > 0)
-        .sort((a, b) => b.points - a.points);
+      pointsThisMonth = summarizePoints(monthActs).total;
       // Distinct active days (user-zone day keys) still drive the week grid;
       // both streak numbers now come from the shared helper (same semantics).
       const daySet = new Set(acts.map((a) => dayKey(a.date, hdrTz)));
@@ -4978,7 +5003,6 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
       pointsThisMonth,
       longestStreak,
       currentStreak,
-      pointsBySport,
       weekGrid,
       friendsInChallenges,
       followsAnyone

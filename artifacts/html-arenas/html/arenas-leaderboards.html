@@ -95,24 +95,30 @@ document.addEventListener('DOMContentLoaded', function(){
 .empty-state { padding: 60px 24px; text-align: center; width: 100%; }
 
 .right-col { display: flex; flex-direction: column; gap: 14px; }
-@media (max-width:768px){ body:has(.bottom-nav) .right-col{display:none} }
 .side-card { background: white; border: var(--border); border-radius: var(--radius-lg); overflow: hidden; }
 .side-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--gray-500); padding: 14px 16px 8px; }
-.challenge-row { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: var(--border); cursor: pointer; transition: background 0.1s; }
-.challenge-row:last-child { border-bottom: none; }
-.challenge-row:hover { background: var(--gray-50); }
-.ch-icon { width: 34px; height: 34px; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--gray-900); flex-shrink: 0; }
-.ch-info { flex: 1; min-width: 0; }
-.ch-name { font-size: 13px; font-weight: 600; color: var(--gray-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ch-bar-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
-.ch-bar { flex: 1; height: 3px; background: var(--gray-100); border-radius: 2px; overflow: hidden; }
-.ch-bar-fill { height: 100%; border-radius: 2px; }
-.ch-pct { font-size: 10px; font-family: var(--mono); color: var(--gray-400); flex-shrink: 0; }
+.pts-row { display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:var(--border);font-size:13px;gap:12px }
+.pts-sport { display:flex;align-items:center;gap:8px;color:var(--gray-700);min-width:0 }
+.pts-sport-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0 }
+.pts-val { font-family:var(--mono);font-weight:600;color:var(--gray-900);white-space:nowrap }
+.pts-empty { padding:10px 16px 14px;color:var(--gray-500);font-size:13px }
+.pts-total { padding:10px 16px;background:var(--gray-50);border-top:var(--border);display:flex;justify-content:space-between;font-size:13px }
+.pts-total strong { font-family:var(--mono);font-size:16px;color:var(--gray-900) }
 
 .hpw-link{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--gray-500);text-decoration:none}
 .hpw-link:hover{color:var(--gray-700);text-decoration:underline}
 
 @media (max-width: 480px) {
+    .main { display:flex; flex-direction:column; gap:12px; padding:16px; }
+    .page-header { width:calc(100% + 32px); margin:-16px -16px 0; padding:16px; }
+    .page-header-inner { gap:12px; }
+    .page-header-left p { display:none; }
+    .right-col { order:1; width:100%; }
+    .board-container { order:2; width:100%; }
+    .points-card .pts-row:nth-child(n+4) { display:none; }
+    .points-card .side-title { padding-top:10px; }
+    .pts-row { padding:6px 12px; }
+    .pts-total { padding:7px 12px; }
     .board-podium { padding: 16px 16px 0 16px; background: white; }
     .podium-layout { flex-direction: column; align-items: stretch; gap: 8px; }
     .podium-layout.p-3 .p-rank-2 { order: 0; }
@@ -223,14 +229,9 @@ document.addEventListener('DOMContentLoaded', function(){
 </div>
 
 <div class="right-col">
-  <div class="side-card">
-    <div class="side-title">Active challenges</div>
-    <div id="active-challenges-list">
-      <div style="padding:16px;text-align:center;color:var(--gray-400);font-size:12px">Loading…</div>
-    </div>
-    <div style="padding:10px 16px">
-      <button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:13px" onclick="nav('/challenges')">Browse all challenges →</button>
-    </div>
+  <div class="side-card points-card">
+    <div class="side-title" id="pts-breakdown-title">Your points breakdown</div>
+    <div id="pts-breakdown-body"><div class="pts-empty">Loading…</div></div>
   </div>
 </div>
 </main>
@@ -243,6 +244,9 @@ document.addEventListener('DOMContentLoaded', function(){
   var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
   var state = { period: 'week' };
   var cache = [];
+  var breakdown = { total: 0, rows: [] };
+  var requestGeneration = 0;
+  var loadError = false;
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -263,11 +267,60 @@ document.addEventListener('DOMContentLoaded', function(){
   };
 
   function load() {
-    var qs = 'period=' + encodeURIComponent(apiPeriod(state.period));
+    var requestedPeriod = apiPeriod(state.period);
+    var generation = ++requestGeneration;
+    var qs = 'period=' + encodeURIComponent(requestedPeriod);
     fetch(B + '/api/leaderboard/platform?' + qs)
-      .then(function (r) { return r.json(); })
-      .then(function (j) { cache = (j && j.leaderboard) || []; renderAll(); })
-      .catch(function () { cache = []; renderAll(); });
+      .then(function (r) {
+        if (!r.ok) throw new Error('Leaderboard unavailable');
+        return r.json();
+      })
+      .then(function (j) {
+        if (generation !== requestGeneration || requestedPeriod !== apiPeriod(state.period)) return;
+        cache = (j && j.leaderboard) || [];
+        breakdown = (j && j.viewerBreakdown) || { total: 0, rows: [] };
+        loadError = false;
+        renderAll();
+        renderBreakdown();
+      })
+      .catch(function () {
+        if (generation !== requestGeneration || requestedPeriod !== apiPeriod(state.period)) return;
+        cache = [];
+        breakdown = null;
+        loadError = true;
+        renderAll();
+        renderBreakdown();
+      });
+  }
+
+  function periodLabel() {
+    return state.period === 'week' ? 'this week' : state.period === 'month' ? 'this month' : 'all time';
+  }
+  function sportMeta(id) {
+    var found = (window.ARENAS_SPORTS || []).find(function (s) { return s.id === id; });
+    return found || { label: id === 'other' ? 'Other' : String(id || 'Other').replace(/(^|_)([a-z])/g, function(_, p, c){ return (p ? ' ' : '') + c.toUpperCase(); }), colors: {} };
+  }
+  function renderBreakdown() {
+    var title = document.getElementById('pts-breakdown-title');
+    var body = document.getElementById('pts-breakdown-body');
+    if (!body) return;
+    if (title) title.textContent = 'Your points — ' + periodLabel();
+    if (loadError || !breakdown) {
+      body.innerHTML = '<div class="pts-empty">Your points are unavailable right now. Please try again.</div>';
+      return;
+    }
+    var rows = (breakdown.rows || []).slice();
+    if (rows.length > 6) {
+      var otherPoints = rows.slice(6).reduce(function(sum, row) { return sum + (Number(row.points) || 0); }, 0);
+      rows = rows.slice(0, 6).concat([{ sport: '__other_sports__', points: otherPoints }]);
+    }
+    var rowsHtml = rows.map(function(row) {
+      var meta = row.sport === '__other_sports__' ? { label: 'Other sports', colors: { bg: 'var(--gray-400)' } } : sportMeta(row.sport);
+      var color = (meta.colors && (meta.colors.text || meta.colors.bg)) || 'var(--gray-400)';
+      return '<div class="pts-row"><div class="pts-sport"><span class="pts-sport-dot" style="background:' + color + '"></span><span>' + esc(meta.label) + '</span></div><span class="pts-val">' + fmt(row.points) + ' pts</span></div>';
+    }).join('');
+    var empty = rows.length ? '' : '<div class="pts-empty">No points logged ' + periodLabel() + '.</div>';
+    body.innerHTML = empty + rowsHtml + '<div class="pts-total"><span>Total ' + periodLabel() + '</span><strong>' + fmt(breakdown.total) + ' pts</strong></div>';
   }
 
   function renderPodiumCol(row, displayRank) {
@@ -316,6 +369,14 @@ document.addEventListener('DOMContentLoaded', function(){
   }
 
   function renderAll() {
+    if (loadError) {
+      var errorPodium = document.getElementById('board-podium');
+      var errorList = document.getElementById('board-list');
+      errorPodium.className = 'board-podium is-empty';
+      errorPodium.innerHTML = '<div class="empty-state"><div class="empty-title">Rankings unavailable</div><div class="empty-copy">Please try again in a moment.</div></div>';
+      errorList.innerHTML = '';
+      return;
+    }
     var rows = cache.slice();
     var viewer = null;
     var viewerIndex = -1;
@@ -513,109 +574,6 @@ document.addEventListener('DOMContentLoaded', function(){
       if (el.textContent.trim() === 'Jamie King') el.textContent = name;
     });
   });
-})();
-</script>
-<script>
-// ── ACTIVE CHALLENGES RAIL (live data) ──
-// Sourced client-side from GET /api/challenges — the same endpoint the Challenges
-// page uses. Renders only the viewer's active joined challenges
-// (isJoined && !isExpired && !isComplete). There is no points/reward column, so no
-// points badge is shown. duration-type goals have no server progress branch
-// (always 0), so they render without a misleading progress bar.
-(function () {
-  var B = window.BASE || (location.pathname.indexOf('/html') === 0 ? '/html' : '');
-  var listEl = document.getElementById('active-challenges-list');
-  if (!listEl) return;
-
-  // Icons come from the sports registry; bg/bar stay a local challenge-card
-  // accent palette (deliberately different hexes from the registry tag colors).
-  // Full 14-sport coverage, CVD-safe bars: hues stay in each sport's family
-  // but lightness is deliberately spread (hue alone collapses under
-  // deuteranopia/protanopia). Bar-set minima: normal-vision ΔE 23.9,
-  // deutan 11.2, protan 9.5; verify-sport-colors.js enforces floors.
-  // bg tile tints are NOT part of the distinguishability contract — the emoji
-  // carries identity on the tile — so they stay near-indistinguishable pales.
-  var CHALLENGE_ACCENTS = {
-    running:       { bg: 'var(--orange-light)', bar: '#EA580C' },
-    cycling:       { bg: '#EFF6FF', bar: '#2563EB' },
-    climbing:      { bg: '#F5F3FF', bar: '#A78BFA' },
-    swimming:      { bg: '#ECFEFF', bar: '#14B8A6' },
-    football:      { bg: '#F0FDF4', bar: '#047857' },
-    weightlifting: { bg: '#FEF2F2', bar: '#F87171' },
-    hiking:        { bg: '#F7FEE7', bar: '#A3E635' },
-    yoga:          { bg: '#FDF4FF', bar: '#A21CAF' },
-    tennis:        { bg: '#FFF1F2', bar: '#9F1239' },
-    pilates:       { bg: '#FDF2F8', bar: '#DB2777' },
-    golf:          { bg: '#ECFDF5', bar: '#34D399' },
-    hockey:        { bg: '#F1F5F9', bar: '#0F172A' },
-    basketball:    { bg: 'var(--orange)', bar: '#9A3412' },
-    pickleball:    { bg: '#E0F2FE', bar: '#22D3EE' }
-  };
-  var sportStyle = {};
-  (window.ARENAS_SPORTS || []).forEach(function (s) {
-    var acc = CHALLENGE_ACCENTS[s.id] || {};
-    sportStyle[s.id] = { icon: s.emoji, bg: acc.bg || '#FFF9E0', bar: acc.bar || '#F59E0B' };
-  });
-  var DEFAULT_STYLE = { icon: '🏅', bg: '#FFF9E0', bar: '#F59E0B' };
-
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
-  function num(n) { return Math.round((Number(n) || 0) * 10) / 10; }
-  function daysLeftText(d) {
-    d = Number(d) || 0;
-    if (d <= 0) return 'ends today';
-    if (d === 1) return '1 day left';
-    return d + ' days left';
-  }
-
-  function showEmpty() {
-    listEl.innerHTML =
-      '<div style="padding:18px 16px;text-align:center">' +
-        '<div style="font-size:26px;margin-bottom:6px">⚡</div>' +
-        '<div style="font-size:13px;font-weight:600;color:var(--gray-700);margin-bottom:3px">No active challenges</div>' +
-        '<div style="font-size:12px;color:var(--gray-400)">Browse to join one and track your progress here.</div>' +
-      '</div>';
-  }
-
-  function render(items) {
-    if (!items.length) { showEmpty(); return; }
-    listEl.innerHTML = items.map(function (c) {
-      var st = sportStyle[c.sport] || DEFAULT_STYLE;
-      var unit = c.goal_unit ? (' ' + esc(c.goal_unit)) : '';
-      // Duration progress is computed server-side now (sums logged activity
-      // durations in the window), so it gets the same bar as every other type.
-      var pct = Math.max(0, Math.min(100, Number(c.pct) || 0));
-      var bar =
-        '<div class="ch-bar-row">' +
-          '<div class="ch-bar"><div class="ch-bar-fill" style="width:' + pct + '%;background:' + st.bar + '"></div></div>' +
-          '<span class="ch-pct">' + pct + '%</span>' +
-        '</div>';
-      var sub = num(c.progress) + ' / ' + num(c.goal_target) + unit + ' · ' + daysLeftText(c.daysLeft);
-      return '' +
-        '<div class="challenge-row" onclick="nav(\'/challenges\')">' +
-          (c.image
-            ? '<img class="ch-icon" alt="" style="object-fit:cover" src="' + B + '/api/challenges/' + encodeURIComponent(c.id) + '/image?v=' + encodeURIComponent(c.image) + '">'
-            : '<div class="ch-icon" style="background:' + st.bg + '">' + st.icon + '</div>') +
-          '<div class="ch-info">' +
-            '<div class="ch-name">' + esc(c.title || c.name || 'Challenge') + '</div>' +
-            bar +
-            '<div style="font-size:11px;color:var(--gray-400);margin-top:2px">' + sub + '</div>' +
-          '</div>' +
-        '</div>';
-    }).join('');
-  }
-
-  fetch(B + '/api/challenges')
-    .then(function (r) { return r.json(); })
-    .then(function (j) {
-      var mine = (j && j.myChallenges) || [];
-      var active = mine.filter(function (c) { return c.isJoined && !c.isExpired && !c.isComplete; });
-      render(active);
-    })
-    .catch(function () { showEmpty(); });
 })();
 </script>
 <script src="/html/arenas-overlay.js" defer></script>
