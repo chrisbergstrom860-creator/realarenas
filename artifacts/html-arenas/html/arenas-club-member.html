@@ -370,16 +370,31 @@ function showToast(msg) {
     {bg:'#FFF7ED',c:'#9A3412'},{bg:'#FBEAF0',c:'#72243E'}
   ];
 
+  var memberLoadSequence = 0;
   async function loadMemberHome() {
+    var sequence = ++memberLoadSequence;
     var container = document.getElementById('cm-content');
     if (!container) return;
     try {
-      var response = await fetch(B + '/api/clubs/' + clubId + '/member-home');
+      var activeSection = data.activeSection || 'overview';
+      var legacySectionRoutes = { feed:'announcements', events:'events', challenges:'challenges', members:'members' };
+      var requestedSection = legacySectionRoutes[pendingMemberSection] || activeSection;
+      var focusedEndpoint = {
+        overview: 'member-overview',
+        announcements: 'member-announcements',
+        events: 'member-events'
+      }[requestedSection];
+      var response = await fetch(B + '/api/clubs/' + clubId + '/' + (focusedEndpoint || 'member-home'));
       var r = await response.json();
+      if (sequence !== memberLoadSequence) return;
       if (r.error) {
         container.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">' + esc(r.error) + '</div>';
         return;
       }
+      r.announcements = r.announcements || [];
+      r.events = r.events || [];
+      r.challenges = r.challenges || [];
+      r.roster = r.roster || [];
 
       var s = r.standing || {};
       var rankEl = document.getElementById('club-member-rank');
@@ -583,7 +598,8 @@ function showToast(msg) {
     var hash = decodeURIComponent((window.location.hash || '').replace(/^#/, ''));
     var id = ({ overview:'overview', announcements:'feed', challenges:'challenges',
       'club-events':'events', members:'members' })[hash];
-    if (id) setTab(id, null);
+    pendingMemberSection = id || null;
+    loadMemberHome();
   });
 })();
 </script>

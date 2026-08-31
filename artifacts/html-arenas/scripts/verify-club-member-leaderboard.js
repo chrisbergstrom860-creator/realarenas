@@ -9,6 +9,9 @@ const { createClient } = require('@supabase/supabase-js');
 
 const BASE_URL = 'http://localhost:80/html';
 const TASK89_BASELINE = process.env.TASK89_BASELINE === '1';
+const TASK96_BENCHMARK = process.env.TASK96_BENCHMARK === '1';
+const TASK96_PHASE = process.env.TASK96_PHASE === 'after' ? 'after' : 'before';
+const TASK96_BASE_URL = process.env.TASK96_BASE_URL || BASE_URL;
 const MANIFEST = '/tmp/verify-club-member-leaderboard-manifest.json';
 const PW = 'ArenasTest!234';
 const TZ = 'America/Los_Angeles';
@@ -162,12 +165,13 @@ async function login(key) {
   users[key].cookie = cookie;
 }
 
-async function api(key, method, route, body) {
-  const response = await fetch(BASE_URL + '/api' + route, {
+async function api(key, method, route, body, measure) {
+  const response = await fetch((measure ? TASK96_BASE_URL : BASE_URL) + '/api' + route, {
     method,
     redirect: 'manual',
     headers: {
       Cookie: users[key].cookie,
+      ...(measure ? { 'X-Arenas-Measure-DB': '1' } : {}),
       ...(body ? { 'Content-Type': 'application/json' } : {})
     },
     body: body ? JSON.stringify(body) : undefined
@@ -175,7 +179,23 @@ async function api(key, method, route, body) {
   const raw = await response.text();
   let json = null;
   try { json = JSON.parse(raw); } catch (err) {}
-  return { status: response.status, raw, body: json, location: response.headers.get('location') };
+  let dbBreakdown = null;
+  const encodedBreakdown = response.headers.get('x-arenas-db-breakdown');
+  if (encodedBreakdown) {
+    dbBreakdown = JSON.parse(Buffer.from(encodedBreakdown, 'base64url').toString('utf8'));
+  }
+  return {
+    status: response.status,
+    raw,
+    body: json,
+    location: response.headers.get('location'),
+    metrics: measure ? {
+      dbQueries: Number(response.headers.get('x-arenas-db-queries')),
+      dbResponseBytes: Number(response.headers.get('x-arenas-db-bytes')),
+      apiResponseBytes: Buffer.byteLength(raw),
+      breakdown: dbBreakdown
+    } : null
+  };
 }
 
 async function page(key, route) {
@@ -251,12 +271,27 @@ async function verifyMemberShellInBrowser(clubId) {
         return { name: pair.slice(0, split), value: pair.slice(split + 1), url: BASE_URL };
       }));
       styleReport[width] = {};
-      for (const cfg of [
+      const routeConfigs = [
         { key: 'member-home', route: '/clubs/member/' + clubId, wait: '#cm-sec-overview:not([hidden])' },
-        { key: 'member-leaderboard', route: '/clubs/member/' + clubId + '/leaderboard', wait: '.lb-table-wrap' }
-      ]) {
+        { key: 'member-leaderboard', route: '/clubs/member/' + clubId + '/leaderboard', wait: '.lb-table-wrap' },
+        ...(TASK96_BENCHMARK ? [
+          { key: 'overview', route: '/clubs/member/' + clubId, wait: '#cm-sec-overview:not([hidden])' },
+          { key: 'announcements', route: '/clubs/member/' + clubId + '/announcements', wait: '#cm-sec-feed:not([hidden])' },
+          { key: 'events', route: '/clubs/member/' + clubId + '/events', wait: '#cm-sec-events:not([hidden])' }
+        ] : [])
+      ];
+      for (const cfg of routeConfigs) {
         const p = await context.newPage();
         const browserErrors = [];
+        if (TASK96_BENCHMARK && TASK96_PHASE === 'before' &&
+            ['overview', 'announcements', 'events'].includes(cfg.key)) {
+          await p.route('**/api/clubs/*/member-*', async (route) => {
+            const request = route.request();
+            const url = request.url().replace(/\/member-(overview|announcements|events)$/, '/member-home');
+            const fullPayloadResponse = await route.fetch({ url });
+            await route.fulfill({ response: fullPayloadResponse });
+          });
+        }
         p.on('console', (message) => {
           if (message.type() === 'error') browserErrors.push('console: ' + message.text());
         });
@@ -286,6 +321,12 @@ async function verifyMemberShellInBrowser(clubId) {
         });
         const phase = TASK89_BASELINE ? 'before' : 'after';
         await p.screenshot({ path: `/tmp/task89-${phase}-${cfg.key}-${width}.png`, fullPage: true });
+        if (TASK96_BENCHMARK && ['overview', 'announcements', 'events'].includes(cfg.key)) {
+          await p.screenshot({
+            path: `/tmp/task96-${TASK96_PHASE}-${cfg.key}-${width}.png`,
+            fullPage: true
+          });
+        }
         check(`8: ${cfg.key} has no browser errors at ${width}`, browserErrors.length === 0, browserErrors);
         await p.close();
       }
@@ -317,6 +358,11 @@ async function verifyMemberShellInBrowser(clubId) {
     }));
     const p = await context.newPage();
     const browserErrors = [];
+    const sectionApiCalls = [];
+    p.on('request', (request) => {
+      const pathname = new URL(request.url()).pathname;
+      if (pathname.includes('/api/clubs/' + clubId + '/')) sectionApiCalls.push(pathname);
+    });
     p.on('console', (message) => {
       if (message.type() === 'error') browserErrors.push('console: ' + message.text());
     });
@@ -331,6 +377,7 @@ async function verifyMemberShellInBrowser(clubId) {
     ];
     await p.goto(BASE_URL + '/clubs/member/' + clubId);
     for (const [section, suffix, target] of sectionCases) {
+      const callStart = sectionApiCalls.length;
       await p.click('#club-tab-' + section);
       await p.waitForURL('**/clubs/member/' + clubId + suffix);
       await p.waitForSelector(target + (section === 'leaderboard' ? '' : ':not([hidden])'));
@@ -349,6 +396,20 @@ async function verifyMemberShellInBrowser(clubId) {
         state.active === 'club-tab-' + section && state.targetVisible &&
         (section === 'leaderboard' || state.visibleFallback.length === 1),
         state);
+      const expectedEndpoint = {
+        overview: '/member-overview',
+        announcements: '/member-announcements',
+        leaderboard: '/leaderboard',
+        challenges: '/member-home',
+        events: '/member-events',
+        members: '/member-home'
+      }[section];
+      const calls = sectionApiCalls.slice(callStart);
+      check('8: canonical ' + section + ' route uses its intended payload',
+        calls.some((pathname) => pathname.endsWith(expectedEndpoint)) &&
+        (section === 'challenges' || section === 'members' ||
+          !calls.some((pathname) => pathname.endsWith('/member-home'))),
+        calls);
     }
     await p.goBack();
     await p.waitForURL('**/clubs/member/' + clubId + '/events');
@@ -371,6 +432,36 @@ async function verifyMemberShellInBrowser(clubId) {
       conflictingHash.membersHidden === false &&
       conflictingHash.announcementsHidden === true,
       conflictingHash);
+    await p.goto(BASE_URL + '/clubs/member/' + clubId);
+    await p.waitForSelector('#cm-sec-overview:not([hidden])');
+    const legacyHashCases = [
+      ['announcements', '#cm-sec-feed', '/member-announcements'],
+      ['club-events', '#cm-sec-events', '/member-events'],
+      ['challenges', '#cm-sec-challenges', '/member-home'],
+      ['members', '#cm-sec-members', '/member-home']
+    ];
+    for (const [hash, target, expectedEndpoint] of legacyHashCases) {
+      const callStart = sectionApiCalls.length;
+      await p.evaluate((nextHash) => { window.location.hash = nextHash; }, hash);
+      await p.waitForSelector(target + ':not([hidden])');
+      const visibleFallback = await p.locator('#cm-content [id^="cm-sec-"]:not([hidden])').count();
+      const calls = sectionApiCalls.slice(callStart);
+      check('8: live legacy #' + hash + ' navigation reloads the intended payload',
+        visibleFallback === 1 && calls.some((pathname) => pathname.endsWith(expectedEndpoint)),
+        { calls, visibleFallback });
+    }
+    const legacyBackStart = sectionApiCalls.length;
+    await p.goBack();
+    await p.waitForSelector('#cm-sec-challenges:not([hidden])');
+    check('8: legacy hash browser history reloads the restored section',
+      sectionApiCalls.slice(legacyBackStart).some((pathname) => pathname.endsWith('/member-home')),
+      sectionApiCalls.slice(legacyBackStart));
+    const clearHashStart = sectionApiCalls.length;
+    await p.evaluate(() => { window.location.hash = ''; });
+    await p.waitForSelector('#cm-sec-overview:not([hidden])');
+    check('8: clearing a legacy hash restores focused Overview',
+      sectionApiCalls.slice(clearHashStart).some((pathname) => pathname.endsWith('/member-overview')),
+      sectionApiCalls.slice(clearHashStart));
     const sticky = await p.evaluate(() => {
       const main = document.querySelector('.main');
       const identity = document.querySelector('.club-member-identity');
@@ -429,6 +520,165 @@ async function verifyClean(created) {
     storageCount += (data || []).length;
   }
   check('cleanup: seeded user storage absent', storageCount === 0, storageCount);
+}
+
+async function seedTask96Benchmark(clubId) {
+  const fillerKeys = Array.from({ length: 19 }, (_, i) => 'bench' + String(i + 1).padStart(2, '0'));
+  for (const [i, key] of fillerKeys.entries()) {
+    emails[key] = `task96-bench-${String(i + 1).padStart(2, '0')}@arenas-test.dev`;
+    await createUser(key, `Benchmark Member ${String(i + 1).padStart(2, '0')}`);
+  }
+  const { error: membershipError } = await admin.from('memberships').insert(
+    fillerKeys.map((key) => ({ user_id: users[key].id, club_id: clubId, role: 'member' }))
+  );
+  if (membershipError) throw new Error('task96 memberships: ' + membershipError.message);
+
+  const memberIds = ['manager', 'viewer', 'active', 'opted', 'prejoin', ...fillerKeys].map((key) => users[key].id);
+  const activityRows = Array.from({ length: 88 }, (_, i) => ({
+    user_id: memberIds[i % memberIds.length],
+    sport: 'running',
+    title: `Benchmark activity ${i + 1}`,
+    distance: `${5 + (i % 12)} km`,
+    duration: `00:${String(20 + (i % 35)).padStart(2, '0')}:00`,
+    date: new Date(Date.now() - (i % 24) * 3600000).toISOString()
+  }));
+  const { data: activities, error: activitiesError } = await admin
+    .from('activities').insert(activityRows).select('id');
+  if (activitiesError) throw new Error('task96 activities: ' + activitiesError.message);
+  for (const row of activities || []) saveManifest({ type: 'activity', id: row.id });
+
+  const postRows = Array.from({ length: 8 }, (_, i) => ({
+    user_id: users.manager.id,
+    club_id: clubId,
+    content: `Benchmark announcement ${i + 2}: club update with enough detail to produce realistic payload bytes.`
+  }));
+  const { data: posts, error: postsError } = await admin.from('posts').insert(postRows).select('id');
+  if (postsError) throw new Error('task96 posts: ' + postsError.message);
+  for (const row of posts || []) saveManifest({ type: 'post', id: row.id });
+  const allPostIds = records.filter((x) => x.type === 'post').map((x) => x.id);
+  const likeRows = [];
+  const commentRows = [];
+  for (const [postIndex, post] of (posts || []).entries()) {
+    const postId = post.id;
+    for (let i = 0; i < 8; i++) {
+      likeRows.push({ post_id: postId, user_id: memberIds[(postIndex + i) % memberIds.length] });
+    }
+    for (let i = 0; i < 3; i++) {
+      commentRows.push({
+        post_id: postId,
+        user_id: memberIds[(postIndex + i + 3) % memberIds.length],
+        content: `Benchmark comment ${i + 1}`
+      });
+    }
+  }
+  const { error: likesError } = await admin.from('post_likes').insert(likeRows);
+  if (likesError) throw new Error('task96 likes: ' + likesError.message);
+  const { error: commentsError } = await admin.from('post_comments').insert(commentRows);
+  if (commentsError) throw new Error('task96 comments: ' + commentsError.message);
+
+  const eventRows = Array.from({ length: 7 }, (_, i) => ({
+    created_by: users.manager.id,
+    club_id: clubId,
+    title: `Benchmark upcoming event ${i + 2}`,
+    sport: 'running',
+    event_type: 'training',
+    visibility: 'club',
+    date: new Date(Date.now() + (i + 8) * 86400000).toISOString(),
+    location: `Benchmark venue ${i + 2}`
+  }));
+  const { data: events, error: eventsError } = await admin.from('events').insert(eventRows).select('id');
+  if (eventsError) throw new Error('task96 events: ' + eventsError.message);
+  for (const row of events || []) saveManifest({ type: 'event', id: row.id });
+  const allEventIds = records.filter((x) => x.type === 'event').map((x) => x.id);
+  const rsvpRows = [];
+  for (const [eventIndex, event] of (events || []).entries()) {
+    const eventId = event.id;
+    for (let i = 0; i < 12; i++) {
+      rsvpRows.push({
+        event_id: eventId,
+        user_id: memberIds[(eventIndex + i) % memberIds.length],
+        status: i % 4 === 0 ? 'interested' : 'going'
+      });
+    }
+  }
+  const { error: rsvpsError } = await admin.from('event_rsvps').insert(rsvpRows);
+  if (rsvpsError) throw new Error('task96 rsvps: ' + rsvpsError.message);
+
+  const challengeRows = Array.from({ length: 9 }, (_, i) => ({
+    created_by: users.manager.id,
+    club_id: clubId,
+    title: `Benchmark active challenge ${i + 2}`,
+    visibility: 'club',
+    sport: 'running',
+    goal_type: 'distance',
+    goal_target: 50 + i * 5,
+    goal_unit: 'km',
+    start_date: new Date(Date.now() - 2 * 86400000).toISOString(),
+    end_date: new Date(Date.now() + (15 + i) * 86400000).toISOString()
+  }));
+  const { data: challenges, error: challengesError } = await admin
+    .from('challenges').insert(challengeRows).select('id');
+  if (challengesError) throw new Error('task96 challenges: ' + challengesError.message);
+  for (const row of challenges || []) saveManifest({ type: 'challenge', id: row.id });
+  const allChallengeIds = records.filter((x) => x.type === 'challenge').map((x) => x.id);
+  const participantRows = [];
+  for (const [challengeIndex, challenge] of (challenges || []).entries()) {
+    const challengeId = challenge.id;
+    for (let i = 0; i < 12; i++) {
+      participantRows.push({
+        challenge_id: challengeId,
+        user_id: memberIds[(challengeIndex + i) % memberIds.length]
+      });
+    }
+  }
+  const { error: participantsError } = await admin.from('challenge_participants').insert(participantRows);
+  if (participantsError) throw new Error('task96 participants: ' + participantsError.message);
+
+  return {
+    members: memberIds.length,
+    activities: 96,
+    announcements: allPostIds.length,
+    events: allEventIds.length,
+    challenges: allChallengeIds.length,
+    likes: likeRows.length + 2,
+    comments: commentRows.length + 1,
+    rsvps: rsvpRows.length + 1,
+    challengeParticipants: participantRows.length + 1
+  };
+}
+
+async function measureTask96Routes(clubId, composition) {
+  const endpointBySection = TASK96_PHASE === 'before'
+    ? {
+        overview: '/clubs/' + clubId + '/member-home',
+        announcements: '/clubs/' + clubId + '/member-home',
+        events: '/clubs/' + clubId + '/member-home'
+      }
+    : {
+        overview: '/clubs/' + clubId + '/member-overview',
+        announcements: '/clubs/' + clubId + '/member-announcements',
+        events: '/clubs/' + clubId + '/member-events'
+      };
+  const routes = {};
+  for (const [section, endpoint] of Object.entries(endpointBySection)) {
+    const result = await api('viewer', 'GET', endpoint, null, true);
+    if (result.status !== 200 || !result.metrics || !Number.isFinite(result.metrics.dbQueries)) {
+      throw new Error(`task96 ${section} measurement unavailable: ${result.status} ${result.raw.slice(0, 200)}`);
+    }
+    routes[section] = { endpoint, ...result.metrics };
+  }
+  const report = { phase: TASK96_PHASE, composition, routes };
+  if (TASK96_PHASE === 'after' && fs.existsSync('/tmp/task96-before-metrics.json')) {
+    const before = JSON.parse(fs.readFileSync('/tmp/task96-before-metrics.json', 'utf8'));
+    for (const section of Object.keys(routes)) {
+      check('10: focused ' + section + ' reduces database requests and JSON bytes',
+        routes[section].dbQueries < before.routes[section].dbQueries &&
+        routes[section].apiResponseBytes < before.routes[section].apiResponseBytes,
+        { before: before.routes[section], after: routes[section] });
+    }
+  }
+  fs.writeFileSync(`/tmp/task96-${TASK96_PHASE}-metrics.json`, JSON.stringify(report, null, 2));
+  console.log('TASK96_METRICS ' + JSON.stringify(report));
 }
 
 async function run() {
@@ -510,6 +760,34 @@ async function run() {
   await createActivity(users.viewer.id, 'LB future date excluded', new Date(Date.now() + 10 * 86400000).toISOString(), '9 km');
   await createActivity(users.opted.id, 'LB opted future does not suppress nudge', new Date(Date.now() + 10 * 86400000).toISOString(), '11 km');
   await admin.from('memberships').delete().eq('club_id', clubA).eq('user_id', users.departed.id);
+  const { data: departedPost, error: departedPostError } = await admin.from('posts').insert({
+    user_id: users.departed.id,
+    club_id: clubA,
+    content: 'Departed author attribution must remain intact'
+  }).select('id').single();
+  if (departedPostError) throw new Error('create departed-author announcement: ' + departedPostError.message);
+  saveManifest({ type: 'post', id: departedPost.id });
+  const { error: parityLikesError } = await admin.from('post_likes').insert([
+    { post_id: shellPost.id, user_id: users.viewer.id },
+    { post_id: departedPost.id, user_id: users.active.id }
+  ]);
+  if (parityLikesError) throw new Error('create parity announcement likes: ' + parityLikesError.message);
+  const { error: parityCommentError } = await admin.from('post_comments').insert({
+    post_id: departedPost.id,
+    user_id: users.viewer.id,
+    content: 'Parity comment'
+  });
+  if (parityCommentError) throw new Error('create parity announcement comment: ' + parityCommentError.message);
+  const { error: eventImageError } = await admin.from('events')
+    .update({ image_path: 'events/task96-parity.jpg' })
+    .eq('id', shellEvent.id);
+  if (eventImageError) throw new Error('set parity event image: ' + eventImageError.message);
+  const { error: parityRsvpError } = await admin.from('event_rsvps').insert({
+    event_id: shellEvent.id,
+    user_id: users.viewer.id,
+    status: 'going'
+  });
+  if (parityRsvpError) throw new Error('create parity event RSVP: ' + parityRsvpError.message);
 
   // 1: explicit manager scope, no fallback, all manager periods retained.
   const dashA = await api('manager', 'GET', '/leaderboard/club-dashboard?clubId=' + clubA + '&period=all');
@@ -603,6 +881,31 @@ async function run() {
     viewerHome.body.standing.total === monthBoard.body.viewer.total &&
     viewerHome.body.standing.points === monthBoard.body.viewer.points &&
     viewerHome.body.standing.period === 'month', { home: viewerHome.body && viewerHome.body.standing, board: monthBoard.body.viewer });
+  const focusedOverview = await api('viewer', 'GET', '/clubs/' + clubA + '/member-overview');
+  const focusedAnnouncements = await api('viewer', 'GET', '/clubs/' + clubA + '/member-announcements');
+  const focusedEvents = await api('viewer', 'GET', '/clubs/' + clubA + '/member-events');
+  check('7: focused Overview preserves standing and drops unrelated presentation rows',
+    focusedOverview.status === 200 &&
+    JSON.stringify(focusedOverview.body.standing) === JSON.stringify(viewerHome.body.standing) &&
+    focusedOverview.body.announcements.length === 0 &&
+    focusedOverview.body.events.length === 0 &&
+    focusedOverview.body.challenges.length === 0 &&
+    focusedOverview.body.roster.length === 0,
+    focusedOverview.body);
+  check('7: focused Announcements preserves the exact announcement payload',
+    focusedAnnouncements.status === 200 &&
+    JSON.stringify(focusedAnnouncements.body.announcements) === JSON.stringify(viewerHome.body.announcements) &&
+    focusedAnnouncements.body.events.length === 0 &&
+    focusedAnnouncements.body.challenges.length === 0 &&
+    focusedAnnouncements.body.roster.length === 0,
+    focusedAnnouncements.body);
+  check('7: focused Club events preserves the exact event payload',
+    focusedEvents.status === 200 &&
+    JSON.stringify(focusedEvents.body.events) === JSON.stringify(viewerHome.body.events) &&
+    focusedEvents.body.announcements.length === 0 &&
+    focusedEvents.body.challenges.length === 0 &&
+    focusedEvents.body.roster.length === 0,
+    focusedEvents.body);
 
   // 8: verify the actual membership-gated HTML, not merely the source template.
   const currentPage = await page('viewer', '/clubs/member/' + clubA + '/leaderboard');
@@ -673,14 +976,29 @@ async function run() {
         result.status === 302 && result.location === '/html/clubs/member/' + clubB),
       [emptyAnnouncements, emptyChallenges, emptyEvents].map((r) => ({ status: r.status, location: r.location })));
   }
+  if (TASK96_BENCHMARK) {
+    const composition = await seedTask96Benchmark(clubA);
+    await measureTask96Routes(clubA, composition);
+  }
   await verifyMemberShellInBrowser(clubA);
   await admin.from('memberships').delete().eq('club_id', clubA).eq('user_id', users.viewer.id);
   const removedApi = await api('viewer', 'GET', '/clubs/' + clubA + '/leaderboard');
+  const removedFocused = await Promise.all([
+    api('viewer', 'GET', '/clubs/' + clubA + '/member-overview'),
+    api('viewer', 'GET', '/clubs/' + clubA + '/member-announcements'),
+    api('viewer', 'GET', '/clubs/' + clubA + '/member-events')
+  ]);
   const removedPage = await page('viewer', '/clubs/member/' + clubA + '/leaderboard');
   const removedHome = await page('viewer', '/clubs/member/' + clubA);
   check('8: removed member fails closed on API and page',
-    removedApi.status === 404 && removedPage.status === 404,
-    { api: removedApi.status + ':' + removedApi.raw, page: removedPage.status + ':' + removedPage.raw });
+    removedApi.status === 404 && removedPage.status === 404 &&
+    removedFocused.every((result) => result.status === 200 && result.body &&
+      result.body.error === 'Not a member of this club'),
+    {
+      api: removedApi.status + ':' + removedApi.raw,
+      page: removedPage.status + ':' + removedPage.raw,
+      focused: removedFocused.map((result) => result.status + ':' + result.raw)
+    });
   check('8: removed member cannot receive member-home shell',
     removedHome.status === 302 && removedHome.location === '/html/feed',
     { status: removedHome.status, location: removedHome.location });

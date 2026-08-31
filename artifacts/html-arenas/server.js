@@ -8,6 +8,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const { AsyncLocalStorage } = require('async_hooks');
 const cookieParser = require('cookie-parser');
 const multer = require('multer');
 const sharp = require('sharp');
@@ -46,16 +47,73 @@ const PORT = process.env.PORT || 3000;
 const BASE = (process.env.BASE_PATH || '').replace(/\/$/, '');
 const HTML = path.join(__dirname, 'html');
 
+// Opt-in benchmark instrumentation. It is inert unless both the process flag
+// and request header are present, and reports only aggregate request/byte data
+// in response headers — never row contents or credentials.
+const dbMetricStorage = new AsyncLocalStorage();
+const DB_METRICS_ENABLED = process.env.ARENAS_DB_METRICS === '1';
+function dbMetricGroup(rawUrl) {
+  try {
+    const url = new URL(typeof rawUrl === 'string' ? rawUrl : rawUrl.url);
+    const rest = url.pathname.match(/\/rest\/v1\/([^/]+)/);
+    if (rest) return decodeURIComponent(rest[1]);
+    if (url.pathname.startsWith('/auth/v1/')) return 'auth';
+    if (url.pathname.startsWith('/storage/v1/')) return 'storage';
+    return 'other';
+  } catch (err) {
+    return 'other';
+  }
+}
+async function measuredSupabaseFetch(input, init) {
+  const response = await fetch(input, init);
+  const metric = dbMetricStorage.getStore();
+  if (metric) {
+    let bytes = 0;
+    try {
+      bytes = (await response.clone().arrayBuffer()).byteLength;
+    } catch (err) {}
+    const group = dbMetricGroup(input);
+    const current = metric.groups[group] || { queries: 0, bytes: 0 };
+    current.queries += 1;
+    current.bytes += bytes;
+    metric.groups[group] = current;
+    metric.queries += 1;
+    metric.bytes += bytes;
+  }
+  return response;
+}
+function attachDbMetricHeaders(res, metric) {
+  if (res.headersSent) return;
+  res.setHeader('X-Arenas-DB-Queries', String(metric.queries));
+  res.setHeader('X-Arenas-DB-Bytes', String(metric.bytes));
+  res.setHeader(
+    'X-Arenas-DB-Breakdown',
+    Buffer.from(JSON.stringify(metric.groups)).toString('base64url')
+  );
+}
+app.use((req, res, next) => {
+  if (!DB_METRICS_ENABLED || req.get('X-Arenas-Measure-DB') !== '1') return next();
+  const metric = { queries: 0, bytes: 0, groups: {} };
+  const json = res.json.bind(res);
+  res.json = (body) => {
+    attachDbMetricHeaders(res, metric);
+    return json(body);
+  };
+  dbMetricStorage.run(metric, next);
+});
+
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_ANON_KEY,
+  DB_METRICS_ENABLED ? { global: { fetch: measuredSupabaseFetch } } : {}
 );
 
 // Server-only admin client (service role bypasses RLS). NEVER expose this key
 // to the browser — it is used exclusively for trusted server-side writes.
 const supabaseAdmin = process.env.SUPABASE_SERVICE_ROLE_KEY
   ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { autoRefreshToken: false, persistSession: false }
+      auth: { autoRefreshToken: false, persistSession: false },
+      ...(DB_METRICS_ENABLED ? { global: { fetch: measuredSupabaseFetch } } : {})
     })
   : null;
 
@@ -11549,6 +11607,181 @@ app.get([
 });
 
 // ── CLUB MEMBER HOME DATA (API) ──
+const CLUB_MEMBER_PLACEHOLDER_ID = '00000000-0000-0000-0000-000000000000';
+
+async function loadFocusedMemberOverview(clubId, user) {
+  const { data: members, error: membersError } = await supabaseAdmin
+    .from('memberships')
+    .select('user_id, role, created_at')
+    .eq('club_id', clubId)
+    .order('created_at', { ascending: true });
+  if (membersError) throw membersError;
+  const memberRows = members || [];
+  const profileMap = await buildUserProfileMap(memberRows.map((m) => m.user_id));
+  const pointsBoard = await buildClubPointsLeaderboard(memberRows, profileMap, 'month', user);
+
+  const nowIso = new Date().toISOString();
+  const { data: challenges, error: challengesError } = await supabaseAdmin
+    .from('challenges')
+    .select('id')
+    .eq('club_id', clubId)
+    .gte('end_date', nowIso);
+  if (challengesError) throw challengesError;
+  const challengeIds = (challenges || []).map((row) => row.id);
+  const { data: joinedChallenges, error: joinedError } = await supabaseAdmin
+    .from('challenge_participants')
+    .select('challenge_id')
+    .eq('user_id', user.id)
+    .in('challenge_id', challengeIds.length ? challengeIds : [CLUB_MEMBER_PLACEHOLDER_ID]);
+  if (joinedError) throw joinedError;
+
+  const viewer = pointsBoard.viewer;
+  return {
+    standing: {
+      rank: viewer ? viewer.rank : null,
+      total: pointsBoard.leaderboard.length,
+      points: viewer ? viewer.points : 0,
+      activeChallenges: new Set((joinedChallenges || []).map((row) => row.challenge_id)).size,
+      period: 'month'
+    },
+    announcements: [],
+    events: [],
+    challenges: [],
+    roster: [],
+    viewerId: user.id
+  };
+}
+
+async function loadFocusedMemberAnnouncements(clubId, user, membership) {
+  const { data: announcements, error: announcementsError } = await supabaseAdmin
+    .from('posts')
+    .select('id, user_id, content, image_url, created_at')
+    .eq('club_id', clubId)
+    .order('created_at', { ascending: false })
+    .limit(5);
+  if (announcementsError) throw announcementsError;
+  const annRows = announcements || [];
+  const authorIds = [...new Set(annRows.map((row) => row.user_id).filter(Boolean))];
+  const profileMap = await buildUserProfileMap(authorIds);
+
+  const { data: authorMemberships, error: authorMembershipsError } = await supabaseAdmin
+    .from('memberships')
+    .select('user_id, role')
+    .eq('club_id', clubId)
+    .in('user_id', authorIds.length ? authorIds : [CLUB_MEMBER_PLACEHOLDER_ID]);
+  if (authorMembershipsError) throw authorMembershipsError;
+  const roleByAuthor = Object.fromEntries((authorMemberships || []).map((row) => [row.user_id, row.role]));
+
+  const annIds = annRows.map((row) => row.id);
+  const [likesResult, commentsResult] = await Promise.all([
+    supabaseAdmin
+      .from('post_likes')
+      .select('post_id, user_id')
+      .in('post_id', annIds.length ? annIds : [CLUB_MEMBER_PLACEHOLDER_ID]),
+    supabaseAdmin
+      .from('post_comments')
+      .select('post_id')
+      .in('post_id', annIds.length ? annIds : [CLUB_MEMBER_PLACEHOLDER_ID])
+  ]);
+  if (likesResult.error) throw likesResult.error;
+  if (commentsResult.error) throw commentsResult.error;
+  const likeRows = likesResult.data || [];
+  const commentRows = commentsResult.data || [];
+  const viewerIsClubManager = membership.role === 'admin' || membership.role === 'coach';
+
+  return {
+    standing: {},
+    announcements: annRows.map((row) => {
+      const profile = profileMap[row.user_id];
+      const likes = likeRows.filter((like) => like.post_id === row.id);
+      return {
+        id: row.id,
+        userId: row.user_id,
+        canDelete: viewerIsClubManager,
+        coachName: (profile && profile.name) || 'Member',
+        coachAvatarUrl: (profile && profile.avatar_url) || null,
+        coachProfilePublic: profile ? profile.profilePublic !== false : true,
+        role: roleByAuthor[row.user_id] || null,
+        content: row.content,
+        image_url: row.image_url || null,
+        createdAt: row.created_at,
+        likeCount: likes.length,
+        commentCount: commentRows.filter((comment) => comment.post_id === row.id).length,
+        likedByMe: likes.some((like) => like.user_id === user.id)
+      };
+    }),
+    events: [],
+    challenges: [],
+    roster: [],
+    viewerId: user.id
+  };
+}
+
+async function loadFocusedMemberEvents(clubId, user) {
+  const nowIso = new Date().toISOString();
+  const { data: events, error: eventsError } = await supabaseAdmin
+    .from('events')
+    .select('id, title, date, location, sport, image_path')
+    .eq('club_id', clubId)
+    .gte('date', nowIso)
+    .order('date', { ascending: true })
+    .limit(5);
+  if (eventsError) throw eventsError;
+  const eventRows = events || [];
+  const eventIds = eventRows.map((row) => row.id);
+  const { data: rsvps, error: rsvpsError } = await supabaseAdmin
+    .from('event_rsvps')
+    .select('event_id, user_id, status')
+    .in('event_id', eventIds.length ? eventIds : [CLUB_MEMBER_PLACEHOLDER_ID]);
+  if (rsvpsError) throw rsvpsError;
+  const rsvpRows = rsvps || [];
+
+  return {
+    standing: {},
+    announcements: [],
+    events: eventRows.map((event) => {
+      const eventRsvps = rsvpRows.filter((row) => row.event_id === event.id);
+      const viewerRsvp = eventRsvps.find((row) => row.user_id === user.id);
+      return {
+        id: event.id,
+        title: event.title,
+        date: event.date,
+        location: event.location,
+        sport: event.sport,
+        image: eventImageVersion(event.image_path),
+        goingCount: eventRsvps.filter((row) => row.status === 'going').length,
+        myStatus: viewerRsvp ? viewerRsvp.status : null
+      };
+    }),
+    challenges: [],
+    roster: [],
+    viewerId: user.id
+  };
+}
+
+function registerFocusedClubMemberRoute(slug, loader) {
+  app.get(BASE + '/api/clubs/:clubId/' + slug, requireAuth, async (req, res) => {
+    if (!supabaseAdmin) return res.json({ error: 'Service unavailable' });
+    const { clubId } = req.params;
+    try {
+      const membership = await getCurrentClubMembership(req.user.id, clubId);
+      if (!membership) return res.json({ error: 'Not a member of this club' });
+      const payload = await loader(clubId, req.user, membership);
+      if (!await getCurrentClubMembership(req.user.id, clubId)) {
+        return res.status(404).json({ error: 'Not found' });
+      }
+      return res.json(payload);
+    } catch (err) {
+      console.log('Focused club member route error:', slug, err.message);
+      return res.json({ error: 'Could not load club' });
+    }
+  });
+}
+
+registerFocusedClubMemberRoute('member-overview', loadFocusedMemberOverview);
+registerFocusedClubMemberRoute('member-announcements', loadFocusedMemberAnnouncements);
+registerFocusedClubMemberRoute('member-events', loadFocusedMemberEvents);
+
 // Everything a member sees about ONE club, in a single payload: hero stats,
 // their month-to-date leaderboard standing, recent coach announcements, upcoming
 // events (with the viewer's RSVP), active challenges (with the viewer's
