@@ -28,3 +28,31 @@ uri = "file://screenshots/billing-admin.png"
 type = "image"
 title = "Billing page — admin"
 description = "Admin view: upgrade + Manage billing cards for both clubs."
+
+[[outputs]]
+id = "r7cROcmPgQaeL_1KXWnt-"
+uri = "file://.local/task97-evidence/challenges-1280-before-after.png"
+type = "image"
+title = "Challenges — desktop before/after"
+description = "1280px comparison: Phase 2 member-home payload versus the focused Challenges payload."
+
+[[outputs]]
+id = "16WmuX0R7mgIDJbadwXXO"
+uri = "file://.local/task97-evidence/challenges-380-before-after.png"
+type = "image"
+title = "Challenges — mobile before/after"
+description = "380px comparison preserving the compact club-member layout and mobile navigation."
+
+[[outputs]]
+id = "EZmlNOXiT7msXX1PIR_MR"
+uri = "file://.local/task97-evidence/members-1280-before-after.png"
+type = "image"
+title = "Members — desktop before/after"
+description = "1280px comparison: Phase 2 member-home payload versus the focused Members payload."
+
+[[outputs]]
+id = "9FyXb3_W6krncVkpkbs3e"
+uri = "file://.local/task97-evidence/members-380-before-after.png"
+type = "image"
+title = "Members — mobile before/after"
+description = "380px comparison preserving roster order, Show all behavior, and mobile navigation."
