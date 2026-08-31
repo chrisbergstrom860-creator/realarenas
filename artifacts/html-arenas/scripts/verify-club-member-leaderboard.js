@@ -252,7 +252,7 @@ async function verifyMemberShellInBrowser(clubId) {
       }));
       styleReport[width] = {};
       for (const cfg of [
-        { key: 'member-home', route: '/clubs/member/' + clubId, wait: '#cm-sec-members' },
+        { key: 'member-home', route: '/clubs/member/' + clubId, wait: '#cm-sec-overview:not([hidden])' },
         { key: 'member-leaderboard', route: '/clubs/member/' + clubId + '/leaderboard', wait: '.lb-table-wrap' }
       ]) {
         const p = await context.newPage();
@@ -278,7 +278,10 @@ async function verifyMemberShellInBrowser(clubId) {
             topbarTile: take('.tc-icon'),
             topbarImage: take('.tc-icon img'),
             sidebarTile: take('.club-sb-icon'),
-            sidebarImage: take('.club-sb-icon img')
+            sidebarImage: take('.club-sb-icon img'),
+            headerTile: take('.club-member-identity-tile'),
+            headerImage: take('.club-member-identity-tile img'),
+            tabs: take('.club-member-tabs')
           };
         });
         const phase = TASK89_BASELINE ? 'before' : 'after';
@@ -294,7 +297,8 @@ async function verifyMemberShellInBrowser(clubId) {
           ['member-home', 'member-leaderboard'].every((key) => {
             const styles = styleReport[width][key];
             return styles.topbarTile.overflow === 'hidden' && styles.topbarTile.borderRadius === '5px' &&
-              styles.sidebarTile.overflow === 'hidden' && styles.sidebarTile.borderRadius === '8px';
+              styles.sidebarTile.overflow === 'hidden' && styles.sidebarTile.borderRadius === '8px' &&
+              styles.headerTile.overflow === 'hidden' && styles.headerTile.borderRadius === '12px';
           }), styleReport[width]);
       }
       await context.close();
@@ -305,65 +309,95 @@ async function verifyMemberShellInBrowser(clubId) {
     );
 
     if (TASK89_BASELINE) return;
+    const context = await browser.newContext({ viewport: { width: 1280, height: 500 } });
+    const cookiePairs = users.viewer.cookie.split(';').map((part) => part.trim()).filter(Boolean);
+    await context.addCookies(cookiePairs.map((pair) => {
+      const split = pair.indexOf('=');
+      return { name: pair.slice(0, split), value: pair.slice(split + 1), url: BASE_URL };
+    }));
+    const p = await context.newPage();
+    const browserErrors = [];
+    p.on('console', (message) => {
+      if (message.type() === 'error') browserErrors.push('console: ' + message.text());
+    });
+    p.on('pageerror', (error) => browserErrors.push('pageerror: ' + error.message));
     const sectionCases = [
-      ['feed', 'announcements'], ['challenges', 'challenges'],
-      ['events', 'club-events'], ['members', 'members']
+      ['overview', '', '#cm-sec-overview'],
+      ['announcements', '/announcements', '#cm-sec-feed'],
+      ['leaderboard', '/leaderboard', '.lb-table-wrap'],
+      ['challenges', '/challenges', '#cm-sec-challenges'],
+      ['events', '/events', '#cm-sec-events'],
+      ['members', '/members', '#cm-sec-members']
     ];
-    for (const [internalId, canonicalHash] of sectionCases) {
-      // Keep a desktop-width but deliberately short viewport so each middle
-      // destination has enough document below it to align independently.
-      const context = await browser.newContext({ viewport: { width: 1280, height: 500 } });
-      const cookiePairs = users.viewer.cookie.split(';').map((part) => part.trim()).filter(Boolean);
-      await context.addCookies(cookiePairs.map((pair) => {
-        const split = pair.indexOf('=');
-        return { name: pair.slice(0, split), value: pair.slice(split + 1), url: BASE_URL };
-      }));
-      const p = await context.newPage();
-      const browserErrors = [];
-      p.on('console', (message) => {
-        if (message.type() === 'error') browserErrors.push('console: ' + message.text());
-      });
-      p.on('pageerror', (error) => browserErrors.push('pageerror: ' + error.message));
-      await p.route('**/api/clubs/' + clubId + '/member-home', async (route) => {
-        await new Promise((resolve) => setTimeout(resolve, 900));
-        await route.continue();
-      });
-      await p.goto(BASE_URL + '/clubs/member/' + clubId + '/leaderboard');
-      await p.click('#nav-' + internalId);
-      await p.waitForURL('**/clubs/member/' + clubId + '#' + canonicalHash);
-      await p.waitForTimeout(150);
-      const absentDuringDelay = await p.locator('#cm-sec-' + internalId).count() === 0;
-      await p.waitForSelector('#cm-sec-' + internalId);
-      await p.waitForTimeout(1800);
-      const landed = await p.evaluate((id) => {
-        const target = document.getElementById('cm-sec-' + id);
-        const active = document.getElementById('nav-' + id);
-        const rect = target && target.getBoundingClientRect();
-        const topbar = document.querySelector('.topbar').getBoundingClientRect();
-        const scroll = document.scrollingElement;
-        const expectedTop = topbar.bottom + 8;
-        const maxScrollTop = scroll.scrollHeight - scroll.clientHeight;
-        const absoluteTargetTop = scroll.scrollTop + rect.top;
-        const expectedScrollTop = Math.min(maxScrollTop, Math.max(0, absoluteTargetTop - expectedTop));
+    await p.goto(BASE_URL + '/clubs/member/' + clubId);
+    for (const [section, suffix, target] of sectionCases) {
+      await p.click('#club-tab-' + section);
+      await p.waitForURL('**/clubs/member/' + clubId + suffix);
+      await p.waitForSelector(target + (section === 'leaderboard' ? '' : ':not([hidden])'));
+      const state = await p.evaluate(({ section, target }) => {
+        const active = document.querySelector('.club-member-tab.active');
+        const visibleFallback = Array.from(document.querySelectorAll('#cm-content [id^="cm-sec-"]'))
+          .filter((el) => !el.hidden).map((el) => el.id);
         return {
-          active: !!active && active.classList.contains('active'),
-          visible: !!rect && rect.bottom > topbar.bottom && rect.top < window.innerHeight,
-          aligned: !!rect && Math.abs(rect.top - expectedTop) <= 6,
-          targetScrollMatched: Math.abs(scroll.scrollTop - expectedScrollTop) <= 4,
-          targetTop: rect && rect.top,
-          expectedTop,
-          scrollTop: scroll.scrollTop,
-          expectedScrollTop,
-          maxScrollTop
+          active: active && active.id,
+          targetVisible: !!document.querySelector(target) &&
+            getComputedStyle(document.querySelector(target)).display !== 'none',
+          visibleFallback
         };
-      }, internalId);
-      check('8: delayed leaderboard link lands on rendered ' + canonicalHash,
-        absentDuringDelay && landed.active && landed.visible && landed.targetScrollMatched,
-        { absentDuringDelay, landed });
-      check('8: delayed ' + canonicalHash + ' navigation has no browser errors',
-        browserErrors.length === 0, browserErrors);
-      await context.close();
+      }, { section, target });
+      check('8: canonical ' + section + ' route focuses its section',
+        state.active === 'club-tab-' + section && state.targetVisible &&
+        (section === 'leaderboard' || state.visibleFallback.length === 1),
+        state);
     }
+    await p.goBack();
+    await p.waitForURL('**/clubs/member/' + clubId + '/events');
+    const backActive = await p.locator('.club-member-tab.active').getAttribute('id');
+    await p.goForward();
+    await p.waitForURL('**/clubs/member/' + clubId + '/members');
+    const forwardActive = await p.locator('.club-member-tab.active').getAttribute('id');
+    check('8: browser back and forward restore active route tabs',
+      backActive === 'club-tab-events' && forwardActive === 'club-tab-members',
+      { backActive, forwardActive });
+    await p.goto(BASE_URL + '/clubs/member/' + clubId + '/members#announcements');
+    await p.waitForSelector('#cm-sec-members:not([hidden])');
+    const conflictingHash = await p.evaluate(() => ({
+      active: document.querySelector('.club-member-tab.active')?.id,
+      membersHidden: document.getElementById('cm-sec-members')?.hidden,
+      announcementsHidden: document.getElementById('cm-sec-feed')?.hidden
+    }));
+    check('8: canonical section overrides a conflicting legacy hash',
+      conflictingHash.active === 'club-tab-members' &&
+      conflictingHash.membersHidden === false &&
+      conflictingHash.announcementsHidden === true,
+      conflictingHash);
+    const sticky = await p.evaluate(() => {
+      const main = document.querySelector('.main');
+      const identity = document.querySelector('.club-member-identity');
+      const tabs = document.querySelector('.club-member-tabs');
+      const spacer = document.createElement('div');
+      spacer.style.height = '1200px';
+      spacer.setAttribute('data-test-scroll-spacer', '');
+      main.appendChild(spacer);
+      main.scrollTop = main.scrollHeight;
+      const mainRect = main.getBoundingClientRect();
+      const identityRect = identity.getBoundingClientRect();
+      const tabsRect = tabs.getBoundingClientRect();
+      const scroller = tabs.querySelector('.club-member-tabs-scroll');
+      return {
+        identityScrolled: identityRect.bottom < mainRect.top,
+        tabsStuck: Math.abs(tabsRect.top - mainRect.top) <= 2,
+        tabOverflow: scroller.scrollWidth > scroller.clientWidth,
+        scrollTop: main.scrollTop,
+        mainTop: mainRect.top,
+        tabsTop: tabsRect.top
+      };
+    });
+    check('8: banner scrolls away while route tabs stick below topbar',
+      sticky.scrollTop > 0 && sticky.identityScrolled && sticky.tabsStuck, sticky);
+    check('8: canonical route navigation has no browser errors',
+      browserErrors.length === 0, browserErrors);
+    await context.close();
   } finally {
     await browser.close();
   }
@@ -580,57 +614,64 @@ async function run() {
     count(currentPage.raw, '>This week<') === 0,
     { status: currentPage.status, month: count(currentPage.raw, '>This month<'), all: count(currentPage.raw, '>All time<'), week: count(currentPage.raw, '>This week<') });
   const currentHome = await page('viewer', '/clubs/member/' + clubA);
-  const expectedOrder = ['nav-overview', 'nav-feed', 'nav-leaderboard', 'nav-challenges', 'nav-events', 'nav-members'];
+  const expectedOrder = ['club-tab-overview', 'club-tab-announcements', 'club-tab-leaderboard', 'club-tab-challenges', 'club-tab-events', 'club-tab-members'];
   const orderIn = (raw) => expectedOrder.map((id) => raw.indexOf('id="' + id + '"'));
   const strictlyOrdered = (indexes) => indexes.every((value, i) => value >= 0 && (i === 0 || value > indexes[i - 1]));
   if (!TASK89_BASELINE) {
-    check('8: both pages use one complete ordered member navigation',
+    check('8: both pages use one complete ordered route-tab navigation',
       strictlyOrdered(orderIn(currentHome.raw)) && strictlyOrdered(orderIn(currentPage.raw)) &&
-      currentHome.raw.includes('id="nav-overview"') && currentHome.raw.includes('id="nav-overview" onclick=') &&
-      currentPage.raw.includes('nav-item active" id="nav-leaderboard"') &&
+      currentHome.raw.includes('id="club-tab-overview"') &&
+      currentHome.raw.includes('id="club-tab-overview" href="/html/clubs/member/') &&
+      currentPage.raw.includes('club-member-tab active" id="club-tab-leaderboard"') &&
+      !currentHome.raw.includes('id="nav-overview"') &&
+      !currentPage.raw.includes('id="nav-leaderboard"') &&
       !currentHome.raw.includes('<!-- CLUB_MEMBER_') && !currentPage.raw.includes('<!-- CLUB_MEMBER_'),
       { home: orderIn(currentHome.raw), leaderboard: orderIn(currentPage.raw) });
     const serverSource = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
     const occurrences = (source, text) => source.split(text).length - 1;
-    check('8: one shared member-nav loader is called by exactly both page routes',
+    check('8: one dispatcher and one nav-state read serve all six routes',
       occurrences(serverSource, 'function loadClubMemberNavState(') === 1 &&
-      occurrences(serverSource, 'await loadClubMemberNavState(club.id)') === 2,
+      occurrences(serverSource, 'await loadClubMemberNavState(club.id)') === 1 &&
+      serverSource.includes("BASE + '/clubs/member/:clubId/:section'") &&
+      occurrences(serverSource, "app.get(BASE + '/clubs/member/:clubId/leaderboard'") === 0,
       {
         definitions: occurrences(serverSource, 'function loadClubMemberNavState('),
         routeCalls: occurrences(serverSource, 'await loadClubMemberNavState(club.id)')
       });
-    const boardRouteStart = serverSource.indexOf("app.get(BASE + '/clubs/member/:clubId/leaderboard'");
-    const homeRouteStart = serverSource.indexOf("app.get(BASE + '/clubs/member/:clubId'", boardRouteStart + 1);
-    const homeRouteEnd = serverSource.indexOf("// ── CLUB MEMBER HOME DATA", homeRouteStart);
+    const routeStart = serverSource.indexOf("BASE + '/clubs/member/:clubId/:section'");
+    const routeEnd = serverSource.indexOf("// ── CLUB MEMBER HOME DATA", routeStart);
     const finalMembershipCheck = 'if (!await getCurrentClubMembership(req.user.id, req.params.clubId))';
-    check('8: both member pages revalidate membership after async shell reads',
-      occurrences(serverSource.slice(boardRouteStart, homeRouteStart), finalMembershipCheck) === 1 &&
-      occurrences(serverSource.slice(homeRouteStart, homeRouteEnd), finalMembershipCheck) === 1,
-      {
-        leaderboard: occurrences(serverSource.slice(boardRouteStart, homeRouteStart), finalMembershipCheck),
-        home: occurrences(serverSource.slice(homeRouteStart, homeRouteEnd), finalMembershipCheck)
-      });
+    check('8: dispatcher revalidates membership after async shell reads',
+      occurrences(serverSource.slice(routeStart, routeEnd), finalMembershipCheck) === 1,
+      { rechecks: occurrences(serverSource.slice(routeStart, routeEnd), finalMembershipCheck) });
     check('8: both existing mobile member nav variants keep their item sets',
-      serverSource.includes("clubBnItem(activeKey, 'overview', 'overview', '📊', 'Overview')") &&
-      serverSource.includes("clubBnItem(activeKey, 'feed', 'feed', '📣', 'News')") &&
-      serverSource.includes("clubBnItem(activeKey, 'challenges', 'challenges', '⚡', 'Goals')") &&
-      serverSource.includes("clubBnItem(activeKey, 'events', 'events', '🎟️', 'Events')") &&
-      serverSource.includes("clubBnItem(activeKey, 'members', 'members', '👥', 'Members')") &&
+      serverSource.includes("bnItem(activeKey, 'overview'") &&
+      serverSource.includes("bnItem(activeKey, 'announcements'") &&
+      serverSource.includes("bnItem(activeKey, 'challenges'") &&
+      serverSource.includes("bnItem(activeKey, 'events'") &&
+      serverSource.includes("bnItem(activeKey, 'members'") &&
       serverSource.includes("bnItem(null, 'club', \"nav('/clubs/member/'") &&
       serverSource.includes("bnItem('ranks', 'ranks', \"nav('/clubs/member/'"),
       null);
     const emptyHome = await page('manager', '/clubs/member/' + clubB);
     const emptyBoard = await page('manager', '/clubs/member/' + clubB + '/leaderboard');
+    const emptyAnnouncements = await page('manager', '/clubs/member/' + clubB + '/announcements');
+    const emptyChallenges = await page('manager', '/clubs/member/' + clubB + '/challenges');
+    const emptyEvents = await page('manager', '/clubs/member/' + clubB + '/events');
     const hasOnlyRequiredMemberNav = (raw) =>
-      raw.includes('id="nav-overview"') &&
-      raw.includes('id="nav-leaderboard"') &&
-      raw.includes('id="nav-members"') &&
-      !raw.includes('id="nav-feed"') &&
-      !raw.includes('id="nav-challenges"') &&
-      !raw.includes('id="nav-events"');
-    check('8: shared false-state hides all optional nav on both pages',
+      raw.includes('id="club-tab-overview"') &&
+      raw.includes('id="club-tab-leaderboard"') &&
+      raw.includes('id="club-tab-members"') &&
+      !raw.includes('id="club-tab-announcements"') &&
+      !raw.includes('id="club-tab-challenges"') &&
+      !raw.includes('id="club-tab-events"');
+    check('8: shared false-state hides all optional tabs on both pages',
       hasOnlyRequiredMemberNav(emptyHome.raw) && hasOnlyRequiredMemberNav(emptyBoard.raw),
       { homeStatus: emptyHome.status, boardStatus: emptyBoard.status });
+    check('8: direct unavailable optional routes redirect to Overview',
+      [emptyAnnouncements, emptyChallenges, emptyEvents].every((result) =>
+        result.status === 302 && result.location === '/html/clubs/member/' + clubB),
+      [emptyAnnouncements, emptyChallenges, emptyEvents].map((r) => ({ status: r.status, location: r.location })));
   }
   await verifyMemberShellInBrowser(clubA);
   await admin.from('memberships').delete().eq('club_id', clubA).eq('user_id', users.viewer.id);
@@ -665,8 +706,8 @@ async function run() {
     !serverSource.includes("app.get(BASE + '/api/leaderboard/club'"), null);
   const apiStart = serverSource.indexOf("app.get(BASE + '/api/clubs/:clubId/leaderboard'");
   const apiEnd = serverSource.indexOf("// Club dashboard leaderboard", apiStart);
-  const pageStart = serverSource.indexOf("app.get(BASE + '/clubs/member/:clubId/leaderboard'");
-  const pageEnd = serverSource.indexOf("app.get(BASE + '/clubs/member/:clubId'", pageStart + 1);
+  const pageStart = serverSource.indexOf("BASE + '/clubs/member/:clubId/:section'");
+  const pageEnd = serverSource.indexOf("// ── CLUB MEMBER HOME DATA", pageStart);
   const countMembershipChecks = (source) => (source.match(/getCurrentClubMembership\(/g) || []).length;
   check('9: member API and page revalidate membership before send',
     countMembershipChecks(serverSource.slice(apiStart, apiEnd)) === 2 &&

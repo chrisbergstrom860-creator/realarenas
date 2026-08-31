@@ -253,6 +253,121 @@ body {
   color: var(--red);
 }
 
+/* ── CLUB MEMBER IDENTITY + ROUTE TABS ──
+   These pages constrain the shared grid to the viewport so .main is the real
+   scrollport; that lets the banner leave while tabs remain below row-1 topbar. */
+body:has(.club-member-tabs) { height: 100vh; overflow: hidden; }
+body:has(.club-member-tabs) .app { height: 100vh; min-height: 0; }
+body:has(.club-member-tabs) .app > .main { min-height: 0; overflow-y: auto; }
+.club-member-identity {
+  margin: 12px 12px 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--gray-900);
+}
+.club-member-banner {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  aspect-ratio: 4/1;
+  object-fit: cover;
+  object-position: center;
+}
+.club-member-identity-band { padding: 16px; color: white; }
+.club-member-identity-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.club-member-identity-tile {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.club-member-identity-copy { flex: 1; min-width: 0; }
+.club-member-identity-copy h1 {
+  margin: 0;
+  color: white;
+  font-size: 18px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.club-member-identity-copy p {
+  margin: 2px 0 0;
+  color: rgba(255,255,255,.55);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.club-member-leave-btn {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border: .5px solid rgba(255,255,255,.25);
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255,255,255,.7);
+  font: 600 11px var(--font);
+  cursor: pointer;
+}
+.club-member-leave-btn:hover { border-color: rgba(255,255,255,.5); color: white; }
+.club-member-stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }
+.club-member-stats > div {
+  padding: 9px 10px;
+  border: .5px solid rgba(255,255,255,.1);
+  border-radius: 8px;
+  background: rgba(255,255,255,.06);
+  text-align: center;
+}
+.club-member-stats strong {
+  display: block;
+  color: white;
+  font: 700 16px/1 var(--mono);
+}
+.club-member-stats > div:last-child strong { color: var(--yellow); }
+.club-member-stats span {
+  display: block;
+  margin-top: 3px;
+  color: rgba(255,255,255,.45);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.club-member-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  border-bottom: var(--border);
+  background: white;
+}
+.club-member-tabs-scroll {
+  display: flex;
+  gap: 24px;
+  padding: 0 24px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.club-member-tabs-scroll::-webkit-scrollbar { display: none; }
+.club-member-tab {
+  flex: 0 0 auto;
+  padding: 14px 0 12px;
+  border-bottom: 2px solid transparent;
+  color: var(--gray-500);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color .15s,border-color .15s;
+}
+.club-member-tab:hover { color: var(--gray-900); }
+.club-member-tab.active { border-bottom-color: var(--gray-900); color: var(--gray-900); }
+
 /* Shared club-member shell only. Dashboard, invite and public-club chrome keep
    their own visual rules. Both member routes receive these exact elements from
    renderClubMemberShell(), so their computed shell styles remain identical. */

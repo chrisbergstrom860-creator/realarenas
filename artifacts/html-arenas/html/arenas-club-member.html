@@ -242,6 +242,8 @@ button,select,input,textarea{font-family:var(--font)}/* ── LAYOUT ── */
 <!-- MAIN CONTENT -->
 <main class="main">
 
+<!-- CLUB_MEMBER_HEADER -->
+
 <div id="cm-content">
   <div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Loading your club…</div>
 </div>
@@ -254,11 +256,13 @@ button,select,input,textarea{font-family:var(--font)}/* ── LAYOUT ── */
 
 <script>
 var pendingMemberSection = (function() {
+  var routeSection = ((window.ARENAS_DATA || {}).activeSection || 'overview');
+  if (routeSection !== 'overview') return null;
   var hash = decodeURIComponent((window.location.hash || '').replace(/^#/, ''));
   return ({ overview:'overview', announcements:'feed', challenges:'challenges',
     'club-events':'events', members:'members' })[hash] || null;
 })();
-function setTab(id, el) {
+function setTab(id, el, skipScroll) {
   // The club member home is now a single scrolling page; sidebar items jump to
   // the matching rendered section. If async content is not present yet, retain
   // the request rather than scrolling to the wrong place.
@@ -267,6 +271,9 @@ function setTab(id, el) {
     pendingMemberSection = id;
     return;
   }
+  document.querySelectorAll('#cm-content [id^="cm-sec-"]').forEach(function(section) {
+    section.hidden = section !== sec;
+  });
   document.querySelectorAll('.sidebar .nav-item').forEach(n => n.classList.remove('active'));
   if (el) el.classList.add('active');
   else {
@@ -274,10 +281,13 @@ function setTab(id, el) {
     if (navEl) navEl.classList.add('active');
   }
   pendingMemberSection = null;
-  const topbar = document.querySelector('.topbar');
-  const offset = (topbar ? topbar.getBoundingClientRect().height : 64) + 8;
-  const targetTop = window.scrollY + sec.getBoundingClientRect().top - offset;
-  window.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
+  if (skipScroll) return;
+  const main = document.querySelector('.main');
+  const tabs = document.querySelector('.club-member-tabs');
+  if (!main) return;
+  const offset = (tabs ? tabs.getBoundingClientRect().height : 42) + 8;
+  const targetTop = main.scrollTop + sec.getBoundingClientRect().top - main.getBoundingClientRect().top - offset;
+  main.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
 }
 function openClubLeaderboard() {
   var club = (window.ARENAS_DATA && window.ARENAS_DATA.club) || {};
@@ -371,62 +381,23 @@ function showToast(msg) {
         return;
       }
 
-      var c = r.club || data.club;
       var s = r.standing || {};
-      var sportLabel = c.sport === 'any' ? 'Any-sport club'
-        : c.sport ? (c.sport.charAt(0).toUpperCase() + c.sport.slice(1) + ' club') : 'Club';
-
-      // Hero + stats. The shared wrapper owns the outer corners in both
-      // states; the optional image and dark identity band meet with no seam.
-      var bannerHtml = c.banner
-        ? '<img id="cm-club-banner" class="member-club-banner" src="' +
-          esc(B + '/api/clubs/' + encodeURIComponent(c.id) + '/banner?v=' + encodeURIComponent(c.banner)) +
-          '" alt="" onerror="this.remove()">'
-        : '';
-      var html = '<div class="member-club-identity">' +
-        bannerHtml +
-        '<div id="cm-sec-overview" style="background:var(--gray-900);padding:16px;color:white">' +
-          '<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">' +
-            window.clubTileHtml(c.logo_url || null, c.sport, '', 'width:46px;height:46px;border-radius:12px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0') +
-            '<div style="flex:1;min-width:0">' +
-              '<div style="font-size:18px;font-weight:700;color:white;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(c.name) + '</div>' +
-              '<div style="font-size:11px;color:rgba(255,255,255,.55)">' + esc(sportLabel) + (c.city ? ' · ' + esc(c.city) : '') + ' · You\u2019re a ' + esc(r.myRole) + '</div>' +
-            '</div>' +
-            // Leave-club control: renders only on the server-injected canLeave
-            // flag (owner and blocked sole admin never see it — server-decided,
-            // same pattern as the dashboard danger zone's isOwner).
-            (data.canLeave ? '<button id="btn-leave-club" style="flex-shrink:0;background:transparent;border:0.5px solid rgba(255,255,255,.25);color:rgba(255,255,255,.65);font-size:11px;font-weight:600;padding:6px 12px;border-radius:8px;cursor:pointer;font-family:inherit">Leave club</button>' : '') +
-          '</div>' +
-          '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">' +
-            '<div style="background:rgba(255,255,255,.06);border:0.5px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 10px;text-align:center">' +
-              '<div style="font-size:16px;font-weight:700;font-family:var(--mono);color:white;line-height:1">' + r.stats.memberCount + '</div>' +
-              '<div style="font-size:9px;color:rgba(255,255,255,.45);margin-top:3px;text-transform:uppercase">Members</div>' +
-            '</div>' +
-            '<div style="background:rgba(255,255,255,.06);border:0.5px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 10px;text-align:center">' +
-              '<div style="font-size:16px;font-weight:700;font-family:var(--mono);color:white;line-height:1">' + r.stats.eventCount + '</div>' +
-              '<div style="font-size:9px;color:rgba(255,255,255,.45);margin-top:3px;text-transform:uppercase">Events</div>' +
-            '</div>' +
-            '<div style="background:rgba(255,255,255,.06);border:0.5px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 10px;text-align:center">' +
-              '<div style="font-size:16px;font-weight:700;font-family:var(--mono);color:white;line-height:1">' + r.stats.challengeCount + '</div>' +
-              '<div style="font-size:9px;color:rgba(255,255,255,.45);margin-top:3px;text-transform:uppercase">Challenges</div>' +
-            '</div>' +
-            '<div style="background:rgba(255,255,255,.06);border:0.5px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 10px;text-align:center">' +
-              '<div style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--yellow);line-height:1">' + (s.rank ? '#' + s.rank : '\u2014') + '</div>' +
-              '<div style="font-size:9px;color:rgba(255,255,255,.45);margin-top:3px;text-transform:uppercase">Your rank</div>' +
-            '</div>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
+      var rankEl = document.getElementById('club-member-rank');
+      if (rankEl) rankEl.textContent = s.rank ? '#' + s.rank : '\u2014';
+      var html = '<div id="cm-sec-overview">';
 
       // Standing
       if (s.rank) {
         var ord = s.rank === 1 ? 'st' : s.rank === 2 ? 'nd' : s.rank === 3 ? 'rd' : 'th';
         html += '' +
-          '<div id="cm-sec-leaderboard" style="margin:12px;background:linear-gradient(135deg,#FFFDF0,var(--yellow-light));border:0.5px solid var(--yellow-dark);border-radius:var(--radius-lg);padding:12px 16px;display:flex;align-items:center;gap:12px">' +
+          '<div style="margin:12px;background:linear-gradient(135deg,#FFFDF0,var(--yellow-light));border:0.5px solid var(--yellow-dark);border-radius:var(--radius-lg);padding:12px 16px;display:flex;align-items:center;gap:12px">' +
             '<div style="font-size:24px;font-weight:700;font-family:var(--mono);color:#E6B800;flex-shrink:0">#' + s.rank + '</div>' +
             '<div style="flex:1;font-size:12px;color:#633806;line-height:1.5">You\u2019re <strong>' + s.rank + ord + ' of ' + s.total + '</strong> on the club leaderboard month to date, with <strong>' + s.points + ' points</strong>.' + (s.activeChallenges > 0 ? ' You\u2019re in ' + s.activeChallenges + ' of the club\u2019s active challenge' + (s.activeChallenges !== 1 ? 's' : '') + ' \u2014 keep logging to climb!' : '') + '</div>' +
           '</div>';
+      } else {
+        html += '<div style="margin:12px;padding:24px;border:var(--border);border-radius:var(--radius-lg);background:white;text-align:center;color:var(--gray-500);font-size:13px">Log an activity to start building your club standing.</div>';
       }
+      html += '</div>';
 
       // Announcements
       if (r.announcements.length > 0) {
@@ -566,7 +537,9 @@ function showToast(msg) {
 
       container.innerHTML = html;
       window._cmRoster = r.roster;
-      if (pendingMemberSection) setTab(pendingMemberSection, null);
+      var sectionMap = { overview:'overview', announcements:'feed', challenges:'challenges', events:'events', members:'members' };
+      var legacySection = pendingMemberSection;
+      setTab(legacySection || sectionMap[data.activeSection] || 'overview', null, !legacySection);
     } catch (err) {
       var cont = document.getElementById('cm-content');
       if (cont) cont.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Could not load this club right now.</div>';
@@ -606,6 +579,7 @@ function showToast(msg) {
 
   loadMemberHome();
   window.addEventListener('hashchange', function() {
+    if (((window.ARENAS_DATA || {}).activeSection || 'overview') !== 'overview') return;
     var hash = decodeURIComponent((window.location.hash || '').replace(/^#/, ''));
     var id = ({ overview:'overview', announcements:'feed', challenges:'challenges',
       'club-events':'events', members:'members' })[hash];

@@ -293,6 +293,8 @@ button,select,input,textarea{font-family:var(--font)}
 
 <!-- MAIN CONTENT -->
 <main class="main">
+  <!-- CLUB_MEMBER_HEADER -->
+
   <div class="lb-container">
     <div class="lb-header">
       <div class="lb-title-wrap">
@@ -406,6 +408,8 @@ function renderData(data) {
   var club = data.club || {};
   var rows = data.leaderboard || [];
   var viewer = data.viewer || null;
+  var rankEl = document.getElementById('club-member-rank');
+  if (rankEl) rankEl.textContent = viewer ? '#' + viewer.rank : '\u2014';
 
   if (club.name) document.title = 'Arenas — ' + club.name + ' Leaderboard';
 
