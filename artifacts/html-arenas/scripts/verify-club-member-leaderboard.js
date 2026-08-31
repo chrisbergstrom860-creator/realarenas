@@ -12,6 +12,10 @@ const TASK89_BASELINE = process.env.TASK89_BASELINE === '1';
 const TASK96_BENCHMARK = process.env.TASK96_BENCHMARK === '1';
 const TASK96_PHASE = process.env.TASK96_PHASE === 'after' ? 'after' : 'before';
 const TASK96_BASE_URL = process.env.TASK96_BASE_URL || BASE_URL;
+const TASK97_BENCHMARK = process.env.TASK97_BENCHMARK === '1';
+const TASK97_PHASE = process.env.TASK97_PHASE === 'after' ? 'after' : 'before';
+const TASK97_BASE_URL = process.env.TASK97_BASE_URL || BASE_URL;
+const MEASURE_BASE_URL = TASK97_BENCHMARK ? TASK97_BASE_URL : TASK96_BASE_URL;
 const MANIFEST = '/tmp/verify-club-member-leaderboard-manifest.json';
 const PW = 'ArenasTest!234';
 const TZ = 'America/Los_Angeles';
@@ -166,7 +170,7 @@ async function login(key) {
 }
 
 async function api(key, method, route, body, measure) {
-  const response = await fetch((measure ? TASK96_BASE_URL : BASE_URL) + '/api' + route, {
+  const response = await fetch((measure ? MEASURE_BASE_URL : BASE_URL) + '/api' + route, {
     method,
     redirect: 'manual',
     headers: {
@@ -278,6 +282,10 @@ async function verifyMemberShellInBrowser(clubId) {
           { key: 'overview', route: '/clubs/member/' + clubId, wait: '#cm-sec-overview:not([hidden])' },
           { key: 'announcements', route: '/clubs/member/' + clubId + '/announcements', wait: '#cm-sec-feed:not([hidden])' },
           { key: 'events', route: '/clubs/member/' + clubId + '/events', wait: '#cm-sec-events:not([hidden])' }
+        ] : []),
+        ...(TASK97_BENCHMARK ? [
+          { key: 'challenges', route: '/clubs/member/' + clubId + '/challenges', wait: '#cm-sec-challenges:not([hidden])' },
+          { key: 'members', route: '/clubs/member/' + clubId + '/members', wait: '#cm-sec-members:not([hidden])' }
         ] : [])
       ];
       for (const cfg of routeConfigs) {
@@ -288,6 +296,15 @@ async function verifyMemberShellInBrowser(clubId) {
           await p.route('**/api/clubs/*/member-*', async (route) => {
             const request = route.request();
             const url = request.url().replace(/\/member-(overview|announcements|events)$/, '/member-home');
+            const fullPayloadResponse = await route.fetch({ url });
+            await route.fulfill({ response: fullPayloadResponse });
+          });
+        }
+        if (TASK97_BENCHMARK && TASK97_PHASE === 'before' &&
+            ['challenges', 'members'].includes(cfg.key)) {
+          await p.route('**/api/clubs/*/member-*', async (route) => {
+            const request = route.request();
+            const url = request.url().replace(/\/member-(challenges|members)$/, '/member-home');
             const fullPayloadResponse = await route.fetch({ url });
             await route.fulfill({ response: fullPayloadResponse });
           });
@@ -324,6 +341,12 @@ async function verifyMemberShellInBrowser(clubId) {
         if (TASK96_BENCHMARK && ['overview', 'announcements', 'events'].includes(cfg.key)) {
           await p.screenshot({
             path: `/tmp/task96-${TASK96_PHASE}-${cfg.key}-${width}.png`,
+            fullPage: true
+          });
+        }
+        if (TASK97_BENCHMARK && ['challenges', 'members'].includes(cfg.key)) {
+          await p.screenshot({
+            path: `/tmp/task97-${TASK97_PHASE}-${cfg.key}-${width}.png`,
             fullPage: true
           });
         }
@@ -400,15 +423,14 @@ async function verifyMemberShellInBrowser(clubId) {
         overview: '/member-overview',
         announcements: '/member-announcements',
         leaderboard: '/leaderboard',
-        challenges: '/member-home',
+        challenges: '/member-challenges',
         events: '/member-events',
-        members: '/member-home'
+        members: '/member-members'
       }[section];
       const calls = sectionApiCalls.slice(callStart);
       check('8: canonical ' + section + ' route uses its intended payload',
         calls.some((pathname) => pathname.endsWith(expectedEndpoint)) &&
-        (section === 'challenges' || section === 'members' ||
-          !calls.some((pathname) => pathname.endsWith('/member-home'))),
+        !calls.some((pathname) => pathname.endsWith('/member-home')),
         calls);
     }
     await p.goBack();
@@ -425,20 +447,21 @@ async function verifyMemberShellInBrowser(clubId) {
     const conflictingHash = await p.evaluate(() => ({
       active: document.querySelector('.club-member-tab.active')?.id,
       membersHidden: document.getElementById('cm-sec-members')?.hidden,
-      announcementsHidden: document.getElementById('cm-sec-feed')?.hidden
+      announcementsAbsentOrHidden: !document.getElementById('cm-sec-feed') ||
+        document.getElementById('cm-sec-feed').hidden
     }));
     check('8: canonical section overrides a conflicting legacy hash',
       conflictingHash.active === 'club-tab-members' &&
       conflictingHash.membersHidden === false &&
-      conflictingHash.announcementsHidden === true,
+      conflictingHash.announcementsAbsentOrHidden === true,
       conflictingHash);
     await p.goto(BASE_URL + '/clubs/member/' + clubId);
     await p.waitForSelector('#cm-sec-overview:not([hidden])');
     const legacyHashCases = [
       ['announcements', '#cm-sec-feed', '/member-announcements'],
       ['club-events', '#cm-sec-events', '/member-events'],
-      ['challenges', '#cm-sec-challenges', '/member-home'],
-      ['members', '#cm-sec-members', '/member-home']
+      ['challenges', '#cm-sec-challenges', '/member-challenges'],
+      ['members', '#cm-sec-members', '/member-members']
     ];
     for (const [hash, target, expectedEndpoint] of legacyHashCases) {
       const callStart = sectionApiCalls.length;
@@ -454,7 +477,8 @@ async function verifyMemberShellInBrowser(clubId) {
     await p.goBack();
     await p.waitForSelector('#cm-sec-challenges:not([hidden])');
     check('8: legacy hash browser history reloads the restored section',
-      sectionApiCalls.slice(legacyBackStart).some((pathname) => pathname.endsWith('/member-home')),
+      sectionApiCalls.slice(legacyBackStart).some((pathname) => pathname.endsWith('/member-challenges')) &&
+      !sectionApiCalls.slice(legacyBackStart).some((pathname) => pathname.endsWith('/member-home')),
       sectionApiCalls.slice(legacyBackStart));
     const clearHashStart = sectionApiCalls.length;
     await p.evaluate(() => { window.location.hash = ''; });
@@ -681,6 +705,38 @@ async function measureTask96Routes(clubId, composition) {
   console.log('TASK96_METRICS ' + JSON.stringify(report));
 }
 
+async function measureTask97Routes(clubId, composition) {
+  const endpointBySection = TASK97_PHASE === 'before'
+    ? {
+        challenges: '/clubs/' + clubId + '/member-home',
+        members: '/clubs/' + clubId + '/member-home'
+      }
+    : {
+        challenges: '/clubs/' + clubId + '/member-challenges',
+        members: '/clubs/' + clubId + '/member-members'
+      };
+  const routes = {};
+  for (const [section, endpoint] of Object.entries(endpointBySection)) {
+    const result = await api('viewer', 'GET', endpoint, null, true);
+    if (result.status !== 200 || !result.metrics || !Number.isFinite(result.metrics.dbQueries)) {
+      throw new Error(`task97 ${section} measurement unavailable: ${result.status} ${result.raw.slice(0, 200)}`);
+    }
+    routes[section] = { endpoint, ...result.metrics };
+  }
+  const report = { phase: TASK97_PHASE, composition, routes };
+  if (TASK97_PHASE === 'after' && fs.existsSync('/tmp/task97-before-metrics.json')) {
+    const before = JSON.parse(fs.readFileSync('/tmp/task97-before-metrics.json', 'utf8'));
+    for (const section of Object.keys(routes)) {
+      check('11: focused ' + section + ' reduces database requests and JSON bytes',
+        routes[section].dbQueries < before.routes[section].dbQueries &&
+        routes[section].apiResponseBytes < before.routes[section].apiResponseBytes,
+        { before: before.routes[section], after: routes[section] });
+    }
+  }
+  fs.writeFileSync(`/tmp/task97-${TASK97_PHASE}-metrics.json`, JSON.stringify(report, null, 2));
+  console.log('TASK97_METRICS ' + JSON.stringify(report));
+}
+
 async function run() {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
@@ -884,6 +940,8 @@ async function run() {
   const focusedOverview = await api('viewer', 'GET', '/clubs/' + clubA + '/member-overview');
   const focusedAnnouncements = await api('viewer', 'GET', '/clubs/' + clubA + '/member-announcements');
   const focusedEvents = await api('viewer', 'GET', '/clubs/' + clubA + '/member-events');
+  const focusedChallenges = await api('viewer', 'GET', '/clubs/' + clubA + '/member-challenges');
+  const focusedMembers = await api('viewer', 'GET', '/clubs/' + clubA + '/member-members');
   check('7: focused Overview preserves standing and drops unrelated presentation rows',
     focusedOverview.status === 200 &&
     JSON.stringify(focusedOverview.body.standing) === JSON.stringify(viewerHome.body.standing) &&
@@ -906,6 +964,20 @@ async function run() {
     focusedEvents.body.challenges.length === 0 &&
     focusedEvents.body.roster.length === 0,
     focusedEvents.body);
+  check('7: focused Challenges preserves the exact challenge payload',
+    focusedChallenges.status === 200 &&
+    JSON.stringify(focusedChallenges.body.challenges) === JSON.stringify(viewerHome.body.challenges) &&
+    focusedChallenges.body.announcements.length === 0 &&
+    focusedChallenges.body.events.length === 0 &&
+    focusedChallenges.body.roster.length === 0,
+    focusedChallenges.body);
+  check('7: focused Members preserves the exact full-roster payload',
+    focusedMembers.status === 200 &&
+    JSON.stringify(focusedMembers.body.roster) === JSON.stringify(viewerHome.body.roster) &&
+    focusedMembers.body.announcements.length === 0 &&
+    focusedMembers.body.events.length === 0 &&
+    focusedMembers.body.challenges.length === 0,
+    focusedMembers.body);
 
   // 8: verify the actual membership-gated HTML, not merely the source template.
   const currentPage = await page('viewer', '/clubs/member/' + clubA + '/leaderboard');
@@ -976,9 +1048,10 @@ async function run() {
         result.status === 302 && result.location === '/html/clubs/member/' + clubB),
       [emptyAnnouncements, emptyChallenges, emptyEvents].map((r) => ({ status: r.status, location: r.location })));
   }
-  if (TASK96_BENCHMARK) {
+  if (TASK96_BENCHMARK || TASK97_BENCHMARK) {
     const composition = await seedTask96Benchmark(clubA);
-    await measureTask96Routes(clubA, composition);
+    if (TASK96_BENCHMARK) await measureTask96Routes(clubA, composition);
+    if (TASK97_BENCHMARK) await measureTask97Routes(clubA, composition);
   }
   await verifyMemberShellInBrowser(clubA);
   await admin.from('memberships').delete().eq('club_id', clubA).eq('user_id', users.viewer.id);
@@ -986,7 +1059,9 @@ async function run() {
   const removedFocused = await Promise.all([
     api('viewer', 'GET', '/clubs/' + clubA + '/member-overview'),
     api('viewer', 'GET', '/clubs/' + clubA + '/member-announcements'),
-    api('viewer', 'GET', '/clubs/' + clubA + '/member-events')
+    api('viewer', 'GET', '/clubs/' + clubA + '/member-events'),
+    api('viewer', 'GET', '/clubs/' + clubA + '/member-challenges'),
+    api('viewer', 'GET', '/clubs/' + clubA + '/member-members')
   ]);
   const removedPage = await page('viewer', '/clubs/member/' + clubA + '/leaderboard');
   const removedHome = await page('viewer', '/clubs/member/' + clubA);
@@ -1006,6 +1081,7 @@ async function run() {
   // 9: guard the independent overall board and server's canonical branch.
   const htmlRoot = path.join(__dirname, '..');
   const globalSource = fs.readFileSync(path.join(htmlRoot, 'html', 'arenas-leaderboards.html'), 'utf8');
+  const memberHomeSource = fs.readFileSync(path.join(htmlRoot, 'html', 'arenas-club-member.html'), 'utf8');
   const serverSource = fs.readFileSync(path.join(htmlRoot, 'server.js'), 'utf8');
   check('9: global leaderboard is platform-only with week/month/all periods',
     /state\s*=\s*\{\s*period:\s*'week'\s*\}/.test(globalSource) &&
@@ -1030,6 +1106,14 @@ async function run() {
   check('9: member API and page revalidate membership before send',
     countMembershipChecks(serverSource.slice(apiStart, apiEnd)) === 2 &&
     countMembershipChecks(serverSource.slice(pageStart, pageEnd)) === 2, null);
+  check('9: all five fallback-rendered sections select focused payloads',
+    ['member-overview', 'member-announcements', 'member-events', 'member-challenges', 'member-members']
+      .every((slug) => memberHomeSource.includes(slug + "'")) &&
+    memberHomeSource.includes("(focusedEndpoint || 'member-home')"), null);
+  check('9: member-home endpoint and renderer remain as rollback code',
+    serverSource.includes("app.get(BASE + '/api/clubs/:clubId/member-home'") &&
+    memberHomeSource.includes("async function loadMemberHome()") &&
+    memberHomeSource.includes("focusedEndpoint || 'member-home'"), null);
 }
 
 (async () => {

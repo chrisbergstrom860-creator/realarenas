@@ -11759,6 +11759,145 @@ async function loadFocusedMemberEvents(clubId, user) {
   };
 }
 
+async function loadFocusedMemberChallenges(clubId, user) {
+  const nowIso = new Date().toISOString();
+  const { data: clubChallenges, error: challengesError } = await supabaseAdmin
+    .from('challenges')
+    .select('id, title, sport, goal_type, goal_target, goal_unit, start_date, end_date, image_path')
+    .eq('club_id', clubId)
+    .gte('end_date', nowIso)
+    .order('end_date', { ascending: true });
+  if (challengesError) throw challengesError;
+  const { data: myActs, error: activitiesError } = await supabaseAdmin
+    .from('activities')
+    .select('sport, distance, date')
+    .eq('user_id', user.id);
+  if (activitiesError) throw activitiesError;
+  const myActRows = myActs || [];
+  const challenges = [];
+
+  // Preserve the current two reads per challenge. Task #100 owns batching.
+  for (const challenge of (clubChallenges || [])) {
+    const { data: myPart, error: participantError } = await supabaseAdmin
+      .from('challenge_participants')
+      .select('id')
+      .eq('challenge_id', challenge.id)
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (participantError) throw participantError;
+    const { count: participantCount, error: participantCountError } = await supabaseAdmin
+      .from('challenge_participants')
+      .select('*', { count: 'exact', head: true })
+      .eq('challenge_id', challenge.id);
+    if (participantCountError) throw participantCountError;
+
+    let progress = 0;
+    const streakDays = new Set();
+    const viewerTz = getUserTimezone(user);
+    const challengeWindow = challengeWindowFor(challenge, viewerTz);
+    const challengeStart = new Date(challenge.start_date);
+    const challengeEnd = new Date(challenge.end_date);
+    myActRows.forEach((activity) => {
+      const activityTime = new Date(activity.date).getTime();
+      if (activityTime < challengeWindow.startMs || activityTime > challengeWindow.endMs) return;
+      if (challenge.sport !== 'any' && activity.sport !== challenge.sport) return;
+      if (challenge.goal_type === 'distance') progress += parseDistanceKmUnitAware(activity.distance);
+      else if (challenge.goal_type === 'duration') progress += parseDurationHours(activity.duration);
+      else if (challenge.goal_type === 'streak') streakDays.add(dayKey(activity.date, viewerTz));
+      else progress += 1;
+    });
+    if (challenge.goal_type === 'streak') progress = streakDays.size;
+    progress = Math.round(progress * 10) / 10;
+    const pct = challenge.goal_target > 0
+      ? Math.min(100, Math.round((progress / challenge.goal_target) * 100))
+      : 0;
+    const totalDays = Math.max(1, (challengeEnd - challengeStart) / 86400000);
+    const elapsed = Math.max(0, (new Date() - challengeStart) / 86400000);
+    const expectedPct = Math.round((elapsed / totalDays) * 100);
+    const daysLeft = Math.max(0, Math.ceil((challengeEnd - new Date()) / 86400000));
+    let statusText;
+    let statusColor;
+    if (!myPart) {
+      statusText = 'Not joined — tap to join';
+      statusColor = '#854D0E';
+    } else if (challenge.goal_target > 0 && pct >= 100) {
+      statusText = 'Goal achieved ✓';
+      statusColor = '#10B981';
+    } else if (challenge.goal_type === 'streak') {
+      const remaining = Math.max(0, (challenge.goal_target || 0) - progress);
+      statusText = `${remaining} more active day${remaining !== 1 ? 's' : ''} to go`;
+      statusColor = '#854D0E';
+    } else if (pct >= expectedPct) {
+      statusText = 'On pace';
+      statusColor = '#10B981';
+    } else {
+      statusText = 'Behind pace — push on';
+      statusColor = '#854D0E';
+    }
+    challenges.push({
+      id: challenge.id,
+      title: challenge.title,
+      sport: challenge.sport,
+      image: challengeImageVersion(challenge.image_path),
+      goalTarget: challenge.goal_target,
+      goalUnit: challenge.goal_unit,
+      joined: !!myPart,
+      progress,
+      pct,
+      daysLeft,
+      statusText,
+      statusColor,
+      participantCount: participantCount || 0
+    });
+  }
+
+  return {
+    standing: {},
+    announcements: [],
+    events: [],
+    challenges,
+    roster: [],
+    viewerId: user.id
+  };
+}
+
+async function loadFocusedMemberMembers(clubId, user) {
+  const { data: members, error: membersError } = await supabaseAdmin
+    .from('memberships')
+    .select('user_id, role, created_at')
+    .eq('club_id', clubId)
+    .order('created_at', { ascending: true });
+  if (membersError) throw membersError;
+  const memberRows = members || [];
+  // Preserve full-roster Auth resolution. Task #99 owns limiting/pagination.
+  const profileMap = await buildUserProfileMap(memberRows.map((member) => member.user_id));
+  const roleOrder = { admin: 0, coach: 1, member: 2 };
+  const roster = memberRows.map((member) => {
+    const profile = profileMap[member.user_id];
+    return {
+      userId: member.user_id,
+      name: (profile && profile.name) || 'Member',
+      handle: (profile && profile.handle) || 'member',
+      avatar_url: (profile && profile.avatar_url) || null,
+      profilePublic: profile ? profile.profilePublic !== false : true,
+      role: member.role,
+      isMe: member.user_id === user.id
+    };
+  }).sort((a, b) =>
+    ((roleOrder[a.role] ?? 3) - (roleOrder[b.role] ?? 3)) ||
+    a.name.localeCompare(b.name)
+  );
+
+  return {
+    standing: {},
+    announcements: [],
+    events: [],
+    challenges: [],
+    roster,
+    viewerId: user.id
+  };
+}
+
 function registerFocusedClubMemberRoute(slug, loader) {
   app.get(BASE + '/api/clubs/:clubId/' + slug, requireAuth, async (req, res) => {
     if (!supabaseAdmin) return res.json({ error: 'Service unavailable' });
@@ -11781,6 +11920,8 @@ function registerFocusedClubMemberRoute(slug, loader) {
 registerFocusedClubMemberRoute('member-overview', loadFocusedMemberOverview);
 registerFocusedClubMemberRoute('member-announcements', loadFocusedMemberAnnouncements);
 registerFocusedClubMemberRoute('member-events', loadFocusedMemberEvents);
+registerFocusedClubMemberRoute('member-challenges', loadFocusedMemberChallenges);
+registerFocusedClubMemberRoute('member-members', loadFocusedMemberMembers);
 
 // Everything a member sees about ONE club, in a single payload: hero stats,
 // their month-to-date leaderboard standing, recent coach announcements, upcoming

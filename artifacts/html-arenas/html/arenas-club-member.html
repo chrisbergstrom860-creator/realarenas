@@ -337,11 +337,10 @@ function showToast(msg) {
 })();
 </script>
 <script>
-// Stage 2: render the member's club home (hero + stats, month-to-date standing, coach
-// announcements, upcoming events, active challenges, roster) into #cm-content
-// from the real /api/clubs/:clubId/member-home endpoint. Fetches are BASE-prefixed
-// for the /html mount; every DB-derived string (including computed initials) is
-// escaped before innerHTML.
+// Render the selected club-member section into #cm-content. Each normal route
+// uses a focused payload; member-home remains the fallback/rollback contract.
+// Fetches are BASE-prefixed for the /html mount; every DB-derived string
+// (including computed initials) is escaped before innerHTML.
 (function() {
   var data = window.ARENAS_DATA;
   if (!data || !data.club) return;
@@ -382,7 +381,9 @@ function showToast(msg) {
       var focusedEndpoint = {
         overview: 'member-overview',
         announcements: 'member-announcements',
-        events: 'member-events'
+        events: 'member-events',
+        challenges: 'member-challenges',
+        members: 'member-members'
       }[requestedSection];
       var response = await fetch(B + '/api/clubs/' + clubId + '/' + (focusedEndpoint || 'member-home'));
       var r = await response.json();
