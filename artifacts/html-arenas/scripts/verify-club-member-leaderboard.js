@@ -19,6 +19,10 @@ const MEASURE_BASE_URL = TASK97_BENCHMARK ? TASK97_BASE_URL : TASK96_BASE_URL;
 const MANIFEST = '/tmp/verify-club-member-leaderboard-manifest.json';
 const PW = 'ArenasTest!234';
 const TZ = 'America/Los_Angeles';
+// NOTE: this verifier normally targets Replit's gate-bypassed server. Its
+// at-risk/nudge assertions prove calculation, privacy, and notification rules,
+// not that a subscription unlocks them. verify-club-pro-gates.js separately
+// proves the production-style entitlement boundary.
 const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false }
 });

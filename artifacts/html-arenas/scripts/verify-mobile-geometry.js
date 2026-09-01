@@ -477,6 +477,10 @@ const PAGES = [
     surfaces: [{ name: 'log form', sel: '.main', min: 1 }] },
   { user: 'creator', name: 'billing', path: '/billing', waitFor: '.main', root: 'body',
     surfaces: [{ name: 'billing content', sel: '.main', min: 1 }] },
+  // The ordinary Replit server intentionally has CLUB_PLAN_GATES_ENABLED unset,
+  // so this geometry pass sees unlocked free-club analytics. It is not proof of
+  // production entitlement or locked-state rendering; verify-club-pro-gates.js
+  // owns those assertions on an explicitly gated child server.
   { user: 'creator', name: 'club-dashboard', path: '/clubs/dashboard?club=' + club.id, waitFor: '.main', root: 'body',
     surfaces: [{ name: 'overview', sel: '.main', min: 1 }],
     steps: [

@@ -26,6 +26,10 @@
 // owned by the demoted owner; one admin; one coach; one member. Cleans up.
 //
 // Run with the dev server up: node artifacts/html-arenas/scripts/verify-club-billing.js
+// NOTE: the ordinary Replit server leaves CLUB_PLAN_GATES_ENABLED unset. The
+// Pro training-load 200 below proves role access and feature behavior, not the
+// paid entitlement boundary. verify-club-pro-gates.js owns that proof on a
+// spawned server with production-style gating enabled.
 
 const { createClient } = require('@supabase/supabase-js');
 

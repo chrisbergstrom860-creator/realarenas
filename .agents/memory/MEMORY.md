@@ -92,3 +92,4 @@
 - [html-arenas Plausible analytics](html-arenas-analytics.md) — ONE send/sendFile injection middleware + client hostname gate; events via arenasTrack on server-confirmed outcomes only; never paste the snippet per-file.
 - [html-arenas post write gate](html-arenas-post-write-gate.md) — like/comment gated by canUserSeePost (read-path union); zero-leak 404; unlike lost with visibility; one grandfathered like.
 - [html-arenas public club profiles](html-arenas-public-club-profiles.md) — public-only profiles; private/missing parity; banner paths stay server-only; public pages never offer joining.
+- [Club Pro gate environment parity](html-arenas-club-pro-gate-env.md) — Railway enforces club gates while Replit bypasses them; entitlement checks need the gated child-server verifier.
