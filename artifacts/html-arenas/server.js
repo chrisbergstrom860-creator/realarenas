@@ -1777,24 +1777,43 @@ function injectProBadge(html, isPro) {
 }
 
 // ── NOTIFICATIONS ──
-// Insert a notification row for a recipient. Best-effort: failures are logged
-// but never bubble up, so the triggering action (like/comment/follow) still
-// succeeds. Uses the shared supabaseAdmin singleton.
-async function createNotification({ userId, type, title, body, link, actorId, entityId }) {
-  if (!supabaseAdmin || !userId) return;
+async function createRequiredNotificationBatch(rows) {
+  if (!supabaseAdmin) throw new Error('required notification unavailable');
+  if (!rows.length) return { delivered: true };
+  const { error } = await supabaseAdmin.from('notifications').upsert(rows, {
+    onConflict: 'user_id,source_key',
+    ignoreDuplicates: true
+  });
+  if (error) throw new Error('required notification failed: ' + error.message);
+  return { delivered: true };
+}
+
+// Insert a notification row for a recipient. Ordinary social notifications are
+// best-effort; required disclosures opt into throwing so the triggering webhook
+// is retried. sourceKey makes those retries idempotent per recipient.
+async function createNotification({
+  userId, type, title, body, link, actorId, entityId,
+  sourceKey = null, required = false, createdAt = null
+}) {
+  if (!supabaseAdmin || !userId) {
+    if (required) throw new Error('required notification unavailable');
+    return { delivered: false };
+  }
   // Respect the recipient's notification preferences for gated types. Fail
   // OPEN: if the lookup errors we deliver (current behavior), never drop.
   const prefKey = NOTIF_PREF_BY_TYPE[type];
   if (prefKey) {
     try {
       const { data: u } = await supabaseAdmin.auth.admin.getUserById(userId);
-      if (u && u.user && !prefsFromMeta(u.user.user_metadata)[prefKey]) return;
+      if (u && u.user && !prefsFromMeta(u.user.user_metadata)[prefKey]) {
+        return { delivered: false, suppressed: true };
+      }
     } catch (err) {
       // Lookup failure → deliver.
     }
   }
   try {
-    const { error } = await supabaseAdmin.from('notifications').insert({
+    const row = {
       user_id: userId,
       type,
       title,
@@ -1803,10 +1822,29 @@ async function createNotification({ userId, type, title, body, link, actorId, en
       actor_id: actorId,
       entity_id: entityId,
       read: false
-    });
-    if (error) console.log('Notification creation error:', error.message);
+    };
+    if (sourceKey) row.source_key = sourceKey;
+    if (createdAt) row.created_at = createdAt;
+    if (required && sourceKey) {
+      return await createRequiredNotificationBatch([row]);
+    }
+    const query = sourceKey
+      ? supabaseAdmin.from('notifications').upsert(row, {
+          onConflict: 'user_id,source_key',
+          ignoreDuplicates: true
+        })
+      : supabaseAdmin.from('notifications').insert(row);
+    const { error } = await query;
+    if (error) {
+      if (required) throw new Error('required notification failed: ' + error.message);
+      console.log('Notification creation error:', error.message);
+      return { delivered: false };
+    }
+    return { delivered: true };
   } catch (err) {
+    if (required) throw err;
     console.log('Notification creation error:', err.message);
+    return { delivered: false };
   }
 }
 
@@ -12342,7 +12380,12 @@ async function createBillingCheckout({ req, ownerType, ownerId, priceId }) {
   const params = {
     mode: 'subscription',
     line_items: [{ price: priceId, quantity: 1 }],
-    metadata: { owner_type: ownerType, owner_id: ownerId, initiated_by: req.user.id },
+    metadata: {
+      owner_type: ownerType,
+      owner_id: ownerId,
+      initiated_by: req.user.id,
+      plan_before: 'free'
+    },
     subscription_data: { metadata: { owner_type: ownerType, owner_id: ownerId } },
     client_reference_id: ownerType + ':' + ownerId,
     success_url: base + '/billing/success?session_id={CHECKOUT_SESSION_ID}',
@@ -12602,17 +12645,39 @@ function subscriptionOwner(sub) {
 // unique(owner_type, owner_id) so replayed and out-of-order events converge
 // on the same final row. Throws on DB failure so the webhook answers 500 and
 // Stripe retries the event.
-async function upsertSubscriptionRow(sub, ownerType, ownerId) {
+async function upsertSubscriptionRow(sub, ownerType, ownerId, {
+  forceEverPaid = false,
+  historicalPaidSubscriptionId = null
+} = {}) {
   const item = sub.items && sub.items.data && sub.items.data[0];
   const priceId = item && item.price && item.price.id;
+  const { data: existing, error: existingErr } = await supabaseAdmin
+    .from('subscriptions')
+    .select('ever_paid, last_paid_subscription_id')
+    .eq('owner_type', ownerType)
+    .eq('owner_id', ownerId)
+    .limit(1);
+  if (existingErr) throw new Error('subscriptions prior-state read failed: ' + existingErr.message);
+  const existingRow = (Array.isArray(existing) && existing[0]) || null;
+  const plan = planFromPrice(priceId, ownerType);
+  const paying = PAID_SUB_STATUSES.includes(sub.status);
+  const entitled =
+    paying &&
+    ((ownerType === 'club' && plan === 'club_pro') ||
+      (ownerType === 'user' && plan === 'pro'));
   const row = {
     owner_type: ownerType,
     owner_id: ownerId,
-    plan: planFromPrice(priceId, ownerType),
+    plan,
     stripe_customer_id:
       typeof sub.customer === 'string' ? sub.customer : (sub.customer && sub.customer.id) || null,
     stripe_subscription_id: sub.id,
     status: sub.status,
+    ever_paid: forceEverPaid || entitled || !!(existingRow && existingRow.ever_paid),
+    last_paid_subscription_id: entitled
+      ? sub.id
+      : historicalPaidSubscriptionId ||
+        (existingRow && existingRow.last_paid_subscription_id) || null,
     current_period_end: subPeriodEndIso(sub),
     cancel_at_period_end: !!sub.cancel_at_period_end,
     updated_at: new Date().toISOString()
@@ -12621,6 +12686,80 @@ async function upsertSubscriptionRow(sub, ownerType, ownerId) {
     .from('subscriptions')
     .upsert(row, { onConflict: 'owner_type,owner_id' });
   if (error) throw new Error('subscriptions upsert failed: ' + error.message);
+}
+
+// Stripe does not promise webhook ordering. Resolve the newest subscription
+// for this owner/customer before mutating local entitlement so a late event for
+// an older subscription cannot overwrite a newer checkout or resurrect access
+// after cancellation.
+async function canonicalOwnerSubscription(sub, ownerType, ownerId) {
+  const customerId =
+    typeof sub.customer === 'string' ? sub.customer : (sub.customer && sub.customer.id) || null;
+  if (!customerId) return sub;
+  const listed = await stripe.subscriptions.list({
+    customer: customerId,
+    status: 'all',
+    limit: 100
+  });
+  const matches = (listed.data || [])
+    .filter((candidate) => {
+      const owner = subscriptionOwner(candidate);
+      return owner && owner.ownerType === ownerType && owner.ownerId === ownerId;
+    })
+    .sort((a, b) => (b.created || 0) - (a.created || 0));
+  return matches[0] || sub;
+}
+
+async function subscriptionHadPaidInvoice(sub) {
+  const customerId =
+    typeof sub.customer === 'string' ? sub.customer : (sub.customer && sub.customer.id) || null;
+  if (!customerId || !sub.id) return false;
+  const invoices = await stripe.invoices.list({
+    customer: customerId,
+    subscription: sub.id,
+    status: 'paid',
+    limit: 1
+  });
+  return !!(invoices.data && invoices.data.length);
+}
+
+const CLUB_PRO_UPGRADE_TITLE = (clubName) => clubName + ' upgraded to Club Pro';
+const CLUB_PRO_UPGRADE_BODY = (clubName) =>
+  clubName + ' upgraded to Club Pro. Club administrators and coaches can now see the activity you log while you are a member, including weekly training hours, trends against your recent average, sessions, distance, rest days, and periods of inactivity, shown alongside your name. They may also see classifications such as training above or below your usual level.';
+const CLUB_PRO_DOWNGRADE_TITLE = (clubName) => clubName + ' no longer has Club Pro';
+const CLUB_PRO_DOWNGRADE_BODY = (clubName) =>
+  clubName + ' no longer has Club Pro. Club administrators and coaches no longer have access to Club Pro training summaries, trends, and inactivity views for club members.';
+
+async function notifyClubProVisibility({
+  clubId, initiatorId = null, direction, sourceKey, occurredAt = null
+}) {
+  const [{ data: club, error: clubErr }, { data: members, error: membersErr }] = await Promise.all([
+    supabaseAdmin.from('clubs').select('id, name').eq('id', clubId).maybeSingle(),
+    supabaseAdmin.from('memberships').select('user_id').eq('club_id', clubId)
+  ]);
+  if (clubErr) throw new Error('club disclosure read failed: ' + clubErr.message);
+  if (membersErr) throw new Error('club disclosure memberships read failed: ' + membersErr.message);
+  // A club may have been deleted while Stripe was delivering the cancellation
+  // event. With no club or roster there is nobody left to notify.
+  if (!club) return;
+  const recipients = [...new Set((members || [])
+    .map((m) => m.user_id)
+    .filter((userId) => userId && userId !== initiatorId))];
+  const isUpgrade = direction === 'upgrade';
+  const title = isUpgrade ? CLUB_PRO_UPGRADE_TITLE(club.name) : CLUB_PRO_DOWNGRADE_TITLE(club.name);
+  const body = isUpgrade ? CLUB_PRO_UPGRADE_BODY(club.name) : CLUB_PRO_DOWNGRADE_BODY(club.name);
+  await createRequiredNotificationBatch(recipients.map((userId) => ({
+      user_id: userId,
+      type: 'club',
+      title,
+      body,
+      link: '/privacy#club-manager-visibility',
+      actor_id: null,
+      entity_id: club.id,
+      source_key: sourceKey,
+      read: false,
+      ...(occurredAt ? { created_at: occurredAt } : {})
+    })));
 }
 
 app.post(BASE + '/api/stripe/webhook', async (req, res) => {
@@ -12654,7 +12793,8 @@ app.post(BASE + '/api/stripe/webhook', async (req, res) => {
         }
         const subId =
           typeof session.subscription === 'string' ? session.subscription : session.subscription.id;
-        const sub = await stripe.subscriptions.retrieve(subId);
+        const retrievedSub = await stripe.subscriptions.retrieve(subId);
+        const sub = await canonicalOwnerSubscription(retrievedSub, meta.owner_type, meta.owner_id);
         // Same stale guard as sub.updated: a redelivered completed event for
         // an OLD session (possible only after earlier 5xx + retry) must not
         // let its now-canceled subscription clobber a newer re-subscribe row.
@@ -12670,8 +12810,33 @@ app.post(BASE + '/api/stripe/webhook', async (req, res) => {
           console.log('[stripe webhook] stale completed ignored:', sub.id, '(row has', priorRow.stripe_subscription_id + ')');
           break;
         }
-        await upsertSubscriptionRow(sub, meta.owner_type, meta.owner_id);
+        const retrievedItem =
+          retrievedSub.items && retrievedSub.items.data && retrievedSub.items.data[0];
+        const checkoutWasPaid =
+          session.status === 'complete' &&
+          session.payment_status === 'paid';
+        const isClubProUpgrade =
+          meta.owner_type === 'club' &&
+          meta.plan_before === 'free' &&
+          planFromPrice(
+            retrievedItem && retrievedItem.price && retrievedItem.price.id,
+            'club'
+          ) === 'club_pro' &&
+          checkoutWasPaid;
+        await upsertSubscriptionRow(sub, meta.owner_type, meta.owner_id, {
+          forceEverPaid: isClubProUpgrade,
+          historicalPaidSubscriptionId: isClubProUpgrade ? retrievedSub.id : null
+        });
         console.log('[stripe webhook] checkout completed →', meta.owner_type, meta.owner_id, '=', sub.status);
+        if (isClubProUpgrade) {
+          await notifyClubProVisibility({
+            clubId: meta.owner_id,
+            initiatorId: meta.initiated_by || null,
+            direction: 'upgrade',
+            sourceKey: 'club-pro-upgrade:' + retrievedSub.id,
+            occurredAt: event.created ? new Date(event.created * 1000).toISOString() : null
+          });
+        }
         // Queue the ARL-compliant confirmation email for the paying subscriber.
         // owner_type maps 1:1 to product (user → Individual Pro, club → Club
         // Pro) because the two checkout flows use distinct prices. The price
@@ -12697,10 +12862,25 @@ app.post(BASE + '/api/stripe/webhook', async (req, res) => {
         break;
       }
       case 'customer.subscription.updated': {
-        const sub = event.data.object;
-        const owner = subscriptionOwner(sub);
+        const eventSub = event.data.object;
+        const owner = subscriptionOwner(eventSub);
         if (!owner) {
           console.log('[stripe webhook] sub.updated missing owner metadata:', sub.id);
+          break;
+        }
+        let sub;
+        try {
+          const liveSub = await stripe.subscriptions.retrieve(eventSub.id);
+          sub = await canonicalOwnerSubscription(liveSub, owner.ownerType, owner.ownerId);
+        } catch (err) {
+          if (err && err.code === 'resource_missing') {
+            console.log('[stripe webhook] sub.updated resource is gone; waiting for sub.deleted:', eventSub.id);
+            break;
+          }
+          throw err;
+        }
+        if (sub.id !== eventSub.id) {
+          console.log('[stripe webhook] stale sub.updated ignored:', eventSub.id, '(newest is', sub.id + ')');
           break;
         }
         // Upsert (not update): this event can arrive BEFORE
@@ -12709,36 +12889,96 @@ app.post(BASE + '/api/stripe/webhook', async (req, res) => {
         // subscription must not clobber a row that has since moved to a
         // different (newer) subscription — e.g. a late-retried "canceled"
         // update for the previous subscription after a re-subscribe.
-        const { data: existing } = await supabaseAdmin
+        const { data: existing, error: existingErr } = await supabaseAdmin
           .from('subscriptions')
-          .select('stripe_subscription_id')
+          .select('stripe_subscription_id, plan, status, ever_paid, last_paid_subscription_id')
           .eq('owner_type', owner.ownerType)
           .eq('owner_id', owner.ownerId)
           .limit(1);
+        if (existingErr) throw new Error('subscriptions prior-state read failed: ' + existingErr.message);
         const row = (Array.isArray(existing) && existing[0]) || null;
         const paying = PAID_SUB_STATUSES.includes(sub.status) || sub.status === 'trialing';
         if (row && row.stripe_subscription_id && row.stripe_subscription_id !== sub.id && !paying) {
           console.log('[stripe webhook] stale sub.updated ignored:', sub.id, '(row has', row.stripe_subscription_id + ')');
           break;
         }
+        const item = sub.items && sub.items.data && sub.items.data[0];
+        const currentPlan = planFromPrice(item && item.price && item.price.id, owner.ownerType);
+        const currentlyEntitled =
+          PAID_SUB_STATUSES.includes(sub.status) &&
+          owner.ownerType === 'club' &&
+          currentPlan === 'club_pro';
+        const lostClubProEntitlement =
+          owner.ownerType === 'club' &&
+          row && row.ever_paid &&
+          row.last_paid_subscription_id === sub.id &&
+          !currentlyEntitled;
         await upsertSubscriptionRow(sub, owner.ownerType, owner.ownerId);
         console.log('[stripe webhook] sub.updated →', owner.ownerType, owner.ownerId, '=', sub.status);
+        if (lostClubProEntitlement) {
+          await notifyClubProVisibility({
+            clubId: owner.ownerId,
+            direction: 'downgrade',
+            sourceKey: 'club-pro-downgrade:' + sub.id
+          });
+        }
         break;
       }
       case 'customer.subscription.deleted': {
         const sub = event.data.object;
+        const owner = subscriptionOwner(sub);
+        let staleForEntitlement = false;
+        if (owner) {
+          const canonical = await canonicalOwnerSubscription(sub, owner.ownerType, owner.ownerId);
+          if (canonical.id !== sub.id) {
+            staleForEntitlement = true;
+            console.log('[stripe webhook] stale sub.deleted will not change entitlement:', sub.id, '(newest is', canonical.id + ')');
+          }
+        }
         // Keep the row (stripe_customer_id is reused at next checkout); just
         // flip status — the plan helpers treat anything outside
         // active/past_due as free. The stale-event guard is inherent in
         // matching BY subscription ID: a delete for an old subscription finds
         // no row once the owner re-subscribed under a new one.
-        const { data, error } = await supabaseAdmin
+        const { data: prior, error: priorErr } = await supabaseAdmin
           .from('subscriptions')
-          .update({ status: 'canceled', cancel_at_period_end: !!sub.cancel_at_period_end, updated_at: new Date().toISOString() })
+          .select('owner_type, owner_id, plan, status, ever_paid, last_paid_subscription_id')
           .eq('stripe_subscription_id', sub.id)
-          .select('owner_type, owner_id');
-        if (error) throw new Error('subscriptions cancel update failed: ' + error.message);
-        console.log('[stripe webhook] sub.deleted', sub.id, data && data.length ? '→ row canceled' : '→ no matching row (stale, ignored)');
+          .limit(1);
+        if (priorErr) throw new Error('subscriptions cancel prior-state read failed: ' + priorErr.message);
+        const priorRow = (Array.isArray(prior) && prior[0]) || null;
+        const item = sub.items && sub.items.data && sub.items.data[0];
+        const isClubPro = planFromPrice(
+          item && item.price && item.price.id,
+          (owner && owner.ownerType) || (priorRow && priorRow.owner_type)
+        ) === 'club_pro';
+        const wasPaid =
+          !!(priorRow && priorRow.ever_paid &&
+            priorRow.last_paid_subscription_id === sub.id) ||
+          await subscriptionHadPaidInvoice(sub);
+        const shouldNotifyClubProLoss =
+          isClubPro && wasPaid &&
+          ((owner && owner.ownerType === 'club') ||
+            (priorRow && priorRow.owner_type === 'club'));
+        const resolvedOwner = owner || (priorRow && {
+          ownerType: priorRow.owner_type,
+          ownerId: priorRow.owner_id
+        });
+        if (resolvedOwner && !staleForEntitlement) {
+          await upsertSubscriptionRow(sub, resolvedOwner.ownerType, resolvedOwner.ownerId, {
+            forceEverPaid: wasPaid,
+            historicalPaidSubscriptionId: wasPaid ? sub.id : null
+          });
+        }
+        console.log('[stripe webhook] sub.deleted', sub.id, resolvedOwner ? '→ row canceled' : '→ no owner metadata (ignored)');
+        if (shouldNotifyClubProLoss) {
+          await notifyClubProVisibility({
+            clubId: resolvedOwner.ownerId,
+            direction: 'downgrade',
+            sourceKey: 'club-pro-downgrade:' + sub.id,
+            occurredAt: event.created ? new Date(event.created * 1000).toISOString() : null
+          });
+        }
         break;
       }
       case 'invoice.payment_failed': {
@@ -13644,7 +13884,7 @@ app.get(BASE + '/api/notifications', requireAuth, async (req, res) => {
   if (!supabaseAdmin) return res.json({ notifications: [], unreadCount: 0 });
   const { data, error } = await supabaseAdmin
     .from('notifications')
-    .select('*')
+    .select('id, user_id, type, title, body, link, read, actor_id, entity_id, created_at')
     .eq('user_id', req.user.id)
     .order('created_at', { ascending: false })
     .limit(50);
