@@ -757,7 +757,10 @@ body:has(.club-member-tabs) .app > .main { min-height: 0; overflow-y: auto; }
 .ccd-title-row .pro-badge{flex-shrink:0}
 .ccd-headline{font-size:12px;color:var(--gray-600);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
 .ccd-sub{font-size:11px;color:var(--gray-400);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
-.ccd-action{display:flex;align-items:center;justify-content:flex-end;flex-shrink:0}
+.ccd-action{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:5px;flex:0 0 220px;min-width:0}
+.ccd-visibility{margin:0;color:var(--gray-500);font-size:11px;line-height:1.25;text-align:right}
+.ccd-visibility a{color:var(--gray-700);font-weight:600;text-decoration:underline;text-underline-offset:2px}
+.ccd-visibility a:hover{color:var(--gray-900)}
 .ccd-btn{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;transition:all .13s;flex-shrink:0;border:1px solid transparent;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ccd-label-mobile{display:none}
 .ccd-btn-request{background:var(--yellow);border-color:var(--yellow-dark);color:var(--gray-900)}
@@ -776,6 +779,10 @@ body:has(.club-member-tabs) .app > .main { min-height: 0; overflow-y: auto; }
   /* Mobile: one compact row with shorter action labels. */
   body:has(.bottom-nav) .ccd-grid.ccd-grid-2{grid-template-columns:1fr}
   body:has(.bottom-nav) .ccd-grid{padding:12px 14px}
+  body:has(.bottom-nav) .ccd-card:has(.ccd-visibility){display:grid;grid-template-columns:42px minmax(0,1fr);align-items:center}
+  body:has(.bottom-nav) .ccd-card:has(.ccd-visibility) .ccd-action{grid-column:1/-1;width:100%;flex-basis:auto;align-items:flex-start;margin-top:1px}
+  body:has(.bottom-nav) .ccd-card:has(.ccd-visibility) .ccd-visibility{text-align:left}
+  body:has(.bottom-nav) .ccd-card:has(.ccd-visibility) .ccd-action .ccd-btn{align-self:flex-end}
   body:has(.bottom-nav) .ccd-btn{padding-left:10px;padding-right:10px}
   body:has(.bottom-nav) .ccd-label-wide{display:none}
   body:has(.bottom-nav) .ccd-label-mobile{display:inline}

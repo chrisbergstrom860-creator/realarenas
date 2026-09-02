@@ -92,9 +92,8 @@
   // ── CLUB-INVITE ACTION PILL ──
   // Club-invite notifications carry link '/join/<token>' and a server-computed
   // inviteState (live invite status + membership). Render the honest action:
-  //   pending → live brand-yellow "Join Club" pill (same solid-yellow committed/
-  //             action language as the ✓ Going state and the /join page CTA),
-  //             accepts inline via POST /auth/join/:token/existing
+  //   pending → live brand-yellow "Review & join" link to the canonical join
+  //             page, where current plan-specific visibility is disclosed
   //   joined  → muted "✓ Joined" pill (inert)
   //   expired → muted "Invite expired" label, no button
   //   gone    → (invite revoked = row deleted) plain row, no action
@@ -109,8 +108,8 @@
     if (n.inviteState !== 'pending') return '';
     var m = typeof n.link === 'string' && n.link.match(/^\/join\/([A-Za-z0-9_-]+)$/);
     if (!m) return '';
-    return '<button onclick="acceptClubInvite(event,\'' + esc(n.id) + '\',\'' + esc(m[1]) + '\')"' +
-      ' style="align-self:center;flex-shrink:0;padding:5px 11px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;background:#FFD21E;color:#111827;border:1px solid #E6B800;white-space:nowrap">Join Club</button>';
+    return '<a href="' + esc(B + '/join/' + m[1]) + '" onclick="event.stopPropagation()"' +
+      ' style="align-self:center;flex-shrink:0;padding:5px 11px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;background:#FFD21E;color:#111827;border:1px solid #E6B800;white-space:nowrap;text-decoration:none">Review &amp; join</a>';
   }
 
   // ── CHALLENGE-INVITE ACTION PILL ──
@@ -190,41 +189,6 @@
       btn.disabled = false;
       btn.style.opacity = '1';
       btn.textContent = 'Join';
-    }
-  };
-
-  // Inline accept: joins the club without leaving the page. On success the
-  // pill flips to muted "✓ Joined" (sidebar My Clubs picks the club up on the
-  // next page load — it is server-injected). On failure the invite may have
-  // died since render — navigate to the /join page, which renders the
-  // canonical invalid/expired/wrong-email states.
-  window.acceptClubInvite = async function (ev, id, token) {
-    ev.stopPropagation();
-    var btn = ev.currentTarget || ev.target;
-    btn.disabled = true;
-    btn.style.opacity = '.6';
-    btn.textContent = 'Joining…';
-    try {
-      var r = await fetch(B + '/auth/join/' + encodeURIComponent(token) + '/existing', { method: 'POST' });
-      var d = null;
-      try { d = await r.json(); } catch (e) { d = null; }
-      if (r.ok && d && d.success) {
-        for (var i = 0; i < allNotifs.length; i++) {
-          if (String(allNotifs[i].id) === String(id)) { allNotifs[i].inviteState = 'joined'; break; }
-        }
-        btn.outerHTML = joinedPill;
-        window.markNotificationRead(id);
-        if (typeof showToast === 'function') showToast(d.alreadyMember ? 'You are already a member of this club' : 'Welcome to the club 🎉');
-      } else {
-        await window.markNotificationRead(id);
-        var link = '/join/' + token;
-        if (typeof window.nav === 'function') window.nav(link);
-        else window.location.href = (window.BASE || B) + link;
-      }
-    } catch (e) {
-      btn.disabled = false;
-      btn.style.opacity = '1';
-      btn.textContent = 'Join Club';
     }
   };
 

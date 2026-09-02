@@ -154,6 +154,20 @@ body.is-public .app > .main {
   line-height: 1.6;
   white-space: pre-line;
 }
+.cp-visibility {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: var(--border);
+  color: var(--gray-600);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.cp-visibility a {
+  color: var(--gray-800);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 
 @media (max-width: 768px) {
   .cp-banner {
@@ -176,6 +190,7 @@ body.is-public .app > .main {
   .cp-about { margin-top: 24px; padding-top: 20px; }
   .cp-about h2 { font-size: 16px; }
   .cp-about p { font-size: 14px; }
+  .cp-visibility { margin-top: 20px; padding-top: 16px; font-size: 12px; }
 }
 </style>
 </head>
@@ -268,6 +283,7 @@ body.is-public .app > .main {
       <h2>About the club</h2>
       <p id="cp-desc"></p>
     </div>
+    <p id="cp-visibility" class="cp-visibility"></p>
   </div>
 </div>
 
@@ -395,6 +411,16 @@ body.is-public .app > .main {
     abtWrap.style.display = 'block';
     abtDesc.textContent = club.description;
   }
+
+  var visibilityCopy = club.plan === 'club_pro'
+    ? 'Club managers can see the activity you log, including weekly training hours and inactivity, while you\u2019re a member.'
+    : 'Club managers can see the activity you log while you\u2019re a member.';
+  var visibilityEl = document.getElementById('cp-visibility');
+  visibilityEl.appendChild(document.createTextNode(visibilityCopy + ' '));
+  var visibilityLink = document.createElement('a');
+  visibilityLink.href = B + '/privacy#club-manager-visibility';
+  visibilityLink.textContent = 'Full visibility policy.';
+  visibilityEl.appendChild(visibilityLink);
   
 })();
 </script>

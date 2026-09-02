@@ -72,6 +72,18 @@ async function api(k, method, path, body) {
   try { json = JSON.parse(text); } catch (e) {}
   return { status: r.status, body: json, raw: text };
 }
+async function acceptClubInvite(k, token) {
+  const page = await fetch(BASE_URL + '/join/' + token, { headers: { Cookie: users[k].cookie } });
+  const rendered = injectedData(await page.text(), 'JOIN_DATA');
+  return fetch(BASE_URL + '/auth/join/' + token + '/existing', {
+    method: 'POST',
+    headers: { Cookie: users[k].cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      renderedPlan: rendered && rendered.plan,
+      renderedPlanProof: rendered && rendered.planProof
+    })
+  });
+}
 
 function injectedData(html, varName) {
   const marker = 'window.' + varName + ' = ';
@@ -277,9 +289,7 @@ async function main() {
     expires_at: new Date(Date.now() + 30 * 864e5).toISOString()
   });
   check('open invite link seeded', !invErr, invErr && invErr.message);
-  const joinRes = await fetch(BASE_URL + '/auth/join/' + token + '/existing', {
-    method: 'POST', headers: { Cookie: users.seeker2.cookie }
-  });
+  const joinRes = await acceptClubInvite('seeker2', token);
   const joinBody = await joinRes.json().catch(() => null);
   check('open-invite accept succeeds', joinRes.status === 200 && joinBody && joinBody.success, { status: joinRes.status, joinBody });
   const { data: row5 } = await admin.from('club_join_requests').select('*').eq('club_id', pubClubId).eq('user_id', users.seeker2.id);
@@ -467,9 +477,7 @@ async function main() {
     expires_at: new Date(Date.now() + 30 * 864e5).toISOString()
   });
   check('15: private-club open invite seeded', !inv2Err, inv2Err && inv2Err.message);
-  const joinRes2 = await fetch(BASE_URL + '/auth/join/' + token2 + '/existing', {
-    method: 'POST', headers: { Cookie: users.seeker.cookie }
-  });
+  const joinRes2 = await acceptClubInvite('seeker', token2);
   const joinBody2 = await joinRes2.json().catch(() => null);
   check('15: invite accepted after leaving (nothing blocks rejoin)', joinRes2.status === 200 && joinBody2 && joinBody2.success, { status: joinRes2.status, joinBody2 });
   const { data: rj4 } = await admin.from('memberships').select('role').eq('club_id', privClubId).eq('user_id', users.seeker.id).maybeSingle();

@@ -607,7 +607,7 @@ async function schemaReady() {
     check('P3: club.banner field present (null or string)', 'banner' in c, Object.keys(c));
     const allowedClubKeys = [
       'banner', 'city', 'description', 'headline', 'id', 'logo_url',
-      'memberCount', 'name', 'sport', 'website_url'
+      'memberCount', 'name', 'plan', 'sport', 'website_url'
     ];
     check(
       'P3: club payload has the exact allowlisted key set',

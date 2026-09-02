@@ -186,12 +186,86 @@ async function sendEmail({ to, subject, html, text, replyTo }) {
   }
 }
 
+const CLUB_MANAGER_VISIBILITY_LINK = '/privacy#club-manager-visibility';
+
+function clubManagerVisibilityLong(plan, lead) {
+  const prefix = lead || 'By joining,';
+  if (plan === 'club_pro') {
+    return `${prefix} club administrators and coaches can see the activity you log while you are a member. This club currently has Club Pro, so this includes weekly training hours, trends against your recent average, sessions, distance, rest days, periods of inactivity, and classifications such as training above or below your usual level, shown alongside your name. Your leaderboard and activity-feed settings do not limit what club managers can see.`;
+  }
+  return `${prefix} club administrators and coaches can see that you are a member and the activity you log while you are a member, including through club leaderboards. This club does not currently have Club Pro. If it upgrades, they can also see weekly training hours, trends against your recent average, sessions, distance, rest days, periods of inactivity, and classifications such as training above or below your usual level. Your leaderboard and activity-feed settings do not limit what club managers can see.`;
+}
+
+function clubManagerVisibilityEmail(plan) {
+  return clubManagerVisibilityLong(plan, 'If you join,');
+}
+
+function clubManagerVisibilityUrl(joinUrl) {
+  const parsed = new URL(joinUrl);
+  const base = parsed.pathname.startsWith('/html/') ? '/html' : '';
+  return new URL(base + CLUB_MANAGER_VISIBILITY_LINK, parsed.origin).href;
+}
+
+function invitePlanProof(token, plan) {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret || !token) return '';
+  return crypto.createHmac('sha256', secret)
+    .update(String(token) + '\n' + (plan === 'club_pro' ? 'club_pro' : 'free'))
+    .digest('hex');
+}
+
+function hasValidInvitePlanProof(token, plan, proof) {
+  const expected = invitePlanProof(token, plan);
+  if (!expected || typeof proof !== 'string' || proof.length !== expected.length) return false;
+  try {
+    return crypto.timingSafeEqual(Buffer.from(proof, 'hex'), Buffer.from(expected, 'hex'));
+  } catch (err) {
+    return false;
+  }
+}
+
+async function notifyInvitePlanChange({ invite, userId, renderedPlan, renderedPlanProof, currentPlan }) {
+  const normalizedRendered = renderedPlan === 'club_pro' ? 'club_pro' : 'free';
+  const normalizedCurrent = currentPlan === 'club_pro' ? 'club_pro' : 'free';
+  if (!hasValidInvitePlanProof(invite.token, normalizedRendered, renderedPlanProof)) return null;
+  if (normalizedRendered === normalizedCurrent) return null;
+  const clubName = (invite.clubs && invite.clubs.name) || 'Your club';
+  const sourceKey = `invite-plan-change:${invite.id}:${normalizedCurrent}`;
+  const body = normalizedCurrent === 'club_pro'
+    ? clubManagerVisibilityLong('club_pro', `You joined ${clubName};`)
+    : clubManagerVisibilityLong('free', `You joined ${clubName};`);
+  await createNotification({
+    userId,
+    type: 'club',
+    title: `${clubName} changed plans before you joined`,
+    body,
+    link: CLUB_MANAGER_VISIBILITY_LINK,
+    actorId: null,
+    entityId: invite.club_id,
+    sourceKey,
+    required: true
+  });
+  return sourceKey;
+}
+
+async function deleteNotificationBySource(userId, sourceKey) {
+  if (!sourceKey || !supabaseAdmin) return;
+  const { error } = await supabaseAdmin.from('notifications')
+    .delete()
+    .eq('user_id', userId)
+    .eq('source_key', sourceKey);
+  if (error) console.error('Notification compensation failed:', error.message);
+}
+
 // Build the club-invite email (shared by single / bulk / resend). Returns
 // { subject, html, text }. All interpolated user values are HTML-escaped.
-function buildInviteEmail({ clubName, inviterName, joinUrl, role }) {
+function buildInviteEmail({ clubName, inviterName, joinUrl, role, clubPlan }) {
   const clubRaw = clubName || 'a club';
   const club = escapeHtml(clubRaw);
   const url = escapeHtml(joinUrl);
+  const privacyUrlRaw = clubManagerVisibilityUrl(joinUrl);
+  const privacyUrl = escapeHtml(privacyUrlRaw);
+  const visibility = escapeHtml(clubManagerVisibilityEmail(clubPlan));
   const intro = inviterName
     ? `${escapeHtml(inviterName)} invited you to join <strong>${club}</strong> on Arenas.`
     : `You've been invited to join <strong>${club}</strong> on Arenas.`;
@@ -210,6 +284,7 @@ function buildInviteEmail({ clubName, inviterName, joinUrl, role }) {
           <h1 style="margin:0 0 14px;font-size:20px;color:#18181b">You're invited 🎉</h1>
           <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.55">${intro}</p>
           ${roleLine}
+          <p style="margin:0 0 18px;color:#3f3f46;font-size:14px;line-height:1.55">${visibility} <a href="${privacyUrl}" style="color:#52525b;font-weight:600">Read the full club manager visibility policy.</a></p>
           <table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 22px">
             <tr><td style="border-radius:10px;background:#fde047">
               <a href="${url}" style="display:inline-block;padding:13px 26px;font-size:15px;font-weight:700;color:#18181b;text-decoration:none">Join ${club} &rarr;</a>
@@ -228,6 +303,9 @@ function buildInviteEmail({ clubName, inviterName, joinUrl, role }) {
   const text = [
     inviterName ? `${inviterName} invited you to join ${clubRaw} on Arenas.` : `You've been invited to join ${clubRaw} on Arenas.`,
     role && role !== 'member' ? `You'll join as ${role}.` : '',
+    '',
+    clubManagerVisibilityEmail(clubPlan),
+    `Full club manager visibility policy: ${privacyUrlRaw}`,
     '',
     `Join here: ${joinUrl}`,
     '',
@@ -6597,7 +6675,8 @@ async function buildPublicClubProfile(clubId) {
     description: club.description || null,
     website_url: normalizedWebsite.error ? null : normalizedWebsite.value,
     memberCount: count || 0,
-    banner: clubBannerVersion(club.banner_path)
+    banner: clubBannerVersion(club.banner_path),
+    plan: (await getClubPlan(club.id)) === 'club_pro' ? 'club_pro' : 'free'
   };
 }
 
@@ -6805,43 +6884,58 @@ async function resolveJoinRequestRoute(req, res, action) {
 
     if (action === 'approve') {
       // Already a member (e.g. accepted an invite in a race) → just resolve
-      // the row; otherwise create the membership first.
+      // the row. Persist the required disclosure BEFORE creating membership:
+      // a false-positive notice can be compensated, while a membership that
+      // survives a failed rollback must never be left without the notice.
       const already = await getClubRole(userId, clubId);
-      if (!already) {
-        const { error: memErr } = await supabaseAdmin
-          .from('memberships')
-          .insert({ user_id: userId, club_id: clubId, role: 'member' });
-        if (memErr) return res.status(500).json({ error: 'Could not approve request' });
-      }
-      const { error: markErr } = await supabaseAdmin
-        .from('club_join_requests')
-        .update({ status: 'approved', resolved_at: new Date().toISOString(), resolved_by: req.user.id })
-        .eq('club_id', clubId)
-        .eq('user_id', userId)
-        .eq('status', 'pending');
-      if (markErr) {
-        // Membership without a resolved row would let the same request be
-        // approved twice — roll the membership back (mirror invite-accept).
-        if (!already) {
-          const { error: rbErr } = await supabaseAdmin.from('memberships').delete()
-            .eq('user_id', userId).eq('club_id', clubId);
-          if (rbErr) console.log('Join approve rollback failed:', rbErr.message);
-        }
-        return res.status(500).json({ error: 'Could not approve request' });
-      }
+      const approvalSourceKey = `club-join-approved:${clubId}:${userId}`;
       try {
-        const { data: clubRow } = await supabaseAdmin.from('clubs').select('name').eq('id', clubId).maybeSingle();
+        const [{ data: clubRow }, plan] = await Promise.all([
+          supabaseAdmin.from('clubs').select('name').eq('id', clubId).maybeSingle(),
+          getClubPlan(clubId)
+        ]);
+        const clubName = (clubRow && clubRow.name) || 'the club';
         await createNotification({
           userId,
           type: 'join_request',
           title: 'Request approved',
-          body: `You're in — welcome to ${(clubRow && clubRow.name) || 'the club'}`,
-          link: '/clubs/member/' + clubId,
+          body: `You're in — welcome to ${clubName}. ${clubManagerVisibilityLong(plan, 'Now that you are a member,')}`,
+          link: CLUB_MANAGER_VISIBILITY_LINK,
           actorId: req.user.id,
-          entityId: clubId
+          entityId: clubId,
+          sourceKey: approvalSourceKey,
+          required: true
         });
       } catch (err) {
-        console.log('Join approve notification error:', err.message);
+        return res.status(500).json({ error: 'Could not approve request' });
+      }
+      if (!already) {
+        const { error: memErr } = await supabaseAdmin
+          .from('memberships')
+          .insert({ user_id: userId, club_id: clubId, role: 'member' });
+        if (memErr) {
+          await deleteNotificationBySource(userId, approvalSourceKey);
+          return res.status(500).json({ error: 'Could not approve request' });
+        }
+      }
+      const { data: marked, error: markErr } = await supabaseAdmin
+        .from('club_join_requests')
+        .update({ status: 'approved', resolved_at: new Date().toISOString(), resolved_by: req.user.id })
+        .eq('club_id', clubId)
+        .eq('user_id', userId)
+        .eq('status', 'pending')
+        .select('user_id');
+      if (markErr || !marked || marked.length !== 1) {
+        // Only remove the required disclosure after a newly inserted
+        // membership is CONFIRMED gone. If rollback fails, preserve the
+        // notice because the requester may still be a member.
+        if (!already) {
+          const { error: rbErr } = await supabaseAdmin.from('memberships').delete()
+            .eq('user_id', userId).eq('club_id', clubId);
+          if (rbErr) console.error('Join approve rollback failed:', rbErr.message);
+          else await deleteNotificationBySource(userId, approvalSourceKey);
+        }
+        return res.status(500).json({ error: 'Could not approve request' });
       }
       return res.json({ success: true, status: 'approved' });
     }
@@ -13130,7 +13224,8 @@ app.post(BASE + '/api/clubs/:clubId/invites', requireAuth, async (req, res) => {
 
     // Everyone invited gets the email. Fire-and-forget: a failed send must never
     // block invite creation (the row already exists and the manager has the link).
-    const invEmail = buildInviteEmail({ clubName, inviterName: inviter.name, joinUrl, role: inviteRole });
+    const clubPlan = await getClubPlan(clubId);
+    const invEmail = buildInviteEmail({ clubName, inviterName: inviter.name, joinUrl, role: inviteRole, clubPlan });
     sendEmail({ to: email, subject: invEmail.subject, html: invEmail.html, text: invEmail.text });
 
     if (existingUser) {
@@ -13172,7 +13267,7 @@ app.post(BASE + '/api/clubs/:clubId/invites', requireAuth, async (req, res) => {
 // members, insert the row, send the email (fire-and-forget) and, for existing
 // Arenas users, an in-app notification. Shared by the bulk-invite endpoint and
 // the club signup wizard. Returns { status: 'sent'|'skipped'|'failed', ... }.
-async function createClubInviteRecord({ clubId, inviterUser, inviterRole, email, role, req, userByEmail, clubName, inviterName }) {
+async function createClubInviteRecord({ clubId, inviterUser, inviterRole, email, role, req, userByEmail, clubName, inviterName, clubPlan = 'free' }) {
   const cleanEmail = (email || '').trim().toLowerCase();
   const irole = ['member', 'coach', 'admin'].includes(role) ? role : 'member';
   // Defense-in-depth mirror of the route-level rule: an inviter cannot grant
@@ -13216,7 +13311,7 @@ async function createClubInviteRecord({ clubId, inviterUser, inviterRole, email,
     const joinUrl = `${publicBaseUrl(req)}/join/${token}`;
 
     // Everyone invited gets the email (fire-and-forget, never blocks the row).
-    const invEmail = buildInviteEmail({ clubName, inviterName, joinUrl, role: irole });
+    const invEmail = buildInviteEmail({ clubName, inviterName, joinUrl, role: irole, clubPlan });
     sendEmail({ to: cleanEmail, subject: invEmail.subject, html: invEmail.html, text: invEmail.text });
 
     if (existingUser) {
@@ -13267,6 +13362,7 @@ app.post(BASE + '/api/clubs/:clubId/invites/bulk', requireAuth, async (req, res)
     if (club && club.name) clubName = club.name;
   } catch (err) { /* fall back to generic name */ }
 
+  const clubPlan = await getClubPlan(clubId);
   const results = { sent: [], skipped: [], failed: [] };
   for (const raw of incoming) {
     const r = await createClubInviteRecord({
@@ -13278,7 +13374,8 @@ app.post(BASE + '/api/clubs/:clubId/invites/bulk', requireAuth, async (req, res)
       req,
       userByEmail,
       clubName,
-      inviterName: inviter.name
+      inviterName: inviter.name,
+      clubPlan
     });
     if (r.status === 'sent') results.sent.push({ email: r.email, joinUrl: r.joinUrl, existingUser: r.existingUser });
     else if (r.status === 'skipped') results.skipped.push({ email: r.email, reason: r.reason });
@@ -13362,7 +13459,8 @@ app.post(BASE + '/api/clubs/invites/:inviteId/resend', requireAuth, async (req, 
         if (club && club.name) clubName = club.name;
       } catch (err) { /* fall back to generic name */ }
       const resender = displayFromUser(req.user);
-      const invEmail = buildInviteEmail({ clubName, inviterName: resender.name, joinUrl, role: invite.role });
+      const clubPlan = await getClubPlan(invite.club_id);
+      const invEmail = buildInviteEmail({ clubName, inviterName: resender.name, joinUrl, role: invite.role, clubPlan });
       sendEmail({ to: invite.email, subject: invEmail.subject, html: invEmail.html, text: invEmail.text });
     }
     return res.json({ success: true, invite: updated, joinUrl });
@@ -13678,6 +13776,7 @@ app.get(BASE + '/join/:token', async (req, res) => {
     else if (invite.status !== 'pending') status = 'invalid';
     else if (isExpired) status = 'expired';
 
+    const plan = (await getClubPlan(invite.club_id)) === 'club_pro' ? 'club_pro' : 'free';
     return render({
       status,
       token: req.params.token,
@@ -13690,6 +13789,8 @@ app.get(BASE + '/join/:token', async (req, res) => {
       isOpen,
       expiresAt: invite.expires_at,
       viewer,
+      plan,
+      planProof: invitePlanProof(req.params.token, plan),
       baseUrl: publicBaseUrl(req)
     });
   } catch (err) {
@@ -13719,6 +13820,12 @@ app.post(BASE + '/auth/join/:token', async (req, res) => {
     const name = (req.body.name || '').trim() || (email ? email.split('@')[0] : 'Athlete');
     if (!email) return back('missing_email');
     if (!password || password.length < 6) return back('weak_password');
+    const renderedPlan = req.body.rendered_plan === 'club_pro' ? 'club_pro'
+      : req.body.rendered_plan === 'free' ? 'free' : null;
+    if (!renderedPlan || !hasValidInvitePlanProof(req.params.token, renderedPlan, req.body.rendered_plan_proof)) {
+      return back('refresh');
+    }
+    const planAtAcceptance = (await getClubPlan(invite.club_id)) === 'club_pro' ? 'club_pro' : 'free';
 
     const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
       email,
@@ -13729,10 +13836,25 @@ app.post(BASE + '/auth/join/:token', async (req, res) => {
     if (authErr || !authData || !authData.user) return back('account_exists');
     const userId = authData.user.id;
 
+    let planChangeSourceKey = null;
+    try {
+      planChangeSourceKey = await notifyInvitePlanChange({
+        invite,
+        userId,
+        renderedPlan: req.body.rendered_plan,
+        renderedPlanProof: req.body.rendered_plan_proof,
+        currentPlan: planAtAcceptance
+      });
+    } catch (err) {
+      const { error: rbUserErr } = await supabaseAdmin.auth.admin.deleteUser(userId);
+      if (rbUserErr) console.error('Invite plan-change rollback: orphaned auth user %s:', userId, rbUserErr.message);
+      return back('unknown');
+    }
     const { error: memErr } = await supabaseAdmin
       .from('memberships')
       .insert({ user_id: userId, club_id: invite.club_id, role: invite.role || 'member' });
     if (memErr) {
+      await deleteNotificationBySource(userId, planChangeSourceKey);
       await supabaseAdmin.auth.admin.deleteUser(userId);
       return back('unknown');
     }
@@ -13742,12 +13864,14 @@ app.post(BASE + '/auth/join/:token', async (req, res) => {
     // must fail the whole flow — otherwise the invite stays redeemable while
     // the account+membership already exist. Roll both back.
     if (!isOpen) {
-      const { error: markErr } = await supabaseAdmin
+      const { data: marked, error: markErr } = await supabaseAdmin
         .from('club_invites')
         .update({ status: 'accepted', accepted_at: new Date().toISOString() })
-        .eq('token', req.params.token);
-      if (markErr) {
-        console.log('Invite accept: status update failed:', markErr.message);
+        .eq('token', req.params.token)
+        .eq('status', 'pending')
+        .select('id');
+      if (markErr || !marked || marked.length !== 1) {
+        console.log('Invite accept: status update failed:', markErr ? markErr.message : 'pending invite changed');
         // Compensation order matters: only delete the auth user AFTER the
         // membership rollback succeeds — deleting the user first (or anyway)
         // could orphan a membership row, the half-created state this rollback
@@ -13759,6 +13883,7 @@ app.post(BASE + '/auth/join/:token', async (req, res) => {
           console.error('Invite accept rollback FAILED — user %s left with membership in club %s (invite %s still pending; manual remediation needed):', userId, invite.club_id, invite.id, rbMemErr.message);
           return back('unknown');
         }
+        await deleteNotificationBySource(userId, planChangeSourceKey);
         const { error: rbUserErr } = await supabaseAdmin.auth.admin.deleteUser(userId);
         if (rbUserErr) console.error('Invite accept rollback: orphaned auth user %s (no memberships; manual remediation needed):', userId, rbUserErr.message);
         return back('unknown');
@@ -13781,7 +13906,6 @@ app.post(BASE + '/auth/join/:token', async (req, res) => {
     } catch (e) {
       console.log('Join notify error:', e.message);
     }
-
     const { data: signInData } = await supabase.auth.signInWithPassword({ email, password });
     if (signInData && signInData.session) setSession(res, signInData.session);
     return res.redirect(BASE + '/feed');
@@ -13816,24 +13940,51 @@ app.post(BASE + '/auth/join/:token/existing', requireAuth, async (req, res) => {
     const already = await getClubRole(req.user.id, invite.club_id);
     if (already) return res.json({ success: true, alreadyMember: true });
 
+    const renderedPlan = req.body && req.body.renderedPlan === 'club_pro' ? 'club_pro'
+      : req.body && req.body.renderedPlan === 'free' ? 'free' : null;
+    if (!renderedPlan || !hasValidInvitePlanProof(req.params.token, renderedPlan, req.body && req.body.renderedPlanProof)) {
+      return res.status(409).json({
+        error: 'Review the current club visibility details before joining',
+        reviewUrl: BASE + '/join/' + req.params.token
+      });
+    }
+    const planAtAcceptance = (await getClubPlan(invite.club_id)) === 'club_pro' ? 'club_pro' : 'free';
+    let planChangeSourceKey = null;
+    try {
+      planChangeSourceKey = await notifyInvitePlanChange({
+        invite,
+        userId: req.user.id,
+        renderedPlan: req.body && req.body.renderedPlan,
+        renderedPlanProof: req.body && req.body.renderedPlanProof,
+        currentPlan: planAtAcceptance
+      });
+    } catch (err) {
+      return res.status(500).json({ error: 'Could not join club' });
+    }
     const { error } = await supabaseAdmin
       .from('memberships')
       .insert({ user_id: req.user.id, club_id: invite.club_id, role: invite.role || 'member' });
-    if (error) return res.status(500).json({ error: 'Could not join club' });
+    if (error) {
+      await deleteNotificationBySource(req.user.id, planChangeSourceKey);
+      return res.status(500).json({ error: 'Could not join club' });
+    }
 
     // Single-use for personal invites; open links remain reusable until expiry.
     // A failed marking must fail the route — otherwise the caller is a member
     // while the invite stays redeemable. Roll the membership back.
     if (!isOpen) {
-      const { error: markErr } = await supabaseAdmin
+      const { data: marked, error: markErr } = await supabaseAdmin
         .from('club_invites')
         .update({ status: 'accepted', accepted_at: new Date().toISOString() })
-        .eq('token', req.params.token);
-      if (markErr) {
-        console.log('Invite join: status update failed:', markErr.message);
+        .eq('token', req.params.token)
+        .eq('status', 'pending')
+        .select('id');
+      if (markErr || !marked || marked.length !== 1) {
+        console.log('Invite join: status update failed:', markErr ? markErr.message : 'pending invite changed');
         const { error: rbErr } = await supabaseAdmin.from('memberships').delete()
           .eq('user_id', req.user.id).eq('club_id', invite.club_id);
         if (rbErr) console.log('Invite join rollback: membership delete failed:', rbErr.message);
+        else await deleteNotificationBySource(req.user.id, planChangeSourceKey);
         return res.status(500).json({ error: 'Could not join club' });
       }
     }
@@ -13870,7 +14021,6 @@ app.post(BASE + '/auth/join/:token/existing', requireAuth, async (req, res) => {
     } catch (e) {
       console.log('Join notify error:', e.message);
     }
-
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: 'Could not join club' });

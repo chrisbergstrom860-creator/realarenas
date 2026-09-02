@@ -5,8 +5,8 @@
 //    write: type 'club', link '/join/<token>').
 // 2. Asserts GET /api/notifications attaches the honest inviteState per row
 //    and leaves non-invite notifications untouched.
-// 3. Accepts the pending invite via POST /auth/join/:token/existing (the
-//    panel button's endpoint) and asserts: membership row exists, invite is
+// 3. Accepts the pending invite with the signed state from the canonical join
+//    page and asserts: membership row exists, invite is
 //    marked accepted, the notification's inviteState flips to 'joined', and
 //    the club shows up in the server-injected sidebar on /feed.
 // Cleans everything up afterwards.
@@ -43,6 +43,26 @@ async function login(email, password) {
   });
   return (r.headers.getSetCookie ? r.headers.getSetCookie() : [])
     .map((c) => c.split(';')[0]).join('; ');
+}
+
+function injectedJoinData(html) {
+  const marker = 'window.JOIN_DATA = ';
+  const start = html.indexOf(marker);
+  const end = start < 0 ? -1 : html.indexOf(';</script>', start + marker.length);
+  return start < 0 || end < 0 ? null : JSON.parse(html.slice(start + marker.length, end));
+}
+
+async function acceptExisting(token, cookie) {
+  const page = await fetch(BASE_URL + '/join/' + token, { headers: { Cookie: cookie } });
+  const rendered = injectedJoinData(await page.text());
+  return fetch(BASE_URL + '/auth/join/' + token + '/existing', {
+    method: 'POST',
+    headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      renderedPlan: rendered && rendered.plan,
+      renderedPlanProof: rendered && rendered.planProof
+    })
+  });
 }
 
 (async () => {
@@ -118,12 +138,10 @@ async function login(email, password) {
     const likeNotif = list.find((x) => x.type === 'like');
     check('non-invite notification carries NO inviteState', likeNotif && !('inviteState' in likeNotif));
 
-    // Accept the pending invite through the panel button's endpoint.
-    const acc = await fetch(BASE_URL + '/auth/join/' + tPending + '/existing', {
-      method: 'POST', headers: { Cookie: cookie }
-    });
+    // Review the canonical page, then accept with its signed plan state.
+    const acc = await acceptExisting(tPending, cookie);
     const accBody = await acc.json();
-    check('inline accept succeeds', acc.ok && accBody && accBody.success === true, JSON.stringify(accBody));
+    check('reviewed invite accept succeeds', acc.ok && accBody && accBody.success === true, JSON.stringify(accBody));
 
     const { data: mem } = await admin.from('memberships')
       .select('role').eq('user_id', inviteeId).eq('club_id', clubId).maybeSingle();
@@ -207,7 +225,7 @@ async function login(email, password) {
     const { data: t2User, error: t2Err } = await mk(target2, 'Invite Target Two', 'invtarget2');
     check('create redeemer user', !t2Err, t2Err && t2Err.message);
     const t2Cookie = await login(target2, password);
-    const r6 = await fetch(BASE_URL + '/auth/join/' + mintedRow.token + '/existing', { method: 'POST', headers: { Cookie: t2Cookie } });
+    const r6 = await acceptExisting(mintedRow.token, t2Cookie);
     const b6 = await r6.json().catch(() => ({}));
     const { data: t2Mem } = await admin.from('memberships')
       .select('role').eq('user_id', t2User.user.id).eq('club_id', clubId).maybeSingle();

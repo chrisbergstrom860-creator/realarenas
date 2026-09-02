@@ -70,6 +70,15 @@
     return '<div class="ccd-tile">' + (icons[c.sport] || '🏟') + '</div>';
   }
 
+  function visibilityHTML(c) {
+    if (c.viewerState !== 'none') return '';
+    var copy = c.plan === 'club_pro'
+      ? 'Club managers can see the activity you log, including weekly training hours and inactivity, while you\u2019re a member.'
+      : 'Club managers can see the activity you log while you\u2019re a member.';
+    var href = (window.BASE || '') + '/privacy#club-manager-visibility';
+    return '<p class="ccd-visibility">' + copy + ' <a href="' + esc(href) + '">Full visibility policy.</a></p>';
+  }
+
   function cardHTML(c, i, clickable) {
     var proBadge = c.plan === 'club_pro' ? '<span class="pro-badge">CLUB PRO</span>' : '';
     var meta = [sportName(c.sport), c.city, c.memberCount + ' member' + (c.memberCount === 1 ? '' : 's')]
@@ -81,7 +90,7 @@
       + (c.headline ? '<div class="ccd-headline" title="' + esc(c.headline) + '">' + esc(c.headline) + '</div>' : '')
       + '<div class="ccd-sub">' + meta + '</div>'
       + '</div>'
-      + '<div class="ccd-action">' + buttonHTML(c) + '</div>'
+      + '<div class="ccd-action">' + visibilityHTML(c) + buttonHTML(c) + '</div>'
       + '</div>';
   }
 
@@ -149,6 +158,11 @@
 
     // Request / cancel / open — delegated so re-renders keep working.
     grid.addEventListener('click', function (ev) {
+      var privacyLink = ev.target.closest ? ev.target.closest('.ccd-visibility a') : null;
+      if (privacyLink) {
+        ev.stopPropagation();
+        return;
+      }
       var btn = ev.target.closest ? ev.target.closest('.ccd-btn[data-act]') : null;
       if (btn) {
         ev.stopPropagation();

@@ -65,6 +65,9 @@ body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);fon
 .state p{font-size:13px;color:var(--gray-500)}
 .divider{display:flex;align-items:center;gap:10px;color:var(--gray-400);font-size:12px}
 .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--gray-200)}
+.visibility-note{background:var(--yellow-light);border:1px solid var(--yellow-dark);border-radius:var(--radius);padding:12px 13px;color:var(--gray-700);font-size:13px;line-height:1.5}
+.visibility-note strong{color:var(--gray-900)}
+.visibility-note a{color:var(--gray-800);font-weight:600;text-decoration:underline;text-underline-offset:2px}
 </style>
 </head>
 <body>
@@ -84,6 +87,7 @@ body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);fon
     expired: 'That invite has expired. Ask the club for a fresh link.',
     missing_email: 'Please enter your email address.',
     weak_password: 'Please choose a password of at least 6 characters.',
+    refresh: 'The club details changed or this page expired. Review the current visibility details and try again.',
     account_exists: 'An account with that email already exists. Try signing in instead.',
     unavailable: 'The service is temporarily unavailable. Please try again shortly.',
     unknown: 'Something went wrong. Please try again.'
@@ -109,6 +113,13 @@ body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);fon
     '</div>';
   }
 
+  function visibilityNote(){
+    var copy = D.plan === 'club_pro'
+      ? 'By joining, club administrators and coaches can see the activity you log while you are a member. This club currently has Club Pro, so this includes weekly training hours, trends against your recent average, sessions, distance, rest days, periods of inactivity, and classifications such as training above or below your usual level, shown alongside your name. Your leaderboard and activity-feed settings do not limit what club managers can see.'
+      : 'By joining, club administrators and coaches can see that you are a member and the activity you log while you are a member, including through club leaderboards. This club does not currently have Club Pro. If it upgrades, they can also see weekly training hours, trends against your recent average, sessions, distance, rest days, periods of inactivity, and classifications such as training above or below your usual level. Your leaderboard and activity-feed settings do not limit what club managers can see.';
+    return '<div class="visibility-note"><strong>What club managers can see:</strong> '+esc(copy)+' <a href="'+esc(baseUrl)+'/privacy#club-manager-visibility" target="_blank" rel="noopener">Read the full club manager visibility policy.</a></div>';
+  }
+
   function stateCard(emoji, title, body, actionHtml){
     card.innerHTML = '<div class="card-body"><div class="state"><div class="emoji">'+emoji+'</div><h2>'+esc(title)+'</h2><p>'+esc(body)+'</p>'+(actionHtml||'')+'</div></div>';
   }
@@ -132,13 +143,17 @@ body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);fon
 
   if (D.viewer){
     // Logged-in: offer one-click join.
-    card.innerHTML = top + '<div class="card-body">'+ errBanner + clubBlock() + perks() +
+    card.innerHTML = top + '<div class="card-body">'+ errBanner + clubBlock() + perks() + visibilityNote() +
       '<button class="btn btn-yellow" id="join-btn">Join '+esc((D.club&&D.club.name)||'this club')+'</button>'+
       '<div class="muted">Signed in as <strong>'+esc(D.viewer.name)+'</strong> ('+esc(D.viewer.email)+')<br><a href="'+esc(baseUrl)+'/auth/logout">Use a different account</a></div>'+
     '</div>';
     document.getElementById('join-btn').addEventListener('click', function(){
       var btn = this; btn.disabled = true; btn.textContent = 'Joining\u2026';
-      fetch(baseUrl + '/auth/join/' + D.token + '/existing', { method:'POST', headers:{'Content-Type':'application/json'} })
+      fetch(baseUrl + '/auth/join/' + D.token + '/existing', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ renderedPlan:D.plan, renderedPlanProof:D.planProof })
+      })
         .then(function(r){ return r.json().catch(function(){return {};}).then(function(j){ return {ok:r.ok, data:j}; }); })
         .then(function(r){
           if (r.ok && r.data.success){ window.location.href = baseUrl + '/feed'; }
@@ -155,8 +170,10 @@ body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);fon
     ? '<input class="form-input" type="email" name="email" value="'+emailVal+'" disabled><input type="hidden" name="email" value="'+emailVal+'">'
     : '<input class="form-input" type="email" name="email" value="'+emailVal+'" placeholder="you@example.com" required>';
 
-  card.innerHTML = top + '<div class="card-body">'+ errBanner + clubBlock() + perks() +
+  card.innerHTML = top + '<div class="card-body">'+ errBanner + clubBlock() + perks() + visibilityNote() +
     '<form method="POST" action="'+esc(baseUrl)+'/auth/join/'+esc(D.token)+'" style="display:flex;flex-direction:column;gap:14px">'+
+      '<input type="hidden" name="rendered_plan" value="'+esc(D.plan||'free')+'">'+
+      '<input type="hidden" name="rendered_plan_proof" value="'+esc(D.planProof||'')+'">'+
       '<div class="form-field"><label class="form-label">Your name</label><input class="form-input" type="text" name="name" placeholder="Jamie King" required></div>'+
       '<div class="form-field"><label class="form-label">Email</label>'+emailField+'</div>'+
       '<div class="form-field"><label class="form-label">Create a password</label><input class="form-input" type="password" name="password" placeholder="At least 6 characters" minlength="6" required></div>'+
