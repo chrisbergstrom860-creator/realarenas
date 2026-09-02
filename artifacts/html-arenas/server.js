@@ -1,5 +1,10 @@
 require('dotenv').config();
 
+const SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET || !SESSION_SECRET.trim()) {
+  throw new Error('SESSION_SECRET is required; refusing to start without a stable signing secret');
+}
+
 console.log('Starting server...');
 console.log('PORT env var:', process.env.PORT);
 console.log('All env vars:', Object.keys(process.env).filter(k => !k.includes('KEY') && !k.includes('SECRET')));
@@ -207,9 +212,8 @@ function clubManagerVisibilityUrl(joinUrl) {
 }
 
 function invitePlanProof(token, plan) {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret || !token) return '';
-  return crypto.createHmac('sha256', secret)
+  if (!token) return '';
+  return crypto.createHmac('sha256', SESSION_SECRET)
     .update(String(token) + '\n' + (plan === 'club_pro' ? 'club_pro' : 'free'))
     .digest('hex');
 }
@@ -380,7 +384,7 @@ app.use(BASE + '/api/stripe/webhook', express.raw({ type: 'application/json' }))
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
-app.use(cookieParser(process.env.SESSION_SECRET));
+app.use(cookieParser(SESSION_SECRET));
 
 // ── PLAUSIBLE ANALYTICS ──
 // Privacy-friendly analytics by Plausible. ONE injection point for every
@@ -13823,6 +13827,12 @@ app.post(BASE + '/auth/join/:token', async (req, res) => {
     const renderedPlan = req.body.rendered_plan === 'club_pro' ? 'club_pro'
       : req.body.rendered_plan === 'free' ? 'free' : null;
     if (!renderedPlan || !hasValidInvitePlanProof(req.params.token, renderedPlan, req.body.rendered_plan_proof)) {
+      if ((req.get('accept') || '').includes('application/json')) {
+        return res.status(409).json({
+          error: 'Review the current club visibility details before joining',
+          reviewUrl: BASE + '/join/' + req.params.token
+        });
+      }
       return back('refresh');
     }
     const planAtAcceptance = (await getClubPlan(invite.club_id)) === 'club_pro' ? 'club_pro' : 'free';

@@ -157,6 +157,7 @@ body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);fon
         .then(function(r){ return r.json().catch(function(){return {};}).then(function(j){ return {ok:r.ok, data:j}; }); })
         .then(function(r){
           if (r.ok && r.data.success){ window.location.href = baseUrl + '/feed'; }
+          else if (r.data.reviewUrl){ window.location.assign(r.data.reviewUrl); }
           else { btn.disabled = false; btn.textContent = 'Join '+((D.club&&D.club.name)||'this club'); card.querySelector('.card-body').insertAdjacentHTML('afterbegin','<div class="alert">'+esc(r.data.error||ERR.unknown)+'</div>'); }
         })
         .catch(function(){ btn.disabled=false; btn.textContent='Try again'; });
@@ -171,7 +172,7 @@ body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);fon
     : '<input class="form-input" type="email" name="email" value="'+emailVal+'" placeholder="you@example.com" required>';
 
   card.innerHTML = top + '<div class="card-body">'+ errBanner + clubBlock() + perks() + visibilityNote() +
-    '<form method="POST" action="'+esc(baseUrl)+'/auth/join/'+esc(D.token)+'" style="display:flex;flex-direction:column;gap:14px">'+
+    '<form id="join-form" method="POST" action="'+esc(baseUrl)+'/auth/join/'+esc(D.token)+'" style="display:flex;flex-direction:column;gap:14px">'+
       '<input type="hidden" name="rendered_plan" value="'+esc(D.plan||'free')+'">'+
       '<input type="hidden" name="rendered_plan_proof" value="'+esc(D.planProof||'')+'">'+
       '<div class="form-field"><label class="form-label">Your name</label><input class="form-input" type="text" name="name" placeholder="Jamie King" required></div>'+
@@ -183,6 +184,56 @@ body{font-family:var(--font);background:var(--gray-50);color:var(--gray-800);fon
     '<a class="btn btn-ghost" href="'+esc(baseUrl)+'/landing">Already have an Arenas account? Sign in</a>'+
     '<div class="muted">By joining you agree to Arenas\u2019 <a href="'+esc(baseUrl)+'/terms" target="_blank" rel="noopener">Terms</a> and <a href="'+esc(baseUrl)+'/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</div>'+
   '</div>';
+
+  var form = document.getElementById('join-form');
+  var retryKey = 'arenas:join-retry:' + D.token;
+  try {
+    var saved = JSON.parse(sessionStorage.getItem(retryKey) || 'null');
+    if (saved) {
+      var nameInput = form.querySelector('input[name="name"]');
+      var emailInput = form.querySelector('input[name="email"]:not([type="hidden"])');
+      if (nameInput && saved.name) nameInput.value = saved.name;
+      if (emailInput && saved.email) emailInput.value = saved.email;
+      sessionStorage.removeItem(retryKey);
+    }
+  } catch (e) {}
+  form.addEventListener('submit', function(event){
+    event.preventDefault();
+    var submit = form.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    submit.textContent = 'Joining\u2026';
+    fetch(form.action, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json' },
+      body: new URLSearchParams(new FormData(form))
+    }).then(function(response){
+      if (response.redirected) {
+        window.location.assign(response.url);
+        return null;
+      }
+      return response.json().catch(function(){ return {}; }).then(function(data){
+        return { response: response, data: data };
+      });
+    }).then(function(result){
+      if (!result) return;
+      if (result.response.status === 409 && result.data.reviewUrl) {
+        try {
+          sessionStorage.setItem(retryKey, JSON.stringify({
+            name: (form.querySelector('input[name="name"]') || {}).value || '',
+            email: (form.querySelector('input[name="email"]:not([type="hidden"])') || {}).value || ''
+          }));
+        } catch (e) {}
+        window.location.assign(result.data.reviewUrl);
+        return;
+      }
+      submit.disabled = false;
+      submit.textContent = 'Create account & join \u2192';
+      card.querySelector('.card-body').insertAdjacentHTML('afterbegin','<div class="alert">'+esc(result.data.error||ERR.unknown)+'</div>');
+    }).catch(function(){
+      submit.disabled = false;
+      submit.textContent = 'Try again';
+    });
+  });
 })();
 </script>
 </body>

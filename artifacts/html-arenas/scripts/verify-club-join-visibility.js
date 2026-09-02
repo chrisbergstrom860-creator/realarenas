@@ -209,7 +209,8 @@ async function screenshotSurface(browser, options) {
     const proSameInvite = await seedInvite(proClub, users.owner.id, emails.proSame);
     const freeToProInvite = await seedInvite(freeClub, users.owner.id, emails.freeToPro);
     const proToFreeInvite = await seedInvite(proClub, users.owner.id, emails.proToFree);
-    inviteIds.push(freeSameInvite.id, proSameInvite.id, freeToProInvite.id, proToFreeInvite.id);
+    const loggedOutRetryInvite = await seedInvite(freeClub, users.owner.id, 'open-invite@realarenas.com');
+    inviteIds.push(freeSameInvite.id, proSameInvite.id, freeToProInvite.id, proToFreeInvite.id, loggedOutRetryInvite.id);
 
     const freeSameRender = await joinPage(freeSameInvite.token);
     const proSameRender = await joinPage(proSameInvite.token);
@@ -299,6 +300,68 @@ async function screenshotSurface(browser, options) {
       .eq('club_id', freeClub)
       .maybeSingle();
     check('missing signed plan state has zero membership effect', !unreviewedMembership);
+
+    const loggedInRecoveryContext = await browser.newContext({
+      ignoreHTTPSErrors: true,
+      viewport: { width: 1280, height: 900 }
+    });
+    await loggedInRecoveryContext.addCookies(logins.freeSame.browserCookies);
+    const loggedInRecoveryPage = await loggedInRecoveryContext.newPage();
+    await loggedInRecoveryPage.goto(BASE + '/join/' + freeSameInvite.token, { waitUntil: 'networkidle' });
+    await loggedInRecoveryPage.evaluate(() => { window.JOIN_DATA.planProof = 'invalid-proof'; });
+    await Promise.all([
+      loggedInRecoveryPage.waitForNavigation({ waitUntil: 'networkidle' }),
+      loggedInRecoveryPage.locator('#join-btn').click()
+    ]);
+    const loggedInRecovered = await loggedInRecoveryPage.evaluate(() => ({
+      proof: window.JOIN_DATA && window.JOIN_DATA.planProof,
+      buttonEnabled: !document.getElementById('join-btn').disabled,
+      url: window.location.pathname
+    }));
+    check('logged-in invalid proof automatically reloads the canonical invite review',
+      loggedInRecovered.url.endsWith('/join/' + freeSameInvite.token) &&
+      /^[a-f0-9]{64}$/.test(loggedInRecovered.proof || '') &&
+      loggedInRecovered.buttonEnabled,
+      JSON.stringify(loggedInRecovered));
+    await loggedInRecoveryContext.close();
+
+    const retryName = 'Preserved Invite Name';
+    const retryEmail = `joinvis-retry-${nonce}@arenas-test.dev`;
+    const loggedOutRecoveryContext = await browser.newContext({
+      ignoreHTTPSErrors: true,
+      viewport: { width: 1280, height: 900 }
+    });
+    const loggedOutRecoveryPage = await loggedOutRecoveryContext.newPage();
+    await loggedOutRecoveryPage.goto(BASE + '/join/' + loggedOutRetryInvite.token, { waitUntil: 'networkidle' });
+    await loggedOutRecoveryPage.locator('input[name="name"]').fill(retryName);
+    await loggedOutRecoveryPage.locator('input[name="email"]:not([type="hidden"])').fill(retryEmail);
+    await loggedOutRecoveryPage.locator('input[name="password"]').fill(PASSWORD);
+    await loggedOutRecoveryPage.locator('input[name="rendered_plan_proof"]').evaluate(input => {
+      input.value = 'invalid-proof';
+    });
+    await Promise.all([
+      loggedOutRecoveryPage.waitForNavigation({ waitUntil: 'networkidle' }),
+      loggedOutRecoveryPage.locator('#join-form button[type="submit"]').click()
+    ]);
+    const loggedOutRecovered = await loggedOutRecoveryPage.evaluate(() => ({
+      name: document.querySelector('input[name="name"]').value,
+      email: document.querySelector('input[name="email"]:not([type="hidden"])').value,
+      password: document.querySelector('input[name="password"]').value,
+      proof: window.JOIN_DATA && window.JOIN_DATA.planProof,
+      url: window.location.pathname
+    }));
+    check('logged-out invalid proof reload preserves name and email but not password',
+      loggedOutRecovered.url.endsWith('/join/' + loggedOutRetryInvite.token) &&
+      loggedOutRecovered.name === retryName &&
+      loggedOutRecovered.email === retryEmail &&
+      loggedOutRecovered.password === '' &&
+      /^[a-f0-9]{64}$/.test(loggedOutRecovered.proof || ''),
+      JSON.stringify(loggedOutRecovered));
+    const { data: retryAccount } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    check('logged-out invalid proof creates no account',
+      !(retryAccount && retryAccount.users || []).some(user => user.email === retryEmail));
+    await loggedOutRecoveryContext.close();
+
     const panelSource = fs.readFileSync('artifacts/html-arenas/html/arenas-notifications-panel.js', 'utf8');
     check('notification panel routes pending invites through review page',
       panelSource.includes('Review &amp; join') && !panelSource.includes('acceptClubInvite'));
