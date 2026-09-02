@@ -275,6 +275,7 @@ async function screenshotSurface(browser, options) {
       });
       check(`free invite page @${width} carries long disclosure`,
         freeInviteText.includes('does not currently have Club Pro') &&
+        freeInviteText.includes('unless you turn off Club training analytics in Settings') &&
         freeInviteText.includes('leaderboard and activity-feed settings do not limit'));
       const proInviteText = await screenshotSurface(browser, {
         width,
@@ -285,7 +286,8 @@ async function screenshotSurface(browser, options) {
       });
       check(`Pro invite page @${width} carries long disclosure`,
         proInviteText.includes('currently has Club Pro') &&
-        proInviteText.includes('periods of inactivity'));
+        proInviteText.includes('periods of inactivity') &&
+        proInviteText.includes('unless you turn off Club training analytics in Settings'));
     }
 
     let unreviewed = await fetch(BASE + '/auth/join/' + freeSameInvite.token + '/existing', {

@@ -2498,6 +2498,7 @@ document.addEventListener('DOMContentLoaded', function () {
   var tlFilter = 'all';
   var tlMembers = [];
   var tlExpandedUserId = null;
+  var tlOptedOutCount = 0;
 
   window.setTlPeriod = function (btn, weeks) {
     document.querySelectorAll('.tl-period-btn').forEach(function (b) {
@@ -2554,6 +2555,7 @@ document.addEventListener('DOMContentLoaded', function () {
         tlMembers = result.members || [];
 
         var s = result.stats || {};
+        tlOptedOutCount = s.optedOutCount || 0;
         var setEl = function (id, val) { var el = document.getElementById(id); if (el) el.textContent = val; };
         setEl('tl-stat-hours', (s.clubThisWeek || 0) + 'h');
         setEl('tl-stat-active', s.activeCount || 0);
@@ -2630,6 +2632,18 @@ document.addEventListener('DOMContentLoaded', function () {
     var sportIcons = window.ARENAS_SPORT_ICONS || {};
     container.innerHTML = filtered.map(function (m, i) {
       var av = avColors[i % avColors.length];
+      if (m.optedOut || m.analyticsUnavailable) {
+        var unavailable = !!m.analyticsUnavailable;
+        return '' +
+          '<div data-training-analytics-hidden="' + (unavailable ? 'unavailable' : 'opted-out') + '" style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:var(--border);background:var(--gray-50)">' +
+            window.avatarHtml(m.avatar_url || null, m.name || 'Member', '', 'width:32px;height:32px;border-radius:50%;background:' + av.bg + ';color:' + av.c + ';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0') +
+            '<div style="min-width:0;flex:1">' +
+              '<div style="font-size:13px;font-weight:600;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(m.name) + '</div>' +
+              '<div style="font-size:10px;color:var(--gray-400)">' + (unavailable ? 'Individual training analytics unavailable' : 'Individual training analytics off') + '</div>' +
+            '</div>' +
+            '<div style="font-size:10px;font-weight:500;padding:2px 9px;border-radius:10px;flex-shrink:0;background:var(--gray-100);color:var(--gray-500);border:var(--border)">' + (unavailable ? 'Unavailable' : 'Opted out') + '</div>' +
+          '</div>';
+      }
       var sc = statusConfig[m.status] || statusConfig.ontrack;
       var maxH = Math.max.apply(null, (m.weeklyHours || []).concat([0.5]));
       var sparkBars = (m.weeklyHours || []).map(function (h, j) {
@@ -2667,6 +2681,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }).join('') +
       '<div style="padding:8px 14px;border-top:var(--border);font-size:11px;color:var(--gray-400)">' +
         'Showing ' + filtered.length + ' of ' + tlMembers.length + ' members · sorted by status priority' +
+        (tlOptedOutCount ? ' · ' + tlOptedOutCount + ' member' + (tlOptedOutCount !== 1 ? 's' : '') + ' opted out of individual analytics' : '') +
       '</div>';
   }
 
@@ -3024,9 +3039,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         var statsEl = document.getElementById('ov-volume-stats');
         if (statsEl) {
-          var tlMembers = tlData.members || [];
-          var totalSessions = tlMembers.reduce(function (s, m) { return s + (m.sessionsThisWeek || 0); }, 0);
-          var totalKm = Math.round(tlMembers.reduce(function (s, m) { return s + (m.kmThisWeek || 0); }, 0) * 10) / 10;
+            var tlStats = tlData.stats || {};
+            var totalSessions = tlStats.sessionsThisWeek || 0;
+            var totalKm = tlStats.kmThisWeek || 0;
           // Value/label scale matches the profile Overview stat cards
           // (16px mono value, 9px small-caps label) — not invented sizes.
           statsEl.innerHTML =

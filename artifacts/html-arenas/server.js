@@ -196,9 +196,9 @@ const CLUB_MANAGER_VISIBILITY_LINK = '/privacy#club-manager-visibility';
 function clubManagerVisibilityLong(plan, lead) {
   const prefix = lead || 'By joining,';
   if (plan === 'club_pro') {
-    return `${prefix} club administrators and coaches can see the activity you log while you are a member. This club currently has Club Pro, so this includes weekly training hours, trends against your recent average, sessions, distance, rest days, periods of inactivity, and classifications such as training above or below your usual level, shown alongside your name. Your leaderboard and activity-feed settings do not limit what club managers can see.`;
+    return `${prefix} club administrators and coaches can see the activity you log while you are a member. This club currently has Club Pro, so this includes weekly training hours, trends against your recent average, sessions, distance, rest days, periods of inactivity, and classifications such as training above or below your usual level, shown alongside your name, unless you turn off Club training analytics in Settings. Your leaderboard and activity-feed settings do not limit what club managers can see.`;
   }
-  return `${prefix} club administrators and coaches can see that you are a member and the activity you log while you are a member, including through club leaderboards. This club does not currently have Club Pro. If it upgrades, they can also see weekly training hours, trends against your recent average, sessions, distance, rest days, periods of inactivity, and classifications such as training above or below your usual level. Your leaderboard and activity-feed settings do not limit what club managers can see.`;
+  return `${prefix} club administrators and coaches can see that you are a member and the activity you log while you are a member, including through club leaderboards. This club does not currently have Club Pro. If it upgrades, they can also see weekly training hours, trends against your recent average, sessions, distance, rest days, periods of inactivity, and classifications such as training above or below your usual level, unless you turn off Club training analytics in Settings. Your leaderboard and activity-feed settings do not limit what club managers can see.`;
 }
 
 function clubManagerVisibilityEmail(plan) {
@@ -1332,6 +1332,7 @@ function displayFromUser(user) {
 const PREF_KEYS = [
   'show_on_leaderboards',  // off = excluded from rankings (leaderboards page all scopes + feed club-rank)
   'activity_feed_visible', // off = activities hidden from followers' feeds + no follower fan-out notifs
+  'club_training_analytics_visible', // off = no named club training analysis/check-ins; aggregates + rankings unchanged
   'notify_kudos',          // gates type 'like'
   'notify_comments',       // gates type 'comment'
   'notify_followers',      // gates type 'follow'
@@ -1875,7 +1876,8 @@ async function createRequiredNotificationBatch(rows) {
 // is retried. sourceKey makes those retries idempotent per recipient.
 async function createNotification({
   userId, type, title, body, link, actorId, entityId,
-  sourceKey = null, required = false, createdAt = null
+  sourceKey = null, required = false, createdAt = null,
+  requiresClubTrainingAnalytics = false
 }) {
   if (!supabaseAdmin || !userId) {
     if (required) throw new Error('required notification unavailable');
@@ -1892,6 +1894,22 @@ async function createNotification({
       }
     } catch (err) {
       // Lookup failure → deliver.
+    }
+  }
+  // Training check-ins need a second, fail-closed eligibility decision at the
+  // notification write boundary. Route-level recipient calculation is still
+  // required, but can become stale while activity/profile reads are running.
+  if (requiresClubTrainingAnalytics) {
+    try {
+      const { data: u, error } = await supabaseAdmin.auth.admin.getUserById(userId);
+      if (error || !u || !u.user) {
+        return { delivered: false, suppressed: true, suppressionReason: 'training-analytics-unavailable' };
+      }
+      if (!prefsFromMeta(u.user.user_metadata || {}).club_training_analytics_visible) {
+        return { delivered: false, suppressed: true, suppressionReason: 'training-analytics-opted-out' };
+      }
+    } catch (err) {
+      return { delivered: false, suppressed: true, suppressionReason: 'training-analytics-unavailable' };
     }
   }
   try {
@@ -3097,6 +3115,22 @@ async function buildUserProfileMap(ids) {
   return map;
 }
 
+// Account-level today, deliberately club-aware at the call boundary so a future
+// membership-level override can replace the storage without changing consumers.
+// Missing profile lookups fail closed for named analysis and training nudges.
+function getClubTrainingVisibility(clubId, memberIds, profileMap) {
+  const visibleIds = [];
+  const optedOutIds = [];
+  const unavailableIds = [];
+  [...new Set((memberIds || []).filter(Boolean))].forEach((id) => {
+    const profile = profileMap && profileMap[id];
+    if (!profile) unavailableIds.push(id);
+    else if (profile.prefs && profile.prefs.club_training_analytics_visible === false) optedOutIds.push(id);
+    else visibleIds.push(id);
+  });
+  return { clubId, visibleIds, optedOutIds, unavailableIds };
+}
+
 // Canonical points ranking for one explicit club roster. Callers supply current
 // membership rows and the matching profile map so authorization and club lookup
 // stay at the route boundary. Ranking visibility is intentionally narrower than
@@ -3294,13 +3328,15 @@ app.get(BASE + '/api/leaderboard/club-dashboard', requireAuth, async (req, res) 
       !(profileMap[id] && profileMap[id].prefs && !profileMap[id].prefs.show_on_leaderboards)
     ));
 
+    const trainingVisibility = getClubTrainingVisibility(clubId, memberIds, profileMap);
+
     // At-risk: no activity in the last 5 days, regardless of the selected period.
     // Always a rolling instant window — a Monday-bound 'week' would clip to
     // less than 5 days early in the week and mark active members at-risk.
-    const recent = await fetchActivitiesForUsers(memberIds, 'rolling7', 'all', undefined, { capAtNow: true });
+    const recent = await fetchActivitiesForUsers(trainingVisibility.visibleIds, 'rolling7', 'all', undefined, { capAtNow: true });
     const fiveDaysAgo = new Date(); fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
     const recentUserIds = new Set((recent || []).filter((a) => new Date(a.date) >= fiveDaysAgo).map((a) => a.user_id));
-    const atRisk = memberIds
+    const atRisk = trainingVisibility.visibleIds
       .filter((id) => !recentUserIds.has(id) && id !== req.user.id) // exclude the viewing coach (matches the nudge recipient set)
       .map((id) => ({ userId: id, name: (profileMap[id] && profileMap[id].name) || 'Member', avatar_url: (profileMap[id] && profileMap[id].avatar_url) || null, daysInactive: 5 }));
 
@@ -3367,23 +3403,28 @@ app.post(BASE + '/api/clubs/:clubId/nudge-atrisk', requireAuth, async (req, res)
     const { data: members } = await supabaseAdmin
       .from('memberships').select('user_id').eq('club_id', clubId);
     const memberIds = [...new Set((members || []).map((m) => m.user_id).filter(Boolean))];
-    const recent = await fetchActivitiesForUsers(memberIds, 'rolling7', 'all', undefined, { capAtNow: true });
+    const profileMap = await buildUserProfileMap(memberIds);
+    const trainingVisibility = getClubTrainingVisibility(clubId, memberIds, profileMap);
+    const recent = await fetchActivitiesForUsers(trainingVisibility.visibleIds, 'rolling7', 'all', undefined, { capAtNow: true });
     const fiveDaysAgo = new Date(); fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
     const recentUserIds = new Set((recent || []).filter((a) => new Date(a.date) >= fiveDaysAgo).map((a) => a.user_id));
-    const atRiskIds = memberIds.filter((id) => !recentUserIds.has(id) && id !== req.user.id);
+    const atRiskIds = trainingVisibility.visibleIds.filter((id) => !recentUserIds.has(id) && id !== req.user.id);
     const coach = displayFromUser(req.user);
+    let nudged = 0;
     for (const userId of atRiskIds) {
-      await createNotification({
+      const outcome = await createNotification({
         userId,
         type: 'club',
         title: 'Check-in from your coach',
         body: `${coach.name} noticed you haven't logged any activity recently — how are you getting on? Jump back in when you're ready.`,
         link: '/profile',
         actorId: req.user.id,
-        entityId: clubId
+        entityId: clubId,
+        requiresClubTrainingAnalytics: true
       });
+      if (outcome.delivered) nudged++;
     }
-    res.json({ success: true, nudged: atRiskIds.length });
+    res.json({ success: true, nudged });
   } catch (err) {
     console.log('Nudge at-risk error:', err.message);
     res.json({ error: 'Could not send nudges' });
@@ -3489,8 +3530,30 @@ app.get(BASE + '/api/clubs/:clubId/training-load', requireAuth, async (req, res)
       }
     }
     const byUser = bucketActivities(activities);
+    const trainingVisibility = getClubTrainingVisibility(clubId, memberIds, profileMap);
 
-    const memberData = memberIds.map((id) => {
+    // Whole-club aggregates use every member's activity, including opted-out
+    // members, but never build a named per-member metric object for them.
+    const clubWeeklyRaw = weekKeys.map(() => 0);
+    const activeThisWeekIds = new Set();
+    let sessionsThisWeek = 0;
+    let kmThisWeek = 0;
+    (activities || []).forEach((activity) => {
+      const activityKey = dayKey(activity.date, memberZone(profileMap[activity.user_id]));
+      for (let i = 0; i < weekKeys.length; i++) {
+        if (activityKey >= weekKeys[i] && activityKey < addDaysToKey(weekKeys[i], 7)) {
+          clubWeeklyRaw[i] += parseDurationHours(activity.duration);
+          break;
+        }
+      }
+      if (activityKey >= thisWeekKey) {
+        activeThisWeekIds.add(activity.user_id);
+        sessionsThisWeek++;
+        kmThisWeek += parseDistanceKmUnitAware(activity.distance);
+      }
+    });
+
+    const memberData = trainingVisibility.visibleIds.map((id) => {
       const prof = profileMap[id] || {};
       const memberTz = memberZone(prof);
       // Each activity's local day key in the MEMBER's zone, computed once.
@@ -3541,9 +3604,23 @@ app.get(BASE + '/api/clubs/:clubId/training-load', requireAuth, async (req, res)
 
     const statusOrder = { overdoing: 0, behind: 1, ontrack: 2, inactive: 3 };
     memberData.sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || b.thisWeek - a.thisWeek);
+    const optedOutRows = trainingVisibility.optedOutIds
+      .map((id) => ({
+        userId: id,
+        name: (profileMap[id] && profileMap[id].name) || 'Member',
+        avatar_url: (profileMap[id] && profileMap[id].avatar_url) || null,
+        optedOut: true
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const unavailableRows = trainingVisibility.unavailableIds.map((id) => ({
+      userId: id,
+      name: 'Member',
+      avatar_url: null,
+      analyticsUnavailable: true
+    }));
+    const responseMembers = memberData.concat(optedOutRows, unavailableRows);
 
-    const clubWeekly = weekKeys.map((_, i) =>
-      Math.round(memberData.reduce((s, m) => s + (m.weeklyHours[i] || 0), 0) * 10) / 10);
+    const clubWeekly = clubWeeklyRaw.map((hours) => Math.round(hours * 10) / 10);
     const clubThisWeek = clubWeekly[clubWeekly.length - 1];
     const clubPrev = clubWeekly.slice(Math.max(0, clubWeekly.length - 5), clubWeekly.length - 1);
     const clubAvg = clubPrev.length
@@ -3551,7 +3628,7 @@ app.get(BASE + '/api/clubs/:clubId/training-load', requireAuth, async (req, res)
       : 0;
 
     res.json({
-      members: memberData,
+      members: responseMembers,
       clubWeekly,
       weekLabels: weekKeys.map((k) => keyToUtcDate(k)
         .toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })),
@@ -3559,10 +3636,13 @@ app.get(BASE + '/api/clubs/:clubId/training-load', requireAuth, async (req, res)
         clubThisWeek,
         clubAvg,
         clubDelta: Math.round((clubThisWeek - clubAvg) * 10) / 10,
-        activeCount: memberData.filter((m) => m.thisWeek > 0).length,
-        totalMembers: memberData.length,
+        activeCount: activeThisWeekIds.size,
+        totalMembers: memberIds.length,
         overdoingCount: memberData.filter((m) => m.status === 'overdoing').length,
-        behindCount: memberData.filter((m) => m.status === 'behind').length
+        behindCount: memberData.filter((m) => m.status === 'behind').length,
+        optedOutCount: optedOutRows.length,
+        sessionsThisWeek,
+        kmThisWeek: Math.round(kmThisWeek * 10) / 10
       }
     });
   } catch (err) {
@@ -3598,16 +3678,31 @@ app.post(BASE + '/api/clubs/:clubId/checkin', requireAuth, async (req, res) => {
       .eq('user_id', targetId)
       .maybeSingle();
     if (!target) return res.status(404).json({ error: 'Member not found' });
+    const { data: targetUser, error: targetUserError } = await supabaseAdmin.auth.admin.getUserById(targetId);
+    if (targetUserError || !targetUser || !targetUser.user) {
+      return res.status(503).json({ error: 'Could not verify this member’s training preference' });
+    }
+    if (!prefsFromMeta(targetUser.user.user_metadata || {}).club_training_analytics_visible) {
+      return res.status(409).json({ error: 'This member has opted out of individual training analytics.' });
+    }
     const coach = displayFromUser(req.user);
-    await createNotification({
+    const outcome = await createNotification({
       userId: targetId,
       type: 'club',
       title: 'Check-in from your coach',
       body: `${coach.name} checked in on your training — keep it going, and reach out any time.`,
       link: '/profile',
       actorId: req.user.id,
-      entityId: clubId
+      entityId: clubId,
+      requiresClubTrainingAnalytics: true
     });
+    if (outcome.suppressionReason === 'training-analytics-opted-out') {
+      return res.status(409).json({ error: 'This member has opted out of individual training analytics.' });
+    }
+    if (outcome.suppressionReason === 'training-analytics-unavailable') {
+      return res.status(503).json({ error: 'Could not verify this member’s training preference' });
+    }
+    if (!outcome.delivered) return res.status(500).json({ error: 'Could not send check-in' });
     res.json({ success: true });
   } catch (err) {
     console.log('Check-in error:', err.message);
@@ -4209,7 +4304,11 @@ app.get(BASE + '/api/clubs/:clubId/report', requireAuth, async (req, res) => {
     // Most popular sport / most active member over the report window. (Names
     // come from the member-wide profileMap fetched above.)
     const topSport = Object.entries(curWin.sportCounts).sort((a, b) => b[1] - a[1])[0];
-    const topMember = Object.entries(curWin.userStats).sort((a, b) => b[1].sessions - a[1].sessions)[0];
+    const trainingVisibility = getClubTrainingVisibility(clubId, memberIds, profileMap);
+    const visibleTrainingIds = new Set(trainingVisibility.visibleIds);
+    const topMember = Object.entries(curWin.userStats)
+      .filter(([userId]) => visibleTrainingIds.has(userId))
+      .sort((a, b) => b[1].sessions - a[1].sessions)[0];
 
     // Training hours trend — total logged hours per trend bucket. Month cuts
     // of the same member-zone-keyed activity list as above.
@@ -12823,7 +12922,7 @@ async function subscriptionHadPaidInvoice(sub) {
 
 const CLUB_PRO_UPGRADE_TITLE = (clubName) => clubName + ' upgraded to Club Pro';
 const CLUB_PRO_UPGRADE_BODY = (clubName) =>
-  clubName + ' upgraded to Club Pro. Club administrators and coaches can now see the activity you log while you are a member, including weekly training hours, trends against your recent average, sessions, distance, rest days, and periods of inactivity, shown alongside your name. They may also see classifications such as training above or below your usual level.';
+  clubName + ' upgraded to Club Pro. Club administrators and coaches can now see the activity you log while you are a member unless you turn off Club training analytics in Settings. When the setting is on, this includes weekly training hours, trends against your recent average, sessions, distance, rest days, periods of inactivity, and classifications such as training above or below your usual level, shown alongside your name.';
 const CLUB_PRO_DOWNGRADE_TITLE = (clubName) => clubName + ' no longer has Club Pro';
 const CLUB_PRO_DOWNGRADE_BODY = (clubName) =>
   clubName + ' no longer has Club Pro. Club administrators and coaches no longer have access to Club Pro training summaries, trends, and inactivity views for club members.';

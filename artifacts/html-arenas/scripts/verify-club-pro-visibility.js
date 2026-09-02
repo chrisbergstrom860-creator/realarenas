@@ -192,7 +192,9 @@ async function deleteUserByEmail(email) {
         row.type === 'club' &&
         row.link === '/privacy#club-manager-visibility' &&
         row.title === clubName + ' upgraded to Club Pro' &&
-        row.body.includes('Club administrators and coaches can now see the activity you log while you are a member')));
+        row.body.includes('Club administrators and coaches can now see the activity you log while you are a member') &&
+        row.body.includes('unless you turn off Club training analytics in Settings') &&
+        row.body.includes('classifications such as training above or below your usual level')));
 
     const retry = await deliver('checkout.session.completed', session, null, upgradeEventId);
     check('upgrade retry accepted', retry.status === 200, retry.status + ' ' + retry.text);
