@@ -2071,6 +2071,12 @@ if (logHashMatch) {
   var aiHistory = [];
   var aiUsage = null;
 
+  function escapeAiHtml(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function (character) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character];
+    });
+  }
+
   function usageText() {
     if (!aiUsage) return '';
     return aiUsage.used + ' of ' + aiUsage.limit + ' questions used · resets ' +
@@ -2122,21 +2128,50 @@ if (logHashMatch) {
     var thread = document.getElementById('ai-insights-thread');
     if (!thread) return;
     var limitations = (response.limitations || []).map(function (line) {
-      return '<li>' + esc(line) + '</li>';
+      return '<li>' + escapeAiHtml(line) + '</li>';
     }).join('');
     var evidence = (response.evidence || []).map(function (item) {
-      return '<span style="display:inline-block;padding:3px 7px;border-radius:999px;background:var(--gray-100);font-size:9px;color:var(--gray-500);margin:3px 3px 0 0">' + esc(item.path) + '</span>';
+      return '<span style="display:inline-block;padding:3px 7px;border-radius:999px;background:var(--gray-100);font-size:9px;color:var(--gray-500);margin:3px 3px 0 0">' + escapeAiHtml(item.path) + '</span>';
     }).join('');
     var wrap = document.createElement('div');
     wrap.innerHTML =
-      '<div style="display:flex;justify-content:flex-end"><div style="max-width:82%;background:var(--gray-900);color:white;border-radius:12px 12px 3px 12px;padding:9px 12px;font-size:12px;line-height:1.55">' + esc(question) + '</div></div>' +
+      '<div style="display:flex;justify-content:flex-end"><div style="max-width:82%;background:var(--gray-900);color:white;border-radius:12px 12px 3px 12px;padding:9px 12px;font-size:12px;line-height:1.55">' + escapeAiHtml(question) + '</div></div>' +
       '<div style="background:white;border:var(--border);border-radius:3px 12px 12px 12px;padding:13px 14px">' +
         '<div style="font-size:10px;font-weight:700;letter-spacing:.05em;color:#9A7600;text-transform:uppercase;margin-bottom:6px">✦ AI Insights</div>' +
-        '<div style="font-size:13px;color:var(--gray-800);line-height:1.65;white-space:pre-wrap">' + esc(response.answer) + '</div>' +
+        '<div style="font-size:13px;color:var(--gray-800);line-height:1.65;white-space:pre-wrap">' + escapeAiHtml(response.answer) + '</div>' +
         (limitations ? '<ul style="margin:9px 0 0 18px;padding:0;font-size:11px;color:var(--gray-500);line-height:1.5">' + limitations + '</ul>' : '') +
         (evidence ? '<details style="margin-top:9px"><summary style="font-size:10px;color:var(--gray-400);cursor:pointer">Evidence used</summary><div style="margin-top:4px">' + evidence + '</div></details>' : '') +
       '</div>';
     while (wrap.firstChild) thread.appendChild(wrap.firstChild);
+  }
+
+  function addPlainTextTurn(question, response) {
+    var empty = document.getElementById('ai-insights-empty');
+    if (empty) empty.remove();
+    var thread = document.getElementById('ai-insights-thread');
+    if (!thread) throw new Error('AI Insights thread is unavailable');
+
+    var turn = document.createElement('div');
+    var questionRow = document.createElement('div');
+    questionRow.style.cssText = 'display:flex;justify-content:flex-end';
+    var questionBubble = document.createElement('div');
+    questionBubble.style.cssText = 'max-width:82%;background:var(--gray-900);color:white;border-radius:12px 12px 3px 12px;padding:9px 12px;font-size:12px;line-height:1.55';
+    questionBubble.textContent = question;
+    questionRow.appendChild(questionBubble);
+
+    var answerCard = document.createElement('div');
+    answerCard.style.cssText = 'background:white;border:var(--border);border-radius:3px 12px 12px 12px;padding:13px 14px';
+    var label = document.createElement('div');
+    label.style.cssText = 'font-size:10px;font-weight:700;letter-spacing:.05em;color:#9A7600;text-transform:uppercase;margin-bottom:6px';
+    label.textContent = '✦ AI Insights';
+    var answer = document.createElement('div');
+    answer.style.cssText = 'font-size:13px;color:var(--gray-800);line-height:1.65;white-space:pre-wrap';
+    answer.textContent = response.answer == null ? '' : String(response.answer);
+    answerCard.appendChild(label);
+    answerCard.appendChild(answer);
+    turn.appendChild(questionRow);
+    turn.appendChild(answerCard);
+    while (turn.firstChild) thread.appendChild(turn.firstChild);
   }
 
   async function submitQuestion() {
@@ -2150,23 +2185,37 @@ if (logHashMatch) {
     if (error) error.textContent = '';
     if (button) { button.disabled = true; button.textContent = 'Reviewing your data…'; }
     try {
-      var response = await fetch(AI_BASE + '/api/profile/ai-insights', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: question, history: aiHistory })
-      });
-      var result = await response.json().catch(function () { return {}; });
-      if (!response.ok) {
-        if (result.error === 'ai_insights_limit') throw new Error(result.message || 'Monthly question limit reached.');
-        if (result.error === 'pro_required') { document.getElementById('ai-insights-body').innerHTML = lockedPanel(); return; }
-        throw new Error(result.message || 'AI Insights could not complete this request. Please try again.');
+      var result;
+      try {
+        var response = await fetch(AI_BASE + '/api/profile/ai-insights', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: question, history: aiHistory })
+        });
+        result = await response.json().catch(function () { return {}; });
+        if (!response.ok) {
+          if (result.error === 'ai_insights_limit') throw new Error(result.message || 'Monthly question limit reached.');
+          if (result.error === 'pro_required') { document.getElementById('ai-insights-body').innerHTML = lockedPanel(); return; }
+          throw new Error(result.message || 'AI Insights could not complete this request. Please try again.');
+        }
+      } catch (requestError) {
+        if (error) error.textContent = requestError.message || 'AI Insights could not complete this request. Please try again.';
+        return;
       }
-      addTurn(question, result);
+      try {
+        addTurn(question, result);
+      } catch (renderError) {
+        console.error('AI Insights enhanced rendering failed:', renderError);
+        try {
+          addPlainTextTurn(question, result);
+        } catch (fallbackError) {
+          if (error) error.textContent = 'AI Insights returned an answer but the page could not display it. Please refresh and try again.';
+          return;
+        }
+      }
       if (result.historyTurn) aiHistory = aiHistory.concat([result.historyTurn]).slice(-3);
       if (result.usage) setUsage(result.usage);
       if (input) input.value = '';
-    } catch (err) {
-      if (error) error.textContent = err.message || 'AI Insights could not complete this request. Please try again.';
     } finally {
       aiBusy = false;
       if (button) { button.disabled = false; button.textContent = 'Ask AI Insights'; }
@@ -2191,7 +2240,7 @@ if (logHashMatch) {
       var form = document.getElementById('ai-insights-form');
       if (form) form.addEventListener('submit', submitQuestion);
     } catch (err) {
-      if (body) body.innerHTML = '<div style="padding:48px 24px;text-align:center;font-size:13px;color:var(--gray-500)">' + esc(err.message || 'AI Insights could not load its status.') + '</div>';
+      if (body) body.innerHTML = '<div style="padding:48px 24px;text-align:center;font-size:13px;color:var(--gray-500)">' + escapeAiHtml(err.message || 'AI Insights could not load its status.') + '</div>';
     }
   }
 

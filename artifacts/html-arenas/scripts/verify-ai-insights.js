@@ -407,11 +407,50 @@ async function cleanup() {
       JSON.stringify(advice.body));
     check('deterministic advice refusal consumes no model call', captured.length === providerCountBeforeAdvice);
 
+    const { launchBrowser } = await import('./lib/mobile-geometry.js');
+    browser = await launchBrowser();
+    const proContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    await proContext.addCookies(proLogin.browserCookies);
+    const proPage = await proContext.newPage();
+    await proPage.goto(BASE + '/profile#insights', { waitUntil: 'networkidle' });
+    await proPage.locator('#ai-insights-question').fill('How many activities have I logged?');
+    await proPage.locator('#ai-insights-form button[type="submit"]').click();
+    await proPage.locator('#ai-insights-thread').getByText('Your all-time activity count was 8.').waitFor();
+    check('Pro browser renders the returned AI answer',
+      (await proPage.locator('#ai-insights-thread').innerText()).includes('Your all-time activity count was 8.'));
+    check('successful Pro browser rendering leaves the inline error empty',
+      (await proPage.locator('#ai-insights-error').innerText()).trim() === '',
+      await proPage.locator('#ai-insights-error').innerText());
+
+    await proPage.route('**/api/profile/ai-insights', async (route) => {
+      const providerResponse = await route.fetch();
+      const body = await providerResponse.json();
+      body.evidence = [null];
+      await route.fulfill({
+        response: providerResponse,
+        contentType: 'application/json',
+        body: JSON.stringify(body)
+      });
+    });
+    await proPage.locator('#ai-insights-question').fill('Show this answer through the plain-text fallback.');
+    await proPage.locator('#ai-insights-form button[type="submit"]').click();
+    const renderedAnswers = proPage.locator('#ai-insights-thread').getByText('Your all-time activity count was 8.', { exact: true });
+    await renderedAnswers.nth(1).waitFor();
+    check('post-200 enhanced-render failure still displays the answer as plain text',
+      await renderedAnswers.count() === 2);
+    check('plain-text fallback leaves the inline error empty',
+      (await proPage.locator('#ai-insights-error').innerText()).trim() === '',
+      await proPage.locator('#ai-insights-error').innerText());
+    await proContext.close();
+    await browser.close();
+    browser = null;
+
     // Fill the remaining durable quota slots directly. The route's four prior
-    // provider calls claimed slots 01–05 through the same unique constraint.
+    // API provider calls claimed slots 01–05 and the two browser calls claimed
+    // 06–07 through the same unique constraint.
     const period = new Date().toISOString().slice(0, 7);
     const remainingSlots = [];
-    for (let slot = 6; slot <= 30; slot++) {
+    for (let slot = 8; slot <= 30; slot++) {
       remainingSlots.push({
         user_id: users.pro.id,
         actor_id: null,
@@ -443,7 +482,6 @@ async function cleanup() {
       !(visibleNotifications.body.notifications || []).some((row) => row.type === 'ai_insights_usage'),
       JSON.stringify(visibleNotifications.body));
 
-    const { launchBrowser } = await import('./lib/mobile-geometry.js');
     browser = await launchBrowser();
     const freeContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     await freeContext.addCookies(freeLogin.browserCookies);
