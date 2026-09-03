@@ -32,12 +32,10 @@ const {
 const { buildFourWeekActivityGrid } = require('./activity-grid');
 const {
   FALLBACK_COPY: AI_INSIGHTS_FALLBACK,
-  REFUSAL_COPY: AI_INSIGHTS_REFUSAL,
   MODEL: AI_INSIGHTS_MODEL,
   makeSignedHistoryTurn,
   verifyHistoryTurns,
   validateInsightResponse,
-  requiresAdviceRefusal,
   resolveAnthropicProvider,
   buildSystemPrompt: buildAiInsightsSystemPrompt
 } = require('./ai-insights');
@@ -8869,15 +8867,6 @@ app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_in
   const question = typeof req.body.question === 'string' ? req.body.question.trim() : '';
   if (!question || question.length > 500) return res.status(400).json({ error: 'invalid_question' });
   const verifiedHistory = verifyHistoryTurns(SESSION_SECRET, req.user.id, req.body.history);
-  if (requiresAdviceRefusal(question)) {
-    return res.json({
-      answer: AI_INSIGHTS_REFUSAL,
-      evidence: [],
-      limitations: [],
-      historyAccepted: verifiedHistory.length,
-      historyTurn: makeSignedHistoryTurn(SESSION_SECRET, req.user.id, question, AI_INSIGHTS_REFUSAL)
-    });
-  }
   let providerConfig;
   try {
     providerConfig = resolveAnthropicProvider(process.env);
@@ -8947,21 +8936,51 @@ app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_in
   try {
     const text = (response.content || []).filter((block) => block.type === 'text').map((block) => block.text).join('');
     const validated = validateInsightResponse(text, context);
-    // Validation may deliberately return the exact policy refusal when a model
-    // emits advice despite the prompt. All other rejection modes use fallback.
     const answer = validated.answer || AI_INSIGHTS_FALLBACK;
+    let responseUsage = usage;
+    if (validated.policyRefusal || !validated.ok) {
+      try {
+        await releaseAiUsageClaim(req.user.id, usage.sourceKey);
+        responseUsage = await readAiUsage(req.user.id);
+      } catch (refundError) {
+        console.error('AI Insights response refund error:', refundError.message);
+        return res.status(503).json({
+          error: 'ai_usage_reconciliation_failed',
+          message: 'AI Insights could not reconcile this question with your usage. Please contact support before retrying.'
+        });
+      }
+    }
     res.json({
       answer,
       evidence: validated.ok ? validated.evidence : [],
       limitations: validated.ok ? validated.limitations : [],
+      policyRefusal: validated.policyRefusal || undefined,
+      policyReason: validated.policyReason,
       rejectedReason: validated.ok ? undefined : validated.reason,
       historyAccepted: verifiedHistory.length,
       historyTurn: makeSignedHistoryTurn(SESSION_SECRET, req.user.id, question, answer),
-      usage: { limit: AI_INSIGHTS_MONTHLY_LIMIT, used: usage.used, remaining: usage.remaining, resetDate: usage.resetDate }
+      usage: {
+        limit: AI_INSIGHTS_MONTHLY_LIMIT,
+        used: responseUsage.used,
+        remaining: responseUsage.remaining,
+        resetDate: responseUsage.resetDate
+      }
     });
   } catch (err) {
     console.log('AI Insights response error:', err.message);
-    res.status(503).json({ error: 'ai_response_unavailable', message: 'AI Insights couldn’t process the analysis response. Please try again.' });
+    let refunded = false;
+    try {
+      await releaseAiUsageClaim(req.user.id, usage.sourceKey);
+      refunded = true;
+    } catch (refundError) {
+      console.error('AI Insights response refund error:', refundError.message);
+    }
+    res.status(503).json({
+      error: 'ai_response_unavailable',
+      message: refunded
+        ? 'AI Insights couldn’t process the analysis response. Your question was not counted. Please try again.'
+        : 'AI Insights couldn’t process the analysis response, and usage could not be reconciled automatically. Please contact support before retrying.'
+    });
   }
 });
 

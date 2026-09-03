@@ -2205,7 +2205,7 @@ if (logHashMatch) {
       try {
         addTurn(question, result);
       } catch (renderError) {
-        console.error('AI Insights enhanced rendering failed:', renderError);
+        console.warn('AI Insights enhanced rendering failed; using plain-text fallback:', renderError);
         try {
           addPlainTextTurn(question, result);
         } catch (fallbackError) {

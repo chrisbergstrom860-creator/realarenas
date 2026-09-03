@@ -5,6 +5,12 @@ const REFUSAL_COPY = "I can describe your recorded training, but I can’t presc
 const MODEL = 'claude-haiku-4-5';
 const MAX_HISTORY_TURNS = 3;
 const HISTORY_TTL_MS = 12 * 60 * 60 * 1000;
+const POLICY_REFUSAL_REASONS = new Set([
+  'prescriptive',
+  'diet_weight_body',
+  'medical',
+  'athlete_characterization'
+]);
 
 class AiProviderConfigurationError extends Error {
   constructor(message) {
@@ -256,6 +262,23 @@ function validateInsightResponse(raw, context) {
   if (!parsed.findings.length || parsed.findings.length > 8 || parsed.limitations.length > 8) {
     return { ok: false, answer: FALLBACK_COPY, reason: 'bounds' };
   }
+  const policyFindings = parsed.findings.filter((finding) => finding && finding.type === 'policy_refusal');
+  if (policyFindings.length) {
+    const finding = policyFindings[0];
+    if (parsed.findings.length !== 1 || parsed.limitations.length !== 0 ||
+        JSON.stringify(Object.keys(finding).sort()) !== JSON.stringify(['reason', 'type']) ||
+        !POLICY_REFUSAL_REASONS.has(finding.reason)) {
+      return { ok: false, answer: FALLBACK_COPY, reason: 'invalid_policy_refusal' };
+    }
+    return {
+      ok: true,
+      policyRefusal: true,
+      policyReason: finding.reason,
+      answer: REFUSAL_COPY,
+      evidence: [],
+      limitations: []
+    };
+  }
   const allEvidence = [];
   const rendered = [];
   for (const finding of parsed.findings) {
@@ -286,10 +309,6 @@ function validateInsightResponse(raw, context) {
   };
 }
 
-function requiresAdviceRefusal(question) {
-  return /\b(?:prescribe|recommend|routine|workout|training plan|how should i train|what should i (?:do|run|ride|eat)|should i (?:rest|train|run|ride|increase|decrease)|can i increase|how (?:much|hard|often) should i|diet|nutrition|calories|weight|lose weight|gain weight|body fat|body composition|under[- ]?train(?:ing|ed)?|over[- ]?train(?:ing|ed)?|injur(?:y|ed)|medical|diagnos)\b/i.test(question || '');
-}
-
 function buildSystemPrompt() {
   return [
     'You are Arenas AI Insights, a descriptive training-data analyst.',
@@ -301,7 +320,9 @@ function buildSystemPrompt() {
     '{"type":"standing","path":"standings.platform.month or standings.clubs.N.month","value":"exact copied object"}',
     '{"type":"personal_record","path":"allTime.personalRecords.N","value":"exact copied object"}',
     '{"type":"insufficient_trend_data"} only when DATA_JSON.dataQuality.trendEligible is false.',
-    'Do not answer advice, causes, diet, weight, body composition, medical, or prescriptive questions; the server handles those.',
+    '{"type":"policy_refusal","reason":"prescriptive|diet_weight_body|medical|athlete_characterization"} must be the only finding, with no limitations, when the user asks for advice or prescriptions; asks what they should do, eat, increase, decrease, or change; asks for diet, weight, body composition, or medical commentary; or asks you to characterize them as under-training, over-training, lazy, fit, healthy, or similar.',
+    'Do not policy-refuse a descriptive question merely because it mentions workouts, training, rest days, routines, weight training, rides, injuries, medical leave, diet, nutrition, calories, or weight in a historical or recorded-data context.',
+    'For policy refusals, return only the typed policy_refusal finding. Never write refusal or advice prose.',
     'Do not use comparison when dataQuality.trendEligible is false.',
     'Limitations may contain only: INSUFFICIENT_TREND_DATA, DETAILED_WINDOW_12_WEEKS, STANDINGS_UNAVAILABLE, CAUSE_NOT_AVAILABLE, QUESTION_NOT_ANSWERABLE.',
     'Return JSON only: {"findings":[...],"limitations":["CODE"]}.'
@@ -318,7 +339,6 @@ module.exports = {
   makeSignedHistoryTurn,
   verifyHistoryTurns,
   validateInsightResponse,
-  requiresAdviceRefusal,
   buildSystemPrompt,
   valueAtPath
 };

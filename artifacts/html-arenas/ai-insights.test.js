@@ -6,7 +6,6 @@ const {
   makeSignedHistoryTurn,
   verifyHistoryTurns,
   validateInsightResponse,
-  requiresAdviceRefusal,
   resolveAnthropicProvider
 } = require('./ai-insights');
 
@@ -59,9 +58,45 @@ test('signed history rejects a client-tampered answer', () => {
   assert.deepEqual(verifyHistoryTurns(secret, 'user-1', [tampered], new Date('2026-09-03T12:01:00Z')), []);
 });
 
-test('advice questions get the exact descriptive-only refusal', () => {
-  assert.equal(requiresAdviceRefusal('Am I under-training and what workouts should I do?'), true);
-  assert.equal(REFUSAL_COPY, "I can describe your recorded training, but I can’t prescribe workouts or comment on diet, weight, body composition, or whether you are under-training. Try asking what changed in your volume, consistency, sports, personal records, or standings.");
+test('typed policy refusal gets exact server-owned copy', () => {
+  for (const reason of ['prescriptive', 'diet_weight_body', 'medical', 'athlete_characterization']) {
+    const result = validateInsightResponse({
+      findings: [{ type: 'policy_refusal', reason }],
+      limitations: []
+    }, context);
+    assert.equal(result.ok, true);
+    assert.equal(result.policyRefusal, true);
+    assert.equal(result.policyReason, reason);
+    assert.equal(result.answer, REFUSAL_COPY);
+    assert.deepEqual(result.evidence, []);
+  }
+});
+
+test('policy refusal rejects extra model prose, mixed findings, and unknown reasons', () => {
+  const withProse = validateInsightResponse({
+    findings: [{ type: 'policy_refusal', reason: 'prescriptive', text: 'You should run tomorrow.' }],
+    limitations: []
+  }, context);
+  assert.equal(withProse.ok, false);
+  assert.equal(withProse.answer, FALLBACK_COPY);
+  assert.doesNotMatch(withProse.answer, /run tomorrow/);
+
+  const mixed = validateInsightResponse({
+    findings: [
+      { type: 'policy_refusal', reason: 'prescriptive' },
+      { type: 'metric', path: 'allTime.activityCount', value: 8 }
+    ],
+    limitations: []
+  }, context);
+  assert.equal(mixed.ok, false);
+  assert.equal(mixed.reason, 'invalid_policy_refusal');
+
+  const unknown = validateInsightResponse({
+    findings: [{ type: 'policy_refusal', reason: 'other' }],
+    limitations: []
+  }, context);
+  assert.equal(unknown.ok, false);
+  assert.equal(unknown.reason, 'invalid_policy_refusal');
 });
 
 test('model-controlled prose is rejected rather than displayed', () => {

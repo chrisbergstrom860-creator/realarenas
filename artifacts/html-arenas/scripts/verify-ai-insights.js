@@ -16,6 +16,32 @@ let clubId = null;
 let subscriptionId = null;
 let failures = 0;
 const captured = [];
+const REFUSAL_COPY = "I can describe your recorded training, but I can’t prescribe workouts or comment on diet, weight, body composition, or whether you are under-training. Try asking what changed in your volume, consistency, sports, personal records, or standings.";
+const GROUNDED_METRIC_COPY = 'Your all-time activity count was 8.';
+const DESCRIPTIVE_QUESTIONS = [
+  'How many hours on average did I workout in August 2026?',
+  'How many rest days did I take last month?',
+  'How much did I train in July?',
+  'How many workouts did I log in August?',
+  'How many hours of weight training did I record last month?',
+  'How did my training routine change over the last 12 weeks?',
+  'How many activities did I log after my injury?',
+  'What was my average ride distance in August?',
+  'How many activities did I record during my medical leave?',
+  'What percentage of my recorded training was running?'
+];
+const POLICY_REFUSAL_CASES = [
+  { question: 'Should I be doing more cardio?', reason: 'prescriptive' },
+  { question: 'What workout should I do tomorrow?', reason: 'prescriptive' },
+  { question: 'Can you recommend a new training routine?', reason: 'prescriptive' },
+  { question: 'Should I rest tomorrow?', reason: 'prescriptive' },
+  { question: 'How much should I train next week?', reason: 'prescriptive' },
+  { question: 'Should I increase my weekly mileage?', reason: 'prescriptive' },
+  { question: 'What should I eat after a long run?', reason: 'diet_weight_body' },
+  { question: 'How many calories should I eat each day?', reason: 'diet_weight_body' },
+  { question: 'Should I lose weight to run faster?', reason: 'diet_weight_body' },
+  { question: 'Am I under-training, and does that mean I’m lazy?', reason: 'athlete_characterization' }
+];
 
 function check(name, ok, detail) {
   if (ok) console.log('  ok  ' + name);
@@ -92,7 +118,18 @@ function responseFor(envelope) {
   const question = envelope.question;
   const count = envelope.data.allTime.activityCount;
   let output;
-  if (/missing path/i.test(question)) {
+  const policyCase = POLICY_REFUSAL_CASES.find((item) => item.question === question);
+  if (/force policy classifier miss/i.test(question)) {
+    output = {
+      findings: [{ type: 'metric', path: 'allTime.activityCount', value: count }],
+      limitations: []
+    };
+  } else if (policyCase) {
+    output = {
+      findings: [{ type: 'policy_refusal', reason: policyCase.reason }],
+      limitations: []
+    };
+  } else if (/missing path/i.test(question)) {
     output = {
       findings: [{ type: 'metric', path: 'allTime.inventedActivityCount', value: 987654321 }],
       limitations: []
@@ -135,7 +172,8 @@ function startStub() {
           const body = JSON.parse(raw || '{}');
           const content = body.messages && body.messages[0] && body.messages[0].content;
           const envelope = JSON.parse(typeof content === 'string' ? content : '{}');
-          captured.push({ path: req.url, headers: req.headers, body, envelope });
+          const record = { path: req.url, headers: req.headers, body, envelope, output: null };
+          captured.push(record);
           if (/force provider failure/i.test(envelope.question || '')) {
             res.writeHead(503, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
@@ -144,8 +182,10 @@ function startStub() {
             }));
             return;
           }
+          const providerResponse = responseFor(envelope);
+          record.output = JSON.parse(providerResponse.content[0].text);
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify(responseFor(envelope)));
+          res.end(JSON.stringify(providerResponse));
         } catch (error) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: { type: 'stub_error', message: error.message } }));
@@ -365,6 +405,7 @@ async function cleanup() {
       usageAfterFailure.body.remaining === usageBeforeFailure.body.remaining,
       JSON.stringify({ before: usageBeforeFailure.body, after: usageAfterFailure.body }));
 
+    const usageBeforeMalformed = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
     const fabricated = await api(proLogin, 'POST', '/api/profile/ai-insights', {
       question: 'Return a fabricated number for the rejection proof.',
       history: []
@@ -396,22 +437,91 @@ async function cleanup() {
       mismatched.body.answer === "I couldn’t produce an answer supported by your recorded data. Try asking about your activity count, volume, sports, streaks, personal records, or standings.",
       JSON.stringify(mismatched.body));
 
-    const providerCountBeforeAdvice = captured.length;
-    const advice = await api(proLogin, 'POST', '/api/profile/ai-insights', {
-      question: 'Should I rest tomorrow and increase my mileage next week?',
+    const usageAfterMalformed = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+    check('all rejected or malformed model outputs refund their exact quota slots',
+      usageBeforeMalformed.status === 200 &&
+      usageAfterMalformed.status === 200 &&
+      usageAfterMalformed.body.used === usageBeforeMalformed.body.used &&
+      usageAfterMalformed.body.remaining === usageBeforeMalformed.body.remaining,
+      JSON.stringify({ before: usageBeforeMalformed.body, after: usageAfterMalformed.body }));
+
+    for (const question of DESCRIPTIVE_QUESTIONS) {
+      const providerCountBefore = captured.length;
+      const result = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+        question,
+        history: []
+      });
+      const providerRecord = captured[captured.length - 1];
+      check('descriptive question reaches provider: ' + question,
+        captured.length === providerCountBefore + 1 &&
+        providerRecord.envelope.question === question,
+        JSON.stringify(result));
+      check('descriptive question returns grounded answer without policy refusal: ' + question,
+        result.status === 200 &&
+        result.body.answer === GROUNDED_METRIC_COPY &&
+        result.body.policyRefusal !== true &&
+        providerRecord.output.findings.every((finding) => finding.type !== 'policy_refusal'),
+        JSON.stringify({ body: result.body, output: providerRecord.output }));
+    }
+
+    for (const policyCase of POLICY_REFUSAL_CASES) {
+      const usageBeforePolicy = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+      const providerCountBefore = captured.length;
+      const result = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+        question: policyCase.question,
+        history: []
+      });
+      const usageAfterPolicy = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+      const providerRecord = captured[captured.length - 1];
+      check('policy question reaches provider classification: ' + policyCase.question,
+        captured.length === providerCountBefore + 1 &&
+        providerRecord.envelope.question === policyCase.question,
+        JSON.stringify(result));
+      check('policy refusal uses exact server copy with no model prose: ' + policyCase.question,
+        result.status === 200 &&
+        result.body.answer === REFUSAL_COPY &&
+        result.body.policyRefusal === true &&
+        result.body.policyReason === policyCase.reason &&
+        JSON.stringify(Object.keys(providerRecord.output.findings[0]).sort()) === JSON.stringify(['reason', 'type']),
+        JSON.stringify({ body: result.body, output: providerRecord.output }));
+      check('policy refusal does not consume quota: ' + policyCase.question,
+        usageBeforePolicy.status === 200 &&
+        usageAfterPolicy.status === 200 &&
+        usageAfterPolicy.body.used === usageBeforePolicy.body.used &&
+        usageAfterPolicy.body.remaining === usageBeforePolicy.body.remaining,
+        JSON.stringify({ before: usageBeforePolicy.body, after: usageAfterPolicy.body }));
+    }
+
+    const usageBeforeMiss = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+    const classifierMiss = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+      question: 'Should I be doing more cardio? Force policy classifier miss.',
       history: []
     });
-    check('advice request gets exact deterministic refusal',
-      advice.status === 200 &&
-      advice.body.answer === "I can describe your recorded training, but I can’t prescribe workouts or comment on diet, weight, body composition, or whether you are under-training. Try asking what changed in your volume, consistency, sports, personal records, or standings.",
-      JSON.stringify(advice.body));
-    check('deterministic advice refusal consumes no model call', captured.length === providerCountBeforeAdvice);
+    const usageAfterMiss = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+    const missRecord = captured[captured.length - 1];
+    check('classifier miss can only render a grounded descriptive metric, never advice',
+      classifierMiss.status === 200 &&
+      classifierMiss.body.answer === GROUNDED_METRIC_COPY &&
+      classifierMiss.body.policyRefusal !== true &&
+      missRecord.output.findings.length === 1 &&
+      missRecord.output.findings[0].type === 'metric' &&
+      !/should|recommend|increase|decrease|rest/i.test(classifierMiss.body.answer),
+      JSON.stringify({ body: classifierMiss.body, output: missRecord.output }));
+    check('grounded answer after classifier miss consumes one normal quota slot',
+      usageBeforeMiss.status === 200 &&
+      usageAfterMiss.status === 200 &&
+      usageAfterMiss.body.used === usageBeforeMiss.body.used + 1 &&
+      usageAfterMiss.body.remaining === usageBeforeMiss.body.remaining - 1,
+      JSON.stringify({ before: usageBeforeMiss.body, after: usageAfterMiss.body }));
 
     const { launchBrowser } = await import('./lib/mobile-geometry.js');
     browser = await launchBrowser();
     const proContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     await proContext.addCookies(proLogin.browserCookies);
     const proPage = await proContext.newPage();
+    const proBrowserErrors = [];
+    proPage.on('console', (message) => { if (message.type() === 'error') proBrowserErrors.push(message.text()); });
+    proPage.on('pageerror', (error) => proBrowserErrors.push(String(error)));
     await proPage.goto(BASE + '/profile#insights', { waitUntil: 'networkidle' });
     await proPage.locator('#ai-insights-question').fill('How many activities have I logged?');
     await proPage.locator('#ai-insights-form button[type="submit"]').click();
@@ -441,16 +551,27 @@ async function cleanup() {
     check('plain-text fallback leaves the inline error empty',
       (await proPage.locator('#ai-insights-error').innerText()).trim() === '',
       await proPage.locator('#ai-insights-error').innerText());
+    check('Pro answer and fallback paths have zero console/page errors',
+      proBrowserErrors.length === 0,
+      proBrowserErrors.join(' | '));
     await proContext.close();
     await browser.close();
     browser = null;
 
-    // Fill the remaining durable quota slots directly. The route's four prior
-    // API provider calls claimed slots 01–05 and the two browser calls claimed
-    // 06–07 through the same unique constraint.
+    // Fill every still-open durable slot directly. Successful descriptive
+    // answers remain claimed; provider failures, policy refusals, and malformed
+    // outputs leave reusable holes by deleting their exact source key.
     const period = new Date().toISOString().slice(0, 7);
+    const existingUsageRows = await must('read claimed quota slots', admin.from('notifications')
+      .select('source_key')
+      .eq('user_id', users.pro.id)
+      .eq('type', 'ai_insights_usage')
+      .like('source_key', `ai-insights:${period}:%`));
+    const existingSourceKeys = new Set(existingUsageRows.map((row) => row.source_key));
     const remainingSlots = [];
-    for (let slot = 8; slot <= 30; slot++) {
+    for (let slot = 1; slot <= 30; slot++) {
+      const sourceKey = `ai-insights:${period}:${String(slot).padStart(2, '0')}`;
+      if (existingSourceKeys.has(sourceKey)) continue;
       remainingSlots.push({
         user_id: users.pro.id,
         actor_id: null,
@@ -459,7 +580,7 @@ async function cleanup() {
         body: 'Monthly usage counter',
         link: null,
         read: true,
-        source_key: `ai-insights:${period}:${String(slot).padStart(2, '0')}`
+        source_key: sourceKey
       });
     }
     await must('fill quota slots', admin.from('notifications').insert(remainingSlots));
