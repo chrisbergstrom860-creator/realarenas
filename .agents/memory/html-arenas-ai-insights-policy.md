@@ -7,6 +7,8 @@ Policy intent is classified by an exclusive, reason-allowlisted `policy_refusal`
 
 Questions unsupported by the available context use an exclusive, reason-allowlisted `not_answerable` result with server-owned copy and an exact-slot refund. Core calendar, sport, rest-day, and average dimensions should be exposed as direct server-computed paths. General derived findings are deliberately deferred; if added later, the server must recompute allowlisted arithmetic from validated source paths rather than trust model math.
 
+Evidence formatting is normalized without weakening evidence equality: bracket indices become canonical dot paths, and strict finite numeric strings are coerced before the existing 1e-9 comparison. Mismatch logs may include expected/received scalar values and types only after the path passes the safe schema allowlist; arbitrary received text remains null.
+
 **Why:** Keyword filtering falsely refused legitimate historical questions containing words such as workout, rest, routine, weight training, injury, or medical. Output-side classification avoids those false positives while the typed evidence validator keeps a classifier miss from becoming model-authored advice.
 
-**How to apply:** Keep policy refusal and not-answerable results exclusive, reject extra fields/prose or mixed findings, preserve answerable/not-answerable/policy test partitions, and never weaken exact-slot refund or server-owned rendering behavior.
+**How to apply:** Keep policy refusal and not-answerable results exclusive, reject extra fields/prose or mixed findings, preserve answerable/not-answerable/policy test partitions, canonicalize evidence paths, and never loosen exact numeric equality beyond safe representation coercion.
