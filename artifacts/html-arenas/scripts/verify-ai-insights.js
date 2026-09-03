@@ -92,7 +92,12 @@ function responseFor(envelope) {
   const question = envelope.question;
   const count = envelope.data.allTime.activityCount;
   let output;
-  if (/fabricated/i.test(question)) {
+  if (/missing path/i.test(question)) {
+    output = {
+      findings: [{ type: 'metric', path: 'allTime.inventedActivityCount', value: 987654321 }],
+      limitations: []
+    };
+  } else if (/fabricated/i.test(question)) {
     output = {
       findings: [{ type: 'metric', path: 'allTime.activityCount', value: count, displayValue: 987654321 }],
       limitations: []
@@ -344,6 +349,18 @@ async function cleanup() {
       !fabricated.body.answer.includes('987654321'),
       JSON.stringify(fabricated.body));
 
+    const missingPath = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+      question: 'Return a fabricated number at a missing path for the rejection proof.',
+      history: []
+    });
+    check('nonexistent evidence path is rejected before rendering',
+      missingPath.status === 200 && missingPath.body.rejectedReason === 'missing_path',
+      JSON.stringify(missingPath));
+    check('nonexistent-path answer is replaced by exact fallback copy',
+      missingPath.body.answer === "I couldn’t produce an answer supported by your recorded data. Try asking about your activity count, volume, sports, streaks, personal records, or standings." &&
+      !missingPath.body.answer.includes('987654321'),
+      JSON.stringify(missingPath.body));
+
     const mismatched = await api(proLogin, 'POST', '/api/profile/ai-insights', {
       question: 'Return mismatched evidence for the rejection proof.',
       history: []
@@ -365,10 +382,10 @@ async function cleanup() {
     check('deterministic advice refusal consumes no model call', captured.length === providerCountBeforeAdvice);
 
     // Fill the remaining durable quota slots directly. The route's four prior
-    // provider calls claimed slots 01–04 through the same unique constraint.
+    // provider calls claimed slots 01–05 through the same unique constraint.
     const period = new Date().toISOString().slice(0, 7);
     const remainingSlots = [];
-    for (let slot = 5; slot <= 30; slot++) {
+    for (let slot = 6; slot <= 30; slot++) {
       remainingSlots.push({
         user_id: users.pro.id,
         actor_id: null,
