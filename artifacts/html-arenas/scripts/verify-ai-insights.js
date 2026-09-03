@@ -18,17 +18,63 @@ let failures = 0;
 const captured = [];
 const REFUSAL_COPY = "I can describe your recorded training, but I can’t prescribe workouts or comment on diet, weight, body composition, or whether you are under-training. Try asking what changed in your volume, consistency, sports, personal records, or standings.";
 const GROUNDED_METRIC_COPY = 'Your all-time activity count was 8.';
-const DESCRIPTIVE_QUESTIONS = [
-  'How many hours on average did I workout in August 2026?',
+const FALLBACK_COPY = "I couldn’t produce an answer supported by your recorded data. Try asking about your activity count, volume, sports, streaks, personal records, or standings.";
+const TEST_TIMEZONE = 'America/Los_Angeles';
+function datePartsInZone(date, timeZone) {
+  return Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date).filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+}
+function monthKeyInZone(date, timeZone) {
+  const parts = datePartsInZone(date, timeZone);
+  return `${parts.year}-${parts.month}`;
+}
+function dayKeyInZone(date, timeZone) {
+  const parts = datePartsInZone(date, timeZone);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+function shiftMonth(key, offset) {
+  const [year, month] = key.split('-').map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1 + offset, 1));
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+function monthLabel(key, withYear = false) {
+  return new Date(key + '-01T00:00:00Z').toLocaleDateString('en-US', {
+    month: 'long',
+    ...(withYear ? { year: 'numeric' } : {}),
+    timeZone: 'UTC'
+  });
+}
+const CURRENT_MONTH_KEY = monthKeyInZone(new Date(), TEST_TIMEZONE);
+const LAST_MONTH_KEY = shiftMonth(CURRENT_MONTH_KEY, -1);
+const TWO_MONTHS_AGO_KEY = shiftMonth(CURRENT_MONTH_KEY, -2);
+const LAST_MONTH_LABEL = monthLabel(LAST_MONTH_KEY);
+const LAST_MONTH_YEAR_LABEL = monthLabel(LAST_MONTH_KEY, true);
+const TWO_MONTHS_AGO_LABEL = monthLabel(TWO_MONTHS_AGO_KEY);
+const ANSWERABLE_QUESTIONS = [
+  `How many hours on average did I workout in ${LAST_MONTH_YEAR_LABEL}?`,
   'How many rest days did I take last month?',
-  'How much did I train in July?',
-  'How many workouts did I log in August?',
+  `How much did I train in ${TWO_MONTHS_AGO_LABEL}?`,
+  `How many workouts did I log in ${LAST_MONTH_LABEL}?`,
   'How many hours of weight training did I record last month?',
   'How did my training routine change over the last 12 weeks?',
-  'How many activities did I log after my injury?',
-  'What was my average ride distance in August?',
-  'How many activities did I record during my medical leave?',
+  `What was my average ride distance in ${LAST_MONTH_LABEL}?`,
   'What percentage of my recorded training was running?'
+];
+const NOT_ANSWERABLE_CASES = [
+  {
+    question: 'How many activities did I log after my injury?',
+    reason: 'missing_injury_date',
+    copy: "Your recorded data does not include when your injury occurred, so I can’t answer questions about activity before or after it."
+  },
+  {
+    question: 'How many activities did I record during my medical leave?',
+    reason: 'missing_medical_leave_dates',
+    copy: "Your recorded data does not include the start and end dates of your medical leave, so I can’t answer questions about activity during it."
+  }
 ];
 const POLICY_REFUSAL_CASES = [
   { question: 'Should I be doing more cardio?', reason: 'prescriptive' },
@@ -74,7 +120,7 @@ async function makeUser(key, name, prefs) {
     user_metadata: {
       name,
       handle: `ai_${key}_${nonce}`.slice(0, 20),
-      timezone: 'UTC',
+      timezone: key === 'pro' ? TEST_TIMEZONE : 'UTC',
       prefs: prefs || {}
     }
   }));
@@ -119,7 +165,13 @@ function responseFor(envelope) {
   const count = envelope.data.allTime.activityCount;
   let output;
   const policyCase = POLICY_REFUSAL_CASES.find((item) => item.question === question);
-  if (/force policy classifier miss/i.test(question)) {
+  const notAnswerableCase = NOT_ANSWERABLE_CASES.find((item) => item.question === question);
+  if (notAnswerableCase) {
+    output = {
+      findings: [{ type: 'not_answerable', reason: notAnswerableCase.reason }],
+      limitations: []
+    };
+  } else if (/force policy classifier miss/i.test(question)) {
     output = {
       findings: [{ type: 'metric', path: 'allTime.activityCount', value: count }],
       limitations: []
@@ -131,7 +183,7 @@ function responseFor(envelope) {
     };
   } else if (/missing path/i.test(question)) {
     output = {
-      findings: [{ type: 'metric', path: 'allTime.inventedActivityCount', value: 987654321 }],
+      findings: [{ type: 'metric', path: 'last12Months.99.durationHours', value: 987654321 }],
       limitations: []
     };
   } else if (/fabricated/i.test(question)) {
@@ -142,6 +194,11 @@ function responseFor(envelope) {
   } else if (/mismatched/i.test(question)) {
     output = {
       findings: [{ type: 'metric', path: 'allTime.activityCount', value: count + 1 }],
+      limitations: []
+    };
+  } else if (ANSWERABLE_QUESTIONS.includes(question)) {
+    output = {
+      findings: findingsForAnswerableQuestion(question, envelope.data),
       limitations: []
     };
   } else {
@@ -160,6 +217,85 @@ function responseFor(envelope) {
     stop_sequence: null,
     usage: { input_tokens: 100, output_tokens: 30 }
   };
+}
+
+function valueAtPath(root, pathValue) {
+  return pathValue.split('.').reduce((value, token) => value == null ? undefined : value[token], root);
+}
+
+function monthPath(data, month, suffix) {
+  const index = data.last12Months.findIndex((row) => row.month === month);
+  if (index < 0) throw new Error('Fixture month unavailable: ' + month);
+  return `last12Months.${index}.${suffix}`;
+}
+
+function monthSportPath(data, month, sport, suffix) {
+  const monthIndex = data.last12Months.findIndex((row) => row.month === month);
+  if (monthIndex < 0) throw new Error('Fixture month unavailable: ' + month);
+  const sportIndex = data.last12Months[monthIndex].sports.findIndex((row) => row.sport === sport);
+  if (sportIndex < 0) throw new Error(`Fixture sport unavailable: ${month}/${sport}`);
+  return `last12Months.${monthIndex}.sports.${sportIndex}.${suffix}`;
+}
+
+function metricFinding(data, pathValue) {
+  return { type: 'metric', path: pathValue, value: valueAtPath(data, pathValue) };
+}
+
+function findingsForAnswerableQuestion(question, data) {
+  const currentMonth = data.last12Months[data.last12Months.length - 1].month;
+  const [year, month] = currentMonth.split('-').map(Number);
+  const previousDate = new Date(Date.UTC(year, month - 2, 1));
+  const lastMonth = `${previousDate.getUTCFullYear()}-${String(previousDate.getUTCMonth() + 1).padStart(2, '0')}`;
+  if (question === `How many hours on average did I workout in ${LAST_MONTH_YEAR_LABEL}?`) {
+    return [metricFinding(data, monthPath(data, LAST_MONTH_KEY, 'averageHoursPerWeek'))];
+  }
+  if (question === 'How many rest days did I take last month?') {
+    return [metricFinding(data, monthPath(data, lastMonth, 'restDays'))];
+  }
+  if (question === `How much did I train in ${TWO_MONTHS_AGO_LABEL}?`) {
+    return [metricFinding(data, monthPath(data, TWO_MONTHS_AGO_KEY, 'durationHours'))];
+  }
+  if (question === `How many workouts did I log in ${LAST_MONTH_LABEL}?`) {
+    return [metricFinding(data, monthPath(data, LAST_MONTH_KEY, 'sessions'))];
+  }
+  if (question === 'How many hours of weight training did I record last month?') {
+    return [metricFinding(data, monthSportPath(data, lastMonth, 'weightlifting', 'durationHours'))];
+  }
+  if (question === 'How did my training routine change over the last 12 weeks?') {
+    const activeIndexes = data.last12Weeks.weekly.map((row, index) => row.activityCount > 0 ? index : -1).filter((index) => index >= 0);
+    const leftPath = `last12Weeks.weekly.${activeIndexes[activeIndexes.length - 1]}.durationHours`;
+    const rightPath = `last12Weeks.weekly.${activeIndexes[0]}.durationHours`;
+    return [{
+      type: 'comparison',
+      leftPath,
+      leftValue: valueAtPath(data, leftPath),
+      rightPath,
+      rightValue: valueAtPath(data, rightPath)
+    }];
+  }
+  if (question === `What was my average ride distance in ${LAST_MONTH_LABEL}?`) {
+    return [metricFinding(data, monthSportPath(data, LAST_MONTH_KEY, 'cycling', 'averageDistanceKmPerActivity'))];
+  }
+  if (question === 'What percentage of my recorded training was running?') {
+    const sportIndex = data.allTime.sports.findIndex((row) => row.sport === 'running');
+    return [metricFinding(data, `allTime.sports.${sportIndex}.percentSessions`)];
+  }
+  throw new Error('No answerable fixture response for: ' + question);
+}
+
+function legacyContextProjection(data) {
+  const legacy = JSON.parse(JSON.stringify(data));
+  legacy.schemaVersion = 1;
+  delete legacy.last12Months;
+  for (const key of ['averageSessionDurationHours', 'averageHoursPerWeek', 'averageSessionsPerWeek', 'averageDistanceKmPerActivity']) {
+    delete legacy.allTime[key];
+    delete legacy.last12Weeks[key];
+  }
+  for (const sport of legacy.allTime.sports || []) {
+    for (const key of ['averageSessionDurationHours', 'averageHoursPerWeek', 'averageSessionsPerWeek', 'averageDistanceKmPerActivity']) delete sport[key];
+  }
+  delete legacy.last12Weeks.sports;
+  return legacy;
 }
 
 function startStub() {
@@ -303,15 +439,28 @@ async function cleanup() {
     today.setUTCHours(12, 0, 0, 0);
     const activityRows = [];
     for (let i = 0; i < 8; i++) {
+      // 03:30 UTC on the first belongs to the prior calendar month in Pacific
+      // time. It proves buckets follow the athlete's zone, not UTC.
+      const activityDate = i === 0
+        ? new Date(CURRENT_MONTH_KEY + '-01T03:30:00Z')
+        : new Date(today.getTime() - i * 7 * 86400000);
       activityRows.push({
         user_id: users.pro.id,
-        sport: 'running',
+        sport: i === 2 || i === 3 ? 'cycling' : i === 4 ? 'weightlifting' : 'running',
         title: 'PRO_PRIVATE_TITLE_' + i,
-        date: new Date(today.getTime() - i * 7 * 86400000).toISOString(),
-        duration: '1h',
-        distance: (10 + i) + ' km'
+        date: activityDate.toISOString(),
+        duration: i === 2 || i === 3 ? '1.04h' : '1h',
+        distance: i === 2 ? '10.04 km' : i === 3 ? '11.04 km' : (10 + i) + ' km'
       });
     }
+    activityRows.push({
+      user_id: users.pro.id,
+      sport: 'running',
+      title: 'FUTURE_ACTIVITY_MUST_NOT_REACH_MODEL',
+      date: new Date(Date.now() + 40 * 86400000).toISOString(),
+      duration: '99h',
+      distance: '9999 km'
+    });
     activityRows.push({
       user_id: users.trainingOptout.id,
       sport: 'cycling',
@@ -347,8 +496,56 @@ async function cleanup() {
     check('Pro comparison request succeeds through captured provider', privacyResult.status === 200 && !!privacyResult.body.historyTurn, JSON.stringify(privacyResult));
     const privacyCapture = captured[captured.length - 1];
     const serializedPayload = JSON.stringify(privacyCapture.envelope);
+    const hybridContextChars = JSON.stringify(privacyCapture.envelope.data).length;
+    const legacyContextChars = JSON.stringify(legacyContextProjection(privacyCapture.envelope.data)).length;
+    const addedContextChars = hybridContextChars - legacyContextChars;
+    console.log(`  info hybrid context adds ${addedContextChars} JSON characters (~${Math.ceil(addedContextChars / 4)} estimated input tokens for this fixture)`);
+    check('hybrid context stays within the expected incremental token budget',
+      addedContextChars > 0 && addedContextChars < 12000,
+      JSON.stringify({ hybridContextChars, legacyContextChars, addedContextChars }));
     check('actual provider request selects Claude Haiku 4.5', privacyCapture.body.model === 'claude-haiku-4-5', JSON.stringify(privacyCapture.body));
     check('actual model payload contains the allowlisted data object', !!privacyCapture.envelope.data && privacyCapture.envelope.data.allTime.activityCount === 8, serializedPayload);
+    check('actual model payload has 12 timezone-calendar month buckets including zero months',
+      privacyCapture.envelope.data.schemaVersion === 2 &&
+      privacyCapture.envelope.data.last12Months.length === 12 &&
+      privacyCapture.envelope.data.last12Months.every((month) =>
+        JSON.stringify(Object.keys(month).sort()) === JSON.stringify([
+          'activeDays', 'averageDistanceKmPerActivity', 'averageHoursPerWeek',
+          'averageSessionDurationHours', 'averageSessionsPerWeek', 'distanceKm',
+          'durationHours', 'month', 'observedDays', 'restDays', 'sessions', 'sports'
+        ])
+      ),
+      JSON.stringify(privacyCapture.envelope.data.last12Months));
+    const lastMonthContext = privacyCapture.envelope.data.last12Months.find((month) => month.month === LAST_MONTH_KEY);
+    const expectedLastMonthRows = activityRows.filter((row) =>
+      row.user_id === users.pro.id && monthKeyInZone(new Date(row.date), TEST_TIMEZONE) === LAST_MONTH_KEY);
+    const expectedLastMonthActiveDays = new Set(expectedLastMonthRows.map((row) =>
+      dayKeyInZone(new Date(row.date), TEST_TIMEZONE))).size;
+    check('prior month uses Pacific boundaries and calendar-day rest counts without zero-date rows',
+      lastMonthContext &&
+      lastMonthContext.sessions === expectedLastMonthRows.length &&
+      lastMonthContext.activeDays === expectedLastMonthActiveDays &&
+      lastMonthContext.restDays === lastMonthContext.observedDays - expectedLastMonthActiveDays &&
+      !Object.prototype.hasOwnProperty.call(lastMonthContext, 'dates'),
+      JSON.stringify({ month: lastMonthContext, expectedLastMonthRows }));
+    check('future-dated activity is excluded from all model facts',
+      privacyCapture.envelope.data.allTime.activityCount === 8 &&
+      !serializedPayload.includes('9999') &&
+      !serializedPayload.includes('99h') &&
+      !serializedPayload.includes('FUTURE_ACTIVITY_MUST_NOT_REACH_MODEL'),
+      serializedPayload);
+    check('last12Weeks has aggregate sports and common averages',
+      Array.isArray(privacyCapture.envelope.data.last12Weeks.sports) &&
+      privacyCapture.envelope.data.last12Weeks.sports.some((sport) => sport.sport === 'cycling') &&
+      ['averageSessionDurationHours', 'averageHoursPerWeek', 'averageSessionsPerWeek', 'averageDistanceKmPerActivity']
+        .every((key) => typeof privacyCapture.envelope.data.last12Weeks[key] === 'number'),
+      JSON.stringify(privacyCapture.envelope.data.last12Weeks));
+    const cyclingContext = privacyCapture.envelope.data.last12Weeks.sports.find((sport) => sport.sport === 'cycling');
+    check('averages divide raw values before one-decimal rounding',
+      cyclingContext &&
+      cyclingContext.averageSessionDurationHours === 1 &&
+      cyclingContext.averageDistanceKmPerActivity === 10.5,
+      JSON.stringify(cyclingContext));
     check('private-club context is present only as requester scalar standing',
       privacyCapture.envelope.data.standings &&
       Array.isArray(privacyCapture.envelope.data.standings.clubs) &&
@@ -444,24 +641,67 @@ async function cleanup() {
       usageAfterMalformed.body.used === usageBeforeMalformed.body.used &&
       usageAfterMalformed.body.remaining === usageBeforeMalformed.body.remaining,
       JSON.stringify({ before: usageBeforeMalformed.body, after: usageAfterMalformed.body }));
+    const rejectionLogs = app.output().split('\n').filter((line) => line.includes('AI Insights validation rejection:'));
+    check('rejection diagnostics log only reason and offending path',
+      rejectionLogs.some((line) => line.includes('"rejectedReason":"invalid_finding"') && line.includes('"offendingPath":"allTime.activityCount"')) &&
+      rejectionLogs.some((line) => line.includes('"rejectedReason":"missing_path"') && line.includes('"offendingPath":"last12Months.99.durationHours"')) &&
+      rejectionLogs.some((line) => line.includes('"rejectedReason":"mismatched_value"') && line.includes('"offendingPath":"allTime.activityCount"')) &&
+      rejectionLogs.every((line) => !line.includes('Return ') && !line.includes('987654321')),
+      rejectionLogs.join(' | '));
 
-    for (const question of DESCRIPTIVE_QUESTIONS) {
+    for (const question of ANSWERABLE_QUESTIONS) {
       const providerCountBefore = captured.length;
       const result = await api(proLogin, 'POST', '/api/profile/ai-insights', {
         question,
         history: []
       });
       const providerRecord = captured[captured.length - 1];
-      check('descriptive question reaches provider: ' + question,
+      check('answerable question reaches provider: ' + question,
         captured.length === providerCountBefore + 1 &&
         providerRecord.envelope.question === question,
         JSON.stringify(result));
-      check('descriptive question returns grounded answer without policy refusal: ' + question,
+      const expectedFindings = findingsForAnswerableQuestion(question, providerRecord.envelope.data);
+      const expectedPaths = expectedFindings.flatMap((finding) =>
+        finding.type === 'comparison' ? [finding.leftPath, finding.rightPath] : [finding.path]);
+      check('answerable question returns relevant real findings: ' + question,
         result.status === 200 &&
-        result.body.answer === GROUNDED_METRIC_COPY &&
+        result.body.answer !== FALLBACK_COPY &&
+        result.body.answer !== REFUSAL_COPY &&
         result.body.policyRefusal !== true &&
-        providerRecord.output.findings.every((finding) => finding.type !== 'policy_refusal'),
+        result.body.notAnswerable !== true &&
+        expectedPaths.every((expectedPath) => result.body.evidence.some((item) => item.path === expectedPath)) &&
+        JSON.stringify(providerRecord.output.findings) === JSON.stringify(expectedFindings),
+        JSON.stringify({ body: result.body, output: providerRecord.output, expectedPaths }));
+    }
+
+    for (const notAnswerableCase of NOT_ANSWERABLE_CASES) {
+      const usageBeforeNotAnswerable = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+      const providerCountBefore = captured.length;
+      const result = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+        question: notAnswerableCase.question,
+        history: []
+      });
+      const usageAfterNotAnswerable = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+      const providerRecord = captured[captured.length - 1];
+      check('not-answerable question reaches provider: ' + notAnswerableCase.question,
+        captured.length === providerCountBefore + 1 &&
+        providerRecord.envelope.question === notAnswerableCase.question,
+        JSON.stringify(result));
+      check('not-answerable question gets reason-specific server copy, not fallback: ' + notAnswerableCase.question,
+        result.status === 200 &&
+        result.body.answer === notAnswerableCase.copy &&
+        result.body.answer !== FALLBACK_COPY &&
+        result.body.notAnswerable === true &&
+        result.body.notAnswerableReason === notAnswerableCase.reason &&
+        result.body.evidence.length === 0 &&
+        JSON.stringify(providerRecord.output.findings) === JSON.stringify([{ type: 'not_answerable', reason: notAnswerableCase.reason }]),
         JSON.stringify({ body: result.body, output: providerRecord.output }));
+      check('not-answerable result does not consume quota: ' + notAnswerableCase.question,
+        usageBeforeNotAnswerable.status === 200 &&
+        usageAfterNotAnswerable.status === 200 &&
+        usageAfterNotAnswerable.body.used === usageBeforeNotAnswerable.body.used &&
+        usageAfterNotAnswerable.body.remaining === usageBeforeNotAnswerable.body.remaining,
+        JSON.stringify({ before: usageBeforeNotAnswerable.body, after: usageAfterNotAnswerable.body }));
     }
 
     for (const policyCase of POLICY_REFUSAL_CASES) {

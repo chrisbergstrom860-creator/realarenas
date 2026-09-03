@@ -8678,33 +8678,65 @@ async function buildAiInsightsContext(user) {
     .eq('user_id', user.id)
     .order('date', { ascending: true });
   if (activityError) throw activityError;
-  const acts = activityRows || [];
+  // Future-dated rows are never part of a current fact. Cap every aggregate,
+  // not just the detailed window, at the athlete's current local day.
+  const acts = (activityRows || []).filter((row) => dayKey(row.date, tz) <= today);
   const detailedActs = acts.filter((a) => {
     const key = dayKey(a.date, tz);
     return key >= windowStart && key < windowEnd;
   });
-  const summarize = (rows) => ({
-    activityCount: rows.length,
-    durationHours: round1(rows.reduce((sum, row) => sum + parseDurationHours(row.duration), 0)),
-    distanceKm: round1(rows.reduce((sum, row) => sum + parseDistanceKmUnitAware(row.distance), 0)),
-    points: calculatePoints(rows)
+  const rawTotals = (rows) => ({
+    durationHours: rows.reduce((sum, row) => sum + parseDurationHours(row.duration), 0),
+    distanceKm: rows.reduce((sum, row) => sum + parseDistanceKmUnitAware(row.distance), 0)
   });
-  const sportMap = {};
-  for (const row of acts) {
-    const sport = row.sport || 'other';
-    const item = sportMap[sport] || { sport, sessions: 0, durationHours: 0, distanceKm: 0 };
-    item.sessions += 1;
-    item.durationHours += parseDurationHours(row.duration);
-    item.distanceKm += parseDistanceKmUnitAware(row.distance);
-    sportMap[sport] = item;
-  }
-  const sports = Object.values(sportMap).map((item) => ({
-    sport: item.sport,
-    sessions: item.sessions,
-    durationHours: round1(item.durationHours),
-    distanceKm: round1(item.distanceKm),
-    percentSessions: acts.length ? Math.round((item.sessions / acts.length) * 100) : 0
-  })).sort((a, b) => b.sessions - a.sessions);
+  const summarize = (rows) => {
+    const raw = rawTotals(rows);
+    return {
+      activityCount: rows.length,
+      durationHours: round1(raw.durationHours),
+      distanceKm: round1(raw.distanceKm),
+      points: calculatePoints(rows)
+    };
+  };
+  const inclusiveDays = (start, end) => Math.max(0, keyToEpochDays(end) - keyToEpochDays(start) + 1);
+  const withAverages = (rows, observedDays) => {
+    const totals = summarize(rows);
+    const raw = rawTotals(rows);
+    const observedWeeks = observedDays > 0 ? observedDays / 7 : 0;
+    return {
+      ...totals,
+      averageSessionDurationHours: rows.length ? round1(raw.durationHours / rows.length) : 0,
+      averageHoursPerWeek: observedWeeks ? round1(raw.durationHours / observedWeeks) : 0,
+      averageSessionsPerWeek: observedWeeks ? round1(rows.length / observedWeeks) : 0,
+      averageDistanceKmPerActivity: rows.length ? round1(raw.distanceKm / rows.length) : 0
+    };
+  };
+  const summarizeSports = (rows, observedDays) => {
+    const sportMap = {};
+    for (const row of rows) {
+      const sport = row.sport || 'other';
+      if (!sportMap[sport]) sportMap[sport] = [];
+      sportMap[sport].push(row);
+    }
+    return Object.entries(sportMap).map(([sport, sportRows]) => {
+      const totals = withAverages(sportRows, observedDays);
+      return {
+        sport,
+        sessions: sportRows.length,
+        durationHours: totals.durationHours,
+        distanceKm: totals.distanceKm,
+        percentSessions: rows.length ? Math.round((sportRows.length / rows.length) * 100) : 0,
+        averageSessionDurationHours: totals.averageSessionDurationHours,
+        averageHoursPerWeek: totals.averageHoursPerWeek,
+        averageSessionsPerWeek: totals.averageSessionsPerWeek,
+        averageDistanceKmPerActivity: totals.averageDistanceKmPerActivity
+      };
+    }).sort((a, b) => b.sessions - a.sessions || a.sport.localeCompare(b.sport));
+  };
+  const allTimeStart = acts.length ? dayKey(acts[0].date, tz) : today;
+  const allTimeObservedDays = inclusiveDays(allTimeStart, today);
+  const detailedObservedDays = inclusiveDays(windowStart, today);
+  const sports = summarizeSports(acts, allTimeObservedDays);
   const dailyMap = {};
   for (const row of detailedActs) {
     const date = dayKey(row.date, tz);
@@ -8750,8 +8782,40 @@ async function buildAiInsightsContext(user) {
   }
   const activeWeeks = weekly.filter((week) => week.activityCount > 0).length;
   const { currentStreak, longestStreak } = computeStreaks(acts, tz);
+  const shiftMonthKey = (key, offset) => {
+    const [year, month] = key.split('-').map(Number);
+    const shifted = new Date(Date.UTC(year, month - 1 + offset, 1));
+    return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}`;
+  };
+  const currentMonth = monthKey(now, tz);
+  const last12Months = [];
+  for (let offset = -11; offset <= 0; offset++) {
+    const month = shiftMonthKey(currentMonth, offset);
+    const monthStart = month + '-01';
+    const monthEnd = month === currentMonth
+      ? today
+      : addDaysToKey(shiftMonthKey(month, 1) + '-01', -1);
+    const observedDays = inclusiveDays(monthStart, monthEnd);
+    const rows = acts.filter((row) => monthKey(row.date, tz) === month);
+    const totals = withAverages(rows, observedDays);
+    const activeDays = new Set(rows.map((row) => dayKey(row.date, tz))).size;
+    last12Months.push({
+      month,
+      sessions: rows.length,
+      durationHours: totals.durationHours,
+      distanceKm: totals.distanceKm,
+      activeDays,
+      restDays: Math.max(0, observedDays - activeDays),
+      observedDays,
+      averageSessionDurationHours: totals.averageSessionDurationHours,
+      averageHoursPerWeek: totals.averageHoursPerWeek,
+      averageSessionsPerWeek: totals.averageSessionsPerWeek,
+      averageDistanceKmPerActivity: totals.averageDistanceKmPerActivity,
+      sports: summarizeSports(rows, observedDays)
+    });
+  }
   const context = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     asOfDate: today,
     timezone: tz,
     coverage: {
@@ -8761,18 +8825,19 @@ async function buildAiInsightsContext(user) {
       detailedWindow: { startDate: windowStart, endDate: today, weeks: 12 }
     },
     allTime: {
-      ...summarize(acts),
+      ...withAverages(acts, allTimeObservedDays),
       sports,
       streaks: { currentDays: currentStreak, longestDays: longestStreak },
       personalRecords: buildAiPersonalRecords(acts, tz)
     },
     last12Weeks: {
-      ...summarize(detailedActs),
+      ...withAverages(detailedActs, detailedObservedDays),
       activeWeeks,
-      averageSessionsPerWeek: round1(detailedActs.length / 12),
+      sports: summarizeSports(detailedActs, detailedObservedDays),
       daily,
       weekly
     },
+    last12Months,
     dataQuality: {
       activityCount: acts.length,
       activeWeeksInDetailedWindow: activeWeeks,
@@ -8906,7 +8971,7 @@ app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_in
   try {
     response = await getAnthropicClient(providerConfig).messages.create({
       model: AI_INSIGHTS_MODEL,
-      max_tokens: 8192,
+      max_tokens: 1200,
       system: buildAiInsightsSystemPrompt(),
       messages: [{
         role: 'user',
@@ -8936,9 +9001,15 @@ app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_in
   try {
     const text = (response.content || []).filter((block) => block.type === 'text').map((block) => block.text).join('');
     const validated = validateInsightResponse(text, context);
+    if (!validated.ok) {
+      console.warn('AI Insights validation rejection:', JSON.stringify({
+        rejectedReason: validated.reason,
+        offendingPath: validated.offendingPath || null
+      }));
+    }
     const answer = validated.answer || AI_INSIGHTS_FALLBACK;
     let responseUsage = usage;
-    if (validated.policyRefusal || !validated.ok) {
+    if (validated.policyRefusal || validated.notAnswerable || !validated.ok) {
       try {
         await releaseAiUsageClaim(req.user.id, usage.sourceKey);
         responseUsage = await readAiUsage(req.user.id);
@@ -8956,6 +9027,8 @@ app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_in
       limitations: validated.ok ? validated.limitations : [],
       policyRefusal: validated.policyRefusal || undefined,
       policyReason: validated.policyReason,
+      notAnswerable: validated.notAnswerable || undefined,
+      notAnswerableReason: validated.notAnswerableReason,
       rejectedReason: validated.ok ? undefined : validated.reason,
       historyAccepted: verifiedHistory.length,
       historyTurn: makeSignedHistoryTurn(SESSION_SECRET, req.user.id, question, answer),

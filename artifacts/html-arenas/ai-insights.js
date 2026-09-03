@@ -11,6 +11,13 @@ const POLICY_REFUSAL_REASONS = new Set([
   'medical',
   'athlete_characterization'
 ]);
+const NOT_ANSWERABLE_COPY = {
+  missing_injury_date: "Your recorded data does not include when your injury occurred, so I can’t answer questions about activity before or after it.",
+  missing_medical_leave_dates: "Your recorded data does not include the start and end dates of your medical leave, so I can’t answer questions about activity during it.",
+  missing_event_date: "Your recorded data does not include the date of the event needed to answer that question.",
+  period_outside_coverage: "Detailed calendar totals are available for the last 12 months, so the requested period is outside the available coverage.",
+  unsupported_metric: "Your recorded data does not include the measurement needed to answer that question."
+};
 
 class AiProviderConfigurationError extends Error {
   constructor(message) {
@@ -103,6 +110,23 @@ function valueAtPath(root, path) {
   return { found: true, value };
 }
 
+function safeDiagnosticPath(path) {
+  const tokens = tokenizePath(path);
+  if (!tokens || !['allTime', 'last12Weeks', 'last12Months', 'coverage', 'standings', 'dataQuality'].includes(tokens[0])) return null;
+  const allowed = new Set([
+    'allTime', 'last12Weeks', 'last12Months', 'coverage', 'standings', 'dataQuality',
+    'activityCount', 'sessions', 'durationHours', 'distanceKm', 'points', 'sports',
+    'percentSessions', 'activeDays', 'restDays', 'observedDays', 'activeWeeks',
+    'averageSessionDurationHours', 'averageHoursPerWeek', 'averageSessionsPerWeek',
+    'averageDistanceKmPerActivity', 'streaks', 'currentDays', 'longestDays',
+    'personalRecords', 'firstActivityDate', 'lastActivityDate', 'daily', 'weekly',
+    'date', 'weekStart', 'platform', 'clubs', 'month', 'rank', 'totalRanked',
+    'activeWeeksInDetailedWindow', 'trendMinimumActivities', 'trendMinimumActiveWeeks',
+    'trendEligible'
+  ]);
+  return tokens.every((token) => /^\d+$/.test(token) || allowed.has(token)) ? path : null;
+}
+
 function equalEvidenceValue(actual, claimed) {
   if (typeof actual === 'number' && typeof claimed === 'number') {
     return Number.isFinite(actual) && Number.isFinite(claimed) && Math.abs(actual - claimed) < 1e-9;
@@ -118,8 +142,8 @@ function parseModelJson(raw) {
 }
 
 function formatMetricValue(path, value) {
-  if (/durationHours$/.test(path)) return value + ' hours';
-  if (/distanceKm$/.test(path)) return value + ' km';
+  if (/(?:durationHours|DurationHours|HoursPerWeek)$/.test(path)) return value + ' hours';
+  if (/(?:distanceKm|DistanceKmPerActivity)$/.test(path)) return value + ' km';
   if (/percentSessions$/.test(path)) return value + '%';
   if (/averageSessionsPerWeek$/.test(path)) return value + ' sessions per week';
   if (/Days$/.test(path)) return value + (value === 1 ? ' day' : ' days');
@@ -142,15 +166,32 @@ function metricDescription(context, path) {
     'last12Weeks.points': 'Your points in the last 12 weeks',
     'last12Weeks.activeWeeks': 'Your active weeks in the last 12 weeks',
     'last12Weeks.averageSessionsPerWeek': 'Your 12-week average',
+    'last12Weeks.averageHoursPerWeek': 'Your average weekly recorded duration in the last 12 weeks',
+    'last12Weeks.averageSessionDurationHours': 'Your average recorded session duration in the last 12 weeks',
+    'last12Weeks.averageDistanceKmPerActivity': 'Your average recorded distance per activity in the last 12 weeks',
+    'allTime.averageSessionsPerWeek': 'Your all-time average weekly session count',
+    'allTime.averageHoursPerWeek': 'Your all-time average weekly recorded duration',
+    'allTime.averageSessionDurationHours': 'Your all-time average recorded session duration',
+    'allTime.averageDistanceKmPerActivity': 'Your all-time average recorded distance per activity',
     'coverage.firstActivityDate': 'Your first logged activity date',
     'coverage.lastActivityDate': 'Your latest logged activity date'
   };
   if (fixed[path]) return fixed[path];
-  let match = path.match(/^allTime\.sports\.(\d+)\.(sessions|durationHours|distanceKm|percentSessions)$/);
+  let match = path.match(/^allTime\.sports\.(\d+)\.(sessions|durationHours|distanceKm|percentSessions|averageSessionDurationHours|averageHoursPerWeek|averageSessionsPerWeek|averageDistanceKmPerActivity)$/);
   if (match) {
     const row = context.allTime && context.allTime.sports && context.allTime.sports[Number(match[1])];
     if (!row || !row.sport) return null;
-    return `Your all-time ${row.sport} ${match[2] === 'sessions' ? 'session count' : match[2] === 'durationHours' ? 'recorded duration' : match[2] === 'distanceKm' ? 'recorded distance' : 'share of sessions'}`;
+    const labels = {
+      sessions: 'session count',
+      durationHours: 'recorded duration',
+      distanceKm: 'recorded distance',
+      percentSessions: 'share of sessions',
+      averageSessionDurationHours: 'average recorded session duration',
+      averageHoursPerWeek: 'average weekly recorded duration',
+      averageSessionsPerWeek: 'average weekly session count',
+      averageDistanceKmPerActivity: 'average recorded distance per activity'
+    };
+    return `Your all-time ${row.sport} ${labels[match[2]]}`;
   }
   match = path.match(/^last12Weeks\.daily\.(\d+)\.(sessions|durationHours|distanceKm)$/);
   if (match) {
@@ -173,6 +214,59 @@ function metricDescription(context, path) {
     const label = match[3] === 'sessions' ? 'session count' : match[3] === 'durationHours' ? 'recorded duration' : 'recorded distance';
     return `Your ${row.sport} ${label} in the week starting ${week.weekStart}`;
   }
+  match = path.match(/^last12Weeks\.sports\.(\d+)\.(sessions|durationHours|distanceKm|percentSessions|averageSessionDurationHours|averageHoursPerWeek|averageSessionsPerWeek|averageDistanceKmPerActivity)$/);
+  if (match) {
+    const row = context.last12Weeks && context.last12Weeks.sports && context.last12Weeks.sports[Number(match[1])];
+    if (!row || !row.sport) return null;
+    const labels = {
+      sessions: 'session count',
+      durationHours: 'recorded duration',
+      distanceKm: 'recorded distance',
+      percentSessions: 'share of sessions',
+      averageSessionDurationHours: 'average recorded session duration',
+      averageHoursPerWeek: 'average weekly recorded duration',
+      averageSessionsPerWeek: 'average weekly session count',
+      averageDistanceKmPerActivity: 'average recorded distance per activity'
+    };
+    return `Your ${row.sport} ${labels[match[2]]} in the last 12 weeks`;
+  }
+  match = path.match(/^last12Months\.(\d+)\.(sessions|durationHours|distanceKm|activeDays|restDays|observedDays|averageSessionDurationHours|averageHoursPerWeek|averageSessionsPerWeek|averageDistanceKmPerActivity)$/);
+  if (match) {
+    const row = context.last12Months && context.last12Months[Number(match[1])];
+    if (!row || !row.month) return null;
+    const monthLabel = new Date(row.month + '-01T00:00:00Z').toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    const labels = {
+      sessions: 'session count',
+      durationHours: 'recorded duration',
+      distanceKm: 'recorded distance',
+      activeDays: 'active-day count',
+      restDays: 'rest-day count',
+      observedDays: 'observed calendar-day count',
+      averageSessionDurationHours: 'average recorded session duration',
+      averageHoursPerWeek: 'average weekly recorded duration',
+      averageSessionsPerWeek: 'average weekly session count',
+      averageDistanceKmPerActivity: 'average recorded distance per activity'
+    };
+    return `Your ${labels[match[2]]} in ${monthLabel}`;
+  }
+  match = path.match(/^last12Months\.(\d+)\.sports\.(\d+)\.(sessions|durationHours|distanceKm|percentSessions|averageSessionDurationHours|averageHoursPerWeek|averageSessionsPerWeek|averageDistanceKmPerActivity)$/);
+  if (match) {
+    const month = context.last12Months && context.last12Months[Number(match[1])];
+    const row = month && month.sports && month.sports[Number(match[2])];
+    if (!month || !row || !row.sport) return null;
+    const monthLabel = new Date(month.month + '-01T00:00:00Z').toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    const labels = {
+      sessions: 'session count',
+      durationHours: 'recorded duration',
+      distanceKm: 'recorded distance',
+      percentSessions: 'share of sessions',
+      averageSessionDurationHours: 'average recorded session duration',
+      averageHoursPerWeek: 'average weekly recorded duration',
+      averageSessionsPerWeek: 'average weekly session count',
+      averageDistanceKmPerActivity: 'average recorded distance per activity'
+    };
+    return `Your ${row.sport} ${labels[match[3]]} in ${monthLabel}`;
+  }
   return null;
 }
 
@@ -185,12 +279,12 @@ function renderTypedFinding(finding, context) {
     return { error: 'invalid_finding' };
   }
   if (finding.type === 'metric') {
-    if (JSON.stringify(Object.keys(finding).sort()) !== JSON.stringify(['path', 'type', 'value'])) return { error: 'invalid_finding' };
+    if (JSON.stringify(Object.keys(finding).sort()) !== JSON.stringify(['path', 'type', 'value'])) return { error: 'invalid_finding', offendingPath: finding.path || null };
     const actual = valueAtPath(context, finding.path);
     const description = metricDescription(context, finding.path);
-    if (!actual.found) return { error: 'missing_path' };
-    if (!description || !['number', 'string'].includes(typeof actual.value)) return { error: 'unsupported_path' };
-    if (!equalEvidenceValue(actual.value, finding.value)) return { error: 'mismatched_value' };
+    if (!actual.found) return { error: 'missing_path', offendingPath: finding.path || null };
+    if (!description || !['number', 'string'].includes(typeof actual.value)) return { error: 'unsupported_path', offendingPath: finding.path || null };
+    if (!equalEvidenceValue(actual.value, finding.value)) return { error: 'mismatched_value', offendingPath: finding.path || null };
     return {
       text: `${description} was ${formatMetricValue(finding.path, actual.value)}.`,
       evidence: [evidenceItem(finding.path, actual.value)]
@@ -198,16 +292,16 @@ function renderTypedFinding(finding, context) {
   }
   if (finding.type === 'comparison') {
     const expectedKeys = ['leftPath', 'leftValue', 'rightPath', 'rightValue', 'type'];
-    if (JSON.stringify(Object.keys(finding).sort()) !== JSON.stringify(expectedKeys)) return { error: 'invalid_finding' };
+    if (JSON.stringify(Object.keys(finding).sort()) !== JSON.stringify(expectedKeys)) return { error: 'invalid_finding', offendingPath: finding.leftPath || finding.rightPath || null };
     if (!(context.dataQuality && context.dataQuality.trendEligible)) return { error: 'unsupported_trend' };
     const left = valueAtPath(context, finding.leftPath);
     const right = valueAtPath(context, finding.rightPath);
     const leftLabel = metricDescription(context, finding.leftPath);
     const rightLabel = metricDescription(context, finding.rightPath);
-    if (!left.found || !right.found) return { error: 'missing_path' };
-    if (!leftLabel || !rightLabel || typeof left.value !== 'number' || typeof right.value !== 'number') return { error: 'unsupported_path' };
+    if (!left.found || !right.found) return { error: 'missing_path', offendingPath: !left.found ? finding.leftPath : finding.rightPath };
+    if (!leftLabel || !rightLabel || typeof left.value !== 'number' || typeof right.value !== 'number') return { error: 'unsupported_path', offendingPath: !leftLabel ? finding.leftPath : finding.rightPath };
     if (finding.leftPath.split('.').at(-1) !== finding.rightPath.split('.').at(-1)) return { error: 'incomparable_paths' };
-    if (!equalEvidenceValue(left.value, finding.leftValue) || !equalEvidenceValue(right.value, finding.rightValue)) return { error: 'mismatched_value' };
+    if (!equalEvidenceValue(left.value, finding.leftValue) || !equalEvidenceValue(right.value, finding.rightValue)) return { error: 'mismatched_value', offendingPath: !equalEvidenceValue(left.value, finding.leftValue) ? finding.leftPath : finding.rightPath };
     const difference = Math.round((left.value - right.value) * 10) / 10;
     return {
       text: `${leftLabel} was ${formatMetricValue(finding.leftPath, left.value)}; ${rightLabel.toLowerCase()} was ${formatMetricValue(finding.rightPath, right.value)}. The recorded difference was ${formatMetricValue(finding.leftPath, Math.abs(difference))} ${difference === 0 ? '(no difference)' : difference > 0 ? 'higher' : 'lower'}.`,
@@ -279,11 +373,33 @@ function validateInsightResponse(raw, context) {
       limitations: []
     };
   }
+  const notAnswerableFindings = parsed.findings.filter((finding) => finding && finding.type === 'not_answerable');
+  if (notAnswerableFindings.length) {
+    const finding = notAnswerableFindings[0];
+    if (parsed.findings.length !== 1 || parsed.limitations.length !== 0 ||
+        JSON.stringify(Object.keys(finding).sort()) !== JSON.stringify(['reason', 'type']) ||
+        !Object.prototype.hasOwnProperty.call(NOT_ANSWERABLE_COPY, finding.reason)) {
+      return { ok: false, answer: FALLBACK_COPY, reason: 'invalid_not_answerable' };
+    }
+    return {
+      ok: true,
+      notAnswerable: true,
+      notAnswerableReason: finding.reason,
+      answer: NOT_ANSWERABLE_COPY[finding.reason],
+      evidence: [],
+      limitations: []
+    };
+  }
   const allEvidence = [];
   const rendered = [];
   for (const finding of parsed.findings) {
     const result = renderTypedFinding(finding, context);
-    if (result.error) return { ok: false, answer: FALLBACK_COPY, reason: result.error };
+    if (result.error) return {
+      ok: false,
+      answer: FALLBACK_COPY,
+      reason: result.error,
+      offendingPath: safeDiagnosticPath(result.offendingPath)
+    };
     rendered.push(result.text);
     allEvidence.push(...result.evidence);
   }
@@ -292,7 +408,6 @@ function validateInsightResponse(raw, context) {
     DETAILED_WINDOW_12_WEEKS: 'Day-by-day and week-by-week detail is limited to the last 12 weeks.',
     STANDINGS_UNAVAILABLE: 'Standings are unavailable because leaderboard visibility is off or no eligible rank exists.',
     CAUSE_NOT_AVAILABLE: 'The logged data can describe what changed, but it cannot establish why it changed.',
-    QUESTION_NOT_ANSWERABLE: 'The available logged data does not answer the question.'
   };
   const limitations = [];
   for (const code of parsed.limitations) {
@@ -320,11 +435,16 @@ function buildSystemPrompt() {
     '{"type":"standing","path":"standings.platform.month or standings.clubs.N.month","value":"exact copied object"}',
     '{"type":"personal_record","path":"allTime.personalRecords.N","value":"exact copied object"}',
     '{"type":"insufficient_trend_data"} only when DATA_JSON.dataQuality.trendEligible is false.',
+    '{"type":"not_answerable","reason":"missing_injury_date|missing_medical_leave_dates|missing_event_date|period_outside_coverage|unsupported_metric"} must be the only finding, with no limitations, when DATA_JSON lacks the information needed to answer honestly.',
+    'Use missing_injury_date for before/after injury questions without an injury date; missing_medical_leave_dates for medical-leave-window questions without its dates; missing_event_date for another absent event boundary; period_outside_coverage for calendar detail older than last12Months; unsupported_metric when the requested measurement is not present.',
+    'last12Months contains 12 athlete-timezone calendar buckets, oldest first, including zero months. Each month has totals, activeDays, restDays, observedDays, common averages, and active-sport summaries.',
+    'last12Weeks.sports contains aggregate sport summaries for the detailed 12-week window. Use these direct paths instead of calculating from weekly or daily rows.',
     '{"type":"policy_refusal","reason":"prescriptive|diet_weight_body|medical|athlete_characterization"} must be the only finding, with no limitations, when the user asks for advice or prescriptions; asks what they should do, eat, increase, decrease, or change; asks for diet, weight, body composition, or medical commentary; or asks you to characterize them as under-training, over-training, lazy, fit, healthy, or similar.',
     'Do not policy-refuse a descriptive question merely because it mentions workouts, training, rest days, routines, weight training, rides, injuries, medical leave, diet, nutrition, calories, or weight in a historical or recorded-data context.',
     'For policy refusals, return only the typed policy_refusal finding. Never write refusal or advice prose.',
+    'For not-answerable results, return only the typed not_answerable finding. Never substitute an unrelated metric.',
     'Do not use comparison when dataQuality.trendEligible is false.',
-    'Limitations may contain only: INSUFFICIENT_TREND_DATA, DETAILED_WINDOW_12_WEEKS, STANDINGS_UNAVAILABLE, CAUSE_NOT_AVAILABLE, QUESTION_NOT_ANSWERABLE.',
+    'Limitations may contain only: INSUFFICIENT_TREND_DATA, DETAILED_WINDOW_12_WEEKS, STANDINGS_UNAVAILABLE, CAUSE_NOT_AVAILABLE.',
     'Return JSON only: {"findings":[...],"limitations":["CODE"]}.'
   ].join('\n');
 }
@@ -332,6 +452,7 @@ function buildSystemPrompt() {
 module.exports = {
   FALLBACK_COPY,
   REFUSAL_COPY,
+  NOT_ANSWERABLE_COPY,
   MODEL,
   MAX_HISTORY_TURNS,
   AiProviderConfigurationError,

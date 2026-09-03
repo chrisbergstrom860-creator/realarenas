@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {
   FALLBACK_COPY,
   REFUSAL_COPY,
+  NOT_ANSWERABLE_COPY,
   makeSignedHistoryTurn,
   verifyHistoryTurns,
   validateInsightResponse,
@@ -10,8 +11,31 @@ const {
 } = require('./ai-insights');
 
 const context = {
-  schemaVersion: 1,
-  allTime: { activityCount: 8, distanceKm: 42.5 },
+  schemaVersion: 2,
+  allTime: {
+    activityCount: 8,
+    distanceKm: 42.5,
+    averageSessionDurationHours: 1.2,
+    sports: [{ sport: 'running', sessions: 6, averageDistanceKmPerActivity: 7.1 }]
+  },
+  last12Weeks: {
+    distanceKm: 42.5,
+    sports: [{ sport: 'running', sessions: 6, averageDistanceKmPerActivity: 7.1 }]
+  },
+  last12Months: [{
+    month: '2026-08',
+    sessions: 6,
+    durationHours: 7.2,
+    distanceKm: 42.5,
+    activeDays: 6,
+    restDays: 25,
+    observedDays: 31,
+    averageSessionDurationHours: 1.2,
+    averageHoursPerWeek: 1.6,
+    averageSessionsPerWeek: 1.4,
+    averageDistanceKmPerActivity: 7.1,
+    sports: [{ sport: 'running', sessions: 6, durationHours: 7.2, distanceKm: 42.5, percentSessions: 100, averageSessionDurationHours: 1.2, averageHoursPerWeek: 1.6, averageSessionsPerWeek: 1.4, averageDistanceKmPerActivity: 7.1 }]
+  }],
   dataQuality: { activeWeeksInDetailedWindow: 4, trendEligible: true }
 };
 
@@ -46,8 +70,43 @@ test('evidence validator rejects an existing path with a mismatched value', () =
   }, context);
   assert.equal(result.ok, false);
   assert.equal(result.reason, 'mismatched_value');
+  assert.equal(result.offendingPath, 'allTime.activityCount');
   assert.equal(result.answer, FALLBACK_COPY);
   assert.doesNotMatch(result.answer, /9 activities/);
+});
+
+test('rejection diagnostics retain only safe schema-vocabulary paths', () => {
+  const safe = validateInsightResponse({
+    findings: [{ type: 'metric', path: 'last12Months.99.durationHours', value: 9 }],
+    limitations: []
+  }, context);
+  assert.equal(safe.reason, 'missing_path');
+  assert.equal(safe.offendingPath, 'last12Months.99.durationHours');
+
+  const modelControlled = validateInsightResponse({
+    findings: [{ type: 'metric', path: 'allTime.private-user-detail', value: 9 }],
+    limitations: []
+  }, context);
+  assert.equal(modelControlled.reason, 'missing_path');
+  assert.equal(modelControlled.offendingPath, null);
+});
+
+test('calendar, window-sport, rest-day, and average paths render from exact evidence', () => {
+  const result = validateInsightResponse({
+    findings: [
+      { type: 'metric', path: 'last12Months.0.restDays', value: 25 },
+      { type: 'metric', path: 'last12Months.0.averageHoursPerWeek', value: 1.6 },
+      { type: 'metric', path: 'last12Months.0.sports.0.averageDistanceKmPerActivity', value: 7.1 },
+      { type: 'metric', path: 'last12Weeks.sports.0.sessions', value: 6 }
+    ],
+    limitations: []
+  }, context);
+  assert.equal(result.ok, true);
+  assert.match(result.answer, /August 2026/);
+  assert.match(result.answer, /25 days/);
+  assert.match(result.answer, /1\.6 hours/);
+  assert.match(result.answer, /7\.1 km/);
+  assert.equal(result.evidence.length, 4);
 });
 
 test('signed history rejects a client-tampered answer', () => {
@@ -97,6 +156,34 @@ test('policy refusal rejects extra model prose, mixed findings, and unknown reas
   }, context);
   assert.equal(unknown.ok, false);
   assert.equal(unknown.reason, 'invalid_policy_refusal');
+});
+
+test('typed not-answerable results use reason-specific server copy', () => {
+  for (const reason of Object.keys(NOT_ANSWERABLE_COPY)) {
+    const result = validateInsightResponse({
+      findings: [{ type: 'not_answerable', reason }],
+      limitations: []
+    }, context);
+    assert.equal(result.ok, true);
+    assert.equal(result.notAnswerable, true);
+    assert.equal(result.notAnswerableReason, reason);
+    assert.equal(result.answer, NOT_ANSWERABLE_COPY[reason]);
+    assert.deepEqual(result.evidence, []);
+  }
+});
+
+test('not-answerable rejects extra prose, mixed findings, limitations, and unknown reasons', () => {
+  for (const payload of [
+    { findings: [{ type: 'not_answerable', reason: 'missing_injury_date', text: 'I need your injury date.' }], limitations: [] },
+    { findings: [{ type: 'not_answerable', reason: 'missing_injury_date' }, { type: 'metric', path: 'allTime.activityCount', value: 8 }], limitations: [] },
+    { findings: [{ type: 'not_answerable', reason: 'missing_injury_date' }], limitations: ['DETAILED_WINDOW_12_WEEKS'] },
+    { findings: [{ type: 'not_answerable', reason: 'unknown' }], limitations: [] }
+  ]) {
+    const result = validateInsightResponse(payload, context);
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'invalid_not_answerable');
+    assert.equal(result.answer, FALLBACK_COPY);
+  }
 });
 
 test('model-controlled prose is rejected rather than displayed', () => {
