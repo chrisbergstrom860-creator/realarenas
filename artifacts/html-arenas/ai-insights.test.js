@@ -71,8 +71,44 @@ test('evidence validator rejects an existing path with a mismatched value', () =
   assert.equal(result.ok, false);
   assert.equal(result.reason, 'mismatched_value');
   assert.equal(result.offendingPath, 'allTime.activityCount');
+  assert.deepEqual(result.mismatchDetails, {
+    expectedValue: 8,
+    receivedValue: 9,
+    expectedType: 'number',
+    receivedType: 'number'
+  });
   assert.equal(result.answer, FALLBACK_COPY);
   assert.doesNotMatch(result.answer, /9 activities/);
+});
+
+test('numeric strings and bracket paths normalize without weakening evidence equality', () => {
+  const numericString = validateInsightResponse({
+    findings: [{ type: 'metric', path: 'last12Months.0.durationHours', value: '7.2' }],
+    limitations: []
+  }, context);
+  assert.equal(numericString.ok, true);
+  assert.deepEqual(numericString.evidence, [{ path: 'last12Months.0.durationHours', value: 7.2 }]);
+
+  const bracketPath = validateInsightResponse({
+    findings: [{ type: 'metric', path: 'last12Months[0].durationHours', value: 7.2 }],
+    limitations: []
+  }, context);
+  assert.equal(bracketPath.ok, true);
+  assert.deepEqual(bracketPath.evidence, [{ path: 'last12Months.0.durationHours', value: 7.2 }]);
+
+  const computed = validateInsightResponse({
+    findings: [{ type: 'metric', path: 'last12Months[0].durationHours', value: '7.3' }],
+    limitations: []
+  }, context);
+  assert.equal(computed.ok, false);
+  assert.equal(computed.reason, 'mismatched_value');
+  assert.equal(computed.offendingPath, 'last12Months.0.durationHours');
+  assert.deepEqual(computed.mismatchDetails, {
+    expectedValue: 7.2,
+    receivedValue: '7.3',
+    expectedType: 'number',
+    receivedType: 'string'
+  });
 });
 
 test('rejection diagnostics retain only safe schema-vocabulary paths', () => {

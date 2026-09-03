@@ -191,6 +191,33 @@ function responseFor(envelope) {
       findings: [{ type: 'metric', path: 'allTime.activityCount', value: count, displayValue: 987654321 }],
       limitations: []
     };
+  } else if (/numeric string fixture/i.test(question)) {
+    output = {
+      findings: [{
+        type: 'metric',
+        path: 'last12Months.10.durationHours',
+        value: String(envelope.data.last12Months[10].durationHours)
+      }],
+      limitations: []
+    };
+  } else if (/bracket path fixture/i.test(question)) {
+    output = {
+      findings: [{
+        type: 'metric',
+        path: 'last12Months[10].durationHours',
+        value: envelope.data.last12Months[10].durationHours
+      }],
+      limitations: []
+    };
+  } else if (/computed value fixture/i.test(question)) {
+    output = {
+      findings: [{
+        type: 'metric',
+        path: 'last12Months[10].durationHours',
+        value: envelope.data.last12Months[10].durationHours + 0.1
+      }],
+      limitations: []
+    };
   } else if (/mismatched/i.test(question)) {
     output = {
       findings: [{ type: 'metric', path: 'allTime.activityCount', value: count + 1 }],
@@ -504,6 +531,10 @@ async function cleanup() {
       addedContextChars > 0 && addedContextChars < 12000,
       JSON.stringify({ hybridContextChars, legacyContextChars, addedContextChars }));
     check('actual provider request selects Claude Haiku 4.5', privacyCapture.body.model === 'claude-haiku-4-5', JSON.stringify(privacyCapture.body));
+    check('system prompt demonstrates canonical dot notation with an unquoted numeric value',
+      privacyCapture.body.system.includes('{"type":"metric","path":"last12Months.10.durationHours","value":16.4}') &&
+      !privacyCapture.body.system.includes('"value":"exact copied value"'),
+      privacyCapture.body.system);
     check('actual model payload contains the allowlisted data object', !!privacyCapture.envelope.data && privacyCapture.envelope.data.allTime.activityCount === 8, serializedPayload);
     check('actual model payload has 12 timezone-calendar month buckets including zero months',
       privacyCapture.envelope.data.schemaVersion === 2 &&
@@ -641,11 +672,63 @@ async function cleanup() {
       usageAfterMalformed.body.used === usageBeforeMalformed.body.used &&
       usageAfterMalformed.body.remaining === usageBeforeMalformed.body.remaining,
       JSON.stringify({ before: usageBeforeMalformed.body, after: usageAfterMalformed.body }));
+
+    const numericString = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+      question: 'Return the numeric string fixture.',
+      history: []
+    });
+    check('strict numeric string matching the exposed number is accepted',
+      numericString.status === 200 &&
+      numericString.body.rejectedReason === undefined &&
+      numericString.body.evidence.some((item) =>
+        item.path === 'last12Months.10.durationHours' &&
+        item.value === privacyCapture.envelope.data.last12Months[10].durationHours),
+      JSON.stringify(numericString));
+
+    const bracketPath = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+      question: 'Return the bracket path fixture.',
+      history: []
+    });
+    check('bracket notation is accepted and exposed as canonical dot notation',
+      bracketPath.status === 200 &&
+      bracketPath.body.rejectedReason === undefined &&
+      bracketPath.body.evidence.some((item) =>
+        item.path === 'last12Months.10.durationHours' &&
+        item.value === privacyCapture.envelope.data.last12Months[10].durationHours),
+      JSON.stringify(bracketPath));
+
+    const usageBeforeComputed = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+    const computedValue = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+      question: 'Return the computed value fixture.',
+      history: []
+    });
+    const usageAfterComputed = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+    check('computed numeric value still fails the unchanged evidence comparison',
+      computedValue.status === 200 &&
+      computedValue.body.rejectedReason === 'mismatched_value' &&
+      computedValue.body.answer === FALLBACK_COPY,
+      JSON.stringify(computedValue));
+    check('computed-value rejection refunds its exact quota slot',
+      usageBeforeComputed.body.used === usageAfterComputed.body.used &&
+      usageBeforeComputed.body.remaining === usageAfterComputed.body.remaining,
+      JSON.stringify({ before: usageBeforeComputed.body, after: usageAfterComputed.body }));
+
     const rejectionLogs = app.output().split('\n').filter((line) => line.includes('AI Insights validation rejection:'));
-    check('rejection diagnostics log only reason and offending path',
+    check('rejection diagnostics include safe scalar mismatch values and types only on allowlisted paths',
       rejectionLogs.some((line) => line.includes('"rejectedReason":"invalid_finding"') && line.includes('"offendingPath":"allTime.activityCount"')) &&
       rejectionLogs.some((line) => line.includes('"rejectedReason":"missing_path"') && line.includes('"offendingPath":"last12Months.99.durationHours"')) &&
-      rejectionLogs.some((line) => line.includes('"rejectedReason":"mismatched_value"') && line.includes('"offendingPath":"allTime.activityCount"')) &&
+      rejectionLogs.some((line) =>
+        line.includes('"rejectedReason":"mismatched_value"') &&
+        line.includes('"offendingPath":"allTime.activityCount"') &&
+        line.includes('"expectedValue":8') &&
+        line.includes('"receivedValue":9') &&
+        line.includes('"expectedType":"number"') &&
+        line.includes('"receivedType":"number"')) &&
+      rejectionLogs.some((line) =>
+        line.includes('"rejectedReason":"mismatched_value"') &&
+        line.includes('"offendingPath":"last12Months.10.durationHours"') &&
+        line.includes('"expectedType":"number"') &&
+        line.includes('"receivedType":"number"')) &&
       rejectionLogs.every((line) => !line.includes('Return ') && !line.includes('987654321')),
       rejectionLogs.join(' | '));
 

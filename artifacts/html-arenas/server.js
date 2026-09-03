@@ -9004,7 +9004,8 @@ app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_in
     if (!validated.ok) {
       console.warn('AI Insights validation rejection:', JSON.stringify({
         rejectedReason: validated.reason,
-        offendingPath: validated.offendingPath || null
+        offendingPath: validated.offendingPath || null,
+        ...(validated.mismatchDetails || {})
       }));
     }
     const answer = validated.answer || AI_INSIGHTS_FALLBACK;

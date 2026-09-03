@@ -99,6 +99,11 @@ function tokenizePath(path) {
   return tokens.length && tokens.every((t) => /^(?:[A-Za-z][A-Za-z0-9_-]*|\d+)$/.test(t)) ? tokens : null;
 }
 
+function normalizePath(path) {
+  const tokens = tokenizePath(path);
+  return tokens ? tokens.join('.') : null;
+}
+
 function valueAtPath(root, path) {
   const tokens = tokenizePath(path);
   if (!tokens) return { found: false };
@@ -124,14 +129,43 @@ function safeDiagnosticPath(path) {
     'activeWeeksInDetailedWindow', 'trendMinimumActivities', 'trendMinimumActiveWeeks',
     'trendEligible'
   ]);
-  return tokens.every((token) => /^\d+$/.test(token) || allowed.has(token)) ? path : null;
+  return tokens.every((token) => /^\d+$/.test(token) || allowed.has(token)) ? tokens.join('.') : null;
+}
+
+const STRICT_NUMERIC_STRING = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
+
+function comparableEvidenceValue(actual, claimed) {
+  if (typeof actual === 'number' && typeof claimed === 'string' && STRICT_NUMERIC_STRING.test(claimed)) {
+    const numeric = Number(claimed);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return claimed;
 }
 
 function equalEvidenceValue(actual, claimed) {
   if (typeof actual === 'number' && typeof claimed === 'number') {
     return Number.isFinite(actual) && Number.isFinite(claimed) && Math.abs(actual - claimed) < 1e-9;
   }
-  return JSON.stringify(actual) === JSON.stringify(claimed);
+  const comparable = comparableEvidenceValue(actual, claimed);
+  if (typeof actual === 'number' && typeof comparable === 'number') {
+    return Number.isFinite(actual) && Number.isFinite(comparable) && Math.abs(actual - comparable) < 1e-9;
+  }
+  return JSON.stringify(actual) === JSON.stringify(comparable);
+}
+
+function safeMismatchDetails(actual, claimed) {
+  if (typeof actual !== 'number' || !Number.isFinite(actual)) return null;
+  const receivedType = Array.isArray(claimed) ? 'array' : claimed === null ? 'null' : typeof claimed;
+  const safeReceived = (
+    (typeof claimed === 'number' && Number.isFinite(claimed)) ||
+    (typeof claimed === 'string' && STRICT_NUMERIC_STRING.test(claimed) && Number.isFinite(Number(claimed)))
+  ) ? claimed : null;
+  return {
+    expectedValue: actual,
+    receivedValue: safeReceived,
+    expectedType: 'number',
+    receivedType
+  };
 }
 
 function parseModelJson(raw) {
@@ -279,58 +313,77 @@ function renderTypedFinding(finding, context) {
     return { error: 'invalid_finding' };
   }
   if (finding.type === 'metric') {
-    if (JSON.stringify(Object.keys(finding).sort()) !== JSON.stringify(['path', 'type', 'value'])) return { error: 'invalid_finding', offendingPath: finding.path || null };
-    const actual = valueAtPath(context, finding.path);
-    const description = metricDescription(context, finding.path);
-    if (!actual.found) return { error: 'missing_path', offendingPath: finding.path || null };
-    if (!description || !['number', 'string'].includes(typeof actual.value)) return { error: 'unsupported_path', offendingPath: finding.path || null };
-    if (!equalEvidenceValue(actual.value, finding.value)) return { error: 'mismatched_value', offendingPath: finding.path || null };
+    const path = normalizePath(finding.path);
+    if (JSON.stringify(Object.keys(finding).sort()) !== JSON.stringify(['path', 'type', 'value'])) return { error: 'invalid_finding', offendingPath: path };
+    const actual = valueAtPath(context, path);
+    const description = metricDescription(context, path);
+    if (!actual.found) return { error: 'missing_path', offendingPath: path };
+    if (!description || !['number', 'string'].includes(typeof actual.value)) return { error: 'unsupported_path', offendingPath: path };
+    if (!equalEvidenceValue(actual.value, finding.value)) return {
+      error: 'mismatched_value',
+      offendingPath: path,
+      mismatchDetails: safeMismatchDetails(actual.value, finding.value)
+    };
     return {
-      text: `${description} was ${formatMetricValue(finding.path, actual.value)}.`,
-      evidence: [evidenceItem(finding.path, actual.value)]
+      text: `${description} was ${formatMetricValue(path, actual.value)}.`,
+      evidence: [evidenceItem(path, actual.value)]
     };
   }
   if (finding.type === 'comparison') {
     const expectedKeys = ['leftPath', 'leftValue', 'rightPath', 'rightValue', 'type'];
-    if (JSON.stringify(Object.keys(finding).sort()) !== JSON.stringify(expectedKeys)) return { error: 'invalid_finding', offendingPath: finding.leftPath || finding.rightPath || null };
+    const leftPath = normalizePath(finding.leftPath);
+    const rightPath = normalizePath(finding.rightPath);
+    if (JSON.stringify(Object.keys(finding).sort()) !== JSON.stringify(expectedKeys)) return { error: 'invalid_finding', offendingPath: leftPath || rightPath };
     if (!(context.dataQuality && context.dataQuality.trendEligible)) return { error: 'unsupported_trend' };
-    const left = valueAtPath(context, finding.leftPath);
-    const right = valueAtPath(context, finding.rightPath);
-    const leftLabel = metricDescription(context, finding.leftPath);
-    const rightLabel = metricDescription(context, finding.rightPath);
-    if (!left.found || !right.found) return { error: 'missing_path', offendingPath: !left.found ? finding.leftPath : finding.rightPath };
-    if (!leftLabel || !rightLabel || typeof left.value !== 'number' || typeof right.value !== 'number') return { error: 'unsupported_path', offendingPath: !leftLabel ? finding.leftPath : finding.rightPath };
-    if (finding.leftPath.split('.').at(-1) !== finding.rightPath.split('.').at(-1)) return { error: 'incomparable_paths' };
-    if (!equalEvidenceValue(left.value, finding.leftValue) || !equalEvidenceValue(right.value, finding.rightValue)) return { error: 'mismatched_value', offendingPath: !equalEvidenceValue(left.value, finding.leftValue) ? finding.leftPath : finding.rightPath };
+    const left = valueAtPath(context, leftPath);
+    const right = valueAtPath(context, rightPath);
+    const leftLabel = metricDescription(context, leftPath);
+    const rightLabel = metricDescription(context, rightPath);
+    if (!left.found || !right.found) return { error: 'missing_path', offendingPath: !left.found ? leftPath : rightPath };
+    if (!leftLabel || !rightLabel || typeof left.value !== 'number' || typeof right.value !== 'number') return { error: 'unsupported_path', offendingPath: !leftLabel ? leftPath : rightPath };
+    if (leftPath.split('.').at(-1) !== rightPath.split('.').at(-1)) return { error: 'incomparable_paths' };
+    const leftMatches = equalEvidenceValue(left.value, finding.leftValue);
+    const rightMatches = equalEvidenceValue(right.value, finding.rightValue);
+    if (!leftMatches || !rightMatches) {
+      const expected = leftMatches ? right.value : left.value;
+      const received = leftMatches ? finding.rightValue : finding.leftValue;
+      return {
+        error: 'mismatched_value',
+        offendingPath: leftMatches ? rightPath : leftPath,
+        mismatchDetails: safeMismatchDetails(expected, received)
+      };
+    }
     const difference = Math.round((left.value - right.value) * 10) / 10;
     return {
-      text: `${leftLabel} was ${formatMetricValue(finding.leftPath, left.value)}; ${rightLabel.toLowerCase()} was ${formatMetricValue(finding.rightPath, right.value)}. The recorded difference was ${formatMetricValue(finding.leftPath, Math.abs(difference))} ${difference === 0 ? '(no difference)' : difference > 0 ? 'higher' : 'lower'}.`,
-      evidence: [evidenceItem(finding.leftPath, left.value), evidenceItem(finding.rightPath, right.value)]
+      text: `${leftLabel} was ${formatMetricValue(leftPath, left.value)}; ${rightLabel.toLowerCase()} was ${formatMetricValue(rightPath, right.value)}. The recorded difference was ${formatMetricValue(leftPath, Math.abs(difference))} ${difference === 0 ? '(no difference)' : difference > 0 ? 'higher' : 'lower'}.`,
+      evidence: [evidenceItem(leftPath, left.value), evidenceItem(rightPath, right.value)]
     };
   }
   if (finding.type === 'standing') {
     if (JSON.stringify(Object.keys(finding).sort()) !== JSON.stringify(['path', 'type', 'value'])) return { error: 'invalid_finding' };
-    if (!/^standings\.(?:platform\.month|clubs\.\d+\.month)$/.test(finding.path)) return { error: 'unsupported_path' };
-    const actual = valueAtPath(context, finding.path);
+    const path = normalizePath(finding.path);
+    if (!/^standings\.(?:platform\.month|clubs\.\d+\.month)$/.test(path)) return { error: 'unsupported_path' };
+    const actual = valueAtPath(context, path);
     if (!actual.found || !actual.value || typeof actual.value !== 'object') return { error: 'missing_path' };
     if (!equalEvidenceValue(actual.value, finding.value)) return { error: 'mismatched_value' };
-    const clubMatch = finding.path.match(/^standings\.clubs\.(\d+)\.month$/);
+    const clubMatch = path.match(/^standings\.clubs\.(\d+)\.month$/);
     const scope = clubMatch ? (context.standings.clubs[Number(clubMatch[1])].clubName + ' club') : 'platform';
     return {
       text: `Your ${scope} rank this month was ${actual.value.rank} of ${actual.value.totalRanked}, with ${actual.value.points} points from ${actual.value.activityCount} activities.`,
-      evidence: [evidenceItem(finding.path, actual.value)]
+      evidence: [evidenceItem(path, actual.value)]
     };
   }
   if (finding.type === 'personal_record') {
     if (JSON.stringify(Object.keys(finding).sort()) !== JSON.stringify(['path', 'type', 'value'])) return { error: 'invalid_finding' };
-    if (!/^allTime\.personalRecords\.\d+$/.test(finding.path)) return { error: 'unsupported_path' };
-    const actual = valueAtPath(context, finding.path);
+    const path = normalizePath(finding.path);
+    if (!/^allTime\.personalRecords\.\d+$/.test(path)) return { error: 'unsupported_path' };
+    const actual = valueAtPath(context, path);
     if (!actual.found || !actual.value || typeof actual.value !== 'object') return { error: 'missing_path' };
     if (!equalEvidenceValue(actual.value, finding.value)) return { error: 'mismatched_value' };
     const label = String(actual.value.type || 'personal record').replace(/_/g, ' ');
     return {
       text: `Your ${label} was ${actual.value.value} ${actual.value.unit} in ${actual.value.sport} on ${actual.value.date}.`,
-      evidence: [evidenceItem(finding.path, actual.value)]
+      evidence: [evidenceItem(path, actual.value)]
     };
   }
   if (finding.type === 'insufficient_trend_data') {
@@ -394,12 +447,16 @@ function validateInsightResponse(raw, context) {
   const rendered = [];
   for (const finding of parsed.findings) {
     const result = renderTypedFinding(finding, context);
-    if (result.error) return {
-      ok: false,
-      answer: FALLBACK_COPY,
-      reason: result.error,
-      offendingPath: safeDiagnosticPath(result.offendingPath)
-    };
+    if (result.error) {
+      const offendingPath = safeDiagnosticPath(result.offendingPath);
+      return {
+        ok: false,
+        answer: FALLBACK_COPY,
+        reason: result.error,
+        offendingPath,
+        mismatchDetails: offendingPath ? result.mismatchDetails || null : null
+      };
+    }
     rendered.push(result.text);
     allEvidence.push(...result.evidence);
   }
@@ -430,7 +487,7 @@ function buildSystemPrompt() {
     'DATA_JSON is the sole factual authority. HISTORY_JSON is conversational context only and is never evidence.',
     'Never write answer prose. Select only typed findings whose referenced paths and copied values exist exactly in DATA_JSON.',
     'Allowed finding forms:',
-    '{"type":"metric","path":"numeric-or-date-leaf","value":"exact copied value"}',
+    '{"type":"metric","path":"last12Months.10.durationHours","value":16.4}',
     '{"type":"comparison","leftPath":"numeric-leaf","leftValue":0,"rightPath":"same-metric numeric-leaf","rightValue":0}',
     '{"type":"standing","path":"standings.platform.month or standings.clubs.N.month","value":"exact copied object"}',
     '{"type":"personal_record","path":"allTime.personalRecords.N","value":"exact copied object"}',
