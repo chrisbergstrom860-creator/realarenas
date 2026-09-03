@@ -136,6 +136,14 @@ function startStub() {
           const content = body.messages && body.messages[0] && body.messages[0].content;
           const envelope = JSON.parse(typeof content === 'string' ? content : '{}');
           captured.push({ path: req.url, headers: req.headers, body, envelope });
+          if (/force provider failure/i.test(envelope.question || '')) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              type: 'error',
+              error: { type: 'api_error', message: 'Forced provider failure for quota-refund proof' }
+            }));
+            return;
+          }
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(responseFor(envelope)));
         } catch (error) {
@@ -338,6 +346,24 @@ async function cleanup() {
       historyCapture.envelope.history.length === 0 &&
       !JSON.stringify(historyCapture.envelope).includes('TAMPERED_CLIENT_ANSWER_123456'),
       JSON.stringify(historyCapture.envelope));
+
+    const usageBeforeFailure = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+    const forcedFailure = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+      question: 'Force provider failure for the quota refund proof.',
+      history: []
+    });
+    const usageAfterFailure = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+    check('provider failure has its own error code and accurate copy',
+      forcedFailure.status === 502 &&
+      forcedFailure.body.error === 'ai_provider_unavailable' &&
+      forcedFailure.body.message === 'AI Insights couldn’t reach its analysis provider. Your question was not counted. Please try again.',
+      JSON.stringify(forcedFailure));
+    check('provider failure refunds the exact quota slot',
+      usageBeforeFailure.status === 200 &&
+      usageAfterFailure.status === 200 &&
+      usageAfterFailure.body.used === usageBeforeFailure.body.used &&
+      usageAfterFailure.body.remaining === usageBeforeFailure.body.remaining,
+      JSON.stringify({ before: usageBeforeFailure.body, after: usageAfterFailure.body }));
 
     const fabricated = await api(proLogin, 'POST', '/api/profile/ai-insights', {
       question: 'Return a fabricated number for the rejection proof.',

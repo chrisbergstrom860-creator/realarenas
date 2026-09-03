@@ -38,6 +38,7 @@ const {
   verifyHistoryTurns,
   validateInsightResponse,
   requiresAdviceRefusal,
+  resolveAnthropicProvider,
   buildSystemPrompt: buildAiInsightsSystemPrompt
 } = require('./ai-insights');
 
@@ -8554,19 +8555,22 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
 // The model receives a fixed allowlisted projection. Raw activity rows, titles,
 // notes, user ids, club rosters, and leaderboard rows never cross this boundary.
 const AI_INSIGHTS_MONTHLY_LIMIT = 30;
+const AI_NOT_CONFIGURED_COPY = 'AI Insights isn’t configured in this environment yet.';
+const AI_PROVIDER_FAILURE_COPY = 'AI Insights couldn’t reach its analysis provider. Your question was not counted. Please try again.';
+const AI_CONTEXT_FAILURE_COPY = 'AI Insights couldn’t load your training data. Your question was not counted. Please try again.';
+const AI_USAGE_FAILURE_COPY = 'AI Insights couldn’t load your usage status. Please try again.';
 let anthropicClient = null;
 
 function round1(value) {
   return Math.round((Number(value) || 0) * 10) / 10;
 }
 
-function getAnthropicClient() {
+function getAnthropicClient(providerConfig) {
   if (anthropicClient) return anthropicClient;
   const Anthropic = require('@anthropic-ai/sdk');
-  anthropicClient = new Anthropic({
-    apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-    baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL
-  });
+  const options = { apiKey: providerConfig.apiKey };
+  if (providerConfig.provider === 'replit-ai-integrations') options.baseURL = providerConfig.baseURL;
+  anthropicClient = new Anthropic(options);
   return anthropicClient;
 }
 
@@ -8610,13 +8614,34 @@ async function claimAiUsage(userId, now = new Date()) {
       source_key: `ai-insights:${period}:${String(slot).padStart(2, '0')}`
     });
     if (!error) {
-      const usage = await readAiUsage(userId, now);
-      return { ...usage, allowed: true };
+      const sourceKey = `ai-insights:${period}:${String(slot).padStart(2, '0')}`;
+      try {
+        const usage = await readAiUsage(userId, now);
+        return { ...usage, allowed: true, sourceKey };
+      } catch (readError) {
+        await releaseAiUsageClaim(userId, sourceKey).catch(() => {});
+        throw readError;
+      }
     }
     if (String(error.code) !== '23505') throw error;
   }
   const usage = await readAiUsage(userId, now);
   return { ...usage, allowed: false };
+}
+
+async function releaseAiUsageClaim(userId, sourceKey) {
+  if (!sourceKey) return;
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const { error } = await supabaseAdmin.from('notifications')
+      .delete()
+      .eq('user_id', userId)
+      .eq('type', 'ai_insights_usage')
+      .eq('source_key', sourceKey);
+    if (!error) return;
+    lastError = error;
+  }
+  throw lastError || new Error('Could not refund AI Insights usage');
 }
 
 function buildAiPersonalRecords(acts, tz) {
@@ -8826,11 +8851,17 @@ async function buildAiInsightsContext(user) {
 
 app.get(BASE + '/api/profile/ai-insights/status', requireAuth, requireActivePro('ai_insights'), async (req, res) => {
   try {
+    resolveAnthropicProvider(process.env);
+  } catch (err) {
+    console.log('AI Insights configuration error:', err.message);
+    return res.status(503).json({ error: 'ai_insights_not_configured', message: AI_NOT_CONFIGURED_COPY });
+  }
+  try {
     const usage = await readAiUsage(req.user.id);
     res.json({ model: AI_INSIGHTS_MODEL, limit: AI_INSIGHTS_MONTHLY_LIMIT, used: usage.used, remaining: usage.remaining, resetDate: usage.resetDate });
   } catch (err) {
     console.log('AI Insights status error:', err.message);
-    res.status(503).json({ error: 'AI Insights is temporarily unavailable' });
+    res.status(503).json({ error: 'ai_usage_unavailable', message: AI_USAGE_FAILURE_COPY });
   }
 });
 
@@ -8847,21 +8878,44 @@ app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_in
       historyTurn: makeSignedHistoryTurn(SESSION_SECRET, req.user.id, question, AI_INSIGHTS_REFUSAL)
     });
   }
+  let providerConfig;
   try {
-    if (!supabaseAdmin) return res.status(503).json({ error: 'AI Insights is temporarily unavailable' });
-    const context = await buildAiInsightsContext(req.user);
-    const usage = await claimAiUsage(req.user.id);
-    if (!usage.allowed) {
-      return res.status(429).json({
-        error: 'ai_insights_limit',
-        limit: AI_INSIGHTS_MONTHLY_LIMIT,
-        used: usage.used,
-        remaining: 0,
-        resetDate: usage.resetDate,
-        message: `You’ve used all ${AI_INSIGHTS_MONTHLY_LIMIT} AI Insights questions for this month. Your limit resets on ${new Date(usage.resetDate + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })}.`
-      });
-    }
-    const response = await getAnthropicClient().messages.create({
+    providerConfig = resolveAnthropicProvider(process.env);
+  } catch (err) {
+    console.log('AI Insights configuration error:', err.message);
+    return res.status(503).json({ error: 'ai_insights_not_configured', message: AI_NOT_CONFIGURED_COPY });
+  }
+  if (!supabaseAdmin) {
+    console.log('AI Insights context error: Supabase service role is not configured');
+    return res.status(503).json({ error: 'ai_context_unavailable', message: AI_CONTEXT_FAILURE_COPY });
+  }
+  let context;
+  try {
+    context = await buildAiInsightsContext(req.user);
+  } catch (err) {
+    console.log('AI Insights context error:', err.message);
+    return res.status(503).json({ error: 'ai_context_unavailable', message: AI_CONTEXT_FAILURE_COPY });
+  }
+  let usage;
+  try {
+    usage = await claimAiUsage(req.user.id);
+  } catch (err) {
+    console.log('AI Insights usage error:', err.message);
+    return res.status(503).json({ error: 'ai_usage_unavailable', message: AI_USAGE_FAILURE_COPY });
+  }
+  if (!usage.allowed) {
+    return res.status(429).json({
+      error: 'ai_insights_limit',
+      limit: AI_INSIGHTS_MONTHLY_LIMIT,
+      used: usage.used,
+      remaining: 0,
+      resetDate: usage.resetDate,
+      message: `You’ve used all ${AI_INSIGHTS_MONTHLY_LIMIT} AI Insights questions for this month. Your limit resets on ${new Date(usage.resetDate + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })}.`
+    });
+  }
+  let response;
+  try {
+    response = await getAnthropicClient(providerConfig).messages.create({
       model: AI_INSIGHTS_MODEL,
       max_tokens: 8192,
       system: buildAiInsightsSystemPrompt(),
@@ -8874,6 +8928,23 @@ app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_in
         })
       }]
     });
+  } catch (err) {
+    let refunded = false;
+    try {
+      await releaseAiUsageClaim(req.user.id, usage.sourceKey);
+      refunded = true;
+    } catch (refundError) {
+      console.error('AI Insights quota refund error:', refundError.message);
+    }
+    console.log('AI Insights provider error:', err.message, '| quota refunded:', refunded);
+    return res.status(502).json({
+      error: 'ai_provider_unavailable',
+      message: refunded
+        ? AI_PROVIDER_FAILURE_COPY
+        : 'AI Insights couldn’t reach its analysis provider, and usage could not be reconciled automatically. Please contact support before retrying.'
+    });
+  }
+  try {
     const text = (response.content || []).filter((block) => block.type === 'text').map((block) => block.text).join('');
     const validated = validateInsightResponse(text, context);
     // Validation may deliberately return the exact policy refusal when a model
@@ -8889,8 +8960,8 @@ app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_in
       usage: { limit: AI_INSIGHTS_MONTHLY_LIMIT, used: usage.used, remaining: usage.remaining, resetDate: usage.resetDate }
     });
   } catch (err) {
-    console.log('AI Insights error:', err.message);
-    res.status(503).json({ error: 'AI Insights is temporarily unavailable' });
+    console.log('AI Insights response error:', err.message);
+    res.status(503).json({ error: 'ai_response_unavailable', message: 'AI Insights couldn’t process the analysis response. Please try again.' });
   }
 });
 

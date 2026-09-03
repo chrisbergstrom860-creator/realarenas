@@ -6,6 +6,38 @@ const MODEL = 'claude-haiku-4-5';
 const MAX_HISTORY_TURNS = 3;
 const HISTORY_TTL_MS = 12 * 60 * 60 * 1000;
 
+class AiProviderConfigurationError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'AiProviderConfigurationError';
+    this.code = 'ai_insights_not_configured';
+  }
+}
+
+function resolveAnthropicProvider(env = {}) {
+  const replitKey = String(env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || '').trim();
+  const replitBaseURL = String(env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL || '').trim();
+  const directKey = String(env.ANTHROPIC_API_KEY || '').trim();
+  const isRailway = Boolean(env.RAILWAY_ENVIRONMENT || env.RAILWAY_PROJECT_ID || env.RAILWAY_SERVICE_ID);
+
+  if (isRailway) {
+    if (!directKey) {
+      throw new AiProviderConfigurationError('ANTHROPIC_API_KEY is required on Railway');
+    }
+    return { provider: 'anthropic-direct', apiKey: directKey };
+  }
+  if (replitKey && replitBaseURL) {
+    return { provider: 'replit-ai-integrations', apiKey: replitKey, baseURL: replitBaseURL };
+  }
+  if (replitKey || replitBaseURL) {
+    throw new AiProviderConfigurationError('Both Replit Anthropic integration variables are required');
+  }
+  if (directKey) {
+    return { provider: 'anthropic-direct', apiKey: directKey };
+  }
+  throw new AiProviderConfigurationError('No Anthropic provider credentials are configured');
+}
+
 function stableTurnPayload(userId, turn) {
   return JSON.stringify({
     userId,
@@ -281,6 +313,8 @@ module.exports = {
   REFUSAL_COPY,
   MODEL,
   MAX_HISTORY_TURNS,
+  AiProviderConfigurationError,
+  resolveAnthropicProvider,
   makeSignedHistoryTurn,
   verifyHistoryTurns,
   validateInsightResponse,

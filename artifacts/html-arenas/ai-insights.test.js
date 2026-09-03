@@ -6,7 +6,8 @@ const {
   makeSignedHistoryTurn,
   verifyHistoryTurns,
   validateInsightResponse,
-  requiresAdviceRefusal
+  requiresAdviceRefusal,
+  resolveAnthropicProvider
 } = require('./ai-insights');
 
 const context = {
@@ -93,4 +94,42 @@ test('trend language is rejected below the 8-activity and 4-week threshold', () 
   assert.equal(result.ok, false);
   assert.equal(result.reason, 'unsupported_trend');
   assert.equal(result.answer, FALLBACK_COPY);
+});
+
+test('provider selection uses Replit integration outside Railway', () => {
+  assert.deepEqual(resolveAnthropicProvider({
+    AI_INTEGRATIONS_ANTHROPIC_API_KEY: 'replit-key',
+    AI_INTEGRATIONS_ANTHROPIC_BASE_URL: 'https://replit-proxy.example'
+  }), {
+    provider: 'replit-ai-integrations',
+    apiKey: 'replit-key',
+    baseURL: 'https://replit-proxy.example'
+  });
+});
+
+test('provider selection requires the direct key on Railway', () => {
+  assert.deepEqual(resolveAnthropicProvider({
+    RAILWAY_ENVIRONMENT: 'production',
+    ANTHROPIC_API_KEY: 'direct-key',
+    AI_INTEGRATIONS_ANTHROPIC_API_KEY: 'replit-key',
+    AI_INTEGRATIONS_ANTHROPIC_BASE_URL: 'https://replit-proxy.example'
+  }), {
+    provider: 'anthropic-direct',
+    apiKey: 'direct-key'
+  });
+  assert.throws(
+    () => resolveAnthropicProvider({ RAILWAY_ENVIRONMENT: 'production' }),
+    (error) => error.code === 'ai_insights_not_configured' && /ANTHROPIC_API_KEY/.test(error.message)
+  );
+});
+
+test('provider selection rejects partial or absent configuration', () => {
+  assert.throws(
+    () => resolveAnthropicProvider({ AI_INTEGRATIONS_ANTHROPIC_BASE_URL: 'https://replit-proxy.example' }),
+    (error) => error.code === 'ai_insights_not_configured'
+  );
+  assert.throws(
+    () => resolveAnthropicProvider({}),
+    (error) => error.code === 'ai_insights_not_configured'
+  );
 });

@@ -2159,14 +2159,14 @@ if (logHashMatch) {
       if (!response.ok) {
         if (result.error === 'ai_insights_limit') throw new Error(result.message || 'Monthly question limit reached.');
         if (result.error === 'pro_required') { document.getElementById('ai-insights-body').innerHTML = lockedPanel(); return; }
-        throw new Error('AI Insights is temporarily unavailable. Please try again.');
+        throw new Error(result.message || 'AI Insights could not complete this request. Please try again.');
       }
       addTurn(question, result);
       if (result.historyTurn) aiHistory = aiHistory.concat([result.historyTurn]).slice(-3);
       if (result.usage) setUsage(result.usage);
       if (input) input.value = '';
     } catch (err) {
-      if (error) error.textContent = err.message || 'AI Insights is temporarily unavailable.';
+      if (error) error.textContent = err.message || 'AI Insights could not complete this request. Please try again.';
     } finally {
       aiBusy = false;
       if (button) { button.disabled = false; button.textContent = 'Ask AI Insights'; }
@@ -2185,13 +2185,13 @@ if (logHashMatch) {
     try {
       var response = await fetch(AI_BASE + '/api/profile/ai-insights/status');
       var result = await response.json().catch(function () { return {}; });
-      if (!response.ok) throw new Error('status');
+      if (!response.ok) throw new Error(result.message || 'AI Insights could not load its status.');
       if (body) body.innerHTML = composerPanel();
       setUsage(result);
       var form = document.getElementById('ai-insights-form');
       if (form) form.addEventListener('submit', submitQuestion);
     } catch (err) {
-      if (body) body.innerHTML = '<div style="padding:48px 24px;text-align:center;font-size:13px;color:var(--gray-500)">AI Insights is temporarily unavailable. Please try again in a moment.</div>';
+      if (body) body.innerHTML = '<div style="padding:48px 24px;text-align:center;font-size:13px;color:var(--gray-500)">' + esc(err.message || 'AI Insights could not load its status.') + '</div>';
     }
   }
 
