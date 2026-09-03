@@ -93,3 +93,4 @@
 - [html-arenas post write gate](html-arenas-post-write-gate.md) — like/comment gated by canUserSeePost (read-path union); zero-leak 404; unlike lost with visibility; one grandfathered like.
 - [html-arenas public club profiles](html-arenas-public-club-profiles.md) — public-only profiles; private/missing parity; banner paths stay server-only; public pages never offer joining.
 - [Club Pro gate environment parity](html-arenas-club-pro-gate-env.md) — Railway enforces club gates while Replit bypasses them; entitlement checks need the gated child-server verifier.
+- [AI Insights policy classification](html-arenas-ai-insights-policy.md) — classify intent in typed model output, never input keywords; safe misses stay grounded, refusal/rejection slots refund.
