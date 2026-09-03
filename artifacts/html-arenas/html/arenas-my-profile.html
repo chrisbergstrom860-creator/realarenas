@@ -445,6 +445,7 @@ button,select,input,textarea{font-family:var(--font)}
       <div class="htab active" id="htab-overview" onclick="setTab('overview')">Overview</div>
       <div class="htab" id="htab-activities" onclick="setTab('activities')">Activities <span class="tab-count"></span></div>
       <div class="htab" id="htab-stats" onclick="setTab('stats')">Stats & PRs</div>
+      <div class="htab" id="htab-insights" onclick="setTab('insights')">AI Insights</div>
       <div class="htab" id="htab-goals" onclick="setTab('goals')">Goals</div>
       <div class="htab" id="htab-achievements" onclick="setTab('achievements')">Achievements <span class="tab-count"></span></div>
       <div class="htab" id="htab-clubs" onclick="setTab('clubs')">Clubs <span class="tab-count"></span></div>
@@ -500,6 +501,20 @@ button,select,input,textarea{font-family:var(--font)}
   </div>
   <div id="sp-stats-body">
     <div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Loading stats…</div>
+  </div>
+</div>
+
+<!-- ═══ AI INSIGHTS TAB ═══ -->
+<div class="tab-content" id="tab-insights">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-bottom:var(--border);background:white;flex-wrap:wrap">
+    <div>
+      <div style="font-size:13px;font-weight:600">AI Insights</div>
+      <div style="font-size:11px;color:var(--gray-500);margin-top:1px">Ask descriptive questions about the training data you’ve logged</div>
+    </div>
+    <div id="ai-insights-usage" style="font-size:11px;color:var(--gray-500)"></div>
+  </div>
+  <div id="ai-insights-body">
+    <div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Loading AI Insights…</div>
   </div>
 </div>
 
@@ -2042,6 +2057,149 @@ if (logHashMatch) {
   if (window.location.hash === '#stats') {
     if (typeof setTab === 'function') setTab('stats');
     loadProfileStats();
+  }
+})();
+</script>
+<script>
+// ── AI INSIGHTS TAB ──
+// Three signed turns live only in this page's memory. Refreshing, navigating,
+// or signing out clears them; the server accepts only untampered signed turns.
+(function () {
+  var AI_BASE = window.BASE || '';
+  var aiLoaded = false;
+  var aiBusy = false;
+  var aiHistory = [];
+  var aiUsage = null;
+
+  function usageText() {
+    if (!aiUsage) return '';
+    return aiUsage.used + ' of ' + aiUsage.limit + ' questions used · resets ' +
+      new Date(aiUsage.resetDate + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  }
+
+  function setUsage(usage) {
+    if (usage) aiUsage = usage;
+    var el = document.getElementById('ai-insights-usage');
+    if (el) el.textContent = usageText();
+  }
+
+  function lockedPanel() {
+    return '<div style="text-align:center;padding:52px 24px;max-width:500px;margin:0 auto">' +
+      '<div style="font-size:38px;margin-bottom:12px">✦</div>' +
+      '<div style="font-size:17px;font-weight:700;color:var(--gray-900);margin-bottom:8px">AI Insights is a Pro feature</div>' +
+      '<div style="font-size:13px;color:var(--gray-500);line-height:1.65;margin-bottom:18px">Ask questions grounded in your logged activities, personal records, streaks, and your own standings. Answers are descriptive only and your questions are not saved.</div>' +
+      '<button onclick="window.location.href=window.BASE + \'/billing\'" style="padding:9px 20px;border-radius:8px;font-size:13px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">🔒 Upgrade to Pro · $9/month →</button>' +
+      '</div>';
+  }
+
+  function composerPanel() {
+    return '<div style="max-width:760px;margin:0 auto;padding:18px 14px 26px">' +
+      '<div style="background:var(--yellow-light);border:1px solid #F2D45C;border-radius:10px;padding:11px 13px;font-size:12px;color:var(--gray-700);line-height:1.55;margin-bottom:14px">' +
+        '<strong>Descriptive, not coaching.</strong> AI Insights can explain patterns in your logged data, but it won’t prescribe workouts or comment on diet, weight, body composition, or whether you are under-training.' +
+      '</div>' +
+      '<div id="ai-insights-thread" aria-live="polite" style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px">' +
+        '<div id="ai-insights-empty" style="background:white;border:var(--border);border-radius:var(--radius-lg);padding:28px 20px;text-align:center">' +
+          '<div style="font-size:28px;margin-bottom:9px">✦</div>' +
+          '<div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:5px">What would you like to understand?</div>' +
+          '<div style="font-size:12px;color:var(--gray-500);line-height:1.6">Try “How has my running changed over the last 12 weeks?” or “What are my strongest personal records?”</div>' +
+        '</div>' +
+      '</div>' +
+      '<form id="ai-insights-form" style="background:white;border:var(--border);border-radius:var(--radius-lg);padding:12px" onsubmit="return false">' +
+        '<label for="ai-insights-question" style="display:block;font-size:11px;font-weight:600;color:var(--gray-700);margin-bottom:7px">Ask about your training data</label>' +
+        '<textarea id="ai-insights-question" maxlength="500" rows="3" placeholder="Ask a complete question or follow up on the conversation…" style="width:100%;box-sizing:border-box;resize:vertical;border:1px solid var(--gray-200);border-radius:8px;padding:10px 11px;font:inherit;font-size:13px;line-height:1.5;color:var(--gray-900);outline:none"></textarea>' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px">' +
+          '<div id="ai-insights-error" style="font-size:11px;color:#A32D2D"></div>' +
+          '<button type="submit" id="ai-insights-submit" style="padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer;white-space:nowrap">Ask AI Insights</button>' +
+        '</div>' +
+      '</form>' +
+      '<div style="font-size:10px;color:var(--gray-400);line-height:1.5;margin-top:8px;text-align:center">The last three exchanges stay in this browser tab for follow-ups and disappear when you leave or refresh.</div>' +
+    '</div>';
+  }
+
+  function addTurn(question, response) {
+    var empty = document.getElementById('ai-insights-empty');
+    if (empty) empty.remove();
+    var thread = document.getElementById('ai-insights-thread');
+    if (!thread) return;
+    var limitations = (response.limitations || []).map(function (line) {
+      return '<li>' + esc(line) + '</li>';
+    }).join('');
+    var evidence = (response.evidence || []).map(function (item) {
+      return '<span style="display:inline-block;padding:3px 7px;border-radius:999px;background:var(--gray-100);font-size:9px;color:var(--gray-500);margin:3px 3px 0 0">' + esc(item.path) + '</span>';
+    }).join('');
+    var wrap = document.createElement('div');
+    wrap.innerHTML =
+      '<div style="display:flex;justify-content:flex-end"><div style="max-width:82%;background:var(--gray-900);color:white;border-radius:12px 12px 3px 12px;padding:9px 12px;font-size:12px;line-height:1.55">' + esc(question) + '</div></div>' +
+      '<div style="background:white;border:var(--border);border-radius:3px 12px 12px 12px;padding:13px 14px">' +
+        '<div style="font-size:10px;font-weight:700;letter-spacing:.05em;color:#9A7600;text-transform:uppercase;margin-bottom:6px">✦ AI Insights</div>' +
+        '<div style="font-size:13px;color:var(--gray-800);line-height:1.65;white-space:pre-wrap">' + esc(response.answer) + '</div>' +
+        (limitations ? '<ul style="margin:9px 0 0 18px;padding:0;font-size:11px;color:var(--gray-500);line-height:1.5">' + limitations + '</ul>' : '') +
+        (evidence ? '<details style="margin-top:9px"><summary style="font-size:10px;color:var(--gray-400);cursor:pointer">Evidence used</summary><div style="margin-top:4px">' + evidence + '</div></details>' : '') +
+      '</div>';
+    while (wrap.firstChild) thread.appendChild(wrap.firstChild);
+  }
+
+  async function submitQuestion() {
+    if (aiBusy) return;
+    var input = document.getElementById('ai-insights-question');
+    var button = document.getElementById('ai-insights-submit');
+    var error = document.getElementById('ai-insights-error');
+    var question = input ? input.value.trim() : '';
+    if (!question) { if (error) error.textContent = 'Enter a question first.'; return; }
+    aiBusy = true;
+    if (error) error.textContent = '';
+    if (button) { button.disabled = true; button.textContent = 'Reviewing your data…'; }
+    try {
+      var response = await fetch(AI_BASE + '/api/profile/ai-insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: question, history: aiHistory })
+      });
+      var result = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        if (result.error === 'ai_insights_limit') throw new Error(result.message || 'Monthly question limit reached.');
+        if (result.error === 'pro_required') { document.getElementById('ai-insights-body').innerHTML = lockedPanel(); return; }
+        throw new Error('AI Insights is temporarily unavailable. Please try again.');
+      }
+      addTurn(question, result);
+      if (result.historyTurn) aiHistory = aiHistory.concat([result.historyTurn]).slice(-3);
+      if (result.usage) setUsage(result.usage);
+      if (input) input.value = '';
+    } catch (err) {
+      if (error) error.textContent = err.message || 'AI Insights is temporarily unavailable.';
+    } finally {
+      aiBusy = false;
+      if (button) { button.disabled = false; button.textContent = 'Ask AI Insights'; }
+    }
+  }
+
+  async function loadAiInsights() {
+    if (aiLoaded) return;
+    aiLoaded = true;
+    var body = document.getElementById('ai-insights-body');
+    var isPro = !!(window.ARENAS_DATA && window.ARENAS_DATA.gating && window.ARENAS_DATA.gating.aiInsightsPro);
+    if (!isPro) {
+      if (body) body.innerHTML = lockedPanel();
+      return;
+    }
+    try {
+      var response = await fetch(AI_BASE + '/api/profile/ai-insights/status');
+      var result = await response.json().catch(function () { return {}; });
+      if (!response.ok) throw new Error('status');
+      if (body) body.innerHTML = composerPanel();
+      setUsage(result);
+      var form = document.getElementById('ai-insights-form');
+      if (form) form.addEventListener('submit', submitQuestion);
+    } catch (err) {
+      if (body) body.innerHTML = '<div style="padding:48px 24px;text-align:center;font-size:13px;color:var(--gray-500)">AI Insights is temporarily unavailable. Please try again in a moment.</div>';
+    }
+  }
+
+  var tab = document.getElementById('htab-insights');
+  if (tab) tab.addEventListener('click', loadAiInsights);
+  if (window.location.hash === '#insights') {
+    if (typeof setTab === 'function') setTab('insights');
+    loadAiInsights();
   }
 })();
 </script>

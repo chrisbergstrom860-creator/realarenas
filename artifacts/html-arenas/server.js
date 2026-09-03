@@ -30,6 +30,16 @@ const {
   computeStreaks
 } = require('./tzdate');
 const { buildFourWeekActivityGrid } = require('./activity-grid');
+const {
+  FALLBACK_COPY: AI_INSIGHTS_FALLBACK,
+  REFUSAL_COPY: AI_INSIGHTS_REFUSAL,
+  MODEL: AI_INSIGHTS_MODEL,
+  makeSignedHistoryTurn,
+  verifyHistoryTurns,
+  validateInsightResponse,
+  requiresAdviceRefusal,
+  buildSystemPrompt: buildAiInsightsSystemPrompt
+} = require('./ai-insights');
 
 // Exact club-sport contract shared by BOTH creation paths and the settings
 // editor. Deliberately trims but does NOT lowercase: canonical registry ids and
@@ -2146,6 +2156,16 @@ async function getPaidSubscription(ownerType, ownerId) {
 async function getUserPlan(userId) {
   const sub = await getPaidSubscription('user', userId);
   return sub && sub.plan === 'pro' ? 'pro' : 'free';
+}
+
+// AI Insights is always a paid capability, including in local/Replit
+// environments where PLAN_GATES_ENABLED is deliberately unset. It must never
+// inherit the dormant-gate pass-through used by older Pro features.
+function requireActivePro(feature) {
+  return async function (req, res, next) {
+    if ((await getUserPlan(req.user.id)) === 'pro') return next();
+    return res.status(403).json({ error: 'pro_required', feature, upgrade: '/billing' });
+  };
 }
 
 // Returns 'club_pro' or 'free'.
@@ -8335,7 +8355,12 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
       // Per-tab "new since last viewed" counts for the header tab badges.
       // Zero = no badge rendered (never a "0" pill).
       tabUnseen,
-      gating: { proLocked: await computeProLocked(req.user.id) }
+      gating: {
+        proLocked: await computeProLocked(req.user.id),
+        // Unlike legacy flag-dependent gates, AI Insights is visibly locked
+        // whenever the real subscription is not Individual Pro.
+        aiInsightsPro: (await getUserPlan(req.user.id)) === 'pro'
+      }
     };
 
     const isProUser = (await getUserPlan(req.user.id)) === 'pro';
@@ -8522,6 +8547,350 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
   } catch (err) {
     console.log('Profile stats error:', err.message);
     res.status(500).json({ error: 'Could not load stats' });
+  }
+});
+
+// ── AI INSIGHTS (unconditionally Individual Pro) ──
+// The model receives a fixed allowlisted projection. Raw activity rows, titles,
+// notes, user ids, club rosters, and leaderboard rows never cross this boundary.
+const AI_INSIGHTS_MONTHLY_LIMIT = 30;
+let anthropicClient = null;
+
+function round1(value) {
+  return Math.round((Number(value) || 0) * 10) / 10;
+}
+
+function getAnthropicClient() {
+  if (anthropicClient) return anthropicClient;
+  const Anthropic = require('@anthropic-ai/sdk');
+  anthropicClient = new Anthropic({
+    apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+    baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL
+  });
+  return anthropicClient;
+}
+
+function aiUsagePeriod(now = new Date()) {
+  return now.toISOString().slice(0, 7);
+}
+
+function aiUsageResetDate(now = new Date()) {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
+}
+
+async function readAiUsage(userId, now = new Date()) {
+  const period = aiUsagePeriod(now);
+  const prefix = `ai-insights:${period}:`;
+  const { count, error } = await supabaseAdmin.from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('type', 'ai_insights_usage')
+    .like('source_key', prefix + '%');
+  if (error) throw error;
+  const used = Math.min(AI_INSIGHTS_MONTHLY_LIMIT, count || 0);
+  return { used, remaining: AI_INSIGHTS_MONTHLY_LIMIT - used, period, resetDate: aiUsageResetDate(now) };
+}
+
+async function claimAiUsage(userId, now = new Date()) {
+  const period = aiUsagePeriod(now);
+  // Thirty deterministic slot keys turn the existing unique
+  // notifications(user_id, source_key) constraint into an atomic, durable cap.
+  // Concurrent app instances race on a slot; exactly one insert wins and the
+  // loser tries the next slot. These internal rows are read=true and excluded
+  // from every notification-list/dismiss route.
+  for (let slot = 1; slot <= AI_INSIGHTS_MONTHLY_LIMIT; slot++) {
+    const { error } = await supabaseAdmin.from('notifications').insert({
+      user_id: userId,
+      actor_id: null,
+      type: 'ai_insights_usage',
+      title: 'AI Insights usage',
+      body: 'Monthly usage counter',
+      link: null,
+      read: true,
+      source_key: `ai-insights:${period}:${String(slot).padStart(2, '0')}`
+    });
+    if (!error) {
+      const usage = await readAiUsage(userId, now);
+      return { ...usage, allowed: true };
+    }
+    if (String(error.code) !== '23505') throw error;
+  }
+  const usage = await readAiUsage(userId, now);
+  return { ...usage, allowed: false };
+}
+
+function buildAiPersonalRecords(acts, tz) {
+  const km = (a) => parseDistanceKmUnitAware(a.distance);
+  const records = [];
+  const addDistanceRecord = (type, sport, rows) => {
+    if (!rows.length) return;
+    const best = rows.reduce((winner, row) => km(row) > km(winner) ? row : winner);
+    records.push({ type, sport, value: round1(km(best)), unit: 'km', date: dayKey(best.date, tz) });
+  };
+  addDistanceRecord('longest_run', 'running', acts.filter((a) => a.sport === 'running' && km(a) > 0));
+  addDistanceRecord('longest_ride', 'cycling', acts.filter((a) => a.sport === 'cycling' && km(a) > 0));
+  const timed = acts.filter((a) => parseDurationHours(a.duration) > 0);
+  if (timed.length) {
+    const best = timed.reduce((winner, row) => parseDurationHours(row.duration) > parseDurationHours(winner.duration) ? row : winner);
+    records.push({
+      type: 'longest_activity',
+      sport: best.sport || 'other',
+      value: round1(parseDurationHours(best.duration)),
+      unit: 'hours',
+      date: dayKey(best.date, tz)
+    });
+  }
+  return records;
+}
+
+async function buildAiInsightsContext(user) {
+  const tz = getUserTimezone(user);
+  const now = new Date();
+  const today = dayKey(now, tz);
+  const windowStart = weekStartKey(now, tz, 11);
+  const windowEnd = addDaysToKey(today, 1);
+  const { data: activityRows, error: activityError } = await supabaseAdmin
+    .from('activities')
+    .select('sport, distance, duration, date')
+    .eq('user_id', user.id)
+    .order('date', { ascending: true });
+  if (activityError) throw activityError;
+  const acts = activityRows || [];
+  const detailedActs = acts.filter((a) => {
+    const key = dayKey(a.date, tz);
+    return key >= windowStart && key < windowEnd;
+  });
+  const summarize = (rows) => ({
+    activityCount: rows.length,
+    durationHours: round1(rows.reduce((sum, row) => sum + parseDurationHours(row.duration), 0)),
+    distanceKm: round1(rows.reduce((sum, row) => sum + parseDistanceKmUnitAware(row.distance), 0)),
+    points: calculatePoints(rows)
+  });
+  const sportMap = {};
+  for (const row of acts) {
+    const sport = row.sport || 'other';
+    const item = sportMap[sport] || { sport, sessions: 0, durationHours: 0, distanceKm: 0 };
+    item.sessions += 1;
+    item.durationHours += parseDurationHours(row.duration);
+    item.distanceKm += parseDistanceKmUnitAware(row.distance);
+    sportMap[sport] = item;
+  }
+  const sports = Object.values(sportMap).map((item) => ({
+    sport: item.sport,
+    sessions: item.sessions,
+    durationHours: round1(item.durationHours),
+    distanceKm: round1(item.distanceKm),
+    percentSessions: acts.length ? Math.round((item.sessions / acts.length) * 100) : 0
+  })).sort((a, b) => b.sessions - a.sessions);
+  const dailyMap = {};
+  for (const row of detailedActs) {
+    const date = dayKey(row.date, tz);
+    const item = dailyMap[date] || { date, sessions: 0, durationHours: 0, distanceKm: 0, sports: [] };
+    item.sessions += 1;
+    item.durationHours += parseDurationHours(row.duration);
+    item.distanceKm += parseDistanceKmUnitAware(row.distance);
+    if (!item.sports.includes(row.sport || 'other')) item.sports.push(row.sport || 'other');
+    dailyMap[date] = item;
+  }
+  const daily = Object.values(dailyMap).map((item) => ({
+    ...item,
+    durationHours: round1(item.durationHours),
+    distanceKm: round1(item.distanceKm)
+  })).sort((a, b) => a.date.localeCompare(b.date));
+  const weekly = [];
+  for (let i = 11; i >= 0; i--) {
+    const start = weekStartKey(now, tz, i);
+    const end = addDaysToKey(start, 7);
+    const rows = detailedActs.filter((a) => {
+      const key = dayKey(a.date, tz);
+      return key >= start && key < end;
+    });
+    const bySportMap = {};
+    for (const row of rows) {
+      const sport = row.sport || 'other';
+      const item = bySportMap[sport] || { sport, sessions: 0, durationHours: 0, distanceKm: 0 };
+      item.sessions += 1;
+      item.durationHours += parseDurationHours(row.duration);
+      item.distanceKm += parseDistanceKmUnitAware(row.distance);
+      bySportMap[sport] = item;
+    }
+    weekly.push({
+      weekStart: start,
+      ...summarize(rows),
+      sports: Object.values(bySportMap).map((item) => ({
+        sport: item.sport,
+        sessions: item.sessions,
+        durationHours: round1(item.durationHours),
+        distanceKm: round1(item.distanceKm)
+      }))
+    });
+  }
+  const activeWeeks = weekly.filter((week) => week.activityCount > 0).length;
+  const { currentStreak, longestStreak } = computeStreaks(acts, tz);
+  const context = {
+    schemaVersion: 1,
+    asOfDate: today,
+    timezone: tz,
+    coverage: {
+      firstActivityDate: acts.length ? dayKey(acts[0].date, tz) : null,
+      lastActivityDate: acts.length ? dayKey(acts[acts.length - 1].date, tz) : null,
+      allTimeActivityCount: acts.length,
+      detailedWindow: { startDate: windowStart, endDate: today, weeks: 12 }
+    },
+    allTime: {
+      ...summarize(acts),
+      sports,
+      streaks: { currentDays: currentStreak, longestDays: longestStreak },
+      personalRecords: buildAiPersonalRecords(acts, tz)
+    },
+    last12Weeks: {
+      ...summarize(detailedActs),
+      activeWeeks,
+      averageSessionsPerWeek: round1(detailedActs.length / 12),
+      daily,
+      weekly
+    },
+    dataQuality: {
+      activityCount: acts.length,
+      activeWeeksInDetailedWindow: activeWeeks,
+      trendMinimumActivities: 8,
+      trendMinimumActiveWeeks: 4,
+      trendEligible: acts.length >= 8 && activeWeeks >= 4
+    }
+  };
+
+  // Ranking queries may read authorized rows internally, but only this user's
+  // scalar standing survives. Profile lookup failures and leaderboard opt-outs
+  // are removed before activity lookup (fail closed).
+  if (prefsFromMeta(user.user_metadata).show_on_leaderboards) {
+    const platformUsers = (await listAllAuthUsers())
+      .filter((candidate) => prefsFromMeta(candidate.user_metadata).show_on_leaderboards);
+    const platformIds = platformUsers.map((candidate) => candidate.id);
+    const platformByUser = bucketActivities(await fetchActivitiesForUsers(platformIds, 'month', 'all', tz, { capAtNow: true }));
+    const ranked = platformUsers.map((candidate) => ({
+      id: candidate.id,
+      points: calculatePoints(platformByUser[candidate.id] || []),
+      activityCount: (platformByUser[candidate.id] || []).length
+    })).filter((row) => row.activityCount > 0)
+      .sort((a, b) => b.points - a.points || b.activityCount - a.activityCount || a.id.localeCompare(b.id));
+    let previousPoints = null;
+    let sharedRank = 0;
+    ranked.forEach((row, index) => {
+      if (index === 0 || row.points !== previousPoints) sharedRank = index + 1;
+      previousPoints = row.points;
+      row.rank = sharedRank;
+    });
+    const mine = ranked.find((row) => row.id === user.id);
+    if (mine) {
+      context.standings = {
+        platform: {
+          month: { rank: mine.rank, totalRanked: ranked.length, points: mine.points, activityCount: mine.activityCount }
+        },
+        clubs: []
+      };
+    }
+    const { data: ownMemberships, error: membershipsError } = await supabaseAdmin
+      .from('memberships')
+      .select('club_id, role, clubs:club_id (name)')
+      .eq('user_id', user.id);
+    if (membershipsError) throw membershipsError;
+    for (const membership of (ownMemberships || [])) {
+      const { data: memberRows, error: memberError } = await supabaseAdmin
+        .from('memberships').select('user_id, created_at').eq('club_id', membership.club_id).order('created_at', { ascending: true });
+      if (memberError) throw memberError;
+      const profileMap = await buildUserProfileMap((memberRows || []).map((row) => row.user_id));
+      const safeRows = (memberRows || []).filter((row) => (
+        profileMap[row.user_id] && profileMap[row.user_id].prefs.show_on_leaderboards
+      ));
+      const board = await buildClubPointsLeaderboard(safeRows, profileMap, 'month', user);
+      if (!await getCurrentClubMembership(user.id, membership.club_id)) throw new Error('Club membership changed');
+      if (board.viewer) {
+        if (!context.standings) context.standings = { clubs: [] };
+        if (!context.standings.clubs) context.standings.clubs = [];
+        const club = Array.isArray(membership.clubs) ? membership.clubs[0] : membership.clubs;
+        context.standings.clubs.push({
+          clubName: (club && club.name) || 'Club',
+          role: membership.role,
+          month: {
+            rank: board.viewer.rank,
+            totalRanked: board.viewer.total,
+            points: board.viewer.points,
+            activityCount: board.viewer.activityCount
+          }
+        });
+      }
+    }
+  }
+  return context;
+}
+
+app.get(BASE + '/api/profile/ai-insights/status', requireAuth, requireActivePro('ai_insights'), async (req, res) => {
+  try {
+    const usage = await readAiUsage(req.user.id);
+    res.json({ model: AI_INSIGHTS_MODEL, limit: AI_INSIGHTS_MONTHLY_LIMIT, used: usage.used, remaining: usage.remaining, resetDate: usage.resetDate });
+  } catch (err) {
+    console.log('AI Insights status error:', err.message);
+    res.status(503).json({ error: 'AI Insights is temporarily unavailable' });
+  }
+});
+
+app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_insights'), async (req, res) => {
+  const question = typeof req.body.question === 'string' ? req.body.question.trim() : '';
+  if (!question || question.length > 500) return res.status(400).json({ error: 'invalid_question' });
+  const verifiedHistory = verifyHistoryTurns(SESSION_SECRET, req.user.id, req.body.history);
+  if (requiresAdviceRefusal(question)) {
+    return res.json({
+      answer: AI_INSIGHTS_REFUSAL,
+      evidence: [],
+      limitations: [],
+      historyAccepted: verifiedHistory.length,
+      historyTurn: makeSignedHistoryTurn(SESSION_SECRET, req.user.id, question, AI_INSIGHTS_REFUSAL)
+    });
+  }
+  try {
+    if (!supabaseAdmin) return res.status(503).json({ error: 'AI Insights is temporarily unavailable' });
+    const context = await buildAiInsightsContext(req.user);
+    const usage = await claimAiUsage(req.user.id);
+    if (!usage.allowed) {
+      return res.status(429).json({
+        error: 'ai_insights_limit',
+        limit: AI_INSIGHTS_MONTHLY_LIMIT,
+        used: usage.used,
+        remaining: 0,
+        resetDate: usage.resetDate,
+        message: `You’ve used all ${AI_INSIGHTS_MONTHLY_LIMIT} AI Insights questions for this month. Your limit resets on ${new Date(usage.resetDate + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })}.`
+      });
+    }
+    const response = await getAnthropicClient().messages.create({
+      model: AI_INSIGHTS_MODEL,
+      max_tokens: 8192,
+      system: buildAiInsightsSystemPrompt(),
+      messages: [{
+        role: 'user',
+        content: JSON.stringify({
+          question,
+          history: verifiedHistory,
+          data: context
+        })
+      }]
+    });
+    const text = (response.content || []).filter((block) => block.type === 'text').map((block) => block.text).join('');
+    const validated = validateInsightResponse(text, context);
+    // Validation may deliberately return the exact policy refusal when a model
+    // emits advice despite the prompt. All other rejection modes use fallback.
+    const answer = validated.answer || AI_INSIGHTS_FALLBACK;
+    res.json({
+      answer,
+      evidence: validated.ok ? validated.evidence : [],
+      limitations: validated.ok ? validated.limitations : [],
+      rejectedReason: validated.ok ? undefined : validated.reason,
+      historyAccepted: verifiedHistory.length,
+      historyTurn: makeSignedHistoryTurn(SESSION_SECRET, req.user.id, question, answer),
+      usage: { limit: AI_INSIGHTS_MONTHLY_LIMIT, used: usage.used, remaining: usage.remaining, resetDate: usage.resetDate }
+    });
+  } catch (err) {
+    console.log('AI Insights error:', err.message);
+    res.status(503).json({ error: 'AI Insights is temporarily unavailable' });
   }
 });
 
@@ -14145,6 +14514,7 @@ app.get(BASE + '/api/notifications', requireAuth, async (req, res) => {
     .from('notifications')
     .select('id, user_id, type, title, body, link, read, actor_id, entity_id, created_at')
     .eq('user_id', req.user.id)
+    .neq('type', 'ai_insights_usage')
     .order('created_at', { ascending: false })
     .limit(50);
   if (error) return res.json({ error: error.message });
@@ -14290,6 +14660,7 @@ app.delete(BASE + '/api/notifications/:id', requireAuth, async (req, res) => {
     .delete()
     .eq('id', req.params.id)
     .eq('user_id', req.user.id)
+    .neq('type', 'ai_insights_usage')
     .select('id');
   if (error) return res.status(500).json({ error: 'Could not dismiss the notification' });
   if (!deleted || deleted.length === 0) {
