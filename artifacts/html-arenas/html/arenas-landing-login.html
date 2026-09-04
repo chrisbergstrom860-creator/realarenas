@@ -36,8 +36,12 @@ document.addEventListener('DOMContentLoaded', function(){
 <link rel="preload" as="image" type="image/avif" href="/html/landing-assets/hero-trail-runners-1600.avif" media="(min-width: 1600px), (min-resolution: 2dppx)">
 <link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-mobile-composite-380-2x.avif" media="(max-width: 384px) and (max-resolution: 2.49dppx)">
 <link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-mobile-composite-380-3x.avif" media="(max-width: 384px) and (min-resolution: 2.5dppx)">
-<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-mobile-composite-390-2x.avif" media="(min-width: 385px) and (max-width: 767px) and (max-resolution: 2.49dppx)">
-<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-mobile-composite-390-3x.avif" media="(min-width: 385px) and (max-width: 767px) and (min-resolution: 2.5dppx)">
+<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-mobile-composite-390-2x.avif" media="(min-width: 385px) and (max-width: 430px) and (max-resolution: 2.49dppx)">
+<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-mobile-composite-390-3x.avif" media="(min-width: 385px) and (max-width: 430px) and (min-resolution: 2.5dppx)">
+<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-mobile-composite-600-2x.avif" media="(min-width: 431px) and (max-width: 639px) and (max-resolution: 2.49dppx)">
+<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-mobile-composite-600-3x.avif" media="(min-width: 431px) and (max-width: 639px) and (min-resolution: 2.5dppx)">
+<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-mobile-composite-767-2x.avif" media="(min-width: 640px) and (max-width: 767px) and (max-resolution: 2.49dppx)">
+<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-mobile-composite-767-3x.avif" media="(min-width: 640px) and (max-width: 767px) and (min-resolution: 2.5dppx)">
 <link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-weekly-activity-800.avif" media="(min-width: 768px) and (max-width: 1599px) and (max-resolution: 1.99dppx)">
 <link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-weekly-activity-1600.avif" media="(min-width: 1600px), (min-width: 768px) and (min-resolution: 2dppx)">
 <style>
@@ -428,13 +432,33 @@ html { scroll-behavior: smooth; }
     url("/html/landing-assets/analytics-mobile-composite-380-3x.webp") type("image/webp") 3x
   );
 }
-@media (min-width: 385px) and (max-width: 767px) {
+@media (min-width: 385px) and (max-width: 430px) {
   .analytics-image--mobile {
     background-image: image-set(
       url("/html/landing-assets/analytics-mobile-composite-390-2x.avif") type("image/avif") 2x,
       url("/html/landing-assets/analytics-mobile-composite-390-3x.avif") type("image/avif") 3x,
       url("/html/landing-assets/analytics-mobile-composite-390-2x.webp") type("image/webp") 2x,
       url("/html/landing-assets/analytics-mobile-composite-390-3x.webp") type("image/webp") 3x
+    );
+  }
+}
+@media (min-width: 431px) and (max-width: 639px) {
+  .analytics-image--mobile {
+    background-image: image-set(
+      url("/html/landing-assets/analytics-mobile-composite-600-2x.avif") type("image/avif") 2x,
+      url("/html/landing-assets/analytics-mobile-composite-600-3x.avif") type("image/avif") 3x,
+      url("/html/landing-assets/analytics-mobile-composite-600-2x.webp") type("image/webp") 2x,
+      url("/html/landing-assets/analytics-mobile-composite-600-3x.webp") type("image/webp") 3x
+    );
+  }
+}
+@media (min-width: 640px) and (max-width: 767px) {
+  .analytics-image--mobile {
+    background-image: image-set(
+      url("/html/landing-assets/analytics-mobile-composite-767-2x.avif") type("image/avif") 2x,
+      url("/html/landing-assets/analytics-mobile-composite-767-3x.avif") type("image/avif") 3x,
+      url("/html/landing-assets/analytics-mobile-composite-767-2x.webp") type("image/webp") 2x,
+      url("/html/landing-assets/analytics-mobile-composite-767-3x.webp") type("image/webp") 3x
     );
   }
 }
