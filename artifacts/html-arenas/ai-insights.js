@@ -21,7 +21,8 @@ const NOT_ANSWERABLE_COPY = {
   goal_history_unavailable: "AI Insights includes active goals only, so goal history is unavailable.",
   goal_comparison_unsupported: "AI Insights can describe active goals individually, but it does not support comparisons between goals.",
   goal_projection_unsupported: "AI Insights includes the server-computed on-track status, but it cannot calculate a catch-up projection.",
-  calendar_results_truncated: "Calendar results were capped, so AI Insights cannot answer a question that requires the omitted results."
+  calendar_results_truncated: "Calendar results were capped, so AI Insights cannot answer a question that requires the omitted results.",
+  calendar_month_out_of_range: "Nothing is scheduled that far ahead, so AI Insights cannot tell whether that month is empty."
 };
 
 class AiProviderConfigurationError extends Error {
@@ -361,6 +362,7 @@ function forwardMetricSentence(context, path, value) {
     if (!row || !row.month) return null;
     const month = humanMonthLabel(row.month);
     if (match[2] === 'plannedCount') {
+      if (value === 0) return `You have no planned sessions in ${month}.`;
       return `You have ${value} planned ${countNoun(value, 'session')} left in ${month}.`;
     }
     if (match[2] === 'totalPlannedMinutes') {
@@ -374,6 +376,9 @@ function forwardMetricSentence(context, path, value) {
       context.calendar.events.byMonth && context.calendar.events.byMonth[Number(match[1])];
     if (!row || !row.month) return null;
     const month = humanMonthLabel(row.month);
+    if (match[2] === 'count' && value === 0) {
+      return `You have no events scheduled in ${month}.`;
+    }
     return match[2] === 'count'
       ? `You have ${value} eligible ${countNoun(value, 'event')} in ${month}.`
       : `AI Insights includes ${value} eligible ${countNoun(value, 'event')} in ${month}.`;
@@ -579,6 +584,15 @@ function renderCalendarList(finding, context) {
   }
   const monthIndex = parent.value.byMonth.findIndex((row) => row && row.month === finding.filter.month);
   if (monthIndex < 0) {
+    const lastMonth = parent.value.byMonth.at(-1);
+    if (lastMonth && finding.filter.month > lastMonth.month) {
+      return {
+        error: 'calendar_month_out_of_range',
+        offendingPath: path,
+        filterPresent,
+        filterValid: false
+      };
+    }
     return { error: 'missing_path', offendingPath: path, filterPresent, filterValid: false };
   }
   const summary = parent.value.byMonth[monthIndex];
@@ -597,7 +611,9 @@ function renderCalendarList(finding, context) {
   const monthLabel = humanMonthLabel(finding.filter.month);
   let text;
   if (!total) {
-    text = `You have no ${isPlan ? 'planned sessions left' : 'events'} in ${monthLabel}.`;
+    text = isPlan
+      ? `You have no planned sessions in ${monthLabel}.`
+      : `You have no events scheduled in ${monthLabel}.`;
   } else {
     const lead = total === shown.length
       ? `You have ${total} ${noun}${total === 1 ? '' : 's'}${isPlan ? ' left' : ''} in ${monthLabel}:`
@@ -824,6 +840,16 @@ function validateInsightResponse(raw, context) {
   for (const finding of parsed.findings) {
     const result = renderTypedFinding(finding, context);
     if (result.error) {
+      if (result.error === 'calendar_month_out_of_range') {
+        return {
+          ok: true,
+          notAnswerable: true,
+          notAnswerableReason: 'calendar_month_out_of_range',
+          answer: NOT_ANSWERABLE_COPY.calendar_month_out_of_range,
+          evidence: [],
+          limitations: []
+        };
+      }
       const offendingPath = safeDiagnosticPath(result.offendingPath);
       return {
         ok: false,
@@ -886,11 +912,11 @@ function buildSystemPrompt() {
     '{"type":"plan_adherence","path":"calendar.pastPlanAdherence.N","value":"exact copied object"}',
     '{"type":"goal_projection","path":"goals.active.items.N","value":"exact copied object"}',
     '{"type":"insufficient_trend_data"} only when DATA_JSON.dataQuality.trendEligible is false.',
-    '{"type":"not_answerable","reason":"missing_injury_date|missing_medical_leave_dates|missing_event_date|period_outside_coverage|unsupported_metric|goal_history_unavailable|goal_comparison_unsupported|goal_projection_unsupported|calendar_results_truncated"} must be the only finding, with no limitations, when DATA_JSON lacks the information needed to answer honestly.',
+    '{"type":"not_answerable","reason":"missing_injury_date|missing_medical_leave_dates|missing_event_date|period_outside_coverage|unsupported_metric|goal_history_unavailable|goal_comparison_unsupported|goal_projection_unsupported|calendar_results_truncated|calendar_month_out_of_range"} must be the only finding, with no limitations, when DATA_JSON lacks the information needed to answer honestly.',
     'Use missing_injury_date for before/after injury questions without an injury date; missing_medical_leave_dates for medical-leave-window questions without its dates; missing_event_date for another absent event boundary; period_outside_coverage for calendar detail older than last12Months; unsupported_metric when the requested measurement is not present.',
     'last12Months contains 12 athlete-timezone calendar buckets, oldest first, including zero months. Each month has totals, activeDays, restDays, observedDays, common averages, and active-sport summaries.',
     'last12Weeks.sports contains aggregate sport summaries for the detailed 12-week window. Use these direct paths instead of calculating from weekly or daily rows.',
-    'calendar contains only the athlete’s own future plans, visible eligible future events, and 12 monthly plan-status counts. plannedSessions.total/included cover all future plan records across planned, done, and skipped statuses. plannedSessions.byMonth and events.byMonth contain exact athlete-timezone future month totals computed before the item caps. Use byMonth.plannedCount for sessions left, and use direct byMonth paths for month counts and planned minutes; never derive a month count from items or use the all-future total for one month.',
+    'calendar contains only the athlete’s own future plans, visible eligible future events, and 12 monthly plan-status counts. plannedSessions.total/included cover all future plan records across planned, done, and skipped statuses. Each byMonth collection is contiguous from the current athlete-timezone month through the later of next month or that collection’s last scheduled item, including exact zero buckets computed before the item caps. A zero bucket is known empty and answerable. A requested future month beyond that collection’s last byMonth bucket is unknown; use calendar_month_out_of_range. Use byMonth.plannedCount for sessions left, and use direct byMonth paths for month counts and planned minutes; never derive a month count from items or use the all-future total for one month.',
     'Use calendar_plan_list or calendar_event_list when the user asks what the month’s matching items are. Canonical list findings contain exactly type, path, and filter; omit value and every other key. The server applies the month filter and renders at most 10 items. If the relevant month bucket is truncated, include CALENDAR_RESULTS_TRUNCATED.',
     'goals contains at most five active goals with server-computed progress and on-track status. Goal history, cross-goal comparison, and catch-up projections are unsupported; use their specific not_answerable reasons.',
     '{"type":"policy_refusal","reason":"prescriptive|diet_weight_body|medical|athlete_characterization"} must be the only finding, with no limitations, when the user asks for advice or prescriptions; asks what they should do, eat, increase, decrease, or change; asks for diet, weight, body composition, or medical commentary; or asks you to characterize them as under-training, over-training, lazy, fit, healthy, or similar.',

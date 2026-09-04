@@ -8936,13 +8936,19 @@ async function buildAiInsightsContext(user) {
     ownRsvp: ownRsvpMap.get(event.id) || null
   }));
   const plannedByMonthMap = new Map();
+  const lastPlanMonth = futurePlanRows.reduce((latest, row) => {
+    const month = String(row.date).slice(0, 7);
+    return month > latest ? month : latest;
+  }, currentMonth);
+  const plannedMonthEnd = [shiftMonthKey(currentMonth, 1), lastPlanMonth]
+    .sort((a, b) => a.localeCompare(b)).at(-1);
+  for (let month = currentMonth; month <= plannedMonthEnd; month = shiftMonthKey(month, 1)) {
+    plannedByMonthMap.set(month, {
+      month, plannedCount: 0, totalPlannedMinutes: 0, included: 0, truncated: false
+    });
+  }
   for (const row of futurePlanRows) {
     const month = String(row.date).slice(0, 7);
-    if (!plannedByMonthMap.has(month)) {
-      plannedByMonthMap.set(month, {
-        month, plannedCount: 0, totalPlannedMinutes: 0, included: 0, truncated: false
-      });
-    }
     if (row.status === 'planned') {
       const bucket = plannedByMonthMap.get(month);
       bucket.plannedCount++;
@@ -8956,11 +8962,17 @@ async function buildAiInsightsContext(user) {
   for (const bucket of plannedByMonth) bucket.truncated = bucket.plannedCount > bucket.included;
 
   const eventByMonthMap = new Map();
+  const lastEventMonth = visibleEligibleEvents.reduce((latest, event) => {
+    const month = monthKey(event.date, tz);
+    return month > latest ? month : latest;
+  }, currentMonth);
+  const eventMonthEnd = [shiftMonthKey(currentMonth, 1), lastEventMonth]
+    .sort((a, b) => a.localeCompare(b)).at(-1);
+  for (let month = currentMonth; month <= eventMonthEnd; month = shiftMonthKey(month, 1)) {
+    eventByMonthMap.set(month, { month, count: 0, included: 0, truncated: false });
+  }
   for (const event of visibleEligibleEvents) {
     const month = monthKey(event.date, tz);
-    if (!eventByMonthMap.has(month)) {
-      eventByMonthMap.set(month, { month, count: 0, included: 0, truncated: false });
-    }
     eventByMonthMap.get(month).count++;
   }
   for (const event of includedEvents) eventByMonthMap.get(monthKey(event.date, tz)).included++;

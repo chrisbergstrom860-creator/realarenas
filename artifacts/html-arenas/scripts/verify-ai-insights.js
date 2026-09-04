@@ -51,6 +51,10 @@ function monthLabel(key, withYear = false) {
 }
 const CURRENT_MONTH_KEY = monthKeyInZone(new Date(), TEST_TIMEZONE);
 const CURRENT_MONTH_YEAR_LABEL = monthLabel(CURRENT_MONTH_KEY, true);
+const NEXT_MONTH_KEY = shiftMonth(CURRENT_MONTH_KEY, 1);
+const NEXT_MONTH_YEAR_LABEL = monthLabel(NEXT_MONTH_KEY, true);
+const OUT_OF_RANGE_MONTH_KEY = shiftMonth(CURRENT_MONTH_KEY, 6);
+const OUT_OF_RANGE_MONTH_YEAR_LABEL = monthLabel(OUT_OF_RANGE_MONTH_KEY, true);
 const LAST_MONTH_KEY = shiftMonth(CURRENT_MONTH_KEY, -1);
 const TWO_MONTHS_AGO_KEY = shiftMonth(CURRENT_MONTH_KEY, -2);
 const LAST_MONTH_LABEL = monthLabel(LAST_MONTH_KEY);
@@ -95,6 +99,11 @@ const NOT_ANSWERABLE_CASES = [
     question: 'If my current pace continued, what would my goal progress be by the end of this month?',
     reason: 'goal_projection_unsupported',
     copy: "AI Insights includes the server-computed on-track status, but it cannot calculate a catch-up projection."
+  },
+  {
+    question: `What events do I have in ${OUT_OF_RANGE_MONTH_YEAR_LABEL}?`,
+    reason: 'calendar_month_out_of_range',
+    copy: "Nothing is scheduled that far ahead, so AI Insights cannot tell whether that month is empty."
   }
 ];
 const POLICY_REFUSAL_CASES = [
@@ -261,6 +270,20 @@ function responseFor(envelope) {
         envelope.data,
         `calendar.plannedSessions.byMonth.${index}.plannedCount`
       )],
+      limitations: []
+    };
+  } else if (/zero event month fixture/i.test(question)) {
+    output = {
+      findings: [{
+        type: 'calendar_event_list',
+        path: 'calendar.events.items',
+        filter: { month: NEXT_MONTH_KEY }
+      }],
+      limitations: []
+    };
+  } else if (/zero plan month fixture/i.test(question)) {
+    output = {
+      findings: [realProviderCalendarPlanListFixture(envelope.data, NEXT_MONTH_KEY)],
       limitations: []
     };
   } else if (/mismatched/i.test(question)) {
@@ -511,8 +534,8 @@ async function cleanup() {
   let browser;
   try {
     writeManifest();
-    check('verification matrix contains exactly 27 preserved-and-extended questions',
-      ANSWERABLE_QUESTIONS.length + NOT_ANSWERABLE_CASES.length + POLICY_REFUSAL_CASES.length === 27,
+    check('verification matrix contains exactly 28 preserved-and-extended questions',
+      ANSWERABLE_QUESTIONS.length + NOT_ANSWERABLE_CASES.length + POLICY_REFUSAL_CASES.length === 28,
       JSON.stringify({
         answerable: ANSWERABLE_QUESTIONS.length,
         notAnswerable: NOT_ANSWERABLE_CASES.length,
@@ -808,6 +831,37 @@ async function cleanup() {
       privacyCapture.envelope.data.goals.active.included === 1 &&
       privacyCapture.envelope.data.goals.active.total === 1,
       JSON.stringify({ calendar: privacyCapture.envelope.data.calendar, goals: privacyCapture.envelope.data.goals }));
+    const nextPlanMonth = privacyCapture.envelope.data.calendar.plannedSessions.byMonth
+      .find((row) => row.month === NEXT_MONTH_KEY);
+    const nextEventMonth = privacyCapture.envelope.data.calendar.events.byMonth
+      .find((row) => row.month === NEXT_MONTH_KEY);
+    check('future calendar collections fill current and next month with honest zeros',
+      privacyCapture.envelope.data.calendar.plannedSessions.byMonth.length === 2 &&
+      privacyCapture.envelope.data.calendar.events.byMonth.length === 2 &&
+      nextPlanMonth && nextPlanMonth.plannedCount === 0 &&
+      nextPlanMonth.totalPlannedMinutes === 0 &&
+      nextPlanMonth.included === 0 &&
+      nextPlanMonth.truncated === false &&
+      nextEventMonth && nextEventMonth.count === 0 &&
+      nextEventMonth.included === 0 &&
+      nextEventMonth.truncated === false,
+      JSON.stringify(privacyCapture.envelope.data.calendar));
+    const zeroEventMonth = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+      question: 'Return the zero event month fixture.',
+      history: []
+    });
+    check('zero-event month renders the server-owned no-events sentence',
+      zeroEventMonth.status === 200 &&
+      zeroEventMonth.body.answer === `You have no events scheduled in ${NEXT_MONTH_YEAR_LABEL}.`,
+      JSON.stringify(zeroEventMonth.body));
+    const zeroPlanMonth = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+      question: 'Return the zero plan month fixture.',
+      history: []
+    });
+    check('zero-session month renders the server-owned no-sessions sentence',
+      zeroPlanMonth.status === 200 &&
+      zeroPlanMonth.body.answer === `You have no planned sessions in ${NEXT_MONTH_YEAR_LABEL}.`,
+      JSON.stringify(zeroPlanMonth.body));
     check('goal projection contains only the approved non-free-text fields',
       JSON.stringify(Object.keys(privacyCapture.envelope.data.goals.active.items[0]).sort()) === JSON.stringify([
         'isComplete', 'onTrack', 'period', 'progress', 'sport', 'target', 'type', 'windowEnd', 'windowStart'
@@ -846,6 +900,26 @@ async function cleanup() {
     const heavyCapture = captured[captured.length - 1];
     const heavySerialized = JSON.stringify(heavyCapture.body);
     console.log(`  info heavy capped serialized provider request: ${heavySerialized.length} JSON characters (~${Math.ceil(heavySerialized.length / 4)} estimated input tokens)`);
+    const heavyMonthPayload = {
+      plannedSessions: heavyCapture.envelope.data.calendar.plannedSessions.byMonth,
+      events: heavyCapture.envelope.data.calendar.events.byMonth
+    };
+    const heavyMonthPayloadWithoutFilledZeros = {
+      plannedSessions: heavyMonthPayload.plannedSessions.filter((row) =>
+        row.plannedCount !== 0 || row.totalPlannedMinutes !== 0 || row.included !== 0),
+      events: heavyMonthPayload.events.filter((row) => row.count !== 0 || row.included !== 0)
+    };
+    const filledMonthCharacters = JSON.stringify(heavyMonthPayload).length -
+      JSON.stringify(heavyMonthPayloadWithoutFilledZeros).length;
+    const maximumFilledMonths = Math.max(
+      heavyMonthPayload.plannedSessions.length,
+      heavyMonthPayload.events.length
+    );
+    console.log(`  info heavy fixture fills at most ${maximumFilledMonths} calendar months; zero-filled buckets add ${filledMonthCharacters} JSON characters (~${Math.ceil(filledMonthCharacters / 4)} estimated input tokens)`);
+    check('heavy fixture month fill stays bounded and its token cost is measured',
+      maximumFilledMonths >= 2 &&
+      filledMonthCharacters > 0,
+      JSON.stringify({ maximumFilledMonths, filledMonthCharacters, heavyMonthPayload }));
     check('heavy calendar fixture is capped with honest totals and no private fields',
       heavyResult.status === 200 &&
       heavyCapture.envelope.data.calendar.plannedSessions.included === 100 &&

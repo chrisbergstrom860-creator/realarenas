@@ -284,7 +284,67 @@ test('same-month count metrics are deduplicated only when their matching list re
   }, differentMonthContext);
   assert.equal(differentMonth.ok, true);
   assert.match(differentMonth.answer, /You have 3 planned sessions left in September 2026\./);
-  assert.match(differentMonth.answer, /You have no planned sessions left in October 2026\./);
+  assert.match(differentMonth.answer, /You have no planned sessions in October 2026\./);
+});
+
+test('zero calendar months render honest empty answers for lists and count metrics', () => {
+  const zeroMonthContext = {
+    ...context,
+    calendar: {
+      ...context.calendar,
+      plannedSessions: {
+        ...context.calendar.plannedSessions,
+        byMonth: [
+          ...context.calendar.plannedSessions.byMonth,
+          { month: '2026-10', plannedCount: 0, totalPlannedMinutes: 0, included: 0, truncated: false }
+        ]
+      },
+      events: {
+        ...context.calendar.events,
+        byMonth: [
+          ...context.calendar.events.byMonth,
+          { month: '2026-10', count: 0, included: 0, truncated: false }
+        ]
+      }
+    }
+  };
+  const lists = validateInsightResponse({
+    findings: [
+      { type: 'calendar_event_list', path: 'calendar.events.items', filter: { month: '2026-10' } },
+      { type: 'calendar_plan_list', path: 'calendar.plannedSessions.items', filter: { month: '2026-10' } }
+    ],
+    limitations: []
+  }, zeroMonthContext);
+  assert.equal(lists.ok, true);
+  assert.equal(lists.answer,
+    'You have no events scheduled in October 2026. You have no planned sessions in October 2026.');
+
+  const counts = validateInsightResponse({
+    findings: [
+      { type: 'metric', path: 'calendar.events.byMonth.1.count', value: 0 },
+      { type: 'metric', path: 'calendar.plannedSessions.byMonth.1.plannedCount', value: 0 }
+    ],
+    limitations: []
+  }, zeroMonthContext);
+  assert.equal(counts.ok, true);
+  assert.equal(counts.answer,
+    'You have no events scheduled in October 2026. You have no planned sessions in October 2026.');
+});
+
+test('calendar list months beyond the filled range are not answerable rather than known empty', () => {
+  const result = validateInsightResponse({
+    findings: [{
+      type: 'calendar_event_list',
+      path: 'calendar.events.items',
+      filter: { month: '2027-03' }
+    }],
+    limitations: []
+  }, context);
+  assert.equal(result.ok, true);
+  assert.equal(result.notAnswerable, true);
+  assert.equal(result.notAnswerableReason, 'calendar_month_out_of_range');
+  assert.equal(result.answer, NOT_ANSWERABLE_COPY.calendar_month_out_of_range);
+  assert.deepEqual(result.evidence, []);
 });
 
 test('bounded month lists are selected and written entirely by the server', () => {
@@ -344,7 +404,7 @@ test('list findings reject arbitrary extra keys and months absent from byMonth w
     findings: [{
       type: 'calendar_plan_list',
       path: 'calendar.plannedSessions.items',
-      filter: { month: '2026-10' }
+      filter: { month: '2026-08' }
     }],
     limitations: []
   }, context);
