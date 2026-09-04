@@ -14668,6 +14668,18 @@ app.post(BASE + '/auth/join/:token/existing', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Could not join club' });
   }
 });
+const LANDING_ASSET_FILES = new Set([
+  'hero-trail-runners-800.avif',
+  'hero-trail-runners-800.webp',
+  'hero-trail-runners-1600.avif',
+  'hero-trail-runners-1600.webp'
+]);
+app.get(['/html/landing-assets/:file', '/landing-assets/:file'], (req, res) => {
+  if (!LANDING_ASSET_FILES.has(req.params.file)) return res.status(404).end();
+  if (process.env.NODE_ENV === 'production') res.set('Cache-Control', 'public, max-age=86400');
+  res.type(req.params.file.endsWith('.avif') ? 'image/avif' : 'image/webp');
+  res.sendFile(path.join(HTML, 'landing-assets', req.params.file));
+});
 app.get(BASE + '/landing', (req, res) => res.sendFile(path.join(HTML, 'arenas-landing-login.html')));
 // ── NOTIFICATIONS API ──
 // List the viewer's 50 most recent notifications with actor display info and an
