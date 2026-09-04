@@ -16,7 +16,11 @@ const NOT_ANSWERABLE_COPY = {
   missing_medical_leave_dates: "Your recorded data does not include the start and end dates of your medical leave, so I can’t answer questions about activity during it.",
   missing_event_date: "Your recorded data does not include the date of the event needed to answer that question.",
   period_outside_coverage: "Detailed calendar totals are available for the last 12 months, so the requested period is outside the available coverage.",
-  unsupported_metric: "Your recorded data does not include the measurement needed to answer that question."
+  unsupported_metric: "Your recorded data does not include the measurement needed to answer that question.",
+  goal_history_unavailable: "AI Insights includes active goals only, so goal history is unavailable.",
+  goal_comparison_unsupported: "AI Insights can describe active goals individually, but it does not support comparisons between goals.",
+  goal_projection_unsupported: "AI Insights includes the server-computed on-track status, but it cannot calculate a catch-up projection.",
+  calendar_results_truncated: "Calendar results were capped, so AI Insights cannot answer a question that requires the omitted results."
 };
 
 class AiProviderConfigurationError extends Error {
@@ -117,7 +121,7 @@ function valueAtPath(root, path) {
 
 function safeDiagnosticPath(path) {
   const tokens = tokenizePath(path);
-  if (!tokens || !['allTime', 'last12Weeks', 'last12Months', 'coverage', 'standings', 'dataQuality'].includes(tokens[0])) return null;
+  if (!tokens || !['allTime', 'last12Weeks', 'last12Months', 'coverage', 'standings', 'dataQuality', 'calendar', 'goals'].includes(tokens[0])) return null;
   const allowed = new Set([
     'allTime', 'last12Weeks', 'last12Months', 'coverage', 'standings', 'dataQuality',
     'activityCount', 'sessions', 'durationHours', 'distanceKm', 'points', 'sports',
@@ -127,7 +131,11 @@ function safeDiagnosticPath(path) {
     'personalRecords', 'firstActivityDate', 'lastActivityDate', 'daily', 'weekly',
     'date', 'weekStart', 'platform', 'clubs', 'month', 'rank', 'totalRanked',
     'activeWeeksInDetailedWindow', 'trendMinimumActivities', 'trendMinimumActiveWeeks',
-    'trendEligible'
+    'trendEligible', 'calendar', 'goals', 'plannedSessions', 'events', 'pastPlanAdherence',
+    'items', 'included', 'total', 'truncated', 'stillPlanned', 'done', 'skipped',
+    'plannedDuration', 'status', 'title', 'type', 'clubName', 'ownRsvp', 'active',
+    'target', 'progress', 'value', 'unit', 'period', 'percent', 'onTrack',
+    'isComplete', 'windowStart', 'windowEnd', 'limitations'
   ]);
   return tokens.every((token) => /^\d+$/.test(token) || allowed.has(token)) ? tokens.join('.') : null;
 }
@@ -386,6 +394,33 @@ function renderTypedFinding(finding, context) {
       evidence: [evidenceItem(path, actual.value)]
     };
   }
+  if (finding.type === 'calendar_plan' || finding.type === 'calendar_event' ||
+      finding.type === 'plan_adherence' || finding.type === 'goal_projection') {
+    if (JSON.stringify(Object.keys(finding).sort()) !== JSON.stringify(['path', 'type', 'value'])) return { error: 'invalid_finding' };
+    const path = normalizePath(finding.path);
+    const patterns = {
+      calendar_plan: /^calendar\.plannedSessions\.items\.\d+$/,
+      calendar_event: /^calendar\.events\.items\.\d+$/,
+      plan_adherence: /^calendar\.pastPlanAdherence\.\d+$/,
+      goal_projection: /^goals\.active\.items\.\d+$/
+    };
+    if (!patterns[finding.type].test(path)) return { error: 'unsupported_path', offendingPath: path };
+    const actual = valueAtPath(context, path);
+    if (!actual.found || !actual.value || typeof actual.value !== 'object') return { error: 'missing_path', offendingPath: path };
+    if (!equalEvidenceValue(actual.value, finding.value)) return { error: 'mismatched_value', offendingPath: path };
+    let text;
+    if (finding.type === 'calendar_plan') {
+      text = `Your planned session is ${actual.value.title || actual.value.sport} on ${actual.value.date}, with ${actual.value.plannedDuration || 'no planned duration'} (${actual.value.status}).`;
+    } else if (finding.type === 'calendar_event') {
+      text = `${actual.value.title} is on ${actual.value.date}${actual.value.clubName ? ` with ${actual.value.clubName}` : ''}; your RSVP is ${actual.value.ownRsvp || 'none'}.`;
+    } else if (finding.type === 'plan_adherence') {
+      text = `In ${actual.value.month}, your plans were ${actual.value.done} done, ${actual.value.skipped} skipped, and ${actual.value.stillPlanned} still planned.`;
+    } else {
+      const goal = actual.value;
+      text = `Your active ${goal.sport || 'all-sport'} ${goal.type} goal is ${goal.progress.value} of ${goal.target.value}${goal.target.unit ? ` ${goal.target.unit}` : ''} for the ${goal.period} period, and is ${goal.isComplete ? 'complete' : goal.onTrack ? 'on track' : 'not on track'}.`;
+    }
+    return { text, evidence: [evidenceItem(path, actual.value)] };
+  }
   if (finding.type === 'insufficient_trend_data') {
     if (Object.keys(finding).length !== 1) return { error: 'invalid_finding' };
     if (context.dataQuality && context.dataQuality.trendEligible) return { error: 'invalid_limitation' };
@@ -465,6 +500,7 @@ function validateInsightResponse(raw, context) {
     DETAILED_WINDOW_12_WEEKS: 'Day-by-day and week-by-week detail is limited to the last 12 weeks.',
     STANDINGS_UNAVAILABLE: 'Standings are unavailable because leaderboard visibility is off or no eligible rank exists.',
     CAUSE_NOT_AVAILABLE: 'The logged data can describe what changed, but it cannot establish why it changed.',
+    CALENDAR_RESULTS_TRUNCATED: 'Calendar results were capped, so additional matching plans or events are not included.',
   };
   const limitations = [];
   for (const code of parsed.limitations) {
@@ -472,6 +508,15 @@ function validateInsightResponse(raw, context) {
       return { ok: false, answer: FALLBACK_COPY, reason: 'invalid_limitation' };
     }
     if (!limitations.includes(allowedLimitations[code])) limitations.push(allowedLimitations[code]);
+  }
+  const calendarWasTruncated = !!(
+    context.calendar &&
+    ((context.calendar.plannedSessions && context.calendar.plannedSessions.truncated) ||
+      (context.calendar.events && context.calendar.events.truncated))
+  );
+  if (calendarWasTruncated &&
+      !limitations.includes(allowedLimitations.CALENDAR_RESULTS_TRUNCATED)) {
+    limitations.push(allowedLimitations.CALENDAR_RESULTS_TRUNCATED);
   }
   return {
     ok: true,
@@ -491,17 +536,23 @@ function buildSystemPrompt() {
     '{"type":"comparison","leftPath":"numeric-leaf","leftValue":0,"rightPath":"same-metric numeric-leaf","rightValue":0}',
     '{"type":"standing","path":"standings.platform.month or standings.clubs.N.month","value":"exact copied object"}',
     '{"type":"personal_record","path":"allTime.personalRecords.N","value":"exact copied object"}',
+    '{"type":"calendar_plan","path":"calendar.plannedSessions.items.N","value":"exact copied object"}',
+    '{"type":"calendar_event","path":"calendar.events.items.N","value":"exact copied object"}',
+    '{"type":"plan_adherence","path":"calendar.pastPlanAdherence.N","value":"exact copied object"}',
+    '{"type":"goal_projection","path":"goals.active.items.N","value":"exact copied object"}',
     '{"type":"insufficient_trend_data"} only when DATA_JSON.dataQuality.trendEligible is false.',
-    '{"type":"not_answerable","reason":"missing_injury_date|missing_medical_leave_dates|missing_event_date|period_outside_coverage|unsupported_metric"} must be the only finding, with no limitations, when DATA_JSON lacks the information needed to answer honestly.',
+    '{"type":"not_answerable","reason":"missing_injury_date|missing_medical_leave_dates|missing_event_date|period_outside_coverage|unsupported_metric|goal_history_unavailable|goal_comparison_unsupported|goal_projection_unsupported|calendar_results_truncated"} must be the only finding, with no limitations, when DATA_JSON lacks the information needed to answer honestly.',
     'Use missing_injury_date for before/after injury questions without an injury date; missing_medical_leave_dates for medical-leave-window questions without its dates; missing_event_date for another absent event boundary; period_outside_coverage for calendar detail older than last12Months; unsupported_metric when the requested measurement is not present.',
     'last12Months contains 12 athlete-timezone calendar buckets, oldest first, including zero months. Each month has totals, activeDays, restDays, observedDays, common averages, and active-sport summaries.',
     'last12Weeks.sports contains aggregate sport summaries for the detailed 12-week window. Use these direct paths instead of calculating from weekly or daily rows.',
+    'calendar contains only the athlete’s own future plans, visible eligible future events, and 12 monthly plan-status counts. If either calendar list is truncated, include CALENDAR_RESULTS_TRUNCATED.',
+    'goals contains at most five active goals with server-computed progress and on-track status. Goal history, cross-goal comparison, and catch-up projections are unsupported; use their specific not_answerable reasons.',
     '{"type":"policy_refusal","reason":"prescriptive|diet_weight_body|medical|athlete_characterization"} must be the only finding, with no limitations, when the user asks for advice or prescriptions; asks what they should do, eat, increase, decrease, or change; asks for diet, weight, body composition, or medical commentary; or asks you to characterize them as under-training, over-training, lazy, fit, healthy, or similar.',
     'Do not policy-refuse a descriptive question merely because it mentions workouts, training, rest days, routines, weight training, rides, injuries, medical leave, diet, nutrition, calories, or weight in a historical or recorded-data context.',
     'For policy refusals, return only the typed policy_refusal finding. Never write refusal or advice prose.',
     'For not-answerable results, return only the typed not_answerable finding. Never substitute an unrelated metric.',
     'Do not use comparison when dataQuality.trendEligible is false.',
-    'Limitations may contain only: INSUFFICIENT_TREND_DATA, DETAILED_WINDOW_12_WEEKS, STANDINGS_UNAVAILABLE, CAUSE_NOT_AVAILABLE.',
+    'Limitations may contain only: INSUFFICIENT_TREND_DATA, DETAILED_WINDOW_12_WEEKS, STANDINGS_UNAVAILABLE, CAUSE_NOT_AVAILABLE, CALENDAR_RESULTS_TRUNCATED.',
     'Return JSON only: {"findings":[...],"limitations":["CODE"]}.'
   ].join('\n');
 }

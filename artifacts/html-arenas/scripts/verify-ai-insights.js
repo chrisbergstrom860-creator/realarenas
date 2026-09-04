@@ -13,6 +13,7 @@ const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVIC
 const nonce = Date.now().toString(36);
 const users = {};
 let clubId = null;
+let foreignClubId = null;
 let subscriptionId = null;
 let failures = 0;
 const captured = [];
@@ -62,7 +63,10 @@ const ANSWERABLE_QUESTIONS = [
   'How many hours of weight training did I record last month?',
   'How did my training routine change over the last 12 weeks?',
   `What was my average ride distance in ${LAST_MONTH_LABEL}?`,
-  'What percentage of my recorded training was running?'
+  'What percentage of my recorded training was running?',
+  'What is my next planned session?',
+  'What events do I have this month?',
+  'Is my cycling goal on track?'
 ];
 const NOT_ANSWERABLE_CASES = [
   {
@@ -74,6 +78,21 @@ const NOT_ANSWERABLE_CASES = [
     question: 'How many activities did I record during my medical leave?',
     reason: 'missing_medical_leave_dates',
     copy: "Your recorded data does not include the start and end dates of your medical leave, so I can’t answer questions about activity during it."
+  },
+  {
+    question: 'List every future calendar result, including results beyond the cap.',
+    reason: 'calendar_results_truncated',
+    copy: "Calendar results were capped, so AI Insights cannot answer a question that requires the omitted results."
+  },
+  {
+    question: 'How were my goals doing last week?',
+    reason: 'goal_history_unavailable',
+    copy: "AI Insights includes active goals only, so goal history is unavailable."
+  },
+  {
+    question: 'How much must I do each day to catch up on my goal?',
+    reason: 'goal_projection_unsupported',
+    copy: "AI Insights includes the server-computed on-track status, but it cannot calculate a catch-up projection."
   }
 ];
 const POLICY_REFUSAL_CASES = [
@@ -107,6 +126,7 @@ function writeManifest() {
   fs.writeFileSync(MANIFEST, JSON.stringify({
     users: Object.fromEntries(Object.entries(users).map(([key, value]) => [key, value.id])),
     clubId,
+    foreignClubId,
     subscriptionId
   }, null, 2));
 }
@@ -307,6 +327,18 @@ function findingsForAnswerableQuestion(question, data) {
     const sportIndex = data.allTime.sports.findIndex((row) => row.sport === 'running');
     return [metricFinding(data, `allTime.sports.${sportIndex}.percentSessions`)];
   }
+  if (question === 'What is my next planned session?') {
+    return [{ type: 'calendar_plan', path: 'calendar.plannedSessions.items.0', value: data.calendar.plannedSessions.items[0] }];
+  }
+  if (question === 'What events do I have this month?') {
+    const index = data.calendar.events.items.findIndex((event) =>
+      monthKeyInZone(new Date(event.date), TEST_TIMEZONE) === CURRENT_MONTH_KEY);
+    return [{ type: 'calendar_event', path: `calendar.events.items.${index}`, value: data.calendar.events.items[index] }];
+  }
+  if (question === 'Is my cycling goal on track?') {
+    const index = data.goals.active.items.findIndex((goal) => goal.sport === 'cycling');
+    return [{ type: 'goal_projection', path: `goals.active.items.${index}`, value: data.goals.active.items[index] }];
+  }
   throw new Error('No answerable fixture response for: ' + question);
 }
 
@@ -408,12 +440,20 @@ async function cleanup() {
   const ids = Object.values(users).map((user) => user.id);
   if (ids.length) {
     await must('cleanup activities', admin.from('activities').delete().in('user_id', ids));
+    await must('cleanup plans', admin.from('planned_sessions').delete().in('user_id', ids));
+    await must('cleanup goals', admin.from('goals').delete().in('user_id', ids));
+    await must('cleanup rsvps', admin.from('event_rsvps').delete().in('user_id', ids));
+    await must('cleanup events', admin.from('events').delete().in('created_by', ids));
     await must('cleanup notifications', admin.from('notifications').delete().in('user_id', ids));
   }
   if (subscriptionId) await must('cleanup subscription', admin.from('subscriptions').delete().eq('id', subscriptionId));
   if (clubId) {
     await must('cleanup memberships', admin.from('memberships').delete().eq('club_id', clubId));
     await must('cleanup club', admin.from('clubs').delete().eq('id', clubId));
+  }
+  if (foreignClubId) {
+    await must('cleanup foreign memberships', admin.from('memberships').delete().eq('club_id', foreignClubId));
+    await must('cleanup foreign club', admin.from('clubs').delete().eq('id', foreignClubId));
   }
   for (const user of Object.values(users)) await must('cleanup user ' + user.id, admin.auth.admin.deleteUser(user.id));
   if (fs.existsSync(MANIFEST)) fs.unlinkSync(MANIFEST);
@@ -425,6 +465,13 @@ async function cleanup() {
   let browser;
   try {
     writeManifest();
+    check('verification matrix contains exactly 26 preserved-and-extended questions',
+      ANSWERABLE_QUESTIONS.length + NOT_ANSWERABLE_CASES.length + POLICY_REFUSAL_CASES.length === 26,
+      JSON.stringify({
+        answerable: ANSWERABLE_QUESTIONS.length,
+        notAnswerable: NOT_ANSWERABLE_CASES.length,
+        policyRefusal: POLICY_REFUSAL_CASES.length
+      }));
     await makeUser('pro', 'AI Pro Subject Sentinel', {});
     await makeUser('free', 'AI Free Sentinel', {});
     await makeUser('trainingOptout', 'NEVER_MODEL_TRAINING_OPTOUT_SENTINEL', { club_training_analytics_visible: false });
@@ -441,6 +488,19 @@ async function cleanup() {
       visibility: 'private'
     }).select('id').single());
     clubId = club.id;
+    writeManifest();
+
+    const foreignClub = await must('create foreign club', admin.from('clubs').insert({
+      owner_id: users.free.id,
+      name: 'FOREIGN_CLUB_NAME_SENTINEL_' + nonce,
+      handle: ('ai-foreign-' + nonce).slice(0, 20),
+      sport: 'cycling',
+      city: 'Seattle',
+      headline: 'Foreign fixture',
+      description: 'FOREIGN_CLUB_DESCRIPTION_SENTINEL',
+      visibility: 'private'
+    }).select('id').single());
+    foreignClubId = foreignClub.id;
     writeManifest();
 
     await must('create memberships', admin.from('memberships').insert([
@@ -505,6 +565,59 @@ async function cleanup() {
     });
     await must('create activities', admin.from('activities').insert(activityRows));
 
+    const future = new Date(Date.now() + 3600000).toISOString();
+    const futureDay = dayKeyInZone(new Date(future), TEST_TIMEZONE);
+    await must('create calendar plans', admin.from('planned_sessions').insert([
+      {
+        user_id: users.pro.id, date: futureDay, sport: 'running',
+        title: 'NEXT_PLAN_ALLOWED_TITLE', planned_duration: '45m',
+        notes: 'PLAN_NOTES_MUST_NOT_REACH_PROVIDER', status: 'planned'
+      },
+      {
+        user_id: users.free.id, date: futureDay, sport: 'cycling',
+        title: 'OTHER_USER_PLAN_MUST_NOT_REACH_PROVIDER', planned_duration: '9h',
+        notes: 'OTHER_USER_PLAN_NOTES_SENTINEL', status: 'planned'
+      }
+    ]));
+    await must('create cycling goal', admin.from('goals').insert({
+      user_id: users.pro.id, type: 'distance', sport: 'cycling', target_value: 100,
+      unit: 'km', period: 'monthly', status: 'active'
+    }));
+    const eventRows = await must('create calendar events', admin.from('events').insert([
+      {
+        created_by: users.pro.id, club_id: clubId, title: 'MEMBER_CLUB_EVENT_ALLOWED',
+        sport: 'running', event_type: 'group_run', date: future, visibility: 'club',
+        location: 'EVENT_LOCATION_MUST_NOT_REACH_PROVIDER',
+        description: 'EVENT_DESCRIPTION_MUST_NOT_REACH_PROVIDER'
+      },
+      {
+        created_by: users.free.id, title: 'OWN_RSVP_PUBLIC_EVENT_ALLOWED',
+        sport: 'cycling', event_type: 'ride', date: future, visibility: 'public',
+        location: 'RSVP_EVENT_LOCATION_MUST_NOT_REACH_PROVIDER',
+        description: 'RSVP_EVENT_DESCRIPTION_MUST_NOT_REACH_PROVIDER'
+      },
+      {
+        created_by: users.free.id, title: 'PUBLIC_NO_RSVP_MUST_NOT_REACH_PROVIDER',
+        sport: 'running', event_type: 'race', date: future, visibility: 'public',
+        location: 'PUBLIC_NO_RSVP_LOCATION_SENTINEL'
+      },
+      {
+        created_by: users.free.id, club_id: foreignClubId, title: 'FOREIGN_CLUB_EVENT_MUST_NOT_REACH_PROVIDER',
+        sport: 'cycling', event_type: 'ride', date: future, visibility: 'club',
+        location: 'FOREIGN_CLUB_LOCATION_SENTINEL'
+      },
+      {
+        created_by: users.free.id, title: 'PRIVATE_EVENT_MUST_NOT_REACH_PROVIDER',
+        sport: 'running', event_type: 'meetup', date: future, visibility: 'private',
+        location: 'PRIVATE_EVENT_LOCATION_SENTINEL'
+      }
+    ]).select('id, title'));
+    const eventId = (title) => eventRows.find((row) => row.title === title).id;
+    await must('create calendar rsvps', admin.from('event_rsvps').insert([
+      { event_id: eventId('OWN_RSVP_PUBLIC_EVENT_ALLOWED'), user_id: users.pro.id, status: 'going' },
+      { event_id: eventId('MEMBER_CLUB_EVENT_ALLOWED'), user_id: users.trainingOptout.id, status: 'going' }
+    ]));
+
     stub = await startStub();
     app = startApp();
     await app.ready;
@@ -522,10 +635,11 @@ async function cleanup() {
     });
     check('Pro comparison request succeeds through captured provider', privacyResult.status === 200 && !!privacyResult.body.historyTurn, JSON.stringify(privacyResult));
     const privacyCapture = captured[captured.length - 1];
-    const serializedPayload = JSON.stringify(privacyCapture.envelope);
+    const serializedPayload = JSON.stringify(privacyCapture.body);
     const hybridContextChars = JSON.stringify(privacyCapture.envelope.data).length;
     const legacyContextChars = JSON.stringify(legacyContextProjection(privacyCapture.envelope.data)).length;
     const addedContextChars = hybridContextChars - legacyContextChars;
+    console.log(`  info realistic serialized provider request: ${serializedPayload.length} JSON characters (~${Math.ceil(serializedPayload.length / 4)} estimated input tokens)`);
     console.log(`  info hybrid context adds ${addedContextChars} JSON characters (~${Math.ceil(addedContextChars / 4)} estimated input tokens for this fixture)`);
     check('hybrid context stays within the expected incremental token budget',
       addedContextChars > 0 && addedContextChars < 12000,
@@ -537,7 +651,7 @@ async function cleanup() {
       privacyCapture.body.system);
     check('actual model payload contains the allowlisted data object', !!privacyCapture.envelope.data && privacyCapture.envelope.data.allTime.activityCount === 8, serializedPayload);
     check('actual model payload has 12 timezone-calendar month buckets including zero months',
-      privacyCapture.envelope.data.schemaVersion === 2 &&
+      privacyCapture.envelope.data.schemaVersion === 3 &&
       privacyCapture.envelope.data.last12Months.length === 12 &&
       privacyCapture.envelope.data.last12Months.every((month) =>
         JSON.stringify(Object.keys(month).sort()) === JSON.stringify([
@@ -598,8 +712,80 @@ async function cleanup() {
       !serializedPayload.includes('NEVER_MODEL_LEADERBOARD_HIDDEN_ACTIVITY') &&
       !serializedPayload.includes('999'),
       serializedPayload);
-    check('actual model payload contains no raw activity title or user id fields',
-      !/"title"|"userId"|"email"|"notes"/.test(serializedPayload), serializedPayload);
+    check('actual model payload contains only approved calendar records and fields',
+      serializedPayload.includes('NEXT_PLAN_ALLOWED_TITLE') &&
+      serializedPayload.includes('MEMBER_CLUB_EVENT_ALLOWED') &&
+      serializedPayload.includes('OWN_RSVP_PUBLIC_EVENT_ALLOWED') &&
+      !serializedPayload.includes('OTHER_USER_PLAN_MUST_NOT_REACH_PROVIDER') &&
+      !serializedPayload.includes('PUBLIC_NO_RSVP_MUST_NOT_REACH_PROVIDER') &&
+      !serializedPayload.includes('FOREIGN_CLUB_EVENT_MUST_NOT_REACH_PROVIDER') &&
+      !serializedPayload.includes('PRIVATE_EVENT_MUST_NOT_REACH_PROVIDER') &&
+      !serializedPayload.includes(users.trainingOptout.id) &&
+      !serializedPayload.includes('PLAN_NOTES_MUST_NOT_REACH_PROVIDER') &&
+      !serializedPayload.includes('EVENT_LOCATION_MUST_NOT_REACH_PROVIDER') &&
+      !serializedPayload.includes('EVENT_DESCRIPTION_MUST_NOT_REACH_PROVIDER') &&
+      !/"userId"|"email"|"notes"|"description"|"location"/.test(serializedPayload),
+      serializedPayload);
+    check('calendar and goal counts are honest for realistic fixture',
+      privacyCapture.envelope.data.calendar.plannedSessions.included === 1 &&
+      privacyCapture.envelope.data.calendar.plannedSessions.total === 1 &&
+      privacyCapture.envelope.data.calendar.plannedSessions.truncated === false &&
+      privacyCapture.envelope.data.calendar.events.included === 2 &&
+      privacyCapture.envelope.data.calendar.events.total === 2 &&
+      privacyCapture.envelope.data.calendar.events.truncated === false &&
+      privacyCapture.envelope.data.goals.active.included === 1 &&
+      privacyCapture.envelope.data.goals.active.total === 1,
+      JSON.stringify({ calendar: privacyCapture.envelope.data.calendar, goals: privacyCapture.envelope.data.goals }));
+    check('goal projection contains only the approved non-free-text fields',
+      JSON.stringify(Object.keys(privacyCapture.envelope.data.goals.active.items[0]).sort()) === JSON.stringify([
+        'isComplete', 'onTrack', 'period', 'progress', 'sport', 'target', 'type', 'windowEnd', 'windowStart'
+      ]),
+      JSON.stringify(privacyCapture.envelope.data.goals.active.items[0]));
+
+    const heavyPlans = Array.from({ length: 100 }, (_, index) => ({
+      user_id: users.pro.id,
+      date: futureDay,
+      sport: 'running',
+      title: `CAPPED_PLAN_${String(index).padStart(3, '0')}`,
+      planned_duration: '30m',
+      notes: `CAPPED_PLAN_NOTE_MUST_NOT_REACH_${index}`,
+      status: 'planned'
+    }));
+    await must('create capped plans', admin.from('planned_sessions').insert(heavyPlans));
+    const heavyEvents = Array.from({ length: 50 }, (_, index) => ({
+      created_by: users.pro.id,
+      club_id: clubId,
+      title: `CAPPED_EVENT_${String(index).padStart(3, '0')}`,
+      sport: 'running',
+      event_type: 'group_run',
+      date: new Date(Date.now() + (index + 2) * 3600000).toISOString(),
+      visibility: 'club',
+      location: `CAPPED_EVENT_LOCATION_MUST_NOT_REACH_${index}`,
+      description: `CAPPED_EVENT_DESCRIPTION_MUST_NOT_REACH_${index}`
+    }));
+    await must('create capped events', admin.from('events').insert(heavyEvents));
+    const heavyResult = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+      question: 'Measure the heavy capped calendar fixture.',
+      history: []
+    });
+    const heavyCapture = captured[captured.length - 1];
+    const heavySerialized = JSON.stringify(heavyCapture.body);
+    console.log(`  info heavy capped serialized provider request: ${heavySerialized.length} JSON characters (~${Math.ceil(heavySerialized.length / 4)} estimated input tokens)`);
+    check('heavy calendar fixture is capped with honest totals and no private fields',
+      heavyResult.status === 200 &&
+      heavyCapture.envelope.data.calendar.plannedSessions.included === 100 &&
+      heavyCapture.envelope.data.calendar.plannedSessions.total === 101 &&
+      heavyCapture.envelope.data.calendar.plannedSessions.truncated === true &&
+      heavyCapture.envelope.data.calendar.events.included === 50 &&
+      heavyCapture.envelope.data.calendar.events.total === 52 &&
+      heavyCapture.envelope.data.calendar.events.truncated === true &&
+      !heavySerialized.includes('CAPPED_PLAN_NOTE_MUST_NOT_REACH') &&
+      !heavySerialized.includes('CAPPED_EVENT_LOCATION_MUST_NOT_REACH') &&
+      !heavySerialized.includes('CAPPED_EVENT_DESCRIPTION_MUST_NOT_REACH'),
+      JSON.stringify(heavyCapture.envelope.data.calendar));
+    check('calendar cap disclosure is server-enforced even when the provider omits it',
+      heavyResult.body.limitations.includes('Calendar results were capped, so additional matching plans or events are not included.'),
+      JSON.stringify(heavyResult.body));
 
     const tampered = { ...privacyResult.body.historyTurn, answer: 'TAMPERED_CLIENT_ANSWER_123456' };
     const historyResult = await api(proLogin, 'POST', '/api/profile/ai-insights', {

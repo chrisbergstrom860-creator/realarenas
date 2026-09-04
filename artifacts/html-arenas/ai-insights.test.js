@@ -36,7 +36,13 @@ const context = {
     averageDistanceKmPerActivity: 7.1,
     sports: [{ sport: 'running', sessions: 6, durationHours: 7.2, distanceKm: 42.5, percentSessions: 100, averageSessionDurationHours: 1.2, averageHoursPerWeek: 1.6, averageSessionsPerWeek: 1.4, averageDistanceKmPerActivity: 7.1 }]
   }],
-  dataQuality: { activeWeeksInDetailedWindow: 4, trendEligible: true }
+  dataQuality: { activeWeeksInDetailedWindow: 4, trendEligible: true },
+  calendar: {
+    plannedSessions: { items: [{ date: '2026-09-10', sport: 'running', title: 'Easy run', plannedDuration: '45m', status: 'planned' }] },
+    events: { items: [{ date: '2026-09-12T17:00:00Z', title: 'Club ride', sport: 'cycling', type: 'group', clubName: 'Road Club', ownRsvp: 'going' }] },
+    pastPlanAdherence: [{ month: '2026-08', done: 3, skipped: 1, stillPlanned: 2 }]
+  },
+  goals: { active: { items: [{ type: 'distance', sport: 'cycling', target: { value: 100, unit: 'km' }, period: 'monthly', progress: { value: 65, unit: 'km', percent: 65 }, onTrack: true, isComplete: false, windowStart: '2026-09-01T07:00:00.000Z', windowEnd: '2026-10-01T07:00:00.000Z' }] } }
 };
 
 test('evidence validator accepts exact paths and values', () => {
@@ -143,6 +149,52 @@ test('calendar, window-sport, rest-day, and average paths render from exact evid
   assert.match(result.answer, /1\.6 hours/);
   assert.match(result.answer, /7\.1 km/);
   assert.equal(result.evidence.length, 4);
+});
+
+test('calendar and active-goal typed findings render only exact copied records', () => {
+  const findings = [
+    ['calendar_plan', 'calendar.plannedSessions.items.0'],
+    ['calendar_event', 'calendar.events.items.0'],
+    ['plan_adherence', 'calendar.pastPlanAdherence.0'],
+    ['goal_projection', 'goals.active.items.0']
+  ].map(([type, path]) => ({ type, path, value: path.split('.').reduce((value, token) => value[token], context) }));
+  const result = validateInsightResponse({ findings, limitations: ['CALENDAR_RESULTS_TRUNCATED'] }, context);
+  assert.equal(result.ok, true);
+  assert.equal(result.evidence.length, 4);
+  assert.match(result.answer, /Easy run/);
+  assert.match(result.answer, /Club ride/);
+  assert.match(result.answer, /on track/);
+  assert.match(result.limitations[0], /capped/);
+});
+
+test('calendar cap disclosure is server-enforced when the model omits it', () => {
+  const cappedContext = {
+    ...context,
+    calendar: {
+      ...context.calendar,
+      plannedSessions: { ...context.calendar.plannedSessions, truncated: true }
+    }
+  };
+  const finding = {
+    type: 'calendar_plan',
+    path: 'calendar.plannedSessions.items.0',
+    value: cappedContext.calendar.plannedSessions.items[0]
+  };
+  const result = validateInsightResponse({ findings: [finding], limitations: [] }, cappedContext);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.limitations, [
+    'Calendar results were capped, so additional matching plans or events are not included.'
+  ]);
+});
+
+test('calendar and goal object findings reject altered records', () => {
+  const result = validateInsightResponse({
+    findings: [{ type: 'goal_projection', path: 'goals.active.items.0', value: { ...context.goals.active.items[0], onTrack: false } }],
+    limitations: []
+  }, context);
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'mismatched_value');
+  assert.equal(result.offendingPath, 'goals.active.items.0');
 });
 
 test('signed history rejects a client-tampered answer', () => {

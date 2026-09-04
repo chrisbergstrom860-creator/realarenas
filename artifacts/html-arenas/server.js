@@ -8550,8 +8550,9 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
 });
 
 // ── AI INSIGHTS (unconditionally Individual Pro) ──
-// The model receives a fixed allowlisted projection. Raw activity rows, titles,
-// notes, user ids, club rosters, and leaderboard rows never cross this boundary.
+// The model receives a fixed allowlisted projection. Raw activity rows/activity
+// titles, notes, user ids, club rosters, and leaderboard rows never cross this
+// boundary. Only the explicitly approved plan/event title projections below do.
 const AI_INSIGHTS_MONTHLY_LIMIT = 30;
 const AI_NOT_CONFIGURED_COPY = 'AI Insights isn’t configured in this environment yet.';
 const AI_PROVIDER_FAILURE_COPY = 'AI Insights couldn’t reach its analysis provider. Your question was not counted. Please try again.';
@@ -8815,7 +8816,7 @@ async function buildAiInsightsContext(user) {
     });
   }
   const context = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     asOfDate: today,
     timezone: tz,
     coverage: {
@@ -8844,6 +8845,134 @@ async function buildAiInsightsContext(user) {
       trendMinimumActivities: 8,
       trendMinimumActiveWeeks: 4,
       trendEligible: acts.length >= 8 && activeWeeks >= 4
+    }
+  };
+
+  // Calendar context is a deliberately narrow, self-scoped projection. Plan
+  // notes and event location/description never enter this object. Event RSVP
+  // lookup is owner-filtered, and RSVP alone never bypasses the shared event
+  // visibility gate.
+  const planMonthStart = shiftMonthKey(currentMonth, -11) + '-01';
+  const [futurePlansRes, adherenceRes, membershipsRes, ownRsvpsRes, activeGoalsRes] = await Promise.all([
+    supabaseAdmin.from('planned_sessions')
+      .select('date, sport, title, planned_duration, status', { count: 'exact' })
+      .eq('user_id', user.id).gte('date', today)
+      .order('date', { ascending: true }).limit(100),
+    supabaseAdmin.from('planned_sessions')
+      .select('date, status').eq('user_id', user.id)
+      .gte('date', planMonthStart).lte('date', today),
+    supabaseAdmin.from('memberships').select('club_id').eq('user_id', user.id),
+    supabaseAdmin.from('event_rsvps').select('event_id, status')
+      .eq('user_id', user.id).in('status', ['going', 'interested']),
+    supabaseAdmin.from('goals').select('*', { count: 'exact' })
+      .eq('user_id', user.id).eq('status', 'active')
+      .order('created_at', { ascending: true }).limit(5)
+  ]);
+  for (const result of [futurePlansRes, adherenceRes, membershipsRes, ownRsvpsRes, activeGoalsRes]) {
+    if (result.error) throw result.error;
+  }
+  const futurePlans = (futurePlansRes.data || []).map((row) => ({
+    date: row.date,
+    sport: row.sport,
+    title: row.title || null,
+    plannedDuration: row.planned_duration || null,
+    status: row.status
+  }));
+  const adherenceRows = adherenceRes.data || [];
+  const adherence = last12Months.map((monthRow) => {
+    const rows = adherenceRows.filter((row) => String(row.date).slice(0, 7) === monthRow.month);
+    return {
+      month: monthRow.month,
+      done: rows.filter((row) => row.status === 'done').length,
+      skipped: rows.filter((row) => row.status === 'skipped').length,
+      stillPlanned: rows.filter((row) => row.status === 'planned').length
+    };
+  });
+
+  const memberClubIds = [...new Set((membershipsRes.data || []).map((row) => row.club_id).filter(Boolean))];
+  const ownRsvpMap = new Map((ownRsvpsRes.data || []).map((row) => [row.event_id, row.status]));
+  const ownRsvpEventIds = [...ownRsvpMap.keys()];
+  const eventSelect = 'id, date, title, sport, event_type, visibility, club_id, created_by';
+  const eventQueries = [];
+  if (memberClubIds.length) {
+    eventQueries.push(supabaseAdmin.from('events').select(eventSelect)
+      .in('club_id', memberClubIds).gte('date', now.toISOString()).order('date', { ascending: true }));
+  }
+  if (ownRsvpEventIds.length) {
+    eventQueries.push(supabaseAdmin.from('events').select(eventSelect)
+      .in('id', ownRsvpEventIds).gte('date', now.toISOString()).order('date', { ascending: true }));
+  }
+  const eventResults = await Promise.all(eventQueries);
+  for (const result of eventResults) if (result.error) throw result.error;
+  const eventMap = new Map();
+  for (const result of eventResults) {
+    for (const event of (result.data || [])) eventMap.set(event.id, event);
+  }
+  const visibleEligibleEvents = (await visibleEventsFilter(user.id, [...eventMap.values()]))
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const eventClubIds = [...new Set(visibleEligibleEvents.map((event) => event.club_id).filter(Boolean))];
+  let clubNameMap = new Map();
+  if (eventClubIds.length) {
+    const { data: clubs, error: clubsError } = await supabaseAdmin
+      .from('clubs').select('id, name').in('id', eventClubIds);
+    if (clubsError) throw clubsError;
+    clubNameMap = new Map((clubs || []).map((club) => [club.id, club.name]));
+  }
+  const calendarEvents = visibleEligibleEvents.slice(0, 50).map((event) => ({
+    date: event.date,
+    title: event.title,
+    sport: event.sport || null,
+    type: event.event_type || null,
+    clubName: event.club_id ? clubNameMap.get(event.club_id) || null : null,
+    ownRsvp: ownRsvpMap.get(event.id) || null
+  }));
+  context.calendar = {
+    plannedSessions: {
+      items: futurePlans,
+      included: futurePlans.length,
+      total: futurePlansRes.count || 0,
+      truncated: (futurePlansRes.count || 0) > futurePlans.length
+    },
+    events: {
+      items: calendarEvents,
+      included: calendarEvents.length,
+      total: visibleEligibleEvents.length,
+      truncated: visibleEligibleEvents.length > calendarEvents.length
+    },
+    pastPlanAdherence: adherence,
+    limitations: {
+      futurePlansOnly: true,
+      futureEventsOnly: true,
+      eventEligibility: 'own_rsvp_or_club_membership',
+      planHistory: 'monthly_status_counts_last_12_months'
+    }
+  };
+
+  const enrichedGoals = await enrichGoalRows(user.id, activeGoalsRes.data || [], tz);
+  const goalItems = enrichedGoals.map((goal) => ({
+    type: goal.type,
+    sport: goal.sport,
+    target: { value: goal.target, unit: goal.unit },
+    period: goal.period,
+    progress: { value: goal.progress, unit: goal.unit, percent: goal.pct },
+    onTrack: goal.onTrack,
+    isComplete: goal.isComplete,
+    windowStart: goal.windowStart,
+    windowEnd: goal.windowEnd
+  }));
+  context.goals = {
+    active: {
+      items: goalItems,
+      included: goalItems.length,
+      total: activeGoalsRes.count || 0,
+      truncated: (activeGoalsRes.count || 0) > goalItems.length
+    },
+    limitations: {
+      activeOnly: true,
+      projection: 'server_computed_linear_pace',
+      historicalGoalsIncluded: false,
+      crossGoalComparisonSupported: false,
+      catchUpProjectionSupported: false
     }
   };
 
