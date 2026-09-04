@@ -340,6 +340,76 @@ function metricDescription(context, path) {
   return null;
 }
 
+function forwardMetricSentence(context, path, value) {
+  const countNoun = (count, singular, plural = singular + 's') => count === 1 ? singular : plural;
+  if (path === 'calendar.plannedSessions.total') {
+    return `You have ${value} future ${countNoun(value, 'plan record')} across all statuses.`;
+  }
+  if (path === 'calendar.plannedSessions.included') {
+    return `AI Insights includes ${value} future ${countNoun(value, 'plan record')} across all statuses.`;
+  }
+  if (path === 'calendar.events.total') {
+    return `You have ${value} future eligible ${countNoun(value, 'event')}.`;
+  }
+  if (path === 'calendar.events.included') {
+    return `AI Insights includes ${value} future eligible ${countNoun(value, 'event')}.`;
+  }
+  let match = path.match(/^calendar\.plannedSessions\.byMonth\.(\d+)\.(plannedCount|totalPlannedMinutes|included)$/);
+  if (match) {
+    const row = context.calendar && context.calendar.plannedSessions &&
+      context.calendar.plannedSessions.byMonth && context.calendar.plannedSessions.byMonth[Number(match[1])];
+    if (!row || !row.month) return null;
+    const month = humanMonthLabel(row.month);
+    if (match[2] === 'plannedCount') {
+      return `You have ${value} planned ${countNoun(value, 'session')} left in ${month}.`;
+    }
+    if (match[2] === 'totalPlannedMinutes') {
+      return `You have ${value} planned ${countNoun(value, 'minute')} in ${month}.`;
+    }
+    return `AI Insights includes ${value} planned ${countNoun(value, 'session')} in ${month}.`;
+  }
+  match = path.match(/^calendar\.events\.byMonth\.(\d+)\.(count|included)$/);
+  if (match) {
+    const row = context.calendar && context.calendar.events &&
+      context.calendar.events.byMonth && context.calendar.events.byMonth[Number(match[1])];
+    if (!row || !row.month) return null;
+    const month = humanMonthLabel(row.month);
+    return match[2] === 'count'
+      ? `You have ${value} eligible ${countNoun(value, 'event')} in ${month}.`
+      : `AI Insights includes ${value} eligible ${countNoun(value, 'event')} in ${month}.`;
+  }
+  return null;
+}
+
+function monthlyCountFindingKey(finding, context) {
+  if (!finding || finding.type !== 'metric') return null;
+  const path = normalizePath(finding.path);
+  let match = path && path.match(/^calendar\.plannedSessions\.byMonth\.(\d+)\.plannedCount$/);
+  if (match) {
+    const row = context.calendar && context.calendar.plannedSessions &&
+      context.calendar.plannedSessions.byMonth && context.calendar.plannedSessions.byMonth[Number(match[1])];
+    return row && row.month ? `plan:${row.month}` : null;
+  }
+  match = path && path.match(/^calendar\.events\.byMonth\.(\d+)\.count$/);
+  if (match) {
+    const row = context.calendar && context.calendar.events &&
+      context.calendar.events.byMonth && context.calendar.events.byMonth[Number(match[1])];
+    return row && row.month ? `event:${row.month}` : null;
+  }
+  return null;
+}
+
+function monthlyListFindingKey(finding) {
+  if (!finding || !finding.filter || typeof finding.filter.month !== 'string') return null;
+  if (finding.type === 'calendar_plan_list' && normalizePath(finding.path) === 'calendar.plannedSessions.items') {
+    return `plan:${finding.filter.month}`;
+  }
+  if (finding.type === 'calendar_event_list' && normalizePath(finding.path) === 'calendar.events.items') {
+    return `event:${finding.filter.month}`;
+  }
+  return null;
+}
+
 function evidenceItem(path, value) {
   return { path, value };
 }
@@ -565,7 +635,8 @@ function renderTypedFinding(finding, context) {
       mismatchDetails: safeMismatchDetails(actual.value, finding.value)
     };
     return {
-      text: `${description} was ${formatMetricValue(path, actual.value)}.`,
+      text: forwardMetricSentence(context, path, actual.value) ||
+        `${description} was ${formatMetricValue(path, actual.value)}.`,
       evidence: [evidenceItem(path, actual.value)]
     };
   }
@@ -749,6 +820,7 @@ function validateInsightResponse(raw, context) {
   const allEvidence = [];
   const rendered = [];
   let requiresCalendarTruncationDisclosure = false;
+  const monthlyListKeys = new Set(parsed.findings.map(monthlyListFindingKey).filter(Boolean));
   for (const finding of parsed.findings) {
     const result = renderTypedFinding(finding, context);
     if (result.error) {
@@ -763,9 +835,10 @@ function validateInsightResponse(raw, context) {
         mismatchDetails: offendingPath ? result.mismatchDetails || null : null
       };
     }
-    rendered.push(result.text);
+    const suppressDuplicateCount = monthlyListKeys.has(monthlyCountFindingKey(finding, context));
+    if (!suppressDuplicateCount) rendered.push(result.text);
     if (result.requiresCalendarTruncationDisclosure) requiresCalendarTruncationDisclosure = true;
-    allEvidence.push(...result.evidence);
+    if (!suppressDuplicateCount) allEvidence.push(...result.evidence);
   }
   const allowedLimitations = {
     INSUFFICIENT_TREND_DATA: 'There is not enough logged history to establish a reliable trend or usual training pattern.',

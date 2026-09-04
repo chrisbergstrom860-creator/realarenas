@@ -188,6 +188,7 @@ test('calendar and active-goal typed findings render only exact copied records',
   assert.match(result.answer, /Club ride/);
   assert.match(result.answer, /today for 45 minutes/);
   assert.match(result.answer, /today at 10:00 AM/);
+  assert.match(result.answer, /your plans were 3 done, 1 skipped, and 2 still planned/);
   assert.match(result.answer, /on track/);
   assert.deepEqual(result.limitations, []);
 });
@@ -206,10 +207,10 @@ test('calendar totals and monthly aggregates are renderable metrics', () => {
     limitations: []
   }, context);
   assert.equal(result.ok, true);
-  assert.match(result.answer, /future plan-record count across all statuses was 3/);
-  assert.match(result.answer, /planned sessions left in September 2026 was 3/);
-  assert.match(result.answer, /total planned duration in September 2026 was 125 minutes/);
-  assert.match(result.answer, /eligible-event count in September 2026 was 3/);
+  assert.match(result.answer, /You have 3 future plan records across all statuses\./);
+  assert.match(result.answer, /You have 3 planned sessions left in September 2026\./);
+  assert.match(result.answer, /You have 125 planned minutes in September 2026\./);
+  assert.match(result.answer, /You have 3 eligible events in September 2026\./);
 });
 
 test('top-level plan totals are labeled as all-status records, not sessions left', () => {
@@ -232,8 +233,58 @@ test('top-level plan totals are labeled as all-status records, not sessions left
     limitations: []
   }, allStatusContext);
   assert.equal(result.ok, true);
-  assert.match(result.answer, /plan-record count across all statuses was 4/);
-  assert.match(result.answer, /planned sessions left in September 2026 was 3/);
+  assert.match(result.answer, /You have 4 future plan records across all statuses\./);
+  assert.match(result.answer, /You have 3 planned sessions left in September 2026\./);
+});
+
+test('same-month count metrics are deduplicated only when their matching list renders', () => {
+  const sameMonth = validateInsightResponse({
+    findings: [
+      { type: 'metric', path: 'calendar.plannedSessions.byMonth.0.plannedCount', value: 3 },
+      { type: 'calendar_plan_list', path: 'calendar.plannedSessions.items', filter: { month: '2026-09' } }
+    ],
+    limitations: []
+  }, context);
+  assert.equal(sameMonth.ok, true);
+  assert.equal((sameMonth.answer.match(/planned sessions left in September 2026/g) || []).length, 1);
+  assert.doesNotMatch(sameMonth.answer, /was 3/);
+  assert.equal(sameMonth.evidence.length, 4);
+
+  const sameEventMonth = validateInsightResponse({
+    findings: [
+      { type: 'metric', path: 'calendar.events.byMonth.0.count', value: 3 },
+      { type: 'calendar_event_list', path: 'calendar.events.items', filter: { month: '2026-09' } }
+    ],
+    limitations: []
+  }, context);
+  assert.equal(sameEventMonth.ok, true);
+  assert.equal((sameEventMonth.answer.match(/events in September 2026/g) || []).length, 1);
+  assert.doesNotMatch(sameEventMonth.answer, /was 3/);
+  assert.equal(sameEventMonth.evidence.length, 4);
+
+  const differentMonthContext = {
+    ...context,
+    calendar: {
+      ...context.calendar,
+      plannedSessions: {
+        ...context.calendar.plannedSessions,
+        byMonth: [
+          ...context.calendar.plannedSessions.byMonth,
+          { month: '2026-10', plannedCount: 0, totalPlannedMinutes: 0, included: 0, truncated: false }
+        ]
+      }
+    }
+  };
+  const differentMonth = validateInsightResponse({
+    findings: [
+      { type: 'metric', path: 'calendar.plannedSessions.byMonth.0.plannedCount', value: 3 },
+      { type: 'calendar_plan_list', path: 'calendar.plannedSessions.items', filter: { month: '2026-10' } }
+    ],
+    limitations: []
+  }, differentMonthContext);
+  assert.equal(differentMonth.ok, true);
+  assert.match(differentMonth.answer, /You have 3 planned sessions left in September 2026\./);
+  assert.match(differentMonth.answer, /You have no planned sessions left in October 2026\./);
 });
 
 test('bounded month lists are selected and written entirely by the server', () => {

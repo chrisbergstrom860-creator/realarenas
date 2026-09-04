@@ -50,6 +50,7 @@ function monthLabel(key, withYear = false) {
   });
 }
 const CURRENT_MONTH_KEY = monthKeyInZone(new Date(), TEST_TIMEZONE);
+const CURRENT_MONTH_YEAR_LABEL = monthLabel(CURRENT_MONTH_KEY, true);
 const LAST_MONTH_KEY = shiftMonth(CURRENT_MONTH_KEY, -1);
 const TWO_MONTHS_AGO_KEY = shiftMonth(CURRENT_MONTH_KEY, -2);
 const LAST_MONTH_LABEL = monthLabel(LAST_MONTH_KEY);
@@ -250,6 +251,16 @@ function responseFor(envelope) {
         ...realProviderCalendarPlanListFixture(envelope.data, CURRENT_MONTH_KEY),
         unexpected: true
       }],
+      limitations: []
+    };
+  } else if (/future count tense fixture/i.test(question)) {
+    const index = envelope.data.calendar.plannedSessions.byMonth
+      .findIndex((row) => row.month === CURRENT_MONTH_KEY);
+    output = {
+      findings: [metricFinding(
+        envelope.data,
+        `calendar.plannedSessions.byMonth.${index}.plannedCount`
+      )],
       limitations: []
     };
   } else if (/mismatched/i.test(question)) {
@@ -875,6 +886,14 @@ async function cleanup() {
       truncatedMonthList.body.limitations.includes('Calendar results were capped, so additional matching plans or events are not included.') &&
       truncatedMonthList.body.evidence.length === 11,
       JSON.stringify(truncatedMonthList.body));
+    const futureCountTense = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+      question: 'Return the future count tense fixture.',
+      history: []
+    });
+    check('future monthly count metric renders in the present tense',
+      futureCountTense.status === 200 &&
+      futureCountTense.body.answer === `You have 103 planned sessions left in ${CURRENT_MONTH_YEAR_LABEL}.`,
+      JSON.stringify(futureCountTense.body));
 
     const tampered = { ...privacyResult.body.historyTurn, answer: 'TAMPERED_CLIENT_ANSWER_123456' };
     const historyResult = await api(proLogin, 'POST', '/api/profile/ai-insights', {
@@ -1044,8 +1063,25 @@ async function cleanup() {
         providerRecord.envelope.question === question,
         JSON.stringify(result));
       const expectedFindings = findingsForAnswerableQuestion(question, providerRecord.envelope.data);
+      const expectedListKeys = new Set(expectedFindings.map((finding) => {
+        if (finding.type === 'calendar_plan_list') return `plan:${finding.filter.month}`;
+        if (finding.type === 'calendar_event_list') return `event:${finding.filter.month}`;
+        return null;
+      }).filter(Boolean));
       const expectedPaths = expectedFindings.flatMap((finding) => {
         if (finding.type === 'comparison') return [finding.leftPath, finding.rightPath];
+        let countMatch = finding.type === 'metric' &&
+          finding.path.match(/^calendar\.plannedSessions\.byMonth\.(\d+)\.plannedCount$/);
+        if (countMatch) {
+          const row = providerRecord.envelope.data.calendar.plannedSessions.byMonth[Number(countMatch[1])];
+          if (row && expectedListKeys.has(`plan:${row.month}`)) return [];
+        }
+        countMatch = finding.type === 'metric' &&
+          finding.path.match(/^calendar\.events\.byMonth\.(\d+)\.count$/);
+        if (countMatch) {
+          const row = providerRecord.envelope.data.calendar.events.byMonth[Number(countMatch[1])];
+          if (row && expectedListKeys.has(`event:${row.month}`)) return [];
+        }
         if (finding.type === 'calendar_plan_list' || finding.type === 'calendar_event_list') {
           const parentPath = finding.type === 'calendar_plan_list'
             ? 'calendar.plannedSessions' : 'calendar.events';
@@ -1064,6 +1100,13 @@ async function cleanup() {
         expectedPaths.every((expectedPath) => result.body.evidence.some((item) => item.path === expectedPath)) &&
         JSON.stringify(providerRecord.output.findings) === JSON.stringify(expectedFindings),
         JSON.stringify({ body: result.body, output: providerRecord.output, expectedPaths }));
+      if (question === 'How many planned sessions do I have left this month and what are they?') {
+        const countPhrase = `planned sessions left in ${CURRENT_MONTH_YEAR_LABEL}`;
+        check('same-month count plus plan list renders one count-bearing sentence',
+          (result.body.answer.match(new RegExp(countPhrase, 'g')) || []).length === 1 &&
+          !result.body.answer.includes(`${countPhrase} was`),
+          result.body.answer);
+      }
     }
 
     for (const notAnswerableCase of NOT_ANSWERABLE_CASES) {
