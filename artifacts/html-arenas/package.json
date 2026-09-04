@@ -6,6 +6,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test": "node --test",
+    "verify:landing-images": "node scripts/verify-landing-images.js",
     "build": "echo 'No build step required'"
   },
   "engines": {
