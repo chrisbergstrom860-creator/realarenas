@@ -362,12 +362,34 @@ html { scroll-behavior: smooth; }
 .features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .feature-card { background: white; border: var(--border); border-radius: var(--radius-lg); padding: 24px; transition: border-color 0.15s, box-shadow 0.15s; }
 .feature-card:hover { border-color: var(--gray-300); box-shadow: var(--shadow-md); }
+.feature-card-link { color: inherit; display: block; text-decoration: none; }
+.feature-card-link:focus-visible { outline: 3px solid var(--yellow-dark); outline-offset: 3px; }
 .feature-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; margin-bottom: 14px; }
+.feature-icon-ai { background: #F5F3FF; color: #5B21B6; font-family: var(--mono); font-size: 12px; font-weight: 700; }
 .feature-card h3 { font-size: 15px; font-weight: 600; color: var(--gray-900); margin-bottom: 8px; }
 .feature-card p { font-size: 13px; color: var(--gray-500); line-height: 1.6; }
 .feature-badge { display: inline-block; margin-top: 12px; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
 .badge-free { background: #F0FDF4; color: #166534; border: 1px solid #BBF7D0; }
 .badge-pro { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+
+/* ── AI INSIGHTS ── */
+.ai-insights { background: white; border-bottom: var(--border); padding: 72px 24px; }
+.ai-insights-inner { max-width: 1176px; margin: 0 auto; }
+.ai-insights-grid { align-items: center; display: grid; gap: 64px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.ai-insights-title { margin-bottom: 24px; }
+.ai-insights-copy { max-width: 520px; }
+.ai-insights-copy p { color: var(--gray-600); font-size: 16px; line-height: 1.6; margin-bottom: 16px; }
+.ai-insights-copy .ai-insights-principle { margin-bottom: 24px; }
+.ai-insights-copy .ai-insights-note { color: var(--gray-500); font-size: 12px; margin-bottom: 0; }
+.ai-example { background: var(--gray-50); border: var(--border); border-radius: var(--radius-lg); padding: 24px; }
+.ai-example-label { margin-bottom: 20px; }
+.ai-example-thread { display: flex; flex-direction: column; gap: 16px; }
+.ai-example-turn { background: white; border: var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.ai-example-turn + .ai-example-turn--question { margin-top: 8px; }
+.ai-example-turn--answer { background: var(--yellow-light); border-color: #FDE68A; }
+.ai-example-role { color: var(--gray-500); font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+.ai-example-turn--answer .ai-example-role { color: #6B5100; }
+.ai-example-text { color: var(--gray-900); font-size: 14px; font-weight: 500; line-height: 1.5; }
 
 /* ── HOW IT WORKS ── */
 .how-it-works { background: white; border-top: var(--border); border-bottom: var(--border); padding: 72px 24px; }
@@ -591,6 +613,7 @@ html { scroll-behavior: smooth; }
   /* All multi-column content grids → single (stats stays 2-col 2x2) */
   .stats-bar-inner { grid-template-columns: 1fr 1fr !important; gap: 16px; }
   .features-grid { grid-template-columns: 1fr !important; }
+  .ai-insights-grid { grid-template-columns: 1fr; gap: 36px; }
   .steps-grid { grid-template-columns: 1fr !important; }
   .testimonials { grid-template-columns: 1fr !important; }
   .pricing-grid { grid-template-columns: 1fr !important; }
@@ -776,6 +799,43 @@ html { scroll-behavior: smooth; }
     </div>
   </div>
 
+  <!-- AI Insights -->
+  <section class="ai-insights" id="ai-insights" aria-labelledby="ai-insights-title">
+    <a class="section-anchor" id="ai-insights-anchor"></a>
+    <div class="ai-insights-inner">
+      <div class="ai-insights-grid">
+        <div class="ai-insights-copy">
+          <div class="section-label">AI Insights · Individual Pro</div>
+          <h2 class="section-title ai-insights-title" id="ai-insights-title">Ask your training a question.</h2>
+          <p>AI Insights answers questions about your own logged activity — hours, sessions, distance, sports, rest days, personal records. Every training metric shown in an answer is checked against your recorded data before you see it.</p>
+          <p class="ai-insights-principle">It describes what you did. It won't tell you what to do.</p>
+          <p class="ai-insights-note">30 questions a month · only your own data, never other athletes'</p>
+        </div>
+        <div class="ai-example" aria-label="AI Insights example">
+          <div class="section-label ai-example-label">Example</div>
+          <div class="ai-example-thread">
+            <div class="ai-example-turn ai-example-turn--question">
+              <div class="ai-example-role">Question</div>
+              <div class="ai-example-text">How many activities have I logged in total?</div>
+            </div>
+            <div class="ai-example-turn ai-example-turn--answer">
+              <div class="ai-example-role">Answer</div>
+              <div class="ai-example-text">Your all-time activity count was 17.</div>
+            </div>
+            <div class="ai-example-turn ai-example-turn--question">
+              <div class="ai-example-role">Question</div>
+              <div class="ai-example-text">Should I be doing more cardio?</div>
+            </div>
+            <div class="ai-example-turn ai-example-turn--answer">
+              <div class="ai-example-role">Answer</div>
+              <div class="ai-example-text">I can describe your recorded training, but I can’t prescribe workouts or comment on diet, weight, body composition, or whether you are under-training. Try asking what changed in your volume, consistency, sports, personal records, or standings.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Features -->
   <div class="features" id="features">
     <a class="section-anchor" id="features-anchor"></a>
@@ -789,6 +849,12 @@ html { scroll-behavior: smooth; }
           <p>Running, cycling, climbing, football, swimming — all in one feed. Follow athletes across every sport and train alongside a community that isn't split by discipline.</p>
           <span class="feature-badge badge-free">Free forever</span>
         </div>
+        <a href="#ai-insights" class="feature-card feature-card-link">
+          <div class="feature-icon feature-icon-ai" aria-hidden="true">AI</div>
+          <h3>Ask your training a question.</h3>
+          <p>AI Insights answers questions about your own logged activity — hours, sessions, distance, sports, rest days, personal records.</p>
+          <span class="feature-badge badge-pro">Individual Pro</span>
+        </a>
         <div class="feature-card">
           <div class="feature-icon" style="background:#EFF6FF">🎟️</div>
           <h3>Event discovery</h3>
@@ -930,6 +996,7 @@ html { scroll-behavior: smooth; }
             <div class="pricing-feat"><span class="pfeat-tick">✓</span> Full training analytics & trends</div>
             <div class="pricing-feat"><span class="pfeat-tick">✓</span> Training load tracking</div>
             <div class="pricing-feat"><span class="pfeat-tick">✓</span> Set goals & track progress</div>
+            <a class="pricing-feat" href="#ai-insights"><span class="pfeat-tick">✓</span> AI Insights · 30 questions a month</a>
           </div>
           <div class="pricing-cta">
             <button class="btn btn-yellow btn-full" onclick="startUpgrade('pro', this)">Upgrade to Pro ▸</button>
