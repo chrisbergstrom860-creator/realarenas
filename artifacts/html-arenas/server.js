@@ -8817,7 +8817,7 @@ async function buildAiInsightsContext(user) {
     });
   }
   const context = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     asOfDate: today,
     timezone: tz,
     coverage: {
@@ -9002,17 +9002,24 @@ async function buildAiInsightsContext(user) {
     }
   };
 
-  const enrichedGoals = await enrichGoalRows(user.id, activeGoalsRes.data || [], tz);
+  const enrichedGoals = await enrichGoalRows(user.id, activeGoalsRes.data || [], tz, {
+    includeRecentHistory: true
+  });
   const goalItems = enrichedGoals.map((goal) => ({
     type: goal.type,
     sport: goal.sport,
-    target: { value: goal.target, unit: goal.unit },
+    target: { value: goal.target, unit: goalNaturalUnit(goal) },
     period: goal.period,
-    progress: { value: goal.progress, unit: goal.unit, percent: goal.pct },
+    progress: { value: goal.progress, unit: goalNaturalUnit(goal), percent: goal.pct },
     onTrack: goal.onTrack,
     isComplete: goal.isComplete,
     windowStart: goal.windowStart,
-    windowEnd: goal.windowEnd
+    windowEnd: goal.windowEnd,
+    ...(goal.previousPeriodRange ? { previousPeriodRange: goal.previousPeriodRange } : {}),
+    ...(goal.previousPeriods ? { previousPeriods: goal.previousPeriods } : {}),
+    ...(goal.previousPeriodUnavailableReason
+      ? { previousPeriodUnavailableReason: goal.previousPeriodUnavailableReason }
+      : {})
   }));
   context.goals = {
     active: {
@@ -9302,6 +9309,126 @@ function goalWindow(goal, tz) {
   };
 }
 
+function goalNaturalUnit(goal) {
+  if (goal.type === 'frequency') return 'sessions';
+  if (goal.type === 'duration') return 'hours';
+  if (goal.type === 'streak') return 'days';
+  return goal.unit || 'km';
+}
+
+function goalProgressInWindow(goal, activities, streaks, tz, window) {
+  const target = Number(goal.target_value) || 0;
+  const targetCmp = goal.type === 'distance' && goal.unit === 'mi' ? target * MI_TO_KM : target;
+  let progressCmp = 0;
+  if (goal.type === 'streak') {
+    progressCmp = goal.sport
+      ? computeStreaks(activities.filter((a) => a.sport === goal.sport), tz).currentStreak
+      : streaks.currentStreak;
+  } else {
+    const matches = activities.filter((a) => {
+      const key = dayKey(a.date, tz);
+      if (key < window.startKey || key >= window.endKeyExcl) return false;
+      if (goal.sport) return a.sport === goal.sport;
+      if (goal.type === 'distance') return DISTANCE_SPORTS.includes(a.sport);
+      return true;
+    });
+    if (goal.type === 'distance') {
+      progressCmp = matches.reduce((sum, activity) =>
+        sum + parseDistanceKmUnitAware(activity.distance), 0);
+    } else if (goal.type === 'frequency') {
+      progressCmp = matches.length;
+    } else if (goal.type === 'duration') {
+      progressCmp = matches.reduce((sum, activity) =>
+        sum + parseDurationHours(activity.duration), 0);
+    }
+  }
+  const progress = goal.type === 'distance' && goal.unit === 'mi'
+    ? Math.round((progressCmp / MI_TO_KM) * 100) / 100
+    : Math.round(progressCmp * 100) / 100;
+  return {
+    target,
+    targetCmp,
+    progress,
+    progressCmp,
+    pct: targetCmp > 0 ? Math.min(100, Math.round((progressCmp / targetCmp) * 100)) : 0,
+    isComplete: targetCmp > 0 && progressCmp >= targetCmp
+  };
+}
+
+function priorClosedGoalWindows(goal, tz, now = new Date()) {
+  if (!['weekly', 'monthly'].includes(goal.period)) return [];
+  const windows = [];
+  if (goal.period === 'weekly') {
+    const currentStart = weekStartKey(now, tz);
+    for (let offset = 1; offset <= 3; offset++) {
+      const startKey = addDaysToKey(currentStart, -7 * offset);
+      const endKeyExcl = addDaysToKey(startKey, 7);
+      windows.push({
+        startKey,
+        endKeyExcl,
+        start: zoneMidnightUtc(startKey, tz),
+        end: zoneMidnightUtc(endKeyExcl, tz)
+      });
+    }
+    return windows;
+  }
+  const current = dateParts(now, tz);
+  for (let offset = 1; offset <= 3; offset++) {
+    const startMonth = new Date(Date.UTC(current.y, current.m - 1 - offset, 1));
+    const endMonth = new Date(Date.UTC(current.y, current.m - offset, 1));
+    const startKey = `${startMonth.getUTCFullYear()}-${String(startMonth.getUTCMonth() + 1).padStart(2, '0')}-01`;
+    const endKeyExcl = `${endMonth.getUTCFullYear()}-${String(endMonth.getUTCMonth() + 1).padStart(2, '0')}-01`;
+    windows.push({
+      startKey,
+      endKeyExcl,
+      start: zoneMidnightUtc(startKey, tz),
+      end: zoneMidnightUtc(endKeyExcl, tz)
+    });
+  }
+  return windows;
+}
+
+function recentGoalHistory(goal, activities, streaks, tz, now = new Date()) {
+  if (goal.type === 'streak' || goal.period === 'custom') {
+    return { previousPeriodUnavailableReason: 'goal_type_requires_saved_history' };
+  }
+  const windows = priorClosedGoalWindows(goal, tz, now);
+  if (!windows.length) return {};
+  const previousPeriods = [];
+  let previousPeriodUnavailableReason = null;
+  for (const window of windows) {
+    const existedAtStart = !!goal.start_date && String(goal.start_date) <= window.startKey &&
+      Number.isFinite(Date.parse(goal.created_at)) && Date.parse(goal.created_at) <= window.start.getTime();
+    const unchangedAfterClose = !goal.updated_at ||
+      (Number.isFinite(Date.parse(goal.updated_at)) && Date.parse(goal.updated_at) <= window.end.getTime());
+    if (!existedAtStart) {
+      previousPeriodUnavailableReason = previousPeriodUnavailableReason || 'goal_did_not_exist';
+      continue;
+    }
+    if (!unchangedAfterClose) {
+      previousPeriodUnavailableReason = previousPeriodUnavailableReason || 'goal_changed_after_period';
+      continue;
+    }
+    const result = goalProgressInWindow(goal, activities, streaks, tz, window);
+    const unit = goalNaturalUnit(goal);
+    previousPeriods.push({
+      windowStart: window.startKey,
+      windowEnd: window.endKeyExcl,
+      target: { value: result.target, unit },
+      progress: { value: result.progress, unit, percent: result.pct },
+      achieved: result.isComplete
+    });
+  }
+  return {
+    previousPeriodRange: {
+      windowStart: windows.at(-1).startKey,
+      windowEnd: windows[0].endKeyExcl
+    },
+    ...(previousPeriods.length ? { previousPeriods } : {}),
+    ...(previousPeriodUnavailableReason ? { previousPeriodUnavailableReason } : {})
+  };
+}
+
 // Server-computed goal enrichment. `activities` = ALL of the owner's activity
 // rows (sport, distance, duration, date); `streaks` = computeStreaks output
 // over those rows (streak goals measure the ALL-TIME current streak — their
@@ -9309,44 +9436,10 @@ function goalWindow(goal, tz) {
 // parser, never crash.
 function enrichGoal(goal, activities, streaks, tz) {
   const now = new Date();
-  const { startKey, endKeyExcl, start, end } = goalWindow(goal, tz);
-  const target = Number(goal.target_value) || 0;
-  // Comparison space: km for distance goals (target converted from mi once
-  // here), otherwise the type's natural unit (sessions / hours / days).
-  const targetCmp = goal.type === 'distance' && goal.unit === 'mi' ? target * MI_TO_KM : target;
-
-  let progressCmp = 0;
-  if (goal.type === 'streak') {
-    // Sport-scoped streak = ALL-TIME current streak in that sport only
-    // (window stays a deadline). Filter-before-call: computeStreaks itself is
-    // untouched (six callers). No sport ever logged → empty array → 0, never
-    // a fallback to the sport-blind number.
-    progressCmp = goal.sport
-      ? computeStreaks(activities.filter((a) => a.sport === goal.sport), tz).currentStreak
-      : streaks.currentStreak;
-  } else {
-    // Window membership by user-zone day key, so a 6 PM Pacific activity
-    // (next-day UTC) counts toward the Pacific day's window.
-    const inWindow = activities.filter((a) => {
-      const k = dayKey(a.date, tz);
-      return k >= startKey && k < endKeyExcl;
-    });
-    const matches = inWindow.filter((a) => {
-      if (goal.sport) return a.sport === goal.sport;
-      if (goal.type === 'distance') return DISTANCE_SPORTS.includes(a.sport);
-      return true;
-    });
-    if (goal.type === 'distance') {
-      progressCmp = matches.reduce((s, a) => s + parseDistanceKmUnitAware(a.distance), 0);
-    } else if (goal.type === 'frequency') {
-      progressCmp = matches.length;
-    } else if (goal.type === 'duration') {
-      progressCmp = matches.reduce((s, a) => s + parseDurationHours(a.duration), 0);
-    }
-  }
-
-  const pct = targetCmp > 0 ? Math.min(100, Math.round((progressCmp / targetCmp) * 100)) : 0;
-  const isComplete = targetCmp > 0 && progressCmp >= targetCmp;
+  const window = goalWindow(goal, tz);
+  const { start, end } = window;
+  const result = goalProgressInWindow(goal, activities, streaks, tz, window);
+  const { target, targetCmp, progress, progressCmp, pct, isComplete } = result;
   const expired = !isComplete && now >= end;
   const daysRemaining = Math.max(0, Math.ceil((end - now) / 86400000));
   // Linear pace projection: on track when the completed fraction of the target
@@ -9355,11 +9448,6 @@ function enrichGoal(goal, activities, streaks, tz) {
   const elapsedFrac = Math.min(1, Math.max(0, (now - start) / (end - start || 1)));
   const progressFrac = targetCmp > 0 ? progressCmp / targetCmp : 0;
   const onTrack = isComplete || (!expired && progressFrac >= elapsedFrac);
-  // Distance progress is reported back in the goal's own stored unit.
-  const progress = goal.type === 'distance' && goal.unit === 'mi'
-    ? Math.round((progressCmp / MI_TO_KM) * 100) / 100
-    : Math.round(progressCmp * 100) / 100;
-
   return {
     id: goal.id,
     type: goal.type,
@@ -9429,12 +9517,15 @@ function validateGoalConfig(g) {
 
 // Fetch the owner's activities once and enrich a set of goal rows (all
 // window/streak math in the owner's zone).
-async function enrichGoalRows(userId, rows, tz) {
+async function enrichGoalRows(userId, rows, tz, { includeRecentHistory = false } = {}) {
   const { data: acts } = await supabaseAdmin
     .from('activities').select('sport, distance, duration, date').eq('user_id', userId);
   const activities = acts || [];
   const streaks = computeStreaks(activities, tz);
-  return rows.map((g) => enrichGoal(g, activities, streaks, tz));
+  return rows.map((goal) => ({
+    ...enrichGoal(goal, activities, streaks, tz),
+    ...(includeRecentHistory ? recentGoalHistory(goal, activities, streaks, tz) : {})
+  }));
 }
 
 // List the signed-in user's goals, enriched, active and archived separated.

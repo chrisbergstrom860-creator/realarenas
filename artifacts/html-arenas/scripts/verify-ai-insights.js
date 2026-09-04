@@ -19,7 +19,7 @@ let subscriptionId = null;
 let failures = 0;
 const captured = [];
 const REFUSAL_COPY = "I can describe your recorded training, but I can’t prescribe workouts or comment on diet, weight, body composition, or whether you are under-training. Try asking what changed in your volume, consistency, sports, personal records, or standings.";
-const GROUNDED_METRIC_COPY = 'Your all-time activity count was 8.';
+const GROUNDED_METRIC_COPY = 'Your all-time activity count was 11.';
 const TEST_TIMEZONE = 'America/Los_Angeles';
 function datePartsInZone(date, timeZone) {
   return Object.fromEntries(new Intl.DateTimeFormat('en-US', {
@@ -41,6 +41,16 @@ function shiftMonth(key, offset) {
   const [year, month] = key.split('-').map(Number);
   const shifted = new Date(Date.UTC(year, month - 1 + offset, 1));
   return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+function shiftDay(key, offset) {
+  const shifted = new Date(key + 'T12:00:00Z');
+  shifted.setUTCDate(shifted.getUTCDate() + offset);
+  return shifted.toISOString().slice(0, 10);
+}
+function weekStartKeyInZone(date, timeZone) {
+  const key = dayKeyInZone(date, timeZone);
+  const noon = new Date(key + 'T12:00:00Z');
+  return shiftDay(key, -((noon.getUTCDay() + 6) % 7));
 }
 function monthLabel(key, withYear = false) {
   return new Date(key + '-01T00:00:00Z').toLocaleDateString('en-US', {
@@ -72,36 +82,67 @@ const ANSWERABLE_QUESTIONS = [
   'What is my next planned session?',
   'How many planned sessions do I have left this month and what are they?',
   'What events do I have this month?',
-  'Is my cycling goal on track?'
+  'Is my cycling goal on track?',
+  'How did I do last week on my weightlifting goal?',
+  'How did I do last month on my cycling goal?'
 ];
 const NOT_ANSWERABLE_CASES = [
   {
     question: 'How many activities did I log after my injury?',
+    domain: 'recorded_training',
     reason: 'missing_injury_date',
     copy: "Your recorded data does not include when your injury occurred, so I can’t answer questions about activity before or after it."
   },
   {
     question: 'How many activities did I record during my medical leave?',
+    domain: 'recorded_training',
     reason: 'missing_medical_leave_dates',
     copy: "Your recorded data does not include the start and end dates of your medical leave, so I can’t answer questions about activity during it."
   },
   {
     question: 'List every future calendar result, including results beyond the cap.',
+    domain: 'future_schedule',
     reason: 'calendar_results_truncated',
     copy: "Calendar results were capped, so AI Insights cannot answer a question that requires the omitted results."
   },
   {
-    question: 'How were my goals doing last week?',
-    reason: 'goal_history_unavailable',
-    copy: "AI Insights includes active goals only, so goal history is unavailable."
+    question: 'How did I do last week on my backdated 7-session running goal?',
+    domain: 'goals',
+    reason: 'goal_did_not_exist',
+    target: 7,
+    copy: "That goal did not exist yet for the requested period, so I can’t evaluate it then."
+  },
+  {
+    question: 'How did I do last week on my edited 8-hour swimming goal?',
+    domain: 'goals',
+    reason: 'goal_changed_after_period',
+    target: 8,
+    copy: "That goal changed after the requested period, so I can’t reliably reconstruct its earlier target and settings."
+  },
+  {
+    question: 'How did I do last week on my streak goal?',
+    domain: 'goals',
+    reason: 'goal_type_requires_saved_history',
+    type: 'streak',
+    copy: "That type of goal needs saved progress history, so I can’t reliably reconstruct it for an earlier period."
+  },
+  {
+    question: 'How did I do six weeks ago on my weightlifting goal?',
+    domain: 'goals',
+    reason: 'goal_period_outside_recent_range',
+    target: 4,
+    copy: "AI Insights includes the three most recent closed goal periods, so I can’t evaluate that older period."
   },
   {
     question: 'If my current pace continued, what would my goal progress be by the end of this month?',
+    domain: 'goals',
     reason: 'goal_projection_unsupported',
+    target: 100,
     copy: "AI Insights includes the server-computed on-track status, but it cannot calculate a catch-up projection."
   },
   {
     question: `What events do I have in ${OUT_OF_RANGE_MONTH_YEAR_LABEL}?`,
+    domain: 'future_schedule',
     reason: 'calendar_month_out_of_range',
     copy: "Nothing is scheduled that far ahead, so AI Insights cannot tell whether that month is empty."
   }
@@ -191,6 +232,22 @@ async function api(loginState, method, route, body) {
   return { status: response.status, body: await response.json().catch(() => ({})) };
 }
 
+function findingForNotAnswerableCase(item, data) {
+  const finding = {
+    type: 'not_answerable',
+    domain: item.domain,
+    reason: item.reason
+  };
+  if (item.domain === 'goals') {
+    const index = data.goals.active.items.findIndex((goal) =>
+      (item.target === undefined || goal.target.value === item.target) &&
+      (item.type === undefined || goal.type === item.type)
+    );
+    finding.subjectPath = `goals.active.items.${index}`;
+  }
+  return finding;
+}
+
 function responseFor(envelope) {
   const question = envelope.question;
   const count = envelope.data.allTime.activityCount;
@@ -199,7 +256,16 @@ function responseFor(envelope) {
   const notAnswerableCase = NOT_ANSWERABLE_CASES.find((item) => item.question === question);
   if (notAnswerableCase) {
     output = {
-      findings: [{ type: 'not_answerable', reason: notAnswerableCase.reason }],
+      findings: [findingForNotAnswerableCase(notAnswerableCase, envelope.data)],
+      limitations: []
+    };
+  } else if (/wrong-domain reason fixture/i.test(question)) {
+    output = {
+      findings: [{
+        type: 'not_answerable',
+        domain: 'future_schedule',
+        reason: 'goal_changed_after_period'
+      }],
       limitations: []
     };
   } else if (/force policy classifier miss/i.test(question)) {
@@ -408,6 +474,18 @@ function findingsForAnswerableQuestion(question, data) {
     const index = data.goals.active.items.findIndex((goal) => goal.sport === 'cycling');
     return [{ type: 'goal_projection', path: `goals.active.items.${index}`, value: data.goals.active.items[index] }];
   }
+  if (question === 'How did I do last week on my weightlifting goal?') {
+    const index = data.goals.active.items.findIndex((goal) =>
+      goal.type === 'frequency' && goal.sport === 'weightlifting' && goal.target.value === 4);
+    const path = `goals.active.items.${index}.previousPeriods.0`;
+    return [{ type: 'goal_period', path, value: valueAtPath(data, path) }];
+  }
+  if (question === 'How did I do last month on my cycling goal?') {
+    const index = data.goals.active.items.findIndex((goal) =>
+      goal.type === 'distance' && goal.sport === 'cycling' && goal.target.value === 100);
+    const path = `goals.active.items.${index}.previousPeriods.0`;
+    return [{ type: 'goal_period', path, value: valueAtPath(data, path) }];
+  }
   throw new Error('No answerable fixture response for: ' + question);
 }
 
@@ -534,8 +612,8 @@ async function cleanup() {
   let browser;
   try {
     writeManifest();
-    check('verification matrix contains exactly 28 preserved-and-extended questions',
-      ANSWERABLE_QUESTIONS.length + NOT_ANSWERABLE_CASES.length + POLICY_REFUSAL_CASES.length === 28,
+    check('verification matrix contains exactly 33 preserved-and-extended questions',
+      ANSWERABLE_QUESTIONS.length + NOT_ANSWERABLE_CASES.length + POLICY_REFUSAL_CASES.length === 33,
       JSON.stringify({
         answerable: ANSWERABLE_QUESTIONS.length,
         notAnswerable: NOT_ANSWERABLE_CASES.length,
@@ -609,6 +687,18 @@ async function cleanup() {
         distance: i === 2 ? '10.04 km' : i === 3 ? '11.04 km' : (10 + i) + ' km'
       });
     }
+    const currentWeekStart = weekStartKeyInZone(new Date(), TEST_TIMEZONE);
+    const lastWeekStart = shiftDay(currentWeekStart, -7);
+    for (let offset = 0; offset < 3; offset++) {
+      activityRows.push({
+        user_id: users.pro.id,
+        sport: 'weightlifting',
+        title: 'GOAL_HISTORY_WEIGHTLIFTING_' + offset,
+        date: shiftDay(lastWeekStart, offset) + 'T19:00:00.000Z',
+        duration: '1h',
+        distance: null
+      });
+    }
     activityRows.push({
       user_id: users.pro.id,
       sport: 'running',
@@ -663,10 +753,35 @@ async function cleanup() {
         notes: 'OTHER_USER_PLAN_NOTES_SENTINEL', status: 'planned'
       }
     ]));
-    await must('create cycling goal', admin.from('goals').insert({
-      user_id: users.pro.id, type: 'distance', sport: 'cycling', target_value: 100,
-      unit: 'km', period: 'monthly', status: 'active'
-    }));
+    const oldGoalTimestamp = new Date(Date.now() - 180 * 86400000).toISOString();
+    const oldGoalStart = shiftDay(dayKeyInZone(new Date(), TEST_TIMEZONE), -180);
+    await must('create goal-history fixtures', admin.from('goals').insert([
+      {
+        user_id: users.pro.id, type: 'distance', sport: 'cycling', target_value: 100,
+        unit: 'km', period: 'monthly', status: 'active', start_date: oldGoalStart,
+        created_at: oldGoalTimestamp, updated_at: oldGoalTimestamp
+      },
+      {
+        user_id: users.pro.id, type: 'frequency', sport: 'weightlifting', target_value: 4,
+        unit: null, period: 'weekly', status: 'active', start_date: oldGoalStart,
+        created_at: oldGoalTimestamp, updated_at: oldGoalTimestamp
+      },
+      {
+        user_id: users.pro.id, type: 'frequency', sport: 'running', target_value: 7,
+        unit: null, period: 'weekly', status: 'active', start_date: oldGoalStart,
+        created_at: new Date().toISOString(), updated_at: new Date().toISOString()
+      },
+      {
+        user_id: users.pro.id, type: 'duration', sport: 'swimming', target_value: 8,
+        unit: null, period: 'weekly', status: 'active', start_date: oldGoalStart,
+        created_at: oldGoalTimestamp, updated_at: new Date().toISOString()
+      },
+      {
+        user_id: users.pro.id, type: 'streak', sport: 'running', target_value: 5,
+        unit: null, period: 'weekly', status: 'active', start_date: oldGoalStart,
+        created_at: oldGoalTimestamp, updated_at: oldGoalTimestamp
+      }
+    ]));
     const eventRows = await must('create calendar events', admin.from('events').insert([
       {
         created_by: users.pro.id, club_id: clubId, title: 'MEMBER_CLUB_EVENT_ALLOWED',
@@ -733,9 +848,9 @@ async function cleanup() {
       privacyCapture.body.system.includes('{"type":"metric","path":"last12Months.10.durationHours","value":16.4}') &&
       !privacyCapture.body.system.includes('"value":"exact copied value"'),
       privacyCapture.body.system);
-    check('actual model payload contains the allowlisted data object', !!privacyCapture.envelope.data && privacyCapture.envelope.data.allTime.activityCount === 8, serializedPayload);
+    check('actual model payload contains the allowlisted data object', !!privacyCapture.envelope.data && privacyCapture.envelope.data.allTime.activityCount === 11, serializedPayload);
     check('actual model payload has 12 timezone-calendar month buckets including zero months',
-      privacyCapture.envelope.data.schemaVersion === 4 &&
+      privacyCapture.envelope.data.schemaVersion === 5 &&
       privacyCapture.envelope.data.last12Months.length === 12 &&
       privacyCapture.envelope.data.last12Months.every((month) =>
         JSON.stringify(Object.keys(month).sort()) === JSON.stringify([
@@ -758,7 +873,7 @@ async function cleanup() {
       !Object.prototype.hasOwnProperty.call(lastMonthContext, 'dates'),
       JSON.stringify({ month: lastMonthContext, expectedLastMonthRows }));
     check('future-dated activity is excluded from all model facts',
-      privacyCapture.envelope.data.allTime.activityCount === 8 &&
+      privacyCapture.envelope.data.allTime.activityCount === 11 &&
       !serializedPayload.includes('9999') &&
       !serializedPayload.includes('99h') &&
       !serializedPayload.includes('FUTURE_ACTIVITY_MUST_NOT_REACH_MODEL'),
@@ -828,8 +943,8 @@ async function cleanup() {
         row.count === 2 &&
         row.included === 2 &&
         row.truncated === false) &&
-      privacyCapture.envelope.data.goals.active.included === 1 &&
-      privacyCapture.envelope.data.goals.active.total === 1,
+      privacyCapture.envelope.data.goals.active.included === 5 &&
+      privacyCapture.envelope.data.goals.active.total === 5,
       JSON.stringify({ calendar: privacyCapture.envelope.data.calendar, goals: privacyCapture.envelope.data.goals }));
     const nextPlanMonth = privacyCapture.envelope.data.calendar.plannedSessions.byMonth
       .find((row) => row.month === NEXT_MONTH_KEY);
@@ -862,11 +977,42 @@ async function cleanup() {
       zeroPlanMonth.status === 200 &&
       zeroPlanMonth.body.answer === `You have no planned sessions in ${NEXT_MONTH_YEAR_LABEL}.`,
       JSON.stringify(zeroPlanMonth.body));
-    check('goal projection contains only the approved non-free-text fields',
-      JSON.stringify(Object.keys(privacyCapture.envelope.data.goals.active.items[0]).sort()) === JSON.stringify([
-        'isComplete', 'onTrack', 'period', 'progress', 'sport', 'target', 'type', 'windowEnd', 'windowStart'
-      ]),
-      JSON.stringify(privacyCapture.envelope.data.goals.active.items[0]));
+    const eligibleWeeklyGoal = privacyCapture.envelope.data.goals.active.items.find((goal) =>
+      goal.type === 'frequency' && goal.sport === 'weightlifting' && goal.target.value === 4);
+    const backdatedGoal = privacyCapture.envelope.data.goals.active.items.find((goal) => goal.target.value === 7);
+    const editedGoal = privacyCapture.envelope.data.goals.active.items.find((goal) => goal.target.value === 8);
+    const streakGoal = privacyCapture.envelope.data.goals.active.items.find((goal) => goal.type === 'streak');
+    check('eligible weekly goal exposes exactly three compact newest-first previous periods',
+      eligibleWeeklyGoal &&
+      Array.isArray(eligibleWeeklyGoal.previousPeriods) &&
+      eligibleWeeklyGoal.previousPeriods.length === 3 &&
+      eligibleWeeklyGoal.previousPeriods[0].progress.value === 3 &&
+      eligibleWeeklyGoal.previousPeriods[0].target.value === 4 &&
+      eligibleWeeklyGoal.previousPeriods[0].achieved === false &&
+      eligibleWeeklyGoal.previousPeriods.every((period, index, periods) =>
+        /^\d{4}-\d{2}-\d{2}$/.test(period.windowStart) &&
+        /^\d{4}-\d{2}-\d{2}$/.test(period.windowEnd) &&
+        (index === 0 || periods[index - 1].windowStart > period.windowStart)
+      ),
+      JSON.stringify(eligibleWeeklyGoal));
+    check('all three server-side history eligibility outcomes are represented without raw timestamps',
+      backdatedGoal && backdatedGoal.previousPeriodUnavailableReason === 'goal_did_not_exist' &&
+      !Object.prototype.hasOwnProperty.call(backdatedGoal, 'previousPeriods') &&
+      editedGoal && editedGoal.previousPeriodUnavailableReason === 'goal_changed_after_period' &&
+      !Object.prototype.hasOwnProperty.call(editedGoal, 'previousPeriods') &&
+      streakGoal && streakGoal.previousPeriodUnavailableReason === 'goal_type_requires_saved_history' &&
+      !Object.prototype.hasOwnProperty.call(streakGoal, 'previousPeriods') &&
+      !/"created_at"|"updated_at"|"start_date"/.test(JSON.stringify(privacyCapture.envelope.data.goals)),
+      JSON.stringify(privacyCapture.envelope.data.goals));
+    check('goal projection contains only approved non-free-text history fields',
+      privacyCapture.envelope.data.goals.active.items.every((goal) =>
+        Object.keys(goal).every((key) => [
+          'isComplete', 'onTrack', 'period', 'previousPeriodRange',
+          'previousPeriodUnavailableReason', 'previousPeriods', 'progress', 'sport',
+          'target', 'type', 'windowEnd', 'windowStart'
+        ].includes(key)
+      )),
+      JSON.stringify(privacyCapture.envelope.data.goals.active.items));
 
     const heavyPlans = Array.from({ length: 100 }, (_, index) => ({
       user_id: users.pro.id,
@@ -1091,6 +1237,23 @@ async function cleanup() {
       listFilterDiagnostic.body.answer === FALLBACK_COPY,
       JSON.stringify(listFilterDiagnostic));
 
+    const usageBeforeWrongDomain = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+    const wrongDomain = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+      question: 'Return the wrong-domain reason fixture.',
+      history: []
+    });
+    const usageAfterWrongDomain = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+    check('server rejects a recognized reason assigned to the wrong domain',
+      wrongDomain.status === 200 &&
+      wrongDomain.body.rejectedReason === 'invalid_not_answerable' &&
+      wrongDomain.body.answer === FALLBACK_COPY &&
+      wrongDomain.body.notAnswerable !== true,
+      JSON.stringify(wrongDomain));
+    check('wrong-domain rejection refunds its exact quota slot',
+      usageBeforeWrongDomain.body.used === usageAfterWrongDomain.body.used &&
+      usageBeforeWrongDomain.body.remaining === usageAfterWrongDomain.body.remaining,
+      JSON.stringify({ before: usageBeforeWrongDomain.body, after: usageAfterWrongDomain.body }));
+
     const rejectionLogs = app.output().split('\n').filter((line) => line.includes('AI Insights validation rejection:'));
     check('rejection diagnostics include safe scalar mismatch values and types only on allowlisted paths',
       rejectionLogs.some((line) => line.includes('"rejectedReason":"invalid_finding"') && line.includes('"offendingPath":"allTime.activityCount"')) &&
@@ -1098,8 +1261,8 @@ async function cleanup() {
       rejectionLogs.some((line) =>
         line.includes('"rejectedReason":"mismatched_value"') &&
         line.includes('"offendingPath":"allTime.activityCount"') &&
-        line.includes('"expectedValue":8') &&
-        line.includes('"receivedValue":9') &&
+        line.includes('"expectedValue":11') &&
+        line.includes('"receivedValue":12') &&
         line.includes('"expectedType":"number"') &&
         line.includes('"receivedType":"number"')) &&
       rejectionLogs.some((line) =>
@@ -1181,6 +1344,16 @@ async function cleanup() {
           !result.body.answer.includes(`${countPhrase} was`),
           result.body.answer);
       }
+      if (question === 'How did I do last week on my weightlifting goal?') {
+        check('eligible weekly goal history uses the exact past-tense renderer',
+          result.body.answer === 'Last week your weightlifting frequency goal reached 3 of 4 sessions and was not achieved.',
+          result.body.answer);
+      }
+      if (question === 'How did I do last month on my cycling goal?') {
+        check('eligible monthly goal history answers for last month in the past tense',
+          /^Last month your cycling distance goal reached .+ and was (?:not )?achieved\.$/.test(result.body.answer),
+          result.body.answer);
+      }
     }
 
     for (const notAnswerableCase of NOT_ANSWERABLE_CASES) {
@@ -1192,6 +1365,7 @@ async function cleanup() {
       });
       const usageAfterNotAnswerable = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
       const providerRecord = captured[captured.length - 1];
+      const expectedFinding = findingForNotAnswerableCase(notAnswerableCase, providerRecord.envelope.data);
       check('not-answerable question reaches provider: ' + notAnswerableCase.question,
         captured.length === providerCountBefore + 1 &&
         providerRecord.envelope.question === notAnswerableCase.question,
@@ -1203,7 +1377,7 @@ async function cleanup() {
         result.body.notAnswerable === true &&
         result.body.notAnswerableReason === notAnswerableCase.reason &&
         result.body.evidence.length === 0 &&
-        JSON.stringify(providerRecord.output.findings) === JSON.stringify([{ type: 'not_answerable', reason: notAnswerableCase.reason }]),
+        JSON.stringify(providerRecord.output.findings) === JSON.stringify([expectedFinding]),
         JSON.stringify({ body: result.body, output: providerRecord.output }));
       check('not-answerable result does not consume quota: ' + notAnswerableCase.question,
         usageBeforeNotAnswerable.status === 200 &&
@@ -1274,9 +1448,9 @@ async function cleanup() {
     await proPage.goto(BASE + '/profile#insights', { waitUntil: 'networkidle' });
     await proPage.locator('#ai-insights-question').fill('How many activities have I logged?');
     await proPage.locator('#ai-insights-form button[type="submit"]').click();
-    await proPage.locator('#ai-insights-thread').getByText('Your all-time activity count was 8.').waitFor();
+    await proPage.locator('#ai-insights-thread').getByText('Your all-time activity count was 11.').waitFor();
     check('Pro browser renders the returned AI answer',
-      (await proPage.locator('#ai-insights-thread').innerText()).includes('Your all-time activity count was 8.'));
+      (await proPage.locator('#ai-insights-thread').innerText()).includes('Your all-time activity count was 11.'));
     check('successful Pro browser rendering leaves the inline error empty',
       (await proPage.locator('#ai-insights-error').innerText()).trim() === '',
       await proPage.locator('#ai-insights-error').innerText());
@@ -1293,7 +1467,7 @@ async function cleanup() {
     });
     await proPage.locator('#ai-insights-question').fill('Show this answer through the plain-text fallback.');
     await proPage.locator('#ai-insights-form button[type="submit"]').click();
-    const renderedAnswers = proPage.locator('#ai-insights-thread').getByText('Your all-time activity count was 8.', { exact: true });
+    const renderedAnswers = proPage.locator('#ai-insights-thread').getByText('Your all-time activity count was 11.', { exact: true });
     await renderedAnswers.nth(1).waitFor();
     check('post-200 enhanced-render failure still displays the answer as plain text',
       await renderedAnswers.count() === 2);

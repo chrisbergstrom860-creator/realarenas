@@ -16,13 +16,37 @@ const NOT_ANSWERABLE_COPY = {
   missing_injury_date: "Your recorded data does not include when your injury occurred, so I can’t answer questions about activity before or after it.",
   missing_medical_leave_dates: "Your recorded data does not include the start and end dates of your medical leave, so I can’t answer questions about activity during it.",
   missing_event_date: "Your recorded data does not include the date of the event needed to answer that question.",
-  period_outside_coverage: "Detailed calendar totals are available for the last 12 months, so the requested period is outside the available coverage.",
+  period_outside_coverage: "I can only look back at your training month by month for the last 12 months, so I can’t answer for that period.",
   unsupported_metric: "Your recorded data does not include the measurement needed to answer that question.",
-  goal_history_unavailable: "AI Insights includes active goals only, so goal history is unavailable.",
+  goal_did_not_exist: "That goal did not exist yet for the requested period, so I can’t evaluate it then.",
+  goal_changed_after_period: "That goal changed after the requested period, so I can’t reliably reconstruct its earlier target and settings.",
+  goal_type_requires_saved_history: "That type of goal needs saved progress history, so I can’t reliably reconstruct it for an earlier period.",
+  goal_period_outside_recent_range: "AI Insights includes the three most recent closed goal periods, so I can’t evaluate that older period.",
   goal_comparison_unsupported: "AI Insights can describe active goals individually, but it does not support comparisons between goals.",
   goal_projection_unsupported: "AI Insights includes the server-computed on-track status, but it cannot calculate a catch-up projection.",
   calendar_results_truncated: "Calendar results were capped, so AI Insights cannot answer a question that requires the omitted results.",
   calendar_month_out_of_range: "Nothing is scheduled that far ahead, so AI Insights cannot tell whether that month is empty."
+};
+const NOT_ANSWERABLE_REASONS_BY_DOMAIN = {
+  recorded_training: new Set([
+    'missing_injury_date',
+    'missing_medical_leave_dates',
+    'missing_event_date',
+    'period_outside_coverage',
+    'unsupported_metric'
+  ]),
+  future_schedule: new Set([
+    'calendar_results_truncated',
+    'calendar_month_out_of_range'
+  ]),
+  goals: new Set([
+    'goal_did_not_exist',
+    'goal_changed_after_period',
+    'goal_type_requires_saved_history',
+    'goal_period_outside_recent_range',
+    'goal_comparison_unsupported',
+    'goal_projection_unsupported'
+  ])
 };
 
 class AiProviderConfigurationError extends Error {
@@ -138,7 +162,8 @@ function safeDiagnosticPath(path) {
     'plannedDuration', 'status', 'title', 'type', 'clubName', 'ownRsvp', 'active',
     'target', 'progress', 'value', 'unit', 'period', 'percent', 'onTrack',
     'isComplete', 'windowStart', 'windowEnd', 'limitations', 'byMonth',
-    'plannedCount', 'totalPlannedMinutes', 'count'
+    'plannedCount', 'totalPlannedMinutes', 'count', 'previousPeriods', 'achieved',
+    'previousPeriodRange', 'previousPeriodUnavailableReason'
   ]);
   return tokens.every((token) => /^\d+$/.test(token) || allowed.has(token)) ? tokens.join('.') : null;
 }
@@ -634,6 +659,92 @@ function renderCalendarList(finding, context) {
   };
 }
 
+function goalUnitLabel(unit, target) {
+  if (!unit) return '';
+  if (target === 1 && unit === 'sessions') return 'session';
+  if (target === 1 && unit === 'hours') return 'hour';
+  if (target === 1 && unit === 'days') return 'day';
+  return unit;
+}
+
+function goalDescription(goal) {
+  return `${goal.sport || 'all-sport'} ${goal.type} goal`;
+}
+
+function goalPeriodProgressText(period) {
+  const unit = goalUnitLabel(period.target.unit, period.target.value);
+  return `${period.progress.value} of ${period.target.value}${unit ? ` ${unit}` : ''}`;
+}
+
+function humanGoalPeriodLabel(goal, period, index, list = false) {
+  if (!list && index === 0) return goal.period === 'weekly' ? 'Last week' : 'Last month';
+  if (goal.period === 'monthly') return humanMonthLabel(period.windowStart.slice(0, 7));
+  const start = new Date(period.windowStart + 'T12:00:00Z').toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC'
+  });
+  return `the week of ${start}`;
+}
+
+function renderGoalPeriod(goal, period, index) {
+  const periodLabel = humanGoalPeriodLabel(goal, period, index);
+  const lead = index === 0 ? periodLabel : `In ${periodLabel}`;
+  return `${lead} your ${goalDescription(goal)} reached ${goalPeriodProgressText(period)} and was ${period.achieved ? '' : 'not '}achieved.`;
+}
+
+function renderGoalPeriodFinding(finding, context) {
+  const path = normalizePath(finding.path);
+  const singleMatch = path && path.match(/^goals\.active\.items\.(\d+)\.previousPeriods\.(\d+)$/);
+  const listMatch = path && path.match(/^goals\.active\.items\.(\d+)\.previousPeriods$/);
+  const match = finding.type === 'goal_period' ? singleMatch : listMatch;
+  if (!match) return { error: 'unsupported_path', offendingPath: path };
+  const canonicalKeys = finding.type === 'goal_period'
+    ? ['path', 'type', 'value']
+    : ['path', 'type'];
+  const capturedListKeys = ['path', 'type', 'value'];
+  const keys = Object.keys(finding).sort();
+  if (JSON.stringify(keys) !== JSON.stringify(canonicalKeys) &&
+      !(finding.type === 'goal_period_list' && JSON.stringify(keys) === JSON.stringify(capturedListKeys))) {
+    return { error: 'invalid_finding', offendingPath: path };
+  }
+  const goalPath = `goals.active.items.${match[1]}`;
+  const goalResult = valueAtPath(context, goalPath);
+  const actual = valueAtPath(context, path);
+  if (!goalResult.found || !goalResult.value || !actual.found) {
+    return { error: 'missing_path', offendingPath: path };
+  }
+  if (finding.type === 'goal_period') {
+    if (!actual.value || typeof actual.value !== 'object') {
+      return { error: 'missing_path', offendingPath: path };
+    }
+    if (!equalEvidenceValue(actual.value, finding.value)) {
+      return { error: 'mismatched_value', offendingPath: path };
+    }
+    return {
+      text: renderGoalPeriod(goalResult.value, actual.value, Number(match[2])),
+      evidence: [evidenceItem(path, actual.value)]
+    };
+  }
+  if (!Array.isArray(actual.value) || !actual.value.length) {
+    return { error: 'missing_path', offendingPath: path };
+  }
+  if (Object.prototype.hasOwnProperty.call(finding, 'value') &&
+      !equalEvidenceValue(actual.value, finding.value)) {
+    return { error: 'mismatched_value', offendingPath: path };
+  }
+  const periods = actual.value.slice(0, 3);
+  const periodNoun = goalResult.value.period === 'weekly' ? 'weeks' : 'months';
+  const entries = periods.map((period, index) =>
+    `${goalPeriodProgressText(period)} in ${humanGoalPeriodLabel(goalResult.value, period, index, true)} and was ${period.achieved ? '' : 'not '}achieved`
+  );
+  return {
+    text: `Over your last ${periods.length === 3 ? 'three' : periods.length} closed ${periodNoun}, your ${goalDescription(goalResult.value)} reached ${entries.join('; ')}.`,
+    evidence: periods.map((period, index) => evidenceItem(`${path}.${index}`, period))
+  };
+}
+
 function renderTypedFinding(finding, context) {
   if (!finding || typeof finding !== 'object' || typeof finding.type !== 'string') {
     return { error: 'invalid_finding' };
@@ -752,6 +863,9 @@ function renderTypedFinding(finding, context) {
   if (finding.type === 'calendar_plan_list' || finding.type === 'calendar_event_list') {
     return renderCalendarList(finding, context);
   }
+  if (finding.type === 'goal_period' || finding.type === 'goal_period_list') {
+    return renderGoalPeriodFinding(finding, context);
+  }
   if (finding.type === 'insufficient_trend_data') {
     if (Object.keys(finding).length !== 1) return { error: 'invalid_finding' };
     if (context.dataQuality && context.dataQuality.trendEligible) return { error: 'invalid_limitation' };
@@ -769,7 +883,8 @@ function renderTypedFinding(finding, context) {
 const DIAGNOSTIC_FINDING_TYPES = new Set([
   'metric', 'comparison', 'standing', 'personal_record', 'calendar_plan',
   'calendar_event', 'calendar_plan_list', 'calendar_event_list', 'plan_adherence',
-  'goal_projection', 'insufficient_trend_data', 'not_answerable', 'policy_refusal'
+  'goal_projection', 'goal_period', 'goal_period_list', 'insufficient_trend_data',
+  'not_answerable', 'policy_refusal'
 ]);
 
 function safeFindingDiagnostics(raw) {
@@ -819,15 +934,28 @@ function validateInsightResponse(raw, context) {
   const notAnswerableFindings = parsed.findings.filter((finding) => finding && finding.type === 'not_answerable');
   if (notAnswerableFindings.length) {
     const finding = notAnswerableFindings[0];
+    const domainReasons = NOT_ANSWERABLE_REASONS_BY_DOMAIN[finding.domain];
+    const expectedKeys = finding.domain === 'goals'
+      ? ['domain', 'reason', 'subjectPath', 'type']
+      : ['domain', 'reason', 'type'];
+    const subjectPath = finding.domain === 'goals' ? normalizePath(finding.subjectPath) : null;
+    const subject = subjectPath ? valueAtPath(context, subjectPath) : { found: false };
     if (parsed.findings.length !== 1 || parsed.limitations.length !== 0 ||
-        JSON.stringify(Object.keys(finding).sort()) !== JSON.stringify(['reason', 'type']) ||
-        !Object.prototype.hasOwnProperty.call(NOT_ANSWERABLE_COPY, finding.reason)) {
+        JSON.stringify(Object.keys(finding).sort()) !== JSON.stringify(expectedKeys) ||
+        !domainReasons || !domainReasons.has(finding.reason) ||
+        !Object.prototype.hasOwnProperty.call(NOT_ANSWERABLE_COPY, finding.reason) ||
+        (finding.domain === 'goals' && (
+          !/^goals\.active\.items\.\d+$/.test(subjectPath || '') ||
+          !subject.found || !subject.value || typeof subject.value !== 'object'
+        ))) {
       return { ok: false, answer: FALLBACK_COPY, reason: 'invalid_not_answerable' };
     }
     return {
       ok: true,
       notAnswerable: true,
       notAnswerableReason: finding.reason,
+      notAnswerableDomain: finding.domain,
+      notAnswerableSubjectPath: subjectPath || undefined,
       answer: NOT_ANSWERABLE_COPY[finding.reason],
       evidence: [],
       limitations: []
@@ -911,14 +1039,20 @@ function buildSystemPrompt() {
     '{"type":"calendar_event_list","path":"calendar.events.items","filter":{"month":"2026-09"}} is the literal list-finding format for eligible events in September 2026. Replace only the month with an exact month present in events.byMonth.',
     '{"type":"plan_adherence","path":"calendar.pastPlanAdherence.N","value":"exact copied object"}',
     '{"type":"goal_projection","path":"goals.active.items.N","value":"exact copied object"}',
+    '{"type":"goal_period","path":"goals.active.items.N.previousPeriods.N","value":"exact copied object"}',
+    '{"type":"goal_period_list","path":"goals.active.items.N.previousPeriods"} renders up to three exact recent closed periods. An optional value key is allowed only when it exactly copies the full previousPeriods array.',
     '{"type":"insufficient_trend_data"} only when DATA_JSON.dataQuality.trendEligible is false.',
-    '{"type":"not_answerable","reason":"missing_injury_date|missing_medical_leave_dates|missing_event_date|period_outside_coverage|unsupported_metric|goal_history_unavailable|goal_comparison_unsupported|goal_projection_unsupported|calendar_results_truncated|calendar_month_out_of_range"} must be the only finding, with no limitations, when DATA_JSON lacks the information needed to answer honestly.',
-    'Use missing_injury_date for before/after injury questions without an injury date; missing_medical_leave_dates for medical-leave-window questions without its dates; missing_event_date for another absent event boundary; period_outside_coverage for calendar detail older than last12Months; unsupported_metric when the requested measurement is not present.',
+    '{"type":"not_answerable","domain":"recorded_training|future_schedule","reason":"domain-compatible reason"} or {"type":"not_answerable","domain":"goals","subjectPath":"goals.active.items.N","reason":"domain-compatible goal reason"} must be the only finding, with no limitations, when DATA_JSON lacks the information needed to answer honestly.',
+    'Choose the question’s subject domain before choosing a not_answerable reason.',
+    'RECORDED TRAINING: use only missing_injury_date for before/after injury questions without an injury date; missing_medical_leave_dates for medical-leave-window questions without its dates; missing_event_date for another absent event boundary; period_outside_coverage for recorded training month detail older than last12Months; or unsupported_metric when the requested recorded-training measurement is not present. Never use period_outside_coverage for a goal or future-schedule question.',
+    'FUTURE SCHEDULE: use only calendar_results_truncated when omitted capped results are required, or calendar_month_out_of_range when the requested future month is beyond the relevant byMonth range.',
+    'GOALS: use only goal_did_not_exist when the goal’s previousPeriodUnavailableReason says so for the requested recent period; goal_changed_after_period when it says so; goal_type_requires_saved_history for streak or custom goals; goal_period_outside_recent_range when the requested closed period predates previousPeriodRange.windowStart; goal_comparison_unsupported for comparing separate goals; or goal_projection_unsupported for hypothetical catch-up or future projection. Every goal not_answerable finding must include the exact active-goal subjectPath.',
+    'Worked example: “How did I do last week on my weightlifting goal?” must use a matching goal_period finding when that weekly period is present; otherwise use a goals-domain reason with that goal’s subjectPath. Never use period_outside_coverage for this question.',
     'last12Months contains 12 athlete-timezone calendar buckets, oldest first, including zero months. Each month has totals, activeDays, restDays, observedDays, common averages, and active-sport summaries.',
     'last12Weeks.sports contains aggregate sport summaries for the detailed 12-week window. Use these direct paths instead of calculating from weekly or daily rows.',
     'calendar contains only the athlete’s own future plans, visible eligible future events, and 12 monthly plan-status counts. plannedSessions.total/included cover all future plan records across planned, done, and skipped statuses. Each byMonth collection is contiguous from the current athlete-timezone month through the later of next month or that collection’s last scheduled item, including exact zero buckets computed before the item caps. A zero bucket is known empty and answerable. A requested future month beyond that collection’s last byMonth bucket is unknown; use calendar_month_out_of_range. Use byMonth.plannedCount for sessions left, and use direct byMonth paths for month counts and planned minutes; never derive a month count from items or use the all-future total for one month.',
     'Use calendar_plan_list or calendar_event_list when the user asks what the month’s matching items are. Canonical list findings contain exactly type, path, and filter; omit value and every other key. The server applies the month filter and renders at most 10 items. If the relevant month bucket is truncated, include CALENDAR_RESULTS_TRUNCATED.',
-    'goals contains at most five active goals with server-computed progress and on-track status. Goal history, cross-goal comparison, and catch-up projections are unsupported; use their specific not_answerable reasons.',
+    'goals contains at most five active goals with server-computed progress and on-track status. Eligible weekly and monthly non-streak goals also contain up to three previousPeriods, newest first. Their compact windowStart/windowEnd dates use an exclusive windowEnd. Use goal_period for one requested closed period and goal_period_list when the user asks about all three. previousPeriodRange is the exact three-period coverage boundary. previousPeriodUnavailableReason explains why one or more recent periods are absent. Streak and custom goals never expose previousPeriods. Cross-goal comparison and catch-up projections remain unsupported.',
     '{"type":"policy_refusal","reason":"prescriptive|diet_weight_body|medical|athlete_characterization"} must be the only finding, with no limitations, when the user asks for advice or prescriptions; asks what they should do, eat, increase, decrease, or change; asks for diet, weight, body composition, or medical commentary; or asks you to characterize them as under-training, over-training, lazy, fit, healthy, or similar.',
     'Do not policy-refuse a descriptive question merely because it mentions workouts, training, rest days, routines, weight training, rides, injuries, medical leave, diet, nutrition, calories, or weight in a historical or recorded-data context.',
     'For policy refusals, return only the typed policy_refusal finding. Never write refusal or advice prose.',
@@ -933,6 +1067,7 @@ module.exports = {
   FALLBACK_COPY,
   REFUSAL_COPY,
   NOT_ANSWERABLE_COPY,
+  NOT_ANSWERABLE_REASONS_BY_DOMAIN,
   MODEL,
   MAX_HISTORY_TURNS,
   MAX_CALENDAR_LIST_ITEMS,

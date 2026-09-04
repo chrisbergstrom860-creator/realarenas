@@ -4,6 +4,7 @@ const {
   FALLBACK_COPY,
   REFUSAL_COPY,
   NOT_ANSWERABLE_COPY,
+  NOT_ANSWERABLE_REASONS_BY_DOMAIN,
   makeSignedHistoryTurn,
   verifyHistoryTurns,
   validateInsightResponse,
@@ -12,7 +13,7 @@ const {
 } = require('./ai-insights');
 
 const context = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   asOfDate: '2026-09-10',
   timezone: 'America/Los_Angeles',
   allTime: {
@@ -65,7 +66,45 @@ const context = {
     },
     pastPlanAdherence: [{ month: '2026-08', done: 3, skipped: 1, stillPlanned: 2 }]
   },
-  goals: { active: { items: [{ type: 'distance', sport: 'cycling', target: { value: 100, unit: 'km' }, period: 'monthly', progress: { value: 65, unit: 'km', percent: 65 }, onTrack: true, isComplete: false, windowStart: '2026-09-01T07:00:00.000Z', windowEnd: '2026-10-01T07:00:00.000Z' }] } }
+  goals: {
+    active: {
+      items: [{
+        type: 'distance',
+        sport: 'cycling',
+        target: { value: 100, unit: 'km' },
+        period: 'monthly',
+        progress: { value: 65, unit: 'km', percent: 65 },
+        onTrack: true,
+        isComplete: false,
+        windowStart: '2026-09-01T07:00:00.000Z',
+        windowEnd: '2026-10-01T07:00:00.000Z',
+        previousPeriodRange: { windowStart: '2026-06-01', windowEnd: '2026-09-01' },
+        previousPeriods: [
+          {
+            windowStart: '2026-08-01',
+            windowEnd: '2026-09-01',
+            target: { value: 100, unit: 'km' },
+            progress: { value: 105, unit: 'km', percent: 100 },
+            achieved: true
+          },
+          {
+            windowStart: '2026-07-01',
+            windowEnd: '2026-08-01',
+            target: { value: 100, unit: 'km' },
+            progress: { value: 75, unit: 'km', percent: 75 },
+            achieved: false
+          },
+          {
+            windowStart: '2026-06-01',
+            windowEnd: '2026-07-01',
+            target: { value: 100, unit: 'km' },
+            progress: { value: 90, unit: 'km', percent: 90 },
+            achieved: false
+          }
+        ]
+      }]
+    }
+  }
 };
 
 test('evidence validator accepts exact paths and values', () => {
@@ -191,6 +230,52 @@ test('calendar and active-goal typed findings render only exact copied records',
   assert.match(result.answer, /your plans were 3 done, 1 skipped, and 2 still planned/);
   assert.match(result.answer, /on track/);
   assert.deepEqual(result.limitations, []);
+});
+
+test('previous goal periods render achieved, not-achieved, and three-period past-tense copy', () => {
+  const first = context.goals.active.items[0].previousPeriods[0];
+  const achieved = validateInsightResponse({
+    findings: [{
+      type: 'goal_period',
+      path: 'goals.active.items.0.previousPeriods.0',
+      value: first
+    }],
+    limitations: []
+  }, context);
+  assert.equal(achieved.ok, true);
+  assert.equal(
+    achieved.answer,
+    'Last month your cycling distance goal reached 105 of 100 km and was achieved.'
+  );
+
+  const second = context.goals.active.items[0].previousPeriods[1];
+  const notAchieved = validateInsightResponse({
+    findings: [{
+      type: 'goal_period',
+      path: 'goals.active.items.0.previousPeriods.1',
+      value: second
+    }],
+    limitations: []
+  }, context);
+  assert.equal(notAchieved.ok, true);
+  assert.equal(
+    notAchieved.answer,
+    'In July 2026 your cycling distance goal reached 75 of 100 km and was not achieved.'
+  );
+
+  const list = validateInsightResponse({
+    findings: [{
+      type: 'goal_period_list',
+      path: 'goals.active.items.0.previousPeriods'
+    }],
+    limitations: []
+  }, context);
+  assert.equal(list.ok, true);
+  assert.equal(
+    list.answer,
+    'Over your last three closed months, your cycling distance goal reached 105 of 100 km in August 2026 and was achieved; 75 of 100 km in July 2026 and was not achieved; 90 of 100 km in June 2026 and was not achieved.'
+  );
+  assert.equal(list.evidence.length, 3);
 });
 
 test('calendar totals and monthly aggregates are renderable metrics', () => {
@@ -561,25 +646,58 @@ test('policy refusal rejects extra model prose, mixed findings, and unknown reas
 });
 
 test('typed not-answerable results use reason-specific server copy', () => {
-  for (const reason of Object.keys(NOT_ANSWERABLE_COPY)) {
+  for (const [domain, reasons] of Object.entries(NOT_ANSWERABLE_REASONS_BY_DOMAIN)) {
+    for (const reason of reasons) {
+      const finding = {
+        type: 'not_answerable',
+        domain,
+        reason,
+        ...(domain === 'goals' ? { subjectPath: 'goals.active.items.0' } : {})
+      };
+      const result = validateInsightResponse({
+        findings: [finding],
+        limitations: []
+      }, context);
+      assert.equal(result.ok, true);
+      assert.equal(result.notAnswerable, true);
+      assert.equal(result.notAnswerableReason, reason);
+      assert.equal(result.notAnswerableDomain, domain);
+      assert.equal(result.answer, NOT_ANSWERABLE_COPY[reason]);
+      assert.deepEqual(result.evidence, []);
+    }
+  }
+});
+
+test('not-answerable rejects wrong-domain reasons and unresolved goal subject paths', () => {
+  for (const finding of [
+    {
+      type: 'not_answerable',
+      domain: 'future_schedule',
+      reason: 'goal_changed_after_period'
+    },
+    {
+      type: 'not_answerable',
+      domain: 'goals',
+      subjectPath: 'goals.active.items.99',
+      reason: 'goal_changed_after_period'
+    }
+  ]) {
     const result = validateInsightResponse({
-      findings: [{ type: 'not_answerable', reason }],
+      findings: [finding],
       limitations: []
     }, context);
-    assert.equal(result.ok, true);
-    assert.equal(result.notAnswerable, true);
-    assert.equal(result.notAnswerableReason, reason);
-    assert.equal(result.answer, NOT_ANSWERABLE_COPY[reason]);
-    assert.deepEqual(result.evidence, []);
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'invalid_not_answerable');
+    assert.equal(result.answer, FALLBACK_COPY);
   }
 });
 
 test('not-answerable rejects extra prose, mixed findings, limitations, and unknown reasons', () => {
   for (const payload of [
-    { findings: [{ type: 'not_answerable', reason: 'missing_injury_date', text: 'I need your injury date.' }], limitations: [] },
-    { findings: [{ type: 'not_answerable', reason: 'missing_injury_date' }, { type: 'metric', path: 'allTime.activityCount', value: 8 }], limitations: [] },
-    { findings: [{ type: 'not_answerable', reason: 'missing_injury_date' }], limitations: ['DETAILED_WINDOW_12_WEEKS'] },
-    { findings: [{ type: 'not_answerable', reason: 'unknown' }], limitations: [] }
+    { findings: [{ type: 'not_answerable', domain: 'recorded_training', reason: 'missing_injury_date', text: 'I need your injury date.' }], limitations: [] },
+    { findings: [{ type: 'not_answerable', domain: 'recorded_training', reason: 'missing_injury_date' }, { type: 'metric', path: 'allTime.activityCount', value: 8 }], limitations: [] },
+    { findings: [{ type: 'not_answerable', domain: 'recorded_training', reason: 'missing_injury_date' }], limitations: ['DETAILED_WINDOW_12_WEEKS'] },
+    { findings: [{ type: 'not_answerable', domain: 'recorded_training', reason: 'unknown' }], limitations: [] }
   ]) {
     const result = validateInsightResponse(payload, context);
     assert.equal(result.ok, false);
