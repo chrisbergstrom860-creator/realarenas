@@ -468,33 +468,59 @@ function renderEventItem(item, context, compact = false) {
 }
 
 function renderCalendarList(finding, context) {
-  const expectedKeys = ['filter', 'path', 'type'];
-  if (JSON.stringify(Object.keys(finding).sort()) !== JSON.stringify(expectedKeys)) {
-    return { error: 'invalid_finding', offendingPath: normalizePath(finding.path) };
-  }
   const isPlan = finding.type === 'calendar_plan_list';
   const expectedPath = isPlan ? 'calendar.plannedSessions.items' : 'calendar.events.items';
   const path = normalizePath(finding.path);
-  if (path !== expectedPath) return { error: 'unsupported_path', offendingPath: path };
-  if (!finding.filter || typeof finding.filter !== 'object' ||
-      JSON.stringify(Object.keys(finding.filter)) !== JSON.stringify(['month']) ||
-      !/^\d{4}-\d{2}$/.test(finding.filter.month)) {
-    return { error: 'invalid_filter', offendingPath: path };
+  const filterPresent = Object.prototype.hasOwnProperty.call(finding, 'filter');
+  const filterShapeValid = !!(
+    finding.filter &&
+    typeof finding.filter === 'object' &&
+    !Array.isArray(finding.filter) &&
+    JSON.stringify(Object.keys(finding.filter)) === JSON.stringify(['month']) &&
+    typeof finding.filter.month === 'string' &&
+    /^\d{4}-\d{2}$/.test(finding.filter.month)
+  );
+  const parentPath = isPlan ? 'calendar.plannedSessions' : 'calendar.events';
+  const parentForFilter = valueAtPath(context, parentPath);
+  const filterValid = !!(
+    filterShapeValid &&
+    parentForFilter.found &&
+    Array.isArray(parentForFilter.value.byMonth) &&
+    parentForFilter.value.byMonth.some((row) => row && row.month === finding.filter.month)
+  );
+  const findingKeys = Object.keys(finding).sort();
+  const canonicalKeys = ['filter', 'path', 'type'];
+  const capturedProviderKeys = ['filter', 'path', 'type', 'value'];
+  if (JSON.stringify(findingKeys) !== JSON.stringify(canonicalKeys) &&
+      JSON.stringify(findingKeys) !== JSON.stringify(capturedProviderKeys)) {
+    return { error: 'invalid_finding', offendingPath: path, filterPresent, filterValid };
+  }
+  if (path !== expectedPath) {
+    return { error: 'unsupported_path', offendingPath: path, filterPresent, filterValid };
+  }
+  if (!filterShapeValid) {
+    return { error: 'invalid_filter', offendingPath: path, filterPresent, filterValid: false };
   }
   const collection = valueAtPath(context, path);
-  const parent = valueAtPath(context, isPlan ? 'calendar.plannedSessions' : 'calendar.events');
+  const parent = valueAtPath(context, parentPath);
   if (!collection.found || !Array.isArray(collection.value) || !parent.found ||
       !Array.isArray(parent.value.byMonth)) {
-    return { error: 'missing_path', offendingPath: path };
+    return { error: 'missing_path', offendingPath: path, filterPresent, filterValid: false };
   }
   const monthIndex = parent.value.byMonth.findIndex((row) => row && row.month === finding.filter.month);
-  if (monthIndex < 0) return { error: 'missing_path', offendingPath: path };
+  if (monthIndex < 0) {
+    return { error: 'missing_path', offendingPath: path, filterPresent, filterValid: false };
+  }
   const summary = parent.value.byMonth[monthIndex];
   const indexed = collection.value.map((item, index) => ({ item, index })).filter(({ item }) => {
     const itemDate = dateKeyForValue(item.date, context.timezone);
     const sameMonth = itemDate && itemDate.slice(0, 7) === finding.filter.month;
     return sameMonth && (!isPlan || item.status === 'planned');
   });
+  if (Object.prototype.hasOwnProperty.call(finding, 'value') &&
+      !equalEvidenceValue(indexed.map(({ item }) => item), finding.value)) {
+    return { error: 'mismatched_value', offendingPath: path, filterPresent, filterValid: true };
+  }
   const shown = indexed.slice(0, MAX_CALENDAR_LIST_ITEMS);
   const total = isPlan ? summary.plannedCount : summary.count;
   const noun = isPlan ? 'planned session' : 'event';
@@ -732,6 +758,8 @@ function validateInsightResponse(raw, context) {
         answer: FALLBACK_COPY,
         reason: result.error,
         offendingPath,
+        filterPresent: result.filterPresent === true,
+        filterValid: result.filterValid === true,
         mismatchDetails: offendingPath ? result.mismatchDetails || null : null
       };
     }
@@ -780,8 +808,8 @@ function buildSystemPrompt() {
     '{"type":"personal_record","path":"allTime.personalRecords.N","value":"exact copied object"}',
     '{"type":"calendar_plan","path":"calendar.plannedSessions.items.N","value":"exact copied object"}',
     '{"type":"calendar_event","path":"calendar.events.items.N","value":"exact copied object"}',
-    '{"type":"calendar_plan_list","path":"calendar.plannedSessions.items","filter":{"month":"YYYY-MM"}} for a month-filtered list of planned-status sessions.',
-    '{"type":"calendar_event_list","path":"calendar.events.items","filter":{"month":"YYYY-MM"}} for a month-filtered list of eligible events.',
+    '{"type":"calendar_plan_list","path":"calendar.plannedSessions.items","filter":{"month":"2026-09"}} is the literal list-finding format for planned-status sessions in September 2026. Replace only the month with an exact month present in plannedSessions.byMonth.',
+    '{"type":"calendar_event_list","path":"calendar.events.items","filter":{"month":"2026-09"}} is the literal list-finding format for eligible events in September 2026. Replace only the month with an exact month present in events.byMonth.',
     '{"type":"plan_adherence","path":"calendar.pastPlanAdherence.N","value":"exact copied object"}',
     '{"type":"goal_projection","path":"goals.active.items.N","value":"exact copied object"}',
     '{"type":"insufficient_trend_data"} only when DATA_JSON.dataQuality.trendEligible is false.',
@@ -790,7 +818,7 @@ function buildSystemPrompt() {
     'last12Months contains 12 athlete-timezone calendar buckets, oldest first, including zero months. Each month has totals, activeDays, restDays, observedDays, common averages, and active-sport summaries.',
     'last12Weeks.sports contains aggregate sport summaries for the detailed 12-week window. Use these direct paths instead of calculating from weekly or daily rows.',
     'calendar contains only the athlete’s own future plans, visible eligible future events, and 12 monthly plan-status counts. plannedSessions.total/included cover all future plan records across planned, done, and skipped statuses. plannedSessions.byMonth and events.byMonth contain exact athlete-timezone future month totals computed before the item caps. Use byMonth.plannedCount for sessions left, and use direct byMonth paths for month counts and planned minutes; never derive a month count from items or use the all-future total for one month.',
-    'Use calendar_plan_list or calendar_event_list when the user asks what the month’s matching items are. The server applies the month filter and renders at most 10 items. If the relevant month bucket is truncated, include CALENDAR_RESULTS_TRUNCATED.',
+    'Use calendar_plan_list or calendar_event_list when the user asks what the month’s matching items are. Canonical list findings contain exactly type, path, and filter; omit value and every other key. The server applies the month filter and renders at most 10 items. If the relevant month bucket is truncated, include CALENDAR_RESULTS_TRUNCATED.',
     'goals contains at most five active goals with server-computed progress and on-track status. Goal history, cross-goal comparison, and catch-up projections are unsupported; use their specific not_answerable reasons.',
     '{"type":"policy_refusal","reason":"prescriptive|diet_weight_body|medical|athlete_characterization"} must be the only finding, with no limitations, when the user asks for advice or prescriptions; asks what they should do, eat, increase, decrease, or change; asks for diet, weight, body composition, or medical commentary; or asks you to characterize them as under-training, over-training, lazy, fit, healthy, or similar.',
     'Do not policy-refuse a descriptive question merely because it mentions workouts, training, rest days, routines, weight training, rides, injuries, medical leave, diet, nutrition, calories, or weight in a historical or recorded-data context.',

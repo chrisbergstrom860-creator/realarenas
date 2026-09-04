@@ -250,6 +250,59 @@ test('bounded month lists are selected and written entirely by the server', () =
   assert.equal(result.evidence.length, 8);
 });
 
+test('captured provider list value is accepted only when it exactly matches the filtered records', () => {
+  const capturedFinding = {
+    type: 'calendar_plan_list',
+    path: 'calendar.plannedSessions.items',
+    filter: { month: '2026-09' },
+    value: context.calendar.plannedSessions.items
+  };
+  const accepted = validateInsightResponse({ findings: [capturedFinding], limitations: [] }, context);
+  assert.equal(accepted.ok, true);
+  assert.match(accepted.answer, /You have 3 planned sessions left/);
+
+  const altered = validateInsightResponse({
+    findings: [{
+      ...capturedFinding,
+      value: capturedFinding.value.slice(0, 2)
+    }],
+    limitations: []
+  }, context);
+  assert.equal(altered.ok, false);
+  assert.equal(altered.reason, 'mismatched_value');
+  assert.equal(altered.filterPresent, true);
+  assert.equal(altered.filterValid, true);
+});
+
+test('list findings reject arbitrary extra keys and months absent from byMonth with filter diagnostics', () => {
+  const extraKey = validateInsightResponse({
+    findings: [{
+      type: 'calendar_plan_list',
+      path: 'calendar.plannedSessions.items',
+      filter: { month: '2026-09' },
+      displayValue: 'not allowed'
+    }],
+    limitations: []
+  }, context);
+  assert.equal(extraKey.ok, false);
+  assert.equal(extraKey.reason, 'invalid_finding');
+  assert.equal(extraKey.filterPresent, true);
+  assert.equal(extraKey.filterValid, true);
+
+  const missingMonth = validateInsightResponse({
+    findings: [{
+      type: 'calendar_plan_list',
+      path: 'calendar.plannedSessions.items',
+      filter: { month: '2026-10' }
+    }],
+    limitations: []
+  }, context);
+  assert.equal(missingMonth.ok, false);
+  assert.equal(missingMonth.reason, 'missing_path');
+  assert.equal(missingMonth.filterPresent, true);
+  assert.equal(missingMonth.filterValid, false);
+});
+
 test('a truncated month list receives server-enforced disclosure', () => {
   const cappedContext = {
     ...context,

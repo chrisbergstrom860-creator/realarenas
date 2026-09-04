@@ -9176,6 +9176,8 @@ app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_in
       console.warn('AI Insights validation rejection:', JSON.stringify({
         rejectedReason: validated.reason,
         offendingPath: validated.offendingPath || null,
+        filterPresent: validated.filterPresent === true,
+        filterValid: validated.filterValid === true,
         ...safeFindingDiagnostics(text),
         ...(validated.mismatchDetails || {})
       }));

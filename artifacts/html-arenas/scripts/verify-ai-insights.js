@@ -241,10 +241,14 @@ function responseFor(envelope) {
     };
   } else if (/truncated month list fixture/i.test(question)) {
     output = {
+      findings: [realProviderCalendarPlanListFixture(envelope.data, CURRENT_MONTH_KEY)],
+      limitations: []
+    };
+  } else if (/list filter diagnostic fixture/i.test(question)) {
+    output = {
       findings: [{
-        type: 'calendar_plan_list',
-        path: 'calendar.plannedSessions.items',
-        filter: { month: CURRENT_MONTH_KEY }
+        ...realProviderCalendarPlanListFixture(envelope.data, CURRENT_MONTH_KEY),
+        unexpected: true
       }],
       limitations: []
     };
@@ -298,6 +302,18 @@ function metricFinding(data, pathValue) {
   return { type: 'metric', path: pathValue, value: valueAtPath(data, pathValue) };
 }
 
+// Matches the extra exact `value` array observed in a real Replit-provider
+// response, while sourcing records from disposable verifier data.
+function realProviderCalendarPlanListFixture(data, month) {
+  return {
+    type: 'calendar_plan_list',
+    path: 'calendar.plannedSessions.items',
+    filter: { month },
+    value: data.calendar.plannedSessions.items.filter((item) =>
+      item.status === 'planned' && String(item.date).slice(0, 7) === month)
+  };
+}
+
 function findingsForAnswerableQuestion(question, data) {
   const currentMonth = data.last12Months[data.last12Months.length - 1].month;
   const [year, month] = currentMonth.split('-').map(Number);
@@ -344,11 +360,7 @@ function findingsForAnswerableQuestion(question, data) {
     const index = data.calendar.plannedSessions.byMonth.findIndex((row) => row.month === CURRENT_MONTH_KEY);
     return [
       metricFinding(data, `calendar.plannedSessions.byMonth.${index}.plannedCount`),
-      {
-        type: 'calendar_plan_list',
-        path: 'calendar.plannedSessions.items',
-        filter: { month: CURRENT_MONTH_KEY }
-      }
+      realProviderCalendarPlanListFixture(data, CURRENT_MONTH_KEY)
     ];
   }
   if (question === 'What events do I have this month?') {
@@ -976,6 +988,16 @@ async function cleanup() {
       usageBeforeComputed.body.remaining === usageAfterComputed.body.remaining,
       JSON.stringify({ before: usageBeforeComputed.body, after: usageAfterComputed.body }));
 
+    const listFilterDiagnostic = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+      question: 'Return the list filter diagnostic fixture.',
+      history: []
+    });
+    check('valid list filter plus an arbitrary key is rejected with filter diagnostics',
+      listFilterDiagnostic.status === 200 &&
+      listFilterDiagnostic.body.rejectedReason === 'invalid_finding' &&
+      listFilterDiagnostic.body.answer === FALLBACK_COPY,
+      JSON.stringify(listFilterDiagnostic));
+
     const rejectionLogs = app.output().split('\n').filter((line) => line.includes('AI Insights validation rejection:'));
     check('rejection diagnostics include safe scalar mismatch values and types only on allowlisted paths',
       rejectionLogs.some((line) => line.includes('"rejectedReason":"invalid_finding"') && line.includes('"offendingPath":"allTime.activityCount"')) &&
@@ -992,7 +1014,15 @@ async function cleanup() {
         line.includes('"offendingPath":"last12Months.10.durationHours"') &&
         line.includes('"expectedType":"number"') &&
         line.includes('"receivedType":"number"')) &&
+      rejectionLogs.some((line) =>
+        line.includes('"rejectedReason":"invalid_finding"') &&
+        line.includes('"offendingPath":"calendar.plannedSessions.items"') &&
+        line.includes('"filterPresent":true') &&
+        line.includes('"filterValid":true') &&
+        line.includes('"type":"calendar_plan_list"')) &&
       rejectionLogs.every((line) =>
+        line.includes('"filterPresent":') &&
+        line.includes('"filterValid":') &&
         line.includes('"findingCount":') &&
         line.includes('"findings":') &&
         !line.includes('Return ') &&
