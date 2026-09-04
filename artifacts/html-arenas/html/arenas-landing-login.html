@@ -34,8 +34,10 @@ document.addEventListener('DOMContentLoaded', function(){
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,300..800;1,300..800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="preload" as="image" type="image/avif" href="/html/landing-assets/hero-trail-runners-800.avif" media="(max-width: 1599px) and (max-resolution: 1.99dppx)">
 <link rel="preload" as="image" type="image/avif" href="/html/landing-assets/hero-trail-runners-1600.avif" media="(min-width: 1600px), (min-resolution: 2dppx)">
-<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-weekly-mobile-800.avif" media="(max-width: 767px) and (max-resolution: 1.99dppx)">
-<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-weekly-mobile-1600.avif" media="(max-width: 767px) and (min-resolution: 2dppx)">
+<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-mobile-composite-380-2x.avif" media="(max-width: 384px) and (max-resolution: 2.49dppx)">
+<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-mobile-composite-380-3x.avif" media="(max-width: 384px) and (min-resolution: 2.5dppx)">
+<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-mobile-composite-390-2x.avif" media="(min-width: 385px) and (max-width: 767px) and (max-resolution: 2.49dppx)">
+<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-mobile-composite-390-3x.avif" media="(min-width: 385px) and (max-width: 767px) and (min-resolution: 2.5dppx)">
 <link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-weekly-activity-800.avif" media="(min-width: 768px) and (max-width: 1599px) and (max-resolution: 1.99dppx)">
 <link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-weekly-activity-1600.avif" media="(min-width: 1600px), (min-width: 768px) and (min-resolution: 2dppx)">
 <style>
@@ -415,16 +417,26 @@ html { scroll-behavior: smooth; }
     url("/html/landing-assets/analytics-weekly-activity-1600.webp") type("image/webp") 2x
   );
 }
-.analytics-mobile-scroll { display: none; }
+.analytics-mobile-frame { display: none; }
 .analytics-image--mobile {
-  aspect-ratio: 1864 / 520;
-  width: 800px;
+  aspect-ratio: 1140 / 2427;
+  width: 100%;
   background-image: image-set(
-    url("/html/landing-assets/analytics-weekly-mobile-800.avif") type("image/avif") 1x,
-    url("/html/landing-assets/analytics-weekly-mobile-1600.avif") type("image/avif") 2x,
-    url("/html/landing-assets/analytics-weekly-mobile-800.webp") type("image/webp") 1x,
-    url("/html/landing-assets/analytics-weekly-mobile-1600.webp") type("image/webp") 2x
+    url("/html/landing-assets/analytics-mobile-composite-380-2x.avif") type("image/avif") 2x,
+    url("/html/landing-assets/analytics-mobile-composite-380-3x.avif") type("image/avif") 3x,
+    url("/html/landing-assets/analytics-mobile-composite-380-2x.webp") type("image/webp") 2x,
+    url("/html/landing-assets/analytics-mobile-composite-380-3x.webp") type("image/webp") 3x
   );
+}
+@media (min-width: 385px) and (max-width: 767px) {
+  .analytics-image--mobile {
+    background-image: image-set(
+      url("/html/landing-assets/analytics-mobile-composite-390-2x.avif") type("image/avif") 2x,
+      url("/html/landing-assets/analytics-mobile-composite-390-3x.avif") type("image/avif") 3x,
+      url("/html/landing-assets/analytics-mobile-composite-390-2x.webp") type("image/webp") 2x,
+      url("/html/landing-assets/analytics-mobile-composite-390-3x.webp") type("image/webp") 3x
+    );
+  }
 }
 @media (min-width: 1600px) {
   .analytics-image--composite {
@@ -697,7 +709,7 @@ html { scroll-behavior: smooth; }
 }
 @media (max-width: 767px) {
   .analytics-image--composite { display: none; }
-  .analytics-mobile-scroll { display: block; max-width: 100%; overflow-x: auto; padding: 8px 0 12px; }
+  .analytics-mobile-frame { display: block; max-width: 100%; padding: 8px 0 12px; }
 }
 @media (max-width: 380px) {
   .hero-left { --hero-band-height: min(calc(100vw / 2.7), 140px); }
@@ -946,8 +958,8 @@ html { scroll-behavior: smooth; }
         </div>
         <div class="analytics-visual">
           <div class="analytics-image analytics-image--composite" role="img" aria-label="Arenas training analytics showing a twelve-week activity chart ending at 17.5 hours, five goals compared with actual results, and a sport share chart with legend."></div>
-          <div class="analytics-mobile-scroll" tabindex="0">
-            <div class="analytics-image analytics-image--mobile" role="img" aria-label="Arenas weekly activity chart showing twelve weeks of training hours stacked by cycling, swimming, weightlifting, running, and yoga, ending at 17.5 hours this week."></div>
+          <div class="analytics-mobile-frame">
+            <div class="analytics-image analytics-image--mobile" role="img" aria-label="Arenas mobile training analytics showing a twelve-week activity chart ending at 17.5 hours and a sport-share pie chart with Yoga at 22 percent, Swimming, Cycling, and Weightlifting at 20 percent each, and Running at 18 percent."></div>
           </div>
         </div>
       </div>
