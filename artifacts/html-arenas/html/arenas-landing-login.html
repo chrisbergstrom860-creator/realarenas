@@ -34,6 +34,8 @@ document.addEventListener('DOMContentLoaded', function(){
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,300..800;1,300..800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="preload" as="image" type="image/avif" href="/html/landing-assets/hero-trail-runners-800.avif" media="(max-width: 1599px) and (max-resolution: 1.99dppx)">
 <link rel="preload" as="image" type="image/avif" href="/html/landing-assets/hero-trail-runners-1600.avif" media="(min-width: 1600px), (min-resolution: 2dppx)">
+<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-weekly-activity-800.avif" media="(max-width: 1599px) and (max-resolution: 1.99dppx)">
+<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-weekly-activity-1600.avif" media="(min-width: 1600px), (min-resolution: 2dppx)">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -391,6 +393,17 @@ html { scroll-behavior: smooth; }
 .ai-example-turn--answer .ai-example-role { color: #6B5100; }
 .ai-example-text { color: var(--gray-900); font-size: 14px; font-weight: 500; line-height: 1.5; }
 
+/* ── TRAINING ANALYTICS ── */
+.analytics { background: white; border-bottom: var(--border); padding: 72px 24px; }
+.analytics-inner { max-width: 1176px; margin: 0 auto; }
+.analytics-grid { align-items: center; display: grid; gap: 64px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.analytics-title { margin-bottom: 24px; }
+.analytics-copy { max-width: 520px; }
+.analytics-copy p { color: var(--gray-600); font-size: 16px; line-height: 1.6; margin-bottom: 24px; }
+.analytics-copy .analytics-note { color: var(--gray-500); font-size: 12px; margin-bottom: 0; }
+.analytics-visual { display: block; }
+.analytics-image { background: var(--gray-50); border: var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); display: block; height: auto; overflow: hidden; width: 100%; }
+
 /* ── HOW IT WORKS ── */
 .how-it-works { background: white; border-top: var(--border); border-bottom: var(--border); padding: 72px 24px; }
 .how-inner { max-width: 960px; margin: 0 auto; }
@@ -614,6 +627,7 @@ html { scroll-behavior: smooth; }
   .stats-bar-inner { grid-template-columns: 1fr 1fr !important; gap: 16px; }
   .features-grid { grid-template-columns: 1fr !important; }
   .ai-insights-grid { grid-template-columns: 1fr; gap: 36px; }
+  .analytics-grid { grid-template-columns: 1fr; gap: 36px; }
   .steps-grid { grid-template-columns: 1fr !important; }
   .testimonials { grid-template-columns: 1fr !important; }
   .pricing-grid { grid-template-columns: 1fr !important; }
@@ -863,8 +877,8 @@ html { scroll-behavior: smooth; }
         </div>
         <div class="feature-card">
           <div class="feature-icon" style="background:#FDF4FF">🏆</div>
-          <h3>Weekly leaderboards</h3>
-          <p>Weekly sport leaderboards and club competitions. Earn points for every activity and climb the rankings on the platform, among athletes you follow, or inside your club.</p>
+          <h3>Leaderboards &amp; challenges</h3>
+          <p>Weekly sport leaderboards, club competitions, and head-to-head challenges you can join or create. Earn points for every activity and climb the rankings on the platform, among athletes you follow, or inside your club.</p>
           <span class="feature-badge badge-free">Free forever</span>
         </div>
         <div class="feature-card">
@@ -875,13 +889,6 @@ html { scroll-behavior: smooth; }
           <span class="feature-badge badge-pro">Planning Pro</span>
         </div>
         <div class="feature-card">
-          <div class="feature-icon" style="background:#F0FDF4">📈</div>
-          <h3>Challenges & training analytics</h3>
-          <p>Join and create challenges to compete head-to-head, then track your training load and trends across weeks and months — spot patterns and see how your fitness is actually progressing.</p>
-          <span class="feature-badge badge-free">Challenges free</span>
-          <span class="feature-badge badge-pro">Analytics Pro</span>
-        </div>
-        <div class="feature-card">
           <div class="feature-icon" style="background:#FEF9C3">👥</div>
           <h3>Clubs & teams</h3>
           <p>Create or join clubs with shared feeds, club events and challenges, and coach announcements. Find your club in the directory and request to join in one tap.</p>
@@ -890,6 +897,28 @@ html { scroll-behavior: smooth; }
       </div>
     </div>
   </div>
+
+  <!-- Training analytics -->
+  <section class="analytics" id="analytics" aria-labelledby="analytics-title">
+    <a class="section-anchor" id="analytics-anchor"></a>
+    <div class="analytics-inner">
+      <div class="analytics-grid">
+        <div class="analytics-copy">
+          <div class="section-label">Training analytics · Individual Pro</div>
+          <h2 class="section-title analytics-title" id="analytics-title">See how your training is actually going.</h2>
+          <p>Training load week by week, volume and trends across months, your sport mix, goals with progress tracked automatically, and personal records as they happen — all built from the activities you log.</p>
+          <p class="analytics-note">Included in Individual Pro</p>
+        </div>
+        <picture class="analytics-visual">
+          <source type="image/avif" media="(min-width: 1600px), (min-resolution: 2dppx)" srcset="/html/landing-assets/analytics-weekly-activity-1600.avif">
+          <source type="image/avif" srcset="/html/landing-assets/analytics-weekly-activity-800.avif">
+          <source type="image/webp" media="(min-width: 1600px), (min-resolution: 2dppx)" srcset="/html/landing-assets/analytics-weekly-activity-1600.webp">
+          <source type="image/webp" srcset="/html/landing-assets/analytics-weekly-activity-800.webp">
+          <img class="analytics-image" src="/html/landing-assets/analytics-weekly-activity-800.webp" alt="Arenas weekly activity chart showing twelve weeks of varied training hours stacked by cycling, swimming, weightlifting, running, and yoga." width="800" height="223">
+        </picture>
+      </div>
+    </div>
+  </section>
 
   <!-- How it works -->
   <div class="how-it-works">

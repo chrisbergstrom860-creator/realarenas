@@ -14672,7 +14672,11 @@ const LANDING_ASSET_FILES = new Set([
   'hero-trail-runners-800.avif',
   'hero-trail-runners-800.webp',
   'hero-trail-runners-1600.avif',
-  'hero-trail-runners-1600.webp'
+  'hero-trail-runners-1600.webp',
+  'analytics-weekly-activity-800.avif',
+  'analytics-weekly-activity-800.webp',
+  'analytics-weekly-activity-1600.avif',
+  'analytics-weekly-activity-1600.webp'
 ]);
 app.get(['/html/landing-assets/:file', '/landing-assets/:file'], (req, res) => {
   if (!LANDING_ASSET_FILES.has(req.params.file)) return res.status(404).end();
