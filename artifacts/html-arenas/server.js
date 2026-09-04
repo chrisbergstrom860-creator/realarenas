@@ -8853,22 +8853,23 @@ async function buildAiInsightsContext(user) {
   // lookup is owner-filtered, and RSVP alone never bypasses the shared event
   // visibility gate.
   const planMonthStart = shiftMonthKey(currentMonth, -11) + '-01';
-  const [futurePlansRes, adherenceRes, membershipsRes, ownRsvpsRes, activeGoalsRes] = await Promise.all([
+  const [futurePlansRes, adherenceRows, membershipRows, ownRsvpRows, activeGoalsRes] = await Promise.all([
     supabaseAdmin.from('planned_sessions')
       .select('date, sport, title, planned_duration, status', { count: 'exact' })
       .eq('user_id', user.id).gte('date', today)
       .order('date', { ascending: true }).limit(100),
-    supabaseAdmin.from('planned_sessions')
-      .select('date, status').eq('user_id', user.id)
-      .gte('date', planMonthStart).lte('date', today),
-    supabaseAdmin.from('memberships').select('club_id').eq('user_id', user.id),
-    supabaseAdmin.from('event_rsvps').select('event_id, status')
-      .eq('user_id', user.id).in('status', ['going', 'interested']),
+    fetchAllRows('planned_sessions',
+      (query) => query.eq('user_id', user.id).gte('date', planMonthStart).lt('date', today),
+      'date, status'),
+    fetchAllRows('memberships', (query) => query.eq('user_id', user.id), 'club_id'),
+    fetchAllRows('event_rsvps',
+      (query) => query.eq('user_id', user.id).in('status', ['going', 'interested']),
+      'event_id, status'),
     supabaseAdmin.from('goals').select('*', { count: 'exact' })
       .eq('user_id', user.id).eq('status', 'active')
       .order('created_at', { ascending: true }).limit(5)
   ]);
-  for (const result of [futurePlansRes, adherenceRes, membershipsRes, ownRsvpsRes, activeGoalsRes]) {
+  for (const result of [futurePlansRes, activeGoalsRes]) {
     if (result.error) throw result.error;
   }
   const futurePlans = (futurePlansRes.data || []).map((row) => ({
@@ -8878,7 +8879,6 @@ async function buildAiInsightsContext(user) {
     plannedDuration: row.planned_duration || null,
     status: row.status
   }));
-  const adherenceRows = adherenceRes.data || [];
   const adherence = last12Months.map((monthRow) => {
     const rows = adherenceRows.filter((row) => String(row.date).slice(0, 7) === monthRow.month);
     return {
@@ -8889,28 +8889,35 @@ async function buildAiInsightsContext(user) {
     };
   });
 
-  const memberClubIds = [...new Set((membershipsRes.data || []).map((row) => row.club_id).filter(Boolean))];
-  const ownRsvpMap = new Map((ownRsvpsRes.data || []).map((row) => [row.event_id, row.status]));
+  const memberClubIds = [...new Set(membershipRows.map((row) => row.club_id).filter(Boolean))];
+  const ownRsvpMap = new Map(ownRsvpRows.map((row) => [row.event_id, row.status]));
   const ownRsvpEventIds = [...ownRsvpMap.keys()];
   const eventSelect = 'id, date, title, sport, event_type, visibility, club_id, created_by';
   const eventQueries = [];
-  if (memberClubIds.length) {
-    eventQueries.push(supabaseAdmin.from('events').select(eventSelect)
-      .in('club_id', memberClubIds).gte('date', now.toISOString()).order('date', { ascending: true }));
+  const EVENT_FILTER_CHUNK = 200;
+  for (let i = 0; i < memberClubIds.length; i += EVENT_FILTER_CHUNK) {
+    const ids = memberClubIds.slice(i, i + EVENT_FILTER_CHUNK);
+    eventQueries.push(fetchAllRows('events',
+      (query) => query.in('club_id', ids).gte('date', now.toISOString())
+        .order('date', { ascending: true }).order('id', { ascending: true }),
+      eventSelect));
   }
-  if (ownRsvpEventIds.length) {
-    eventQueries.push(supabaseAdmin.from('events').select(eventSelect)
-      .in('id', ownRsvpEventIds).gte('date', now.toISOString()).order('date', { ascending: true }));
+  for (let i = 0; i < ownRsvpEventIds.length; i += EVENT_FILTER_CHUNK) {
+    const ids = ownRsvpEventIds.slice(i, i + EVENT_FILTER_CHUNK);
+    eventQueries.push(fetchAllRows('events',
+      (query) => query.in('id', ids).gte('date', now.toISOString())
+        .order('date', { ascending: true }).order('id', { ascending: true }),
+      eventSelect));
   }
   const eventResults = await Promise.all(eventQueries);
-  for (const result of eventResults) if (result.error) throw result.error;
   const eventMap = new Map();
-  for (const result of eventResults) {
-    for (const event of (result.data || [])) eventMap.set(event.id, event);
+  for (const rows of eventResults) {
+    for (const event of rows) eventMap.set(event.id, event);
   }
   const visibleEligibleEvents = (await visibleEventsFilter(user.id, [...eventMap.values()]))
-    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
-  const eventClubIds = [...new Set(visibleEligibleEvents.map((event) => event.club_id).filter(Boolean))];
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.id).localeCompare(String(b.id)));
+  const includedEvents = visibleEligibleEvents.slice(0, 50);
+  const eventClubIds = [...new Set(includedEvents.map((event) => event.club_id).filter(Boolean))];
   let clubNameMap = new Map();
   if (eventClubIds.length) {
     const { data: clubs, error: clubsError } = await supabaseAdmin
@@ -8918,7 +8925,7 @@ async function buildAiInsightsContext(user) {
     if (clubsError) throw clubsError;
     clubNameMap = new Map((clubs || []).map((club) => [club.id, club.name]));
   }
-  const calendarEvents = visibleEligibleEvents.slice(0, 50).map((event) => ({
+  const calendarEvents = includedEvents.map((event) => ({
     date: event.date,
     title: event.title,
     sport: event.sport || null,

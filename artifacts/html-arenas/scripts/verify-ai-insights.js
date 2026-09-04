@@ -90,7 +90,7 @@ const NOT_ANSWERABLE_CASES = [
     copy: "AI Insights includes active goals only, so goal history is unavailable."
   },
   {
-    question: 'How much must I do each day to catch up on my goal?',
+    question: 'If my current pace continued, what would my goal progress be by the end of this month?',
     reason: 'goal_projection_unsupported',
     copy: "AI Insights includes the server-computed on-track status, but it cannot calculate a catch-up projection."
   }
@@ -752,7 +752,7 @@ async function cleanup() {
       status: 'planned'
     }));
     await must('create capped plans', admin.from('planned_sessions').insert(heavyPlans));
-    const heavyEvents = Array.from({ length: 50 }, (_, index) => ({
+    const heavyEvents = Array.from({ length: 1001 }, (_, index) => ({
       created_by: users.pro.id,
       club_id: clubId,
       title: `CAPPED_EVENT_${String(index).padStart(3, '0')}`,
@@ -763,7 +763,10 @@ async function cleanup() {
       location: `CAPPED_EVENT_LOCATION_MUST_NOT_REACH_${index}`,
       description: `CAPPED_EVENT_DESCRIPTION_MUST_NOT_REACH_${index}`
     }));
-    await must('create capped events', admin.from('events').insert(heavyEvents));
+    for (let index = 0; index < heavyEvents.length; index += 200) {
+      await must(`create capped events ${index}-${Math.min(index + 199, heavyEvents.length - 1)}`,
+        admin.from('events').insert(heavyEvents.slice(index, index + 200)));
+    }
     const heavyResult = await api(proLogin, 'POST', '/api/profile/ai-insights', {
       question: 'Measure the heavy capped calendar fixture.',
       history: []
@@ -777,7 +780,7 @@ async function cleanup() {
       heavyCapture.envelope.data.calendar.plannedSessions.total === 101 &&
       heavyCapture.envelope.data.calendar.plannedSessions.truncated === true &&
       heavyCapture.envelope.data.calendar.events.included === 50 &&
-      heavyCapture.envelope.data.calendar.events.total === 52 &&
+      heavyCapture.envelope.data.calendar.events.total === 1003 &&
       heavyCapture.envelope.data.calendar.events.truncated === true &&
       !heavySerialized.includes('CAPPED_PLAN_NOTE_MUST_NOT_REACH') &&
       !heavySerialized.includes('CAPPED_EVENT_LOCATION_MUST_NOT_REACH') &&
