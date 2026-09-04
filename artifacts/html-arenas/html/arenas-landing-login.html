@@ -34,8 +34,10 @@ document.addEventListener('DOMContentLoaded', function(){
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,300..800;1,300..800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="preload" as="image" type="image/avif" href="/html/landing-assets/hero-trail-runners-800.avif" media="(max-width: 1599px) and (max-resolution: 1.99dppx)">
 <link rel="preload" as="image" type="image/avif" href="/html/landing-assets/hero-trail-runners-1600.avif" media="(min-width: 1600px), (min-resolution: 2dppx)">
-<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-weekly-activity-800.avif" media="(max-width: 1599px) and (max-resolution: 1.99dppx)">
-<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-weekly-activity-1600.avif" media="(min-width: 1600px), (min-resolution: 2dppx)">
+<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-weekly-mobile-800.avif" media="(max-width: 767px) and (max-resolution: 1.99dppx)">
+<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-weekly-mobile-1600.avif" media="(max-width: 767px) and (min-resolution: 2dppx)">
+<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-weekly-activity-800.avif" media="(min-width: 768px) and (max-width: 1599px) and (max-resolution: 1.99dppx)">
+<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-weekly-activity-1600.avif" media="(min-width: 1600px), (min-width: 768px) and (min-resolution: 2dppx)">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -401,8 +403,37 @@ html { scroll-behavior: smooth; }
 .analytics-copy { max-width: 520px; }
 .analytics-copy p { color: var(--gray-600); font-size: 16px; line-height: 1.6; margin-bottom: 24px; }
 .analytics-copy .analytics-note { color: var(--gray-500); font-size: 12px; margin-bottom: 0; }
-.analytics-visual { display: block; }
-.analytics-image { background: var(--gray-50); border: var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); display: block; height: auto; overflow: hidden; width: 100%; }
+.analytics-visual { display: block; min-width: 0; }
+.analytics-image { background-color: var(--gray-50); background-position: center; background-repeat: no-repeat; background-size: 100% 100%; border: var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); display: block; overflow: hidden; }
+.analytics-image--composite {
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  background-image: image-set(
+    url("/html/landing-assets/analytics-weekly-activity-800.avif") type("image/avif") 1x,
+    url("/html/landing-assets/analytics-weekly-activity-1600.avif") type("image/avif") 2x,
+    url("/html/landing-assets/analytics-weekly-activity-800.webp") type("image/webp") 1x,
+    url("/html/landing-assets/analytics-weekly-activity-1600.webp") type("image/webp") 2x
+  );
+}
+.analytics-mobile-scroll { display: none; }
+.analytics-image--mobile {
+  aspect-ratio: 1860 / 513;
+  width: 800px;
+  background-image: image-set(
+    url("/html/landing-assets/analytics-weekly-mobile-800.avif") type("image/avif") 1x,
+    url("/html/landing-assets/analytics-weekly-mobile-1600.avif") type("image/avif") 2x,
+    url("/html/landing-assets/analytics-weekly-mobile-800.webp") type("image/webp") 1x,
+    url("/html/landing-assets/analytics-weekly-mobile-1600.webp") type("image/webp") 2x
+  );
+}
+@media (min-width: 1600px) {
+  .analytics-image--composite {
+    background-image: image-set(
+      url("/html/landing-assets/analytics-weekly-activity-1600.avif") type("image/avif") 1x,
+      url("/html/landing-assets/analytics-weekly-activity-1600.webp") type("image/webp") 1x
+    );
+  }
+}
 
 /* ── HOW IT WORKS ── */
 .how-it-works { background: white; border-top: var(--border); border-bottom: var(--border); padding: 72px 24px; }
@@ -664,6 +695,10 @@ html { scroll-behavior: smooth; }
   /* Clip the oversized decorative glow so it can't cause horizontal scroll */
   .cta-band::before { max-width: 100vw; overflow: hidden; }
 }
+@media (max-width: 767px) {
+  .analytics-image--composite { display: none; }
+  .analytics-mobile-scroll { display: block; max-width: 100%; overflow-x: auto; padding: 8px 0 12px; }
+}
 @media (max-width: 380px) {
   .hero-left { --hero-band-height: min(calc(100vw / 2.7), 140px); }
 }
@@ -909,13 +944,12 @@ html { scroll-behavior: smooth; }
           <p>Training load week by week, volume and trends across months, your sport mix, goals with progress tracked automatically, and personal records as they happen — all built from the activities you log.</p>
           <p class="analytics-note">Included in Individual Pro</p>
         </div>
-        <picture class="analytics-visual">
-          <source type="image/avif" media="(min-width: 1600px), (min-resolution: 2dppx)" srcset="/html/landing-assets/analytics-weekly-activity-1600.avif">
-          <source type="image/avif" srcset="/html/landing-assets/analytics-weekly-activity-800.avif">
-          <source type="image/webp" media="(min-width: 1600px), (min-resolution: 2dppx)" srcset="/html/landing-assets/analytics-weekly-activity-1600.webp">
-          <source type="image/webp" srcset="/html/landing-assets/analytics-weekly-activity-800.webp">
-          <img class="analytics-image" src="/html/landing-assets/analytics-weekly-activity-800.webp" alt="Arenas training analytics showing a twelve-week activity chart, goals compared with actual results, and a sport share chart with legend." width="800" height="600">
-        </picture>
+        <div class="analytics-visual">
+          <div class="analytics-image analytics-image--composite" role="img" aria-label="Arenas training analytics showing a twelve-week activity chart, goals compared with actual results, and a sport share chart with legend."></div>
+          <div class="analytics-mobile-scroll" tabindex="0">
+            <div class="analytics-image analytics-image--mobile" role="img" aria-label="Arenas weekly activity chart showing twelve weeks of varied training hours stacked by cycling, swimming, weightlifting, running, and yoga."></div>
+          </div>
+        </div>
       </div>
     </div>
   </section>

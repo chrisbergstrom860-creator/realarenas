@@ -14676,7 +14676,11 @@ const LANDING_ASSET_FILES = new Set([
   'analytics-weekly-activity-800.avif',
   'analytics-weekly-activity-800.webp',
   'analytics-weekly-activity-1600.avif',
-  'analytics-weekly-activity-1600.webp'
+  'analytics-weekly-activity-1600.webp',
+  'analytics-weekly-mobile-800.avif',
+  'analytics-weekly-mobile-800.webp',
+  'analytics-weekly-mobile-1600.avif',
+  'analytics-weekly-mobile-1600.webp'
 ]);
 app.get(['/html/landing-assets/:file', '/landing-assets/:file'], (req, res) => {
   if (!LANDING_ASSET_FILES.has(req.params.file)) return res.status(404).end();
