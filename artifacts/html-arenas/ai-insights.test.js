@@ -7,11 +7,14 @@ const {
   makeSignedHistoryTurn,
   verifyHistoryTurns,
   validateInsightResponse,
+  safeFindingDiagnostics,
   resolveAnthropicProvider
 } = require('./ai-insights');
 
 const context = {
-  schemaVersion: 2,
+  schemaVersion: 4,
+  asOfDate: '2026-09-10',
+  timezone: 'America/Los_Angeles',
   allTime: {
     activityCount: 8,
     distanceKm: 42.5,
@@ -38,8 +41,28 @@ const context = {
   }],
   dataQuality: { activeWeeksInDetailedWindow: 4, trendEligible: true },
   calendar: {
-    plannedSessions: { items: [{ date: '2026-09-10', sport: 'running', title: 'Easy run', plannedDuration: '45m', status: 'planned' }] },
-    events: { items: [{ date: '2026-09-12T17:00:00Z', title: 'Club ride', sport: 'cycling', type: 'group', clubName: 'Road Club', ownRsvp: 'going' }] },
+    plannedSessions: {
+      items: [
+        { date: '2026-09-10', sport: 'running', title: 'Easy run', plannedDuration: '45m', status: 'planned' },
+        { date: '2026-09-11', sport: 'weightlifting', title: 'Strength', plannedDuration: null, status: 'planned' },
+        { date: '2026-09-12', sport: 'cycling', title: 'Long ride', plannedDuration: '1h 20m', status: 'planned' }
+      ],
+      included: 3,
+      total: 3,
+      truncated: false,
+      byMonth: [{ month: '2026-09', plannedCount: 3, totalPlannedMinutes: 125, included: 3, truncated: false }]
+    },
+    events: {
+      items: [
+        { date: '2026-09-10T17:00:00Z', title: 'Club ride', sport: 'cycling', type: 'group', clubName: 'Road Club', ownRsvp: 'going' },
+        { date: '2026-09-11T18:30:00Z', title: 'Track meet', sport: 'running', type: 'meet', clubName: null, ownRsvp: 'interested' },
+        { date: '2026-09-20T16:00:00Z', title: 'Open race', sport: 'running', type: 'race', clubName: null, ownRsvp: null }
+      ],
+      included: 3,
+      total: 3,
+      truncated: false,
+      byMonth: [{ month: '2026-09', count: 3, included: 3, truncated: false }]
+    },
     pastPlanAdherence: [{ month: '2026-08', done: 3, skipped: 1, stillPlanned: 2 }]
   },
   goals: { active: { items: [{ type: 'distance', sport: 'cycling', target: { value: 100, unit: 'km' }, period: 'monthly', progress: { value: 65, unit: 'km', percent: 65 }, onTrack: true, isComplete: false, windowStart: '2026-09-01T07:00:00.000Z', windowEnd: '2026-10-01T07:00:00.000Z' }] } }
@@ -158,13 +181,140 @@ test('calendar and active-goal typed findings render only exact copied records',
     ['plan_adherence', 'calendar.pastPlanAdherence.0'],
     ['goal_projection', 'goals.active.items.0']
   ].map(([type, path]) => ({ type, path, value: path.split('.').reduce((value, token) => value[token], context) }));
-  const result = validateInsightResponse({ findings, limitations: ['CALENDAR_RESULTS_TRUNCATED'] }, context);
+  const result = validateInsightResponse({ findings, limitations: [] }, context);
   assert.equal(result.ok, true);
   assert.equal(result.evidence.length, 4);
   assert.match(result.answer, /Easy run/);
   assert.match(result.answer, /Club ride/);
+  assert.match(result.answer, /today for 45 minutes/);
+  assert.match(result.answer, /today at 10:00 AM/);
   assert.match(result.answer, /on track/);
-  assert.match(result.limitations[0], /capped/);
+  assert.deepEqual(result.limitations, []);
+});
+
+test('calendar totals and monthly aggregates are renderable metrics', () => {
+  const result = validateInsightResponse({
+    findings: [
+      { type: 'metric', path: 'calendar.plannedSessions.total', value: 3 },
+      { type: 'metric', path: 'calendar.plannedSessions.included', value: 3 },
+      { type: 'metric', path: 'calendar.plannedSessions.byMonth.0.plannedCount', value: 3 },
+      { type: 'metric', path: 'calendar.plannedSessions.byMonth.0.totalPlannedMinutes', value: 125 },
+      { type: 'metric', path: 'calendar.events.total', value: 3 },
+      { type: 'metric', path: 'calendar.events.included', value: 3 },
+      { type: 'metric', path: 'calendar.events.byMonth.0.count', value: 3 }
+    ],
+    limitations: []
+  }, context);
+  assert.equal(result.ok, true);
+  assert.match(result.answer, /future plan-record count across all statuses was 3/);
+  assert.match(result.answer, /planned sessions left in September 2026 was 3/);
+  assert.match(result.answer, /total planned duration in September 2026 was 125 minutes/);
+  assert.match(result.answer, /eligible-event count in September 2026 was 3/);
+});
+
+test('top-level plan totals are labeled as all-status records, not sessions left', () => {
+  const allStatusContext = {
+    ...context,
+    calendar: {
+      ...context.calendar,
+      plannedSessions: {
+        ...context.calendar.plannedSessions,
+        total: 4,
+        included: 4
+      }
+    }
+  };
+  const result = validateInsightResponse({
+    findings: [
+      { type: 'metric', path: 'calendar.plannedSessions.total', value: 4 },
+      { type: 'metric', path: 'calendar.plannedSessions.byMonth.0.plannedCount', value: 3 }
+    ],
+    limitations: []
+  }, allStatusContext);
+  assert.equal(result.ok, true);
+  assert.match(result.answer, /plan-record count across all statuses was 4/);
+  assert.match(result.answer, /planned sessions left in September 2026 was 3/);
+});
+
+test('bounded month lists are selected and written entirely by the server', () => {
+  const result = validateInsightResponse({
+    findings: [
+      { type: 'calendar_plan_list', path: 'calendar.plannedSessions.items', filter: { month: '2026-09' } },
+      { type: 'calendar_event_list', path: 'calendar.events.items', filter: { month: '2026-09' } }
+    ],
+    limitations: []
+  }, context);
+  assert.equal(result.ok, true);
+  assert.match(result.answer, /You have 3 planned sessions left in September 2026: Easy run today for 45 minutes; Strength tomorrow; Long ride on Saturday for 1 hour 20 minutes\./);
+  assert.match(result.answer, /You have 3 events in September 2026: Club ride today at 10:00 AM with Road Club \(RSVP: going\); Track meet tomorrow at 11:30 AM \(RSVP: interested\); Open race on Sep 20 at 9:00 AM\./);
+  assert.equal(result.evidence.length, 8);
+});
+
+test('a truncated month list receives server-enforced disclosure', () => {
+  const cappedContext = {
+    ...context,
+    calendar: {
+      ...context.calendar,
+      plannedSessions: {
+        ...context.calendar.plannedSessions,
+        total: 12,
+        truncated: true,
+        byMonth: [{
+          ...context.calendar.plannedSessions.byMonth[0],
+          plannedCount: 12,
+          truncated: true
+        }]
+      }
+    }
+  };
+  const result = validateInsightResponse({
+    findings: [{ type: 'calendar_plan_list', path: 'calendar.plannedSessions.items', filter: { month: '2026-09' } }],
+    limitations: []
+  }, cappedContext);
+  assert.equal(result.ok, true);
+  assert.match(result.answer, /You have 12 planned sessions left.*here are the first 3/);
+  assert.deepEqual(result.limitations, [
+    'Calendar results were capped, so additional matching plans or events are not included.'
+  ]);
+});
+
+test('a complete requested month does not inherit unrelated calendar truncation', () => {
+  const unrelatedCapContext = {
+    ...context,
+    calendar: {
+      ...context.calendar,
+      events: { ...context.calendar.events, total: 99, truncated: true }
+    }
+  };
+  const result = validateInsightResponse({
+    findings: [{
+      type: 'calendar_plan_list',
+      path: 'calendar.plannedSessions.items',
+      filter: { month: '2026-09' }
+    }],
+    limitations: ['CALENDAR_RESULTS_TRUNCATED']
+  }, unrelatedCapContext);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.limitations, []);
+  assert.match(result.answer, /You have 3 planned sessions left/);
+});
+
+test('safe rejection diagnostics expose only allowlisted finding types and paths', () => {
+  assert.deepEqual(safeFindingDiagnostics({
+    findings: [
+      { type: 'metric', path: 'calendar.plannedSessions.total', value: 99, text: 'PRIVATE FREE TEXT' },
+      { type: 'comparison', leftPath: 'allTime.activityCount', rightPath: 'allTime.distanceKm', text: 'MORE PRIVATE TEXT' },
+      { type: 'PRIVATE TYPE', path: 'calendar.events.items.0', title: 'PRIVATE TITLE' }
+    ],
+    limitations: []
+  }), {
+    findingCount: 3,
+    findings: [
+      { type: 'metric', paths: ['calendar.plannedSessions.total'] },
+      { type: 'comparison', paths: ['allTime.activityCount', 'allTime.distanceKm'] },
+      { type: 'unknown', paths: ['calendar.events.items.0'] }
+    ]
+  });
 });
 
 test('calendar cap disclosure is server-enforced when the model omits it', () => {

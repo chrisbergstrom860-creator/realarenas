@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { createClient } = require('@supabase/supabase-js');
+const { FALLBACK_COPY } = require('../ai-insights');
 
 const APP_PORT = 3987;
 const STUB_PORT = 3988;
@@ -19,7 +20,6 @@ let failures = 0;
 const captured = [];
 const REFUSAL_COPY = "I can describe your recorded training, but I can’t prescribe workouts or comment on diet, weight, body composition, or whether you are under-training. Try asking what changed in your volume, consistency, sports, personal records, or standings.";
 const GROUNDED_METRIC_COPY = 'Your all-time activity count was 8.';
-const FALLBACK_COPY = "I couldn’t produce an answer supported by your recorded data. Try asking about your activity count, volume, sports, streaks, personal records, or standings.";
 const TEST_TIMEZONE = 'America/Los_Angeles';
 function datePartsInZone(date, timeZone) {
   return Object.fromEntries(new Intl.DateTimeFormat('en-US', {
@@ -65,6 +65,7 @@ const ANSWERABLE_QUESTIONS = [
   `What was my average ride distance in ${LAST_MONTH_LABEL}?`,
   'What percentage of my recorded training was running?',
   'What is my next planned session?',
+  'How many planned sessions do I have left this month and what are they?',
   'What events do I have this month?',
   'Is my cycling goal on track?'
 ];
@@ -238,6 +239,15 @@ function responseFor(envelope) {
       }],
       limitations: []
     };
+  } else if (/truncated month list fixture/i.test(question)) {
+    output = {
+      findings: [{
+        type: 'calendar_plan_list',
+        path: 'calendar.plannedSessions.items',
+        filter: { month: CURRENT_MONTH_KEY }
+      }],
+      limitations: []
+    };
   } else if (/mismatched/i.test(question)) {
     output = {
       findings: [{ type: 'metric', path: 'allTime.activityCount', value: count + 1 }],
@@ -330,10 +340,23 @@ function findingsForAnswerableQuestion(question, data) {
   if (question === 'What is my next planned session?') {
     return [{ type: 'calendar_plan', path: 'calendar.plannedSessions.items.0', value: data.calendar.plannedSessions.items[0] }];
   }
+  if (question === 'How many planned sessions do I have left this month and what are they?') {
+    const index = data.calendar.plannedSessions.byMonth.findIndex((row) => row.month === CURRENT_MONTH_KEY);
+    return [
+      metricFinding(data, `calendar.plannedSessions.byMonth.${index}.plannedCount`),
+      {
+        type: 'calendar_plan_list',
+        path: 'calendar.plannedSessions.items',
+        filter: { month: CURRENT_MONTH_KEY }
+      }
+    ];
+  }
   if (question === 'What events do I have this month?') {
-    const index = data.calendar.events.items.findIndex((event) =>
-      monthKeyInZone(new Date(event.date), TEST_TIMEZONE) === CURRENT_MONTH_KEY);
-    return [{ type: 'calendar_event', path: `calendar.events.items.${index}`, value: data.calendar.events.items[index] }];
+    return [{
+      type: 'calendar_event_list',
+      path: 'calendar.events.items',
+      filter: { month: CURRENT_MONTH_KEY }
+    }];
   }
   if (question === 'Is my cycling goal on track?') {
     const index = data.goals.active.items.findIndex((goal) => goal.sport === 'cycling');
@@ -465,8 +488,8 @@ async function cleanup() {
   let browser;
   try {
     writeManifest();
-    check('verification matrix contains exactly 26 preserved-and-extended questions',
-      ANSWERABLE_QUESTIONS.length + NOT_ANSWERABLE_CASES.length + POLICY_REFUSAL_CASES.length === 26,
+    check('verification matrix contains exactly 27 preserved-and-extended questions',
+      ANSWERABLE_QUESTIONS.length + NOT_ANSWERABLE_CASES.length + POLICY_REFUSAL_CASES.length === 27,
       JSON.stringify({
         answerable: ANSWERABLE_QUESTIONS.length,
         notAnswerable: NOT_ANSWERABLE_CASES.length,
@@ -574,6 +597,21 @@ async function cleanup() {
         notes: 'PLAN_NOTES_MUST_NOT_REACH_PROVIDER', status: 'planned'
       },
       {
+        user_id: users.pro.id, date: futureDay, sport: 'weightlifting',
+        title: 'SECOND_PLAN_ALLOWED_TITLE', planned_duration: null,
+        notes: 'SECOND_PLAN_NOTES_MUST_NOT_REACH_PROVIDER', status: 'planned'
+      },
+      {
+        user_id: users.pro.id, date: futureDay, sport: 'cycling',
+        title: 'THIRD_PLAN_ALLOWED_TITLE', planned_duration: '1h 20m',
+        notes: 'THIRD_PLAN_NOTES_MUST_NOT_REACH_PROVIDER', status: 'planned'
+      },
+      {
+        user_id: users.pro.id, date: futureDay, sport: 'running',
+        title: 'SKIPPED_PLAN_ALLOWED_TITLE', planned_duration: '9h',
+        notes: 'SKIPPED_PLAN_NOTES_MUST_NOT_REACH_PROVIDER', status: 'skipped'
+      },
+      {
         user_id: users.free.id, date: futureDay, sport: 'cycling',
         title: 'OTHER_USER_PLAN_MUST_NOT_REACH_PROVIDER', planned_duration: '9h',
         notes: 'OTHER_USER_PLAN_NOTES_SENTINEL', status: 'planned'
@@ -651,7 +689,7 @@ async function cleanup() {
       privacyCapture.body.system);
     check('actual model payload contains the allowlisted data object', !!privacyCapture.envelope.data && privacyCapture.envelope.data.allTime.activityCount === 8, serializedPayload);
     check('actual model payload has 12 timezone-calendar month buckets including zero months',
-      privacyCapture.envelope.data.schemaVersion === 3 &&
+      privacyCapture.envelope.data.schemaVersion === 4 &&
       privacyCapture.envelope.data.last12Months.length === 12 &&
       privacyCapture.envelope.data.last12Months.every((month) =>
         JSON.stringify(Object.keys(month).sort()) === JSON.stringify([
@@ -727,12 +765,23 @@ async function cleanup() {
       !/"userId"|"email"|"notes"|"description"|"location"/.test(serializedPayload),
       serializedPayload);
     check('calendar and goal counts are honest for realistic fixture',
-      privacyCapture.envelope.data.calendar.plannedSessions.included === 1 &&
-      privacyCapture.envelope.data.calendar.plannedSessions.total === 1 &&
+      privacyCapture.envelope.data.calendar.plannedSessions.included === 4 &&
+      privacyCapture.envelope.data.calendar.plannedSessions.total === 4 &&
       privacyCapture.envelope.data.calendar.plannedSessions.truncated === false &&
+      privacyCapture.envelope.data.calendar.plannedSessions.byMonth.some((row) =>
+        row.month === CURRENT_MONTH_KEY &&
+        row.plannedCount === 3 &&
+        row.totalPlannedMinutes === 125 &&
+        row.included === 3 &&
+        row.truncated === false) &&
       privacyCapture.envelope.data.calendar.events.included === 2 &&
       privacyCapture.envelope.data.calendar.events.total === 2 &&
       privacyCapture.envelope.data.calendar.events.truncated === false &&
+      privacyCapture.envelope.data.calendar.events.byMonth.some((row) =>
+        row.month === CURRENT_MONTH_KEY &&
+        row.count === 2 &&
+        row.included === 2 &&
+        row.truncated === false) &&
       privacyCapture.envelope.data.goals.active.included === 1 &&
       privacyCapture.envelope.data.goals.active.total === 1,
       JSON.stringify({ calendar: privacyCapture.envelope.data.calendar, goals: privacyCapture.envelope.data.goals }));
@@ -777,7 +826,7 @@ async function cleanup() {
     check('heavy calendar fixture is capped with honest totals and no private fields',
       heavyResult.status === 200 &&
       heavyCapture.envelope.data.calendar.plannedSessions.included === 100 &&
-      heavyCapture.envelope.data.calendar.plannedSessions.total === 101 &&
+      heavyCapture.envelope.data.calendar.plannedSessions.total === 104 &&
       heavyCapture.envelope.data.calendar.plannedSessions.truncated === true &&
       heavyCapture.envelope.data.calendar.events.included === 50 &&
       heavyCapture.envelope.data.calendar.events.total === 1003 &&
@@ -786,9 +835,34 @@ async function cleanup() {
       !heavySerialized.includes('CAPPED_EVENT_LOCATION_MUST_NOT_REACH') &&
       !heavySerialized.includes('CAPPED_EVENT_DESCRIPTION_MUST_NOT_REACH'),
       JSON.stringify(heavyCapture.envelope.data.calendar));
-    check('calendar cap disclosure is server-enforced even when the provider omits it',
-      heavyResult.body.limitations.includes('Calendar results were capped, so additional matching plans or events are not included.'),
+    check('unrelated metrics do not inherit calendar cap disclosure',
+      !heavyResult.body.limitations.includes('Calendar results were capped, so additional matching plans or events are not included.'),
       JSON.stringify(heavyResult.body));
+    const heavyPlanMonth = heavyCapture.envelope.data.calendar.plannedSessions.byMonth
+      .find((row) => row.month === CURRENT_MONTH_KEY);
+    const heavyEventTotal = heavyCapture.envelope.data.calendar.events.byMonth
+      .reduce((sum, row) => sum + row.count, 0);
+    check('monthly calendar aggregates use complete pre-cap results',
+      heavyPlanMonth &&
+      heavyPlanMonth.plannedCount === 103 &&
+      heavyPlanMonth.totalPlannedMinutes === 3125 &&
+      heavyPlanMonth.truncated === true &&
+      heavyEventTotal === 1003,
+      JSON.stringify({
+        plans: heavyCapture.envelope.data.calendar.plannedSessions.byMonth,
+        events: heavyCapture.envelope.data.calendar.events.byMonth
+      }));
+    const truncatedMonthList = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+      question: 'Return the truncated month list fixture.',
+      history: []
+    });
+    check('truncated month list is server-rendered with bounded items and disclosure',
+      truncatedMonthList.status === 200 &&
+      /here are the first 10:/.test(truncatedMonthList.body.answer) &&
+      truncatedMonthList.body.answer.includes('You have 103 planned sessions left') &&
+      truncatedMonthList.body.limitations.includes('Calendar results were capped, so additional matching plans or events are not included.') &&
+      truncatedMonthList.body.evidence.length === 11,
+      JSON.stringify(truncatedMonthList.body));
 
     const tampered = { ...privacyResult.body.historyTurn, answer: 'TAMPERED_CLIENT_ANSWER_123456' };
     const historyResult = await api(proLogin, 'POST', '/api/profile/ai-insights', {
@@ -829,7 +903,7 @@ async function cleanup() {
     });
     check('fabricated number is rejected as an invalid typed finding', fabricated.status === 200 && fabricated.body.rejectedReason === 'invalid_finding', JSON.stringify(fabricated));
     check('fabricated answer is replaced by exact fallback copy',
-      fabricated.body.answer === "I couldn’t produce an answer supported by your recorded data. Try asking about your activity count, volume, sports, streaks, personal records, or standings." &&
+      fabricated.body.answer === FALLBACK_COPY &&
       !fabricated.body.answer.includes('987654321'),
       JSON.stringify(fabricated.body));
 
@@ -841,7 +915,7 @@ async function cleanup() {
       missingPath.status === 200 && missingPath.body.rejectedReason === 'missing_path',
       JSON.stringify(missingPath));
     check('nonexistent-path answer is replaced by exact fallback copy',
-      missingPath.body.answer === "I couldn’t produce an answer supported by your recorded data. Try asking about your activity count, volume, sports, streaks, personal records, or standings." &&
+      missingPath.body.answer === FALLBACK_COPY &&
       !missingPath.body.answer.includes('987654321'),
       JSON.stringify(missingPath.body));
 
@@ -851,7 +925,7 @@ async function cleanup() {
     });
     check('valid evidence path with mismatched value is rejected', mismatched.status === 200 && mismatched.body.rejectedReason === 'mismatched_value', JSON.stringify(mismatched));
     check('mismatched-value answer is also replaced by exact fallback copy',
-      mismatched.body.answer === "I couldn’t produce an answer supported by your recorded data. Try asking about your activity count, volume, sports, streaks, personal records, or standings.",
+      mismatched.body.answer === FALLBACK_COPY,
       JSON.stringify(mismatched.body));
 
     const usageAfterMalformed = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
@@ -918,7 +992,14 @@ async function cleanup() {
         line.includes('"offendingPath":"last12Months.10.durationHours"') &&
         line.includes('"expectedType":"number"') &&
         line.includes('"receivedType":"number"')) &&
-      rejectionLogs.every((line) => !line.includes('Return ') && !line.includes('987654321')),
+      rejectionLogs.every((line) =>
+        line.includes('"findingCount":') &&
+        line.includes('"findings":') &&
+        !line.includes('Return ') &&
+        !line.includes('987654321') &&
+        !line.includes('PRIVATE') &&
+        !line.includes('"question"') &&
+        !line.includes('"title"')),
       rejectionLogs.join(' | '));
 
     for (const question of ANSWERABLE_QUESTIONS) {
@@ -933,8 +1014,17 @@ async function cleanup() {
         providerRecord.envelope.question === question,
         JSON.stringify(result));
       const expectedFindings = findingsForAnswerableQuestion(question, providerRecord.envelope.data);
-      const expectedPaths = expectedFindings.flatMap((finding) =>
-        finding.type === 'comparison' ? [finding.leftPath, finding.rightPath] : [finding.path]);
+      const expectedPaths = expectedFindings.flatMap((finding) => {
+        if (finding.type === 'comparison') return [finding.leftPath, finding.rightPath];
+        if (finding.type === 'calendar_plan_list' || finding.type === 'calendar_event_list') {
+          const parentPath = finding.type === 'calendar_plan_list'
+            ? 'calendar.plannedSessions' : 'calendar.events';
+          const parent = valueAtPath(providerRecord.envelope.data, parentPath);
+          const monthIndex = parent.byMonth.findIndex((row) => row.month === finding.filter.month);
+          return [`${parentPath}.byMonth.${monthIndex}`];
+        }
+        return [finding.path];
+      });
       check('answerable question returns relevant real findings: ' + question,
         result.status === 200 &&
         result.body.answer !== FALLBACK_COPY &&

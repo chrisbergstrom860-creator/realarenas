@@ -36,6 +36,7 @@ const {
   makeSignedHistoryTurn,
   verifyHistoryTurns,
   validateInsightResponse,
+  safeFindingDiagnostics,
   resolveAnthropicProvider,
   buildSystemPrompt: buildAiInsightsSystemPrompt
 } = require('./ai-insights');
@@ -8816,7 +8817,7 @@ async function buildAiInsightsContext(user) {
     });
   }
   const context = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     asOfDate: today,
     timezone: tz,
     coverage: {
@@ -8853,11 +8854,11 @@ async function buildAiInsightsContext(user) {
   // lookup is owner-filtered, and RSVP alone never bypasses the shared event
   // visibility gate.
   const planMonthStart = shiftMonthKey(currentMonth, -11) + '-01';
-  const [futurePlansRes, adherenceRows, membershipRows, ownRsvpRows, activeGoalsRes] = await Promise.all([
-    supabaseAdmin.from('planned_sessions')
-      .select('date, sport, title, planned_duration, status', { count: 'exact' })
-      .eq('user_id', user.id).gte('date', today)
-      .order('date', { ascending: true }).limit(100),
+  const [futurePlanRows, adherenceRows, membershipRows, ownRsvpRows, activeGoalsRes] = await Promise.all([
+    fetchAllRows('planned_sessions',
+      (query) => query.eq('user_id', user.id).gte('date', today)
+        .order('date', { ascending: true }).order('id', { ascending: true }),
+      'id, date, sport, title, planned_duration, status'),
     fetchAllRows('planned_sessions',
       (query) => query.eq('user_id', user.id).gte('date', planMonthStart).lt('date', today),
       'date, status'),
@@ -8869,10 +8870,11 @@ async function buildAiInsightsContext(user) {
       .eq('user_id', user.id).eq('status', 'active')
       .order('created_at', { ascending: true }).limit(5)
   ]);
-  for (const result of [futurePlansRes, activeGoalsRes]) {
+  for (const result of [activeGoalsRes]) {
     if (result.error) throw result.error;
   }
-  const futurePlans = (futurePlansRes.data || []).map((row) => ({
+  const includedFuturePlanRows = futurePlanRows.slice(0, 100);
+  const futurePlans = includedFuturePlanRows.map((row) => ({
     date: row.date,
     sport: row.sport,
     title: row.title || null,
@@ -8933,18 +8935,51 @@ async function buildAiInsightsContext(user) {
     clubName: event.club_id ? clubNameMap.get(event.club_id) || null : null,
     ownRsvp: ownRsvpMap.get(event.id) || null
   }));
+  const plannedByMonthMap = new Map();
+  for (const row of futurePlanRows) {
+    const month = String(row.date).slice(0, 7);
+    if (!plannedByMonthMap.has(month)) {
+      plannedByMonthMap.set(month, {
+        month, plannedCount: 0, totalPlannedMinutes: 0, included: 0, truncated: false
+      });
+    }
+    if (row.status === 'planned') {
+      const bucket = plannedByMonthMap.get(month);
+      bucket.plannedCount++;
+      bucket.totalPlannedMinutes += Math.round(parseDurationHours(row.planned_duration) * 60);
+    }
+  }
+  for (const row of includedFuturePlanRows) {
+    if (row.status === 'planned') plannedByMonthMap.get(String(row.date).slice(0, 7)).included++;
+  }
+  const plannedByMonth = [...plannedByMonthMap.values()].sort((a, b) => a.month.localeCompare(b.month));
+  for (const bucket of plannedByMonth) bucket.truncated = bucket.plannedCount > bucket.included;
+
+  const eventByMonthMap = new Map();
+  for (const event of visibleEligibleEvents) {
+    const month = monthKey(event.date, tz);
+    if (!eventByMonthMap.has(month)) {
+      eventByMonthMap.set(month, { month, count: 0, included: 0, truncated: false });
+    }
+    eventByMonthMap.get(month).count++;
+  }
+  for (const event of includedEvents) eventByMonthMap.get(monthKey(event.date, tz)).included++;
+  const eventsByMonth = [...eventByMonthMap.values()].sort((a, b) => a.month.localeCompare(b.month));
+  for (const bucket of eventsByMonth) bucket.truncated = bucket.count > bucket.included;
   context.calendar = {
     plannedSessions: {
       items: futurePlans,
       included: futurePlans.length,
-      total: futurePlansRes.count || 0,
-      truncated: (futurePlansRes.count || 0) > futurePlans.length
+      total: futurePlanRows.length,
+      truncated: futurePlanRows.length > futurePlans.length,
+      byMonth: plannedByMonth
     },
     events: {
       items: calendarEvents,
       included: calendarEvents.length,
       total: visibleEligibleEvents.length,
-      truncated: visibleEligibleEvents.length > calendarEvents.length
+      truncated: visibleEligibleEvents.length > calendarEvents.length,
+      byMonth: eventsByMonth
     },
     pastPlanAdherence: adherence,
     limitations: {
@@ -9141,6 +9176,7 @@ app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_in
       console.warn('AI Insights validation rejection:', JSON.stringify({
         rejectedReason: validated.reason,
         offendingPath: validated.offendingPath || null,
+        ...safeFindingDiagnostics(text),
         ...(validated.mismatchDetails || {})
       }));
     }

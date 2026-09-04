@@ -1,9 +1,10 @@
 const crypto = require('crypto');
 
-const FALLBACK_COPY = "I couldn’t produce an answer supported by your recorded data. Try asking about your activity count, volume, sports, streaks, personal records, or standings.";
+const FALLBACK_COPY = "I couldn’t produce an answer supported by your recorded data. Try asking about your activity count, volume, sports, streaks, personal records, standings, upcoming schedule, events, or active goals.";
 const REFUSAL_COPY = "I can describe your recorded training, but I can’t prescribe workouts or comment on diet, weight, body composition, or whether you are under-training. Try asking what changed in your volume, consistency, sports, personal records, or standings.";
 const MODEL = 'claude-haiku-4-5';
 const MAX_HISTORY_TURNS = 3;
+const MAX_CALENDAR_LIST_ITEMS = 10;
 const HISTORY_TTL_MS = 12 * 60 * 60 * 1000;
 const POLICY_REFUSAL_REASONS = new Set([
   'prescriptive',
@@ -135,7 +136,8 @@ function safeDiagnosticPath(path) {
     'items', 'included', 'total', 'truncated', 'stillPlanned', 'done', 'skipped',
     'plannedDuration', 'status', 'title', 'type', 'clubName', 'ownRsvp', 'active',
     'target', 'progress', 'value', 'unit', 'period', 'percent', 'onTrack',
-    'isComplete', 'windowStart', 'windowEnd', 'limitations'
+    'isComplete', 'windowStart', 'windowEnd', 'limitations', 'byMonth',
+    'plannedCount', 'totalPlannedMinutes', 'count'
   ]);
   return tokens.every((token) => /^\d+$/.test(token) || allowed.has(token)) ? tokens.join('.') : null;
 }
@@ -185,6 +187,7 @@ function parseModelJson(raw) {
 
 function formatMetricValue(path, value) {
   if (/(?:durationHours|DurationHours|HoursPerWeek)$/.test(path)) return value + ' hours';
+  if (/totalPlannedMinutes$/.test(path)) return value + (value === 1 ? ' minute' : ' minutes');
   if (/(?:distanceKm|DistanceKmPerActivity)$/.test(path)) return value + ' km';
   if (/percentSessions$/.test(path)) return value + '%';
   if (/averageSessionsPerWeek$/.test(path)) return value + ' sessions per week';
@@ -216,7 +219,11 @@ function metricDescription(context, path) {
     'allTime.averageSessionDurationHours': 'Your all-time average recorded session duration',
     'allTime.averageDistanceKmPerActivity': 'Your all-time average recorded distance per activity',
     'coverage.firstActivityDate': 'Your first logged activity date',
-    'coverage.lastActivityDate': 'Your latest logged activity date'
+    'coverage.lastActivityDate': 'Your latest logged activity date',
+    'calendar.plannedSessions.total': 'Your future plan-record count across all statuses',
+    'calendar.plannedSessions.included': 'Your future plan records included in AI Insights across all statuses',
+    'calendar.events.total': 'Your total future eligible-event count',
+    'calendar.events.included': 'Your future eligible events included in AI Insights'
   };
   if (fixed[path]) return fixed[path];
   let match = path.match(/^allTime\.sports\.(\d+)\.(sessions|durationHours|distanceKm|percentSessions|averageSessionDurationHours|averageHoursPerWeek|averageSessionsPerWeek|averageDistanceKmPerActivity)$/);
@@ -309,11 +316,210 @@ function metricDescription(context, path) {
     };
     return `Your ${row.sport} ${labels[match[3]]} in ${monthLabel}`;
   }
+  match = path.match(/^calendar\.plannedSessions\.byMonth\.(\d+)\.(plannedCount|totalPlannedMinutes|included)$/);
+  if (match) {
+    const row = context.calendar && context.calendar.plannedSessions &&
+      context.calendar.plannedSessions.byMonth && context.calendar.plannedSessions.byMonth[Number(match[1])];
+    if (!row || !row.month) return null;
+    const label = humanMonthLabel(row.month);
+    const descriptions = {
+      plannedCount: 'planned sessions left',
+      totalPlannedMinutes: 'total planned duration',
+      included: 'planned sessions included in AI Insights'
+    };
+    return `Your ${descriptions[match[2]]} in ${label}`;
+  }
+  match = path.match(/^calendar\.events\.byMonth\.(\d+)\.(count|included)$/);
+  if (match) {
+    const row = context.calendar && context.calendar.events &&
+      context.calendar.events.byMonth && context.calendar.events.byMonth[Number(match[1])];
+    if (!row || !row.month) return null;
+    const description = match[2] === 'count' ? 'eligible-event count' : 'eligible events included in AI Insights';
+    return `Your ${description} in ${humanMonthLabel(row.month)}`;
+  }
   return null;
 }
 
 function evidenceItem(path, value) {
   return { path, value };
+}
+
+function validTimeZone(value) {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value }).format();
+    return value;
+  } catch (err) {
+    return 'UTC';
+  }
+}
+
+function dateKeyForValue(value, timeZone) {
+  const raw = String(value || '');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const date = new Date(raw);
+  if (!Number.isFinite(date.getTime())) return null;
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: validTimeZone(timeZone),
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date).filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function humanMonthLabel(month) {
+  return new Date(month + '-01T12:00:00Z').toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC'
+  });
+}
+
+function humanCalendarWhen(value, context, includeTime) {
+  const timeZone = validTimeZone(context && context.timezone);
+  const dateKey = dateKeyForValue(value, timeZone);
+  if (!dateKey) return String(value || '');
+  const asOfDate = /^\d{4}-\d{2}-\d{2}$/.test(context && context.asOfDate)
+    ? context.asOfDate : dateKeyForValue(new Date(), timeZone);
+  const epochDay = (key) => Math.floor(Date.parse(key + 'T12:00:00Z') / 86400000);
+  const difference = epochDay(dateKey) - epochDay(asOfDate);
+  let label;
+  if (difference === 0) label = 'today';
+  else if (difference === 1) label = 'tomorrow';
+  else if (difference >= 2 && difference <= 6) {
+    label = 'on ' + new Date(dateKey + 'T12:00:00Z').toLocaleDateString('en-US', {
+      weekday: 'long',
+      timeZone: 'UTC'
+    });
+  } else {
+    const includeYear = dateKey.slice(0, 4) !== asOfDate.slice(0, 4);
+    label = 'on ' + new Date(dateKey + 'T12:00:00Z').toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      ...(includeYear ? { year: 'numeric' } : {}),
+      timeZone: 'UTC'
+    });
+  }
+  const raw = String(value || '');
+  if (includeTime && raw.includes('T')) {
+    const date = new Date(raw);
+    if (Number.isFinite(date.getTime())) {
+      label += ' at ' + date.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone
+      });
+    }
+  }
+  return label;
+}
+
+function durationMinutes(value) {
+  if (!value) return null;
+  const text = String(value).trim().toLowerCase();
+  let hours = 0;
+  if (text.includes(':')) {
+    const [first, second] = text.split(':').map((part) => parseFloat(part) || 0);
+    hours = first > 12 ? first / 60 + second / 3600 : first + second / 60;
+  } else {
+    const hourMatch = text.match(/(\d+(?:\.\d+)?)\s*h/);
+    const minuteMatch = text.match(/(\d+(?:\.\d+)?)\s*m/);
+    if (hourMatch || minuteMatch) {
+      hours = (parseFloat(hourMatch && hourMatch[1]) || 0) +
+        (parseFloat(minuteMatch && minuteMatch[1]) || 0) / 60;
+    } else {
+      const number = parseFloat(text.replace(/[^0-9.]/g, ''));
+      if (!Number.isFinite(number)) return null;
+      hours = number > 12 ? number / 60 : number;
+    }
+  }
+  const minutes = Math.round(hours * 60);
+  return minutes > 0 ? minutes : null;
+}
+
+function humanDuration(value) {
+  const minutes = durationMinutes(value);
+  if (!minutes) return null;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  const parts = [];
+  if (hours) parts.push(`${hours} ${hours === 1 ? 'hour' : 'hours'}`);
+  if (remainder) parts.push(`${remainder} ${remainder === 1 ? 'minute' : 'minutes'}`);
+  return parts.join(' ');
+}
+
+function renderPlanItem(item, context, compact = false) {
+  const name = item.title || item.sport || 'Session';
+  const when = humanCalendarWhen(item.date, context, false);
+  const duration = humanDuration(item.plannedDuration);
+  if (compact) {
+    return `${name} ${when}${duration ? ` for ${duration}` : ''}${item.status && item.status !== 'planned' ? ` (${item.status})` : ''}`;
+  }
+  return `Your planned session is ${name} ${when}${duration ? ` for ${duration}` : ''}${item.status && item.status !== 'planned' ? ` and is marked ${item.status}` : ''}.`;
+}
+
+function renderEventItem(item, context, compact = false) {
+  const name = item.title || item.type || 'Event';
+  const when = humanCalendarWhen(item.date, context, true);
+  if (compact) {
+    return `${name} ${when}${item.clubName ? ` with ${item.clubName}` : ''}${item.ownRsvp ? ` (RSVP: ${item.ownRsvp})` : ''}`;
+  }
+  return `${name} is ${when}${item.clubName ? ` with ${item.clubName}` : ''}${item.ownRsvp ? `; your RSVP is ${item.ownRsvp}` : ''}.`;
+}
+
+function renderCalendarList(finding, context) {
+  const expectedKeys = ['filter', 'path', 'type'];
+  if (JSON.stringify(Object.keys(finding).sort()) !== JSON.stringify(expectedKeys)) {
+    return { error: 'invalid_finding', offendingPath: normalizePath(finding.path) };
+  }
+  const isPlan = finding.type === 'calendar_plan_list';
+  const expectedPath = isPlan ? 'calendar.plannedSessions.items' : 'calendar.events.items';
+  const path = normalizePath(finding.path);
+  if (path !== expectedPath) return { error: 'unsupported_path', offendingPath: path };
+  if (!finding.filter || typeof finding.filter !== 'object' ||
+      JSON.stringify(Object.keys(finding.filter)) !== JSON.stringify(['month']) ||
+      !/^\d{4}-\d{2}$/.test(finding.filter.month)) {
+    return { error: 'invalid_filter', offendingPath: path };
+  }
+  const collection = valueAtPath(context, path);
+  const parent = valueAtPath(context, isPlan ? 'calendar.plannedSessions' : 'calendar.events');
+  if (!collection.found || !Array.isArray(collection.value) || !parent.found ||
+      !Array.isArray(parent.value.byMonth)) {
+    return { error: 'missing_path', offendingPath: path };
+  }
+  const monthIndex = parent.value.byMonth.findIndex((row) => row && row.month === finding.filter.month);
+  if (monthIndex < 0) return { error: 'missing_path', offendingPath: path };
+  const summary = parent.value.byMonth[monthIndex];
+  const indexed = collection.value.map((item, index) => ({ item, index })).filter(({ item }) => {
+    const itemDate = dateKeyForValue(item.date, context.timezone);
+    const sameMonth = itemDate && itemDate.slice(0, 7) === finding.filter.month;
+    return sameMonth && (!isPlan || item.status === 'planned');
+  });
+  const shown = indexed.slice(0, MAX_CALENDAR_LIST_ITEMS);
+  const total = isPlan ? summary.plannedCount : summary.count;
+  const noun = isPlan ? 'planned session' : 'event';
+  const monthLabel = humanMonthLabel(finding.filter.month);
+  let text;
+  if (!total) {
+    text = `You have no ${isPlan ? 'planned sessions left' : 'events'} in ${monthLabel}.`;
+  } else {
+    const lead = total === shown.length
+      ? `You have ${total} ${noun}${total === 1 ? '' : 's'}${isPlan ? ' left' : ''} in ${monthLabel}:`
+      : `You have ${total} ${noun}${total === 1 ? '' : 's'}${isPlan ? ' left' : ''} in ${monthLabel}; here are the first ${shown.length}:`;
+    const renderedItems = shown.map(({ item }) => isPlan
+      ? renderPlanItem(item, context, true)
+      : renderEventItem(item, context, true));
+    text = `${lead} ${renderedItems.join('; ')}.`;
+  }
+  const summaryPath = `${isPlan ? 'calendar.plannedSessions' : 'calendar.events'}.byMonth.${monthIndex}`;
+  return {
+    text,
+    requiresCalendarTruncationDisclosure: summary.truncated === true,
+    evidence: [
+      evidenceItem(summaryPath, summary),
+      ...shown.map(({ item, index }) => evidenceItem(`${path}.${index}`, item))
+    ]
+  };
 }
 
 function renderTypedFinding(finding, context) {
@@ -410,16 +616,28 @@ function renderTypedFinding(finding, context) {
     if (!equalEvidenceValue(actual.value, finding.value)) return { error: 'mismatched_value', offendingPath: path };
     let text;
     if (finding.type === 'calendar_plan') {
-      text = `Your planned session is ${actual.value.title || actual.value.sport} on ${actual.value.date}, with ${actual.value.plannedDuration || 'no planned duration'} (${actual.value.status}).`;
+      text = renderPlanItem(actual.value, context);
     } else if (finding.type === 'calendar_event') {
-      text = `${actual.value.title} is on ${actual.value.date}${actual.value.clubName ? ` with ${actual.value.clubName}` : ''}; your RSVP is ${actual.value.ownRsvp || 'none'}.`;
+      text = renderEventItem(actual.value, context);
     } else if (finding.type === 'plan_adherence') {
       text = `In ${actual.value.month}, your plans were ${actual.value.done} done, ${actual.value.skipped} skipped, and ${actual.value.stillPlanned} still planned.`;
     } else {
       const goal = actual.value;
       text = `Your active ${goal.sport || 'all-sport'} ${goal.type} goal is ${goal.progress.value} of ${goal.target.value}${goal.target.unit ? ` ${goal.target.unit}` : ''} for the ${goal.period} period, and is ${goal.isComplete ? 'complete' : goal.onTrack ? 'on track' : 'not on track'}.`;
     }
-    return { text, evidence: [evidenceItem(path, actual.value)] };
+    const parent = finding.type === 'calendar_plan'
+      ? context.calendar && context.calendar.plannedSessions
+      : finding.type === 'calendar_event'
+        ? context.calendar && context.calendar.events
+        : null;
+    return {
+      text,
+      requiresCalendarTruncationDisclosure: !!(parent && parent.truncated),
+      evidence: [evidenceItem(path, actual.value)]
+    };
+  }
+  if (finding.type === 'calendar_plan_list' || finding.type === 'calendar_event_list') {
+    return renderCalendarList(finding, context);
   }
   if (finding.type === 'insufficient_trend_data') {
     if (Object.keys(finding).length !== 1) return { error: 'invalid_finding' };
@@ -433,6 +651,30 @@ function renderTypedFinding(finding, context) {
     };
   }
   return { error: 'unsupported_finding_type' };
+}
+
+const DIAGNOSTIC_FINDING_TYPES = new Set([
+  'metric', 'comparison', 'standing', 'personal_record', 'calendar_plan',
+  'calendar_event', 'calendar_plan_list', 'calendar_event_list', 'plan_adherence',
+  'goal_projection', 'insufficient_trend_data', 'not_answerable', 'policy_refusal'
+]);
+
+function safeFindingDiagnostics(raw) {
+  const parsed = parseModelJson(raw);
+  const findings = parsed && Array.isArray(parsed.findings) ? parsed.findings : [];
+  return {
+    findingCount: findings.length,
+    findings: findings.slice(0, 8).map((finding) => {
+      const safeType = finding && DIAGNOSTIC_FINDING_TYPES.has(finding.type) ? finding.type : 'unknown';
+      const candidates = safeType === 'comparison'
+        ? [finding.leftPath, finding.rightPath]
+        : [finding && finding.path];
+      return {
+        type: safeType,
+        paths: candidates.map(safeDiagnosticPath).filter(Boolean)
+      };
+    })
+  };
 }
 
 function validateInsightResponse(raw, context) {
@@ -480,6 +722,7 @@ function validateInsightResponse(raw, context) {
   }
   const allEvidence = [];
   const rendered = [];
+  let requiresCalendarTruncationDisclosure = false;
   for (const finding of parsed.findings) {
     const result = renderTypedFinding(finding, context);
     if (result.error) {
@@ -493,6 +736,7 @@ function validateInsightResponse(raw, context) {
       };
     }
     rendered.push(result.text);
+    if (result.requiresCalendarTruncationDisclosure) requiresCalendarTruncationDisclosure = true;
     allEvidence.push(...result.evidence);
   }
   const allowedLimitations = {
@@ -507,14 +751,12 @@ function validateInsightResponse(raw, context) {
     if (typeof code !== 'string' || !Object.prototype.hasOwnProperty.call(allowedLimitations, code)) {
       return { ok: false, answer: FALLBACK_COPY, reason: 'invalid_limitation' };
     }
-    if (!limitations.includes(allowedLimitations[code])) limitations.push(allowedLimitations[code]);
+    if (code !== 'CALENDAR_RESULTS_TRUNCATED' &&
+        !limitations.includes(allowedLimitations[code])) {
+      limitations.push(allowedLimitations[code]);
+    }
   }
-  const calendarWasTruncated = !!(
-    context.calendar &&
-    ((context.calendar.plannedSessions && context.calendar.plannedSessions.truncated) ||
-      (context.calendar.events && context.calendar.events.truncated))
-  );
-  if (calendarWasTruncated &&
+  if (requiresCalendarTruncationDisclosure &&
       !limitations.includes(allowedLimitations.CALENDAR_RESULTS_TRUNCATED)) {
     limitations.push(allowedLimitations.CALENDAR_RESULTS_TRUNCATED);
   }
@@ -538,6 +780,8 @@ function buildSystemPrompt() {
     '{"type":"personal_record","path":"allTime.personalRecords.N","value":"exact copied object"}',
     '{"type":"calendar_plan","path":"calendar.plannedSessions.items.N","value":"exact copied object"}',
     '{"type":"calendar_event","path":"calendar.events.items.N","value":"exact copied object"}',
+    '{"type":"calendar_plan_list","path":"calendar.plannedSessions.items","filter":{"month":"YYYY-MM"}} for a month-filtered list of planned-status sessions.',
+    '{"type":"calendar_event_list","path":"calendar.events.items","filter":{"month":"YYYY-MM"}} for a month-filtered list of eligible events.',
     '{"type":"plan_adherence","path":"calendar.pastPlanAdherence.N","value":"exact copied object"}',
     '{"type":"goal_projection","path":"goals.active.items.N","value":"exact copied object"}',
     '{"type":"insufficient_trend_data"} only when DATA_JSON.dataQuality.trendEligible is false.',
@@ -545,7 +789,8 @@ function buildSystemPrompt() {
     'Use missing_injury_date for before/after injury questions without an injury date; missing_medical_leave_dates for medical-leave-window questions without its dates; missing_event_date for another absent event boundary; period_outside_coverage for calendar detail older than last12Months; unsupported_metric when the requested measurement is not present.',
     'last12Months contains 12 athlete-timezone calendar buckets, oldest first, including zero months. Each month has totals, activeDays, restDays, observedDays, common averages, and active-sport summaries.',
     'last12Weeks.sports contains aggregate sport summaries for the detailed 12-week window. Use these direct paths instead of calculating from weekly or daily rows.',
-    'calendar contains only the athlete’s own future plans, visible eligible future events, and 12 monthly plan-status counts. If either calendar list is truncated, include CALENDAR_RESULTS_TRUNCATED.',
+    'calendar contains only the athlete’s own future plans, visible eligible future events, and 12 monthly plan-status counts. plannedSessions.total/included cover all future plan records across planned, done, and skipped statuses. plannedSessions.byMonth and events.byMonth contain exact athlete-timezone future month totals computed before the item caps. Use byMonth.plannedCount for sessions left, and use direct byMonth paths for month counts and planned minutes; never derive a month count from items or use the all-future total for one month.',
+    'Use calendar_plan_list or calendar_event_list when the user asks what the month’s matching items are. The server applies the month filter and renders at most 10 items. If the relevant month bucket is truncated, include CALENDAR_RESULTS_TRUNCATED.',
     'goals contains at most five active goals with server-computed progress and on-track status. Goal history, cross-goal comparison, and catch-up projections are unsupported; use their specific not_answerable reasons.',
     '{"type":"policy_refusal","reason":"prescriptive|diet_weight_body|medical|athlete_characterization"} must be the only finding, with no limitations, when the user asks for advice or prescriptions; asks what they should do, eat, increase, decrease, or change; asks for diet, weight, body composition, or medical commentary; or asks you to characterize them as under-training, over-training, lazy, fit, healthy, or similar.',
     'Do not policy-refuse a descriptive question merely because it mentions workouts, training, rest days, routines, weight training, rides, injuries, medical leave, diet, nutrition, calories, or weight in a historical or recorded-data context.',
@@ -563,11 +808,13 @@ module.exports = {
   NOT_ANSWERABLE_COPY,
   MODEL,
   MAX_HISTORY_TURNS,
+  MAX_CALENDAR_LIST_ITEMS,
   AiProviderConfigurationError,
   resolveAnthropicProvider,
   makeSignedHistoryTurn,
   verifyHistoryTurns,
   validateInsightResponse,
+  safeFindingDiagnostics,
   buildSystemPrompt,
   valueAtPath
 };
