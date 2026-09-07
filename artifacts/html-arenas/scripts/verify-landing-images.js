@@ -1,4 +1,4 @@
-// Permanent regression guard for landing-page hero and analytics image bands.
+// Permanent regression guard for landing-page hero/analytics and For Clubs hero image bands.
 //
 // The expectation table is deliberately explicit. Responsive-band changes must
 // update a visible row here rather than silently teaching the verifier to accept
@@ -12,11 +12,14 @@ const { chromium } = require('playwright-core');
 
 const BASE_URL = 'http://localhost:80/html';
 const LANDING_URL = BASE_URL + '/landing';
+const FOR_CLUBS_URL = BASE_URL + '/for-clubs';
 const ASSET_URL = BASE_URL + '/landing-assets/';
 const EXECUTABLE = process.env.REPLIT_PLAYWRIGHT_CHROMIUM_EXECUTABLE;
 
 const HERO_800 = 'hero-trail-runners-800.avif';
 const HERO_1600 = 'hero-trail-runners-1600.avif';
+const CLUBS_800 = 'for-clubs-collage-800.avif';
+const CLUBS_1600 = 'for-clubs-collage-1600.avif';
 const ANALYTICS_800 = 'analytics-weekly-activity-800.avif';
 const ANALYTICS_1600 = 'analytics-weekly-activity-1600.avif';
 const mobile = (width, density) => `analytics-mobile-composite-${width}-${density}x.avif`;
@@ -57,6 +60,7 @@ const BOUNDARIES = [
 ];
 
 const HERO_RE = /^hero-trail-runners-(?:800|1600)\.(?:avif|webp)$/;
+const CLUBS_RE = /^for-clubs-collage-(?:800|1600)\.(?:avif|webp)$/;
 const ANALYTICS_RE = /^analytics-(?:weekly-activity-(?:800|1600)|mobile-composite-(?:380|390|600|767)-(?:2|3)x)\.(?:avif|webp)$/;
 
 let passes = 0;
@@ -104,6 +108,8 @@ function expectedAssetFiles() {
       if (file) avifs.add(file);
     }
   }
+  avifs.add(CLUBS_800);
+  avifs.add(CLUBS_1600);
   return [...avifs].sort().flatMap((file) => [file, file.replace(/\.avif$/, '.webp')]);
 }
 
@@ -204,6 +210,62 @@ async function verifyBrowserMatrix() {
   }
 }
 
+async function verifyForClubsMatrix() {
+  const browser = await chromium.launch({
+    headless: true,
+    executablePath: EXECUTABLE,
+    args: ['--no-sandbox']
+  });
+  const widths = [380, 768, 1279, 1280, 1600, 1920];
+  console.log(`— For Clubs browser matrix (${widths.length * 3} fresh-cache cases) —`);
+  try {
+    for (const width of widths) {
+      for (const dpr of [1, 2, 3]) {
+        const caseKey = `For Clubs ${width}px DPR ${dpr}`;
+        const expected = width >= 1280 || dpr >= 2 ? CLUBS_1600 : CLUBS_800;
+        const context = await browser.newContext({
+          viewport: { width, height: 1000 },
+          deviceScaleFactor: dpr,
+          serviceWorkers: 'block',
+          extraHTTPHeaders: { 'Cache-Control': 'no-cache' }
+        });
+        const page = await context.newPage();
+        const session = await context.newCDPSession(page);
+        await session.send('Network.setCacheDisabled', { cacheDisabled: true });
+        const requested = [];
+        page.on('request', (request) => {
+          try {
+            const pathname = new URL(request.url()).pathname;
+            const prefix = '/html/landing-assets/';
+            if (pathname.startsWith(prefix)) requested.push(pathname.slice(prefix.length));
+          } catch {}
+        });
+        await page.goto(`${FOR_CLUBS_URL}?verify-landing-images=${width}-${dpr}`, {
+          waitUntil: 'networkidle',
+          timeout: 30000
+        });
+        const clubs = requested.filter((file) => CLUBS_RE.test(file));
+        assertImageRequests(caseKey, 'For Clubs hero', expected, clubs);
+        const geometry = await page.evaluate(() => ({
+          viewportWidth: innerWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          bodyWidth: document.body.scrollWidth
+        }));
+        check(caseKey, 'no horizontal page overflow',
+          geometry.documentWidth <= geometry.viewportWidth && geometry.bodyWidth <= geometry.viewportWidth,
+          `document/body <= ${geometry.viewportWidth}px`,
+          `document ${geometry.documentWidth}px, body ${geometry.bodyWidth}px`);
+        if (!failedCases.has(caseKey)) {
+          console.log(`  ok  ${caseKey} — hero ${receivedList(clubs)}`);
+        }
+        await context.close();
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
 function reportBoundaryFailures() {
   for (const [below, above] of BOUNDARIES) {
     const keys = [...failedCases.keys()].filter((key) =>
@@ -217,12 +279,13 @@ function reportBoundaryFailures() {
 (async () => {
   await verifyServedFiles();
   await verifyBrowserMatrix();
+  await verifyForClubsMatrix();
   reportBoundaryFailures();
   if (failures) {
     console.log(`\nverify-landing-images FAILED (${failures} failures, ${passes} passes)`);
     process.exit(1);
   }
-  console.log(`\nverify-landing-images OK (${passes} assertions; ${EXPECTATIONS.length * 3} browser cases; ${expectedAssetFiles().length} served files)`);
+  console.log(`\nverify-landing-images OK (${passes} assertions; ${EXPECTATIONS.length * 3 + 18} browser cases; ${expectedAssetFiles().length} served files)`);
 })().catch((error) => {
   console.error('verify-landing-images FATAL:', error && error.stack ? error.stack : error);
   process.exit(1);
