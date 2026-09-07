@@ -175,17 +175,28 @@ html { scroll-behavior: smooth; }
 .hero-eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: var(--yellow-light);
-  border: 1px solid #fde68a;
-  border-radius: 20px;
+  position: relative;
+  z-index: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   padding: 4px 14px;
   font-size: 12px;
   font-weight: 600;
-  color: #7a5c00;
+  color: var(--gray-900);
   margin-bottom: 22px;
   width: fit-content;
   letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.hero-eyebrow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--yellow);
+  transform: skew(-8deg);
+  border-radius: 0;
+  z-index: -1;
 }
 .hero-eyebrow span { font-family: var(--mono); }
 .hero-h1 {
@@ -769,7 +780,7 @@ html { scroll-behavior: smooth; }
 
     <!-- Left: headline + CTA -->
     <div class="hero-left">
-      <div class="hero-eyebrow">🏅 Train. Compete. Connect. · Every sport</div>
+      <div class="hero-eyebrow">BUILT FOR ATHLETES. MADE FOR EVERYONE.</div>
       <h1 class="hero-h1">Every sport.<br><em>One community.</em></h1>
       <p class="hero-sub">Share every workout, climb the weekly leaderboards, and take on events with athletes who train as hard as you do.</p>
       <div class="hero-cta">
