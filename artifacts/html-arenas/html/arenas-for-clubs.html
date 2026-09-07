@@ -92,13 +92,6 @@ button,select,input,textarea{font-family:var(--font)}
 .hero-btn-secondary:hover{background:rgba(255,255,255,.14)}
 .hero-note{font-size:12px;color:#D1D5DB}
 
-/* ── SPORT STRIP ── */
-.sport-strip{background:white;border-top:var(--border);border-bottom:var(--border);padding:14px 40px;display:flex;gap:8px;overflow-x:auto;align-items:center}
-.sport-strip::-webkit-scrollbar{display:none}
-.sport-tag{padding:5px 14px;border-radius:20px;font-size:13px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);white-space:nowrap;cursor:pointer;transition:all .12s;flex-shrink:0}
-.sport-tag:hover{border-color:var(--gray-400);background:var(--gray-50)}
-.sport-tag.active{background:var(--gray-900);color:white;border-color:var(--gray-900)}
-
 /* ── FEATURES ── */
 .features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .feat-card{background:white;border:var(--border);border-radius:var(--radius-lg);padding:24px;transition:border-color .13s,box-shadow .13s}
@@ -404,20 +397,6 @@ button,select,input,textarea{font-family:var(--font)}
     </div>
   </div>
 </section>
-
-<!-- SPORT STRIP -->
-<div class="sport-strip">
-  <span style="font-size:12px;font-weight:600;color:var(--gray-400);white-space:nowrap">Works for:</span>
-  <div class="sport-tag active">🏃 Running clubs</div>
-  <div class="sport-tag">🚴 Cycling teams</div>
-  <div class="sport-tag">🧗 Climbing gyms</div>
-  <div class="sport-tag">🏊 Swim squads</div>
-  <div class="sport-tag">🔱 Tri clubs</div>
-  <div class="sport-tag">⚽ Football teams</div>
-  <div class="sport-tag">🎾 Tennis clubs</div>
-  <div class="sport-tag">🏋️ Lifting clubs</div>
-  <div class="sport-tag">🏄 Surf crews</div>
-</div>
 
 <!-- FEATURES -->
 <div id="features">
@@ -1269,12 +1248,6 @@ async function authedCreate(c, invites, nextBtn) {
     }
   } catch (err) {}
 })();
-
-// ── SPORT STRIP ──
-document.querySelectorAll('.sport-tag').forEach(t => t.addEventListener('click', function() {
-  document.querySelectorAll('.sport-tag').forEach(x => x.classList.remove('active'));
-  this.classList.add('active');
-}));
 
 // ── TOAST ──
 function showToast(msg) {
