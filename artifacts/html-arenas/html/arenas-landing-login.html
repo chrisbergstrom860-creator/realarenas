@@ -145,7 +145,7 @@ html { scroll-behavior: smooth; }
 @media (min-width: 1280px) {
   .hero-left {
     background-size: cover;
-    background-position: 20% center;
+    background-position: 40% center;
   }
   .hero-left::before {
     content: '';
@@ -158,7 +158,7 @@ html { scroll-behavior: smooth; }
 }
 @media (min-width: 1280px) and (max-width: 1599px) {
   .hero-left {
-    background-position: 40% center;
+    background-position: 58% center;
   }
   .hero-left::before {
     background: linear-gradient(90deg, #fff 0, #fff 455px, rgba(255,255,255,.99) 460px, rgba(255,255,255,.92) 470px, rgba(255,255,255,.55) 490px, rgba(255,255,255,.18) 520px, rgba(255,255,255,.03) 550px, rgba(255,255,255,0) 580px);
@@ -189,7 +189,7 @@ html { scroll-behavior: smooth; }
   border: 0;
   border-radius: 0;
   padding: 4px 14px;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--gray-900);
   margin-bottom: 22px;
@@ -208,13 +208,13 @@ html { scroll-behavior: smooth; }
 }
 .hero-eyebrow span { font-family: var(--mono); }
 .hero-h1 {
-  font-size: 48px;
+  font-size: 104px;
   font-weight: 900;
   font-style: italic;
   color: var(--gray-900);
-  line-height: 1.08;
+  line-height: 1;
   letter-spacing: -0.03em;
-  margin-bottom: 18px;
+  margin-bottom: 28px;
   position: relative;
   z-index: 0;
 }
@@ -701,12 +701,13 @@ html { scroll-behavior: smooth; }
   body:has(#page-landing.active) .topbar-actions { display: none; }
 
   /* Hero — stack to single column, shrink heading, reduce padding */
-  .split-hero { grid-template-columns: 1fr !important; min-height: auto; }
+  .split-hero { grid-template-columns: minmax(0, 1fr) !important; min-height: auto; }
   .hero-left {
     --hero-band-height: calc(100vw / 2.7);
     padding: calc(var(--hero-band-height) + 32px) 20px 40px !important;
   }
-  .hero-h1 { font-size: 32px !important; line-height: 1.10; }
+  .hero-eyebrow { font-size: 14px; }
+  .hero-h1 { font-size: 64px !important; line-height: 1; margin-bottom: 24px; }
   .hero-right, .hero-left { width: auto; }
 
   /* All multi-column content grids → single (stats stays 2-col 2x2) */
