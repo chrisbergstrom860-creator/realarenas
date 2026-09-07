@@ -259,36 +259,6 @@ html { scroll-behavior: smooth; }
 .hsp-text { font-size: 13px; color: var(--gray-500); }
 .hsp-text strong { color: var(--gray-900); font-weight: 600; }
 
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(0.85); }
-}
-
-/* ── STATS BAR — carbon telemetry band ── */
-.stats-bar { background: var(--gray-900); border-bottom: 1px solid var(--gray-900); padding: 36px 24px; position: relative; overflow: hidden; }
-/* Lane lines inside the carbon band — only a shade lighter than the band */
-.stats-bar::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(#1D2736, #1D2736),
-    linear-gradient(#1D2736, #1D2736),
-    linear-gradient(#1D2736, #1D2736),
-    linear-gradient(#1D2736, #1D2736);
-  background-size: 100% 1px;
-  background-repeat: no-repeat;
-  background-position: 0 20%, 0 40%, 0 60%, 0 80%;
-}
-.stats-bar-inner { max-width: 960px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); position: relative; }
-.stat-item { text-align: center; padding: 0 24px; border-right: 1px solid rgba(255,255,255,0.1); }
-.stat-item:last-child { border-right: none; }
-.stat-num { font-size: 32px; font-weight: 700; color: var(--yellow); font-family: var(--mono); font-variant-numeric: tabular-nums; line-height: 1; }
-.stat-label { font-size: 11px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.14em; color: #94A3B8; margin-top: 10px; }
-.stat-delta { font-size: 11px; color: #10B981; font-family: var(--mono); margin-top: 3px; font-weight: 500; }
-.stat-pulse { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #10B981; margin-right: 4px; animation: pulse-dot 2s ease-in-out infinite; }
-
 /* ── FEATURES ── */
 .features { padding: 72px 24px; background: var(--gray-50); }
 .features-inner { max-width: 1100px; margin: 0 auto; }
@@ -308,7 +278,7 @@ html { scroll-behavior: smooth; }
 .badge-pro { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
 
 /* ── AI INSIGHTS ── */
-.ai-insights { background: white; border-bottom: var(--border); padding: 72px 24px; }
+.ai-insights { background: white; border-top: var(--border); border-bottom: var(--border); padding: 72px 24px; }
 .ai-insights-inner { max-width: 1176px; margin: 0 auto; }
 .ai-insights-grid { align-items: center; display: grid; gap: 64px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .ai-insights-title { margin-bottom: 24px; }
@@ -623,8 +593,7 @@ html { scroll-behavior: smooth; }
   .hero-h1 { font-size: 56px !important; line-height: .8; margin-bottom: 22px; }
   .hero-left { width: auto; }
 
-  /* All multi-column content grids → single (stats stays 2-col 2x2) */
-  .stats-bar-inner { grid-template-columns: 1fr 1fr !important; gap: 16px; }
+  /* All multi-column content grids → single */
   .features-grid { grid-template-columns: 1fr !important; }
   .ai-insights-grid { grid-template-columns: 1fr; gap: 36px; }
   .analytics-grid { grid-template-columns: 1fr; gap: 36px; }
@@ -637,7 +606,6 @@ html { scroll-behavior: smooth; }
 
   /* Section titles and big numbers shrink */
   .section-title { font-size: 26px !important; }
-  .stat-num { font-size: 26px !important; }
   .pricing-amount { font-size: 30px !important; }
   .cta-band h2 { font-size: 26px !important; }
 
@@ -716,28 +684,6 @@ html { scroll-behavior: smooth; }
       </div>
     </div>
 
-  </div>
-
-  <!-- Stats bar -->
-  <div class="stats-bar">
-    <div class="stats-bar-inner">
-      <div class="stat-item">
-        <div class="stat-num">14</div>
-        <div class="stat-label">Sports supported</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-num">PRs</div>
-        <div class="stat-label">Tracked automatically</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-num">$0</div>
-        <div class="stat-label">Free forever plan</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-num">∞</div>
-        <div class="stat-label">Clubs, events &amp; leaderboards</div>
-      </div>
-    </div>
   </div>
 
   <!-- AI Insights -->
@@ -1403,44 +1349,6 @@ window.addEventListener('load', () => {
 });
 
 setMode('login');
-
-// ── STATS BAND COUNT-UP (one motion moment) ──
-// Numeric stat values count up stopwatch-style on first scroll into view.
-// HTML keeps the final values, so no-JS and prefers-reduced-motion users
-// always see the real numbers.
-(function(){
-  var band = document.querySelector('.stats-bar');
-  if (!band) return;
-  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  var nums = Array.prototype.slice.call(band.querySelectorAll('.stat-num'));
-  var targets = [];
-  nums.forEach(function(el){
-    var m = el.textContent.match(/^([^0-9]*)(\d+)([^0-9]*)$/);
-    if (m && parseInt(m[2], 10) > 0) targets.push({ el: el, prefix: m[1], value: parseInt(m[2], 10), suffix: m[3] });
-  });
-  if (!targets.length) return;
-  var played = false;
-  var io = new IntersectionObserver(function(entries){
-    entries.forEach(function(entry){
-      if (!entry.isIntersecting || played) return;
-      played = true;
-      io.disconnect();
-      var duration = 900, start = null;
-      function tick(ts){
-        if (start === null) start = ts;
-        var p = Math.min((ts - start) / duration, 1);
-        var eased = 1 - Math.pow(1 - p, 3);
-        targets.forEach(function(t){
-          t.el.textContent = t.prefix + Math.round(t.value * eased) + t.suffix;
-        });
-        if (p < 1) requestAnimationFrame(tick);
-      }
-      targets.forEach(function(t){ t.el.textContent = t.prefix + '0' + t.suffix; });
-      requestAnimationFrame(tick);
-    });
-  }, { threshold: 0.4 });
-  io.observe(band);
-})();
 
 // ── SELF-CONTAINED TOAST (this page has no #toast element) ──
 function showToast(msg){
