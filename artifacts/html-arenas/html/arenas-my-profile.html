@@ -2087,6 +2087,8 @@ if (logHashMatch) {
     if (usage) aiUsage = usage;
     var el = document.getElementById('ai-insights-usage');
     if (el) el.textContent = usageText();
+    var remaining = document.getElementById('ai2-remaining-count');
+    if (remaining && aiUsage) remaining.textContent = aiUsage.remaining + ' questions remaining';
   }
 
   function lockedPanel() {
@@ -2104,14 +2106,14 @@ if (logHashMatch) {
     var d = new Date();
     d.setMonth(d.getMonth() - 1);
     var lastMo = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-    
+
     var statsHtml = stats.map(function(s) {
       var svg = '';
       if (s.icon === 'hours') svg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>';
       else if (s.icon === 'activities') svg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>';
       else if (s.icon === 'streak') svg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>';
       else svg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>';
-      
+
       return '<div class="ai2-stat-row">' +
         '<div class="ai2-stat-icon">' + svg + '</div>' +
         '<div class="ai2-stat-content">' +
@@ -2130,14 +2132,14 @@ if (logHashMatch) {
         '</div>' +
         '<div class="ai2-hero-media">' +
           '<picture>' +
-            '<source srcset="/html/landing-assets/ai-profile-hiker-800.avif 1x, /html/landing-assets/ai-profile-hiker-1600.avif 2x" type="image/avif">' +
-            '<source srcset="/html/landing-assets/ai-profile-hiker-800.webp 1x, /html/landing-assets/ai-profile-hiker-1600.webp 2x" type="image/webp">' +
-            '<img src="/html/landing-assets/ai-profile-hiker-800.avif" class="ai2-hero-img" alt="Hiker overlooking mountains">' +
+            '<source srcset="' + AI_BASE + '/landing-assets/ai-profile-hiker-800.avif 1x, ' + AI_BASE + '/landing-assets/ai-profile-hiker-1600.avif 2x" type="image/avif">' +
+            '<source srcset="' + AI_BASE + '/landing-assets/ai-profile-hiker-800.webp 1x, ' + AI_BASE + '/landing-assets/ai-profile-hiker-1600.webp 2x" type="image/webp">' +
+            '<img src="' + AI_BASE + '/landing-assets/ai-profile-hiker-800.webp" class="ai2-hero-img" alt="Hiker overlooking mountains">' +
           '</picture>' +
           (stats.length > 0 ? '<div class="ai2-stats-card" id="ai2-hero-stats">' + statsHtml + '</div>' : '') +
         '</div>' +
       '</div>' +
-      '</div>' + 
+      '</div>' +
       '<div class="ai2-callout">' +
         '<div class="ai2-callout-icon">ⓘ</div>' +
         '<div class="ai2-callout-text">' +
@@ -2188,7 +2190,7 @@ if (logHashMatch) {
       '<div class="ai2-trust-row">' +
         '<div class="ai2-trust-item">' +
           '<div class="ai2-trust-header"><div class="ai2-chip-icon" style="background:var(--yellow);color:var(--gray-900)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path><path d="M12 14v2"></path></svg></div> Your data only</div>' +
-          '<div class="ai2-trust-desc">Answers use only your own activity — never other athletes'.</div>' +
+          '<div class="ai2-trust-desc">Answers use only your own activity — never other athletes\'.</div>' +
         '</div>' +
         '<div class="ai2-trust-item">' +
           '<div class="ai2-trust-header"><div class="ai2-chip-icon" style="background:var(--yellow);color:var(--gray-900)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 19 6v5c0 4.6-2.8 7.8-7 10-4.2-2.2-7-5.4-7-10V6l7-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></div> Verified answers</div>' +
@@ -2196,7 +2198,7 @@ if (logHashMatch) {
         '</div>' +
         '<div class="ai2-trust-item">' +
           '<div class="ai2-trust-header"><div class="ai2-chip-icon" style="background:var(--yellow);color:var(--gray-900)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18.5 3.5 21v-5A8 8 0 1 1 7 18.5H5Z"></path><path d="M8 10h8M8 14h5"></path></svg></div> 30 questions a month</div>' +
-          '<div class="ai2-trust-desc">' + escapeAiHtml(remainingText) + ' · Included with Individual Pro.</div>' +
+          '<div class="ai2-trust-desc"><span id="ai2-remaining-count">' + escapeAiHtml(remainingText) + '</span> · Included with Individual Pro.</div>' +
         '</div>' +
       '</div>';
   }
@@ -2221,22 +2223,82 @@ if (logHashMatch) {
         (limitations ? '<ul style="margin:10px 0 0;padding-left:18px;font-size:12px;color:var(--gray-500);line-height:1.5">' + limitations + '</ul>' : '') +
         (evidence ? '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--gray-200);font-size:10px;color:var(--gray-400)">Verified data:<br>' + evidence + '</div>' : '') +
       '</div>';
-    thread.appendChild(wrap);
+    while (wrap.firstChild) thread.appendChild(wrap.firstChild);
   }
 
   function addPlainTextTurn(question, response) {
     var empty = document.getElementById('ai-insights-empty');
     if (empty) empty.remove();
     var thread = document.getElementById('ai-insights-thread');
-    if (!thread) return;
-    var wrap = document.createElement('div');
-    wrap.innerHTML =
-      '<div style="display:flex;justify-content:flex-end"><div style="max-width:82%;background:var(--gray-900);color:white;border-radius:12px 12px 3px 12px;padding:9px 12px;font-size:12px;line-height:1.55">' + escapeAiHtml(question) + '</div></div>' +
-      '<div style="background:white;border:var(--border);border-radius:3px 12px 12px 12px;padding:13px 14px">' +
-        '<div style="font-size:10px;font-weight:700;letter-spacing:.05em;color:#9A7600;text-transform:uppercase;margin-bottom:6px">✦ AI Insights</div>' +
-        '<div style="font-size:13px;color:var(--gray-800);line-height:1.65;white-space:pre-wrap">' + escapeAiHtml(response.answer) + '</div>' +
-      '</div>';
-    thread.appendChild(wrap);
+    if (!thread) throw new Error('AI Insights thread is unavailable');
+    var turn = document.createElement('div');
+    var questionRow = document.createElement('div');
+    questionRow.style.cssText = 'display:flex;justify-content:flex-end';
+    var questionBubble = document.createElement('div');
+    questionBubble.style.cssText = 'max-width:82%;background:var(--gray-900);color:white;border-radius:12px 12px 3px 12px;padding:9px 12px;font-size:12px;line-height:1.55';
+    questionBubble.textContent = question;
+    questionRow.appendChild(questionBubble);
+    var answerCard = document.createElement('div');
+    answerCard.style.cssText = 'background:white;border:var(--border);border-radius:3px 12px 12px 12px;padding:13px 14px';
+    var label = document.createElement('div');
+    label.style.cssText = 'font-size:10px;font-weight:700;letter-spacing:.05em;color:#9A7600;text-transform:uppercase;margin-bottom:6px';
+    label.textContent = '✦ AI Insights';
+    var answer = document.createElement('div');
+    answer.style.cssText = 'font-size:13px;color:var(--gray-800);line-height:1.65;white-space:pre-wrap';
+    answer.textContent = response.answer == null ? '' : String(response.answer);
+    answerCard.appendChild(label);
+    answerCard.appendChild(answer);
+    turn.appendChild(questionRow);
+    turn.appendChild(answerCard);
+    while (turn.firstChild) thread.appendChild(turn.firstChild);
+  }
+
+  async function submitQuestion() {
+    if (aiBusy) return;
+    var input = document.getElementById('ai-insights-question');
+    var button = document.getElementById('ai-insights-submit');
+    var error = document.getElementById('ai-insights-error');
+    var question = input ? input.value.trim() : '';
+    if (!question) { if (error) error.textContent = 'Enter a question first.'; return; }
+    aiBusy = true;
+    if (error) error.textContent = '';
+    if (button) { button.disabled = true; button.textContent = 'Reviewing your data…'; }
+    try {
+      var result;
+      try {
+        var response = await fetch(AI_BASE + '/api/profile/ai-insights', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: question, history: aiHistory })
+        });
+        result = await response.json().catch(function () { return {}; });
+        if (!response.ok) {
+          if (result.error === 'ai_insights_limit') throw new Error(result.message || 'Monthly question limit reached.');
+          if (result.error === 'pro_required') { document.getElementById('ai-insights-body').innerHTML = lockedPanel(); return; }
+          throw new Error(result.message || 'AI Insights could not complete this request. Please try again.');
+        }
+      } catch (requestError) {
+        if (error) error.textContent = requestError.message || 'AI Insights could not complete this request. Please try again.';
+        return;
+      }
+      try {
+        addTurn(question, result);
+      } catch (renderError) {
+        console.warn('AI Insights enhanced rendering failed; using plain-text fallback:', renderError);
+        try {
+          addPlainTextTurn(question, result);
+        } catch (fallbackError) {
+          if (error) error.textContent = 'AI Insights returned an answer but the page could not display it. Please refresh and try again.';
+          return;
+        }
+      }
+      if (result.historyTurn) aiHistory = aiHistory.concat([result.historyTurn]).slice(-3);
+      if (result.usage) setUsage(result.usage);
+      if (input) input.value = '';
+    } finally {
+      aiBusy = false;
+      if (button) { button.disabled = false; button.textContent = 'Ask AI Insights'; }
+    }
   }
 
   async function loadAiInsights() {
@@ -2298,7 +2360,7 @@ if (logHashMatch) {
         .ai2-composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
         .ai2-submit-btn { padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; border: 1px solid var(--yellow-dark); background: var(--yellow); color: var(--gray-900); cursor: pointer; display: flex; align-items: center; gap: 6px; }
         .ai2-submit-btn:hover { filter: brightness(0.95); }
-        .ai2-composer-note { font-size: 11px; color: var(--gray-400); text-align: center; }
+        .ai2-composer-note { font-size: 11px; color: var(--gray-600); text-align: center; }
 
         .ai2-trust-row { display: flex; justify-content: space-between; max-width: 760px; margin: 0 auto 32px; padding: 24px 16px 0; border-top: var(--border); gap: 20px; }
         @media (max-width: 768px) {
@@ -2324,14 +2386,14 @@ if (logHashMatch) {
         fetch(AI_BASE + '/api/profile/ai-insights/status')
       ];
       promises.push(fetch(AI_BASE + '/api/profile/ai-insights/hero-stats').catch(function() { return { ok: false }; }));
-      
+
       var responses = await Promise.all(promises);
       var statusRes = responses[0];
       var statsRes = responses[1];
-      
+
       var result = await statusRes.json().catch(function () { return {}; });
       var statsResult = statsRes && statsRes.ok ? await statsRes.json().catch(function () { return { stats: [] }; }) : { stats: [] };
-      
+
       if (!statusRes.ok) throw new Error(result.message || 'AI Insights could not load its status.');
       if (body) body.innerHTML = composerPanel(statsResult.stats, result);
       setUsage(result);

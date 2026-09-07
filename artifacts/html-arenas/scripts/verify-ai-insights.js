@@ -1437,6 +1437,31 @@ async function cleanup() {
       usageAfterMiss.body.remaining === usageBeforeMiss.body.remaining - 1,
       JSON.stringify({ before: usageBeforeMiss.body, after: usageAfterMiss.body }));
 
+    const providerCountBeforeStats = captured.length;
+    const usageBeforeStats = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+    const heroStats = await api(proLogin, 'GET', '/api/profile/ai-insights/hero-stats');
+    const usageAfterStats = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+    const fixtureContext = captured[captured.length - 1].envelope.data;
+    const expectedStats = {
+      'last12Weeks.durationHours': `${fixtureContext.last12Weeks.durationHours}h`,
+      'last12Weeks.activityCount': String(fixtureContext.last12Weeks.activityCount),
+      'allTime.streaks.currentDays': `${fixtureContext.allTime.streaks.currentDays} day${fixtureContext.allTime.streaks.currentDays === 1 ? '' : 's'}`
+    };
+    if (fixtureContext.allTime.personalRecords[0]) {
+      const record = fixtureContext.allTime.personalRecords[0];
+      expectedStats['allTime.personalRecords.0'] = `${record.value} ${record.unit}`;
+    }
+    check('hero stats equal the server context-builder fixture values',
+      heroStats.status === 200 &&
+      heroStats.body.stats.length === Object.keys(expectedStats).length &&
+      heroStats.body.stats.every((stat) => expectedStats[stat.path] === stat.value),
+      JSON.stringify({ expectedStats, actual: heroStats.body }));
+    check('hero stats use no AI provider call or question quota',
+      captured.length === providerCountBeforeStats &&
+      usageBeforeStats.body.used === usageAfterStats.body.used &&
+      usageBeforeStats.body.remaining === usageAfterStats.body.remaining,
+      JSON.stringify({ before: usageBeforeStats.body, after: usageAfterStats.body }));
+
     const { launchBrowser } = await import('./lib/mobile-geometry.js');
     browser = await launchBrowser();
     const proContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -1446,6 +1471,66 @@ async function cleanup() {
     proPage.on('console', (message) => { if (message.type() === 'error') proBrowserErrors.push(message.text()); });
     proPage.on('pageerror', (error) => proBrowserErrors.push(String(error)));
     await proPage.goto(BASE + '/profile#insights', { waitUntil: 'networkidle' });
+    for (const width of [1280, 768, 380]) {
+      await proPage.setViewportSize({ width, height: 900 });
+      await proPage.screenshot({ path: `/tmp/ai-insights-${width}.png` });
+      const visualAudit = await proPage.evaluate(() => {
+        const parse = (value) => {
+          const match = String(value).match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)/);
+          return match ? [Number(match[1]), Number(match[2]), Number(match[3]), match[4] == null ? 1 : Number(match[4])] : null;
+        };
+        const lum = (rgb) => {
+          const channel = rgb.slice(0, 3).map((value) => {
+            value /= 255;
+            return value <= 0.03928 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+          });
+          return 0.2126 * channel[0] + 0.7152 * channel[1] + 0.0722 * channel[2];
+        };
+        const ratio = (a, b) => {
+          const one = lum(a), two = lum(b);
+          return (Math.max(one, two) + 0.05) / (Math.min(one, two) + 0.05);
+        };
+        const selectors = [
+          '.ai2-hero-title', '.ai2-hero-body', '.ai2-stat-value', '.ai2-stat-label',
+          '.ai2-callout-text', '.ai2-sugg-title', '.ai2-chip-header', '.ai2-chip-text',
+          '.ai2-composer-label', '.ai2-composer-note', '.ai2-trust-header', '.ai2-trust-desc'
+        ];
+        const failures = [];
+        selectors.forEach((selector) => {
+          document.querySelectorAll(selector).forEach((element) => {
+            const style = getComputedStyle(element);
+            const foreground = parse(style.color);
+            let node = element;
+            let background = null;
+            while (node && !background) {
+              const candidate = parse(getComputedStyle(node).backgroundColor);
+              if (candidate && candidate[3] === 1) background = candidate;
+              node = node.parentElement;
+            }
+            background = background || [255, 255, 255, 1];
+            const fontSize = parseFloat(style.fontSize);
+            const fontWeight = parseInt(style.fontWeight, 10) || 400;
+            const minimum = fontSize >= 24 || (fontSize >= 18.66 && fontWeight >= 700) ? 3 : 4.5;
+            const actual = foreground ? ratio(foreground, background) : 0;
+            if (actual + 0.001 < minimum) failures.push({ selector, text: element.textContent.trim(), actual, minimum });
+          });
+        });
+        const root = document.querySelector('#ai-insights-body');
+        const rect = root.getBoundingClientRect();
+        return {
+          failures,
+          pageOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+          bodyOutsideViewport: rect.left < -0.5 || rect.right > innerWidth + 0.5
+        };
+      });
+      check(`AI Insights ${width}px has no horizontal overflow or clipping`,
+        !visualAudit.pageOverflow && !visualAudit.bodyOutsideViewport,
+        JSON.stringify(visualAudit));
+      check(`AI Insights ${width}px static copy meets WCAG contrast on its rendered opaque background`,
+        visualAudit.failures.length === 0,
+        JSON.stringify(visualAudit.failures));
+    }
+    await proPage.setViewportSize({ width: 1280, height: 900 });
     await proPage.locator('#ai-insights-question').fill('How many activities have I logged?');
     await proPage.locator('#ai-insights-form button[type="submit"]').click();
     await proPage.locator('#ai-insights-thread').getByText('Your all-time activity count was 11.').waitFor();
@@ -1454,6 +1539,19 @@ async function cleanup() {
     check('successful Pro browser rendering leaves the inline error empty',
       (await proPage.locator('#ai-insights-error').innerText()).trim() === '',
       await proPage.locator('#ai-insights-error').innerText());
+
+    const chipQuestion = 'How many rest days did I take last month?';
+    const threadChildrenBeforeChip = await proPage.locator('#ai-insights-thread > *').count();
+    await proPage.locator('.ai2-chip').filter({ hasText: chipQuestion }).click();
+    await proPage.locator('#ai-insights-thread').getByText(chipQuestion, { exact: true }).waitFor();
+    await proPage.waitForFunction(
+      (before) => document.querySelectorAll('#ai-insights-thread > *').length >= before + 2,
+      threadChildrenBeforeChip
+    );
+    check('suggested-question chip immediately submits and renders an answer',
+      await proPage.locator('#ai-insights-thread > *').count() >= threadChildrenBeforeChip + 2 &&
+      (await proPage.locator('#ai-insights-question').inputValue()) === '' &&
+      (await proPage.locator('#ai-insights-error').innerText()).trim() === '');
 
     await proPage.route('**/api/profile/ai-insights', async (route) => {
       const providerResponse = await route.fetch();
@@ -1531,8 +1629,12 @@ async function cleanup() {
     await freeContext.addCookies(freeLogin.browserCookies);
     const page = await freeContext.newPage();
     const browserErrors = [];
+    let freeStatsRequests = 0;
     page.on('console', (message) => { if (message.type() === 'error') browserErrors.push(message.text()); });
     page.on('pageerror', (error) => browserErrors.push(String(error)));
+    page.on('request', (request) => {
+      if (request.url().endsWith('/api/profile/ai-insights/hero-stats')) freeStatsRequests++;
+    });
     await page.goto(BASE + '/profile#insights', { waitUntil: 'networkidle' });
     check('AI Insights tab is visible between Stats & PRs and Goals',
       await page.locator('.htab').evaluateAll((tabs) => {
@@ -1545,6 +1647,7 @@ async function cleanup() {
         text.includes('AI Insights is a Pro feature') &&
         text.includes('Upgrade to Pro · $9/month')
       ));
+    check('free user makes no hero-stats request', freeStatsRequests === 0, String(freeStatsRequests));
     check('free profile AI tab has zero console/page errors', browserErrors.length === 0, browserErrors.join(' | '));
     await freeContext.close();
     await browser.close();

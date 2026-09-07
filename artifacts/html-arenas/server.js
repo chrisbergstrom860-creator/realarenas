@@ -9118,6 +9118,55 @@ app.get(BASE + '/api/profile/ai-insights/status', requireAuth, requireActivePro(
   }
 });
 
+app.get(BASE + '/api/profile/ai-insights/hero-stats', requireAuth, requireActivePro('ai_insights'), async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({ error: 'ai_context_unavailable', message: AI_CONTEXT_FAILURE_COPY });
+  }
+  try {
+    const context = await buildAiInsightsContext(req.user);
+    const stats = [];
+    if (context.last12Weeks.activityCount > 0) {
+      stats.push({
+        path: 'last12Weeks.durationHours',
+        icon: 'hours',
+        label: 'Training time',
+        value: `${context.last12Weeks.durationHours}h`,
+        detail: 'Last 12 weeks'
+      });
+      stats.push({
+        path: 'last12Weeks.activityCount',
+        icon: 'activities',
+        label: 'Activities',
+        value: String(context.last12Weeks.activityCount),
+        detail: 'Last 12 weeks'
+      });
+    }
+    if (context.coverage.allTimeActivityCount > 0) {
+      stats.push({
+        path: 'allTime.streaks.currentDays',
+        icon: 'streak',
+        label: 'Current streak',
+        value: `${context.allTime.streaks.currentDays} day${context.allTime.streaks.currentDays === 1 ? '' : 's'}`,
+        detail: 'Consecutive active days'
+      });
+    }
+    const record = context.allTime.personalRecords[0];
+    if (record) {
+      stats.push({
+        path: 'allTime.personalRecords.0',
+        icon: 'record',
+        label: 'Personal record',
+        value: `${record.value} ${record.unit}`,
+        detail: `${record.sport.replace(/_/g, ' ')} · ${record.date}`
+      });
+    }
+    res.json({ stats });
+  } catch (err) {
+    console.log('AI Insights hero stats error:', err.message);
+    res.status(503).json({ error: 'ai_context_unavailable', message: AI_CONTEXT_FAILURE_COPY });
+  }
+});
+
 app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_insights'), async (req, res) => {
   const question = typeof req.body.question === 'string' ? req.body.question.trim() : '';
   if (!question || question.length > 500) return res.status(400).json({ error: 'invalid_question' });
@@ -14954,6 +15003,10 @@ const LANDING_ASSET_FILES = new Set([
   'for-clubs-collage-800.webp',
   'for-clubs-collage-1600.avif',
   'for-clubs-collage-1600.webp',
+  'ai-profile-hiker-800.avif',
+  'ai-profile-hiker-800.webp',
+  'ai-profile-hiker-1600.avif',
+  'ai-profile-hiker-1600.webp',
   'analytics-weekly-activity-800.avif',
   'analytics-weekly-activity-800.webp',
   'analytics-weekly-activity-1600.avif',
