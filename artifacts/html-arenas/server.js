@@ -9160,7 +9160,47 @@ app.get(BASE + '/api/profile/ai-insights/hero-stats', requireAuth, requireActive
         detail: `${record.sport.replace(/_/g, ' ')} · ${record.date}`
       });
     }
-    res.json({ stats });
+    const suggestions = [
+      {
+        icon: 'hours',
+        category: 'Training volume',
+        question: `How many hours on average did I workout in ${new Intl.DateTimeFormat('en-US', {
+          month: 'long',
+          year: 'numeric',
+          timeZone: context.timezone
+        }).format(new Date(Date.UTC(
+          Number(context.asOfDate.slice(0, 4)),
+          Number(context.asOfDate.slice(5, 7)) - 2,
+          15
+        )))}?`
+      },
+      { icon: 'rest', category: 'Rest days', question: 'How many rest days did I take last month?' }
+    ];
+    const topSport = context.last12Weeks.sports[0];
+    if (topSport) {
+      suggestions.push({
+        icon: 'sport',
+        category: 'Sport mix',
+        question: `What percentage of my recorded training was ${topSport.sport}?`
+      });
+    }
+    if (context.calendar.plannedSessions.items.length > 0) {
+      suggestions.push({ icon: 'calendar', category: 'Schedule', question: 'What is my next planned session?' });
+    }
+    suggestions.push({
+      icon: 'plans',
+      category: 'Schedule',
+      question: 'How many planned sessions do I have left this month and what are they?'
+    });
+    const firstGoal = context.goals.active.items[0];
+    if (firstGoal) {
+      suggestions.push({
+        icon: 'goal',
+        category: 'Goals',
+        question: `Is my ${firstGoal.sport || 'all-sport'} ${firstGoal.type} goal on track?`
+      });
+    }
+    res.json({ stats, suggestions });
   } catch (err) {
     console.log('AI Insights hero stats error:', err.message);
     res.status(503).json({ error: 'ai_context_unavailable', message: AI_CONTEXT_FAILURE_COPY });

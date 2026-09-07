@@ -2100,13 +2100,10 @@ if (logHashMatch) {
       '</div>';
   }
 
-  function composerPanel(stats, usage) {
+  function composerPanel(stats, usage, suggestions) {
     stats = stats || [];
+    suggestions = suggestions || [];
     var remainingText = usage ? (usage.limit - usage.used) + ' questions remaining' : '30 questions a month';
-    var d = new Date();
-    d.setMonth(d.getMonth() - 1);
-    var lastMo = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
-
     var statsHtml = stats.map(function(s) {
       var svg = '';
       if (s.icon === 'hours') svg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>';
@@ -2121,6 +2118,22 @@ if (logHashMatch) {
           '<div class="ai2-stat-label">' + escapeAiHtml(s.label) + (s.detail ? ' · ' + escapeAiHtml(s.detail) : '') + '</div>' +
         '</div>' +
       '</div>';
+    }).join('');
+    var suggestionIcons = {
+      hours: '<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>',
+      rest: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>',
+      sport: '<path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path>',
+      calendar: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>',
+      plans: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>',
+      goal: '<circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle>'
+    };
+    var suggestionsHtml = suggestions.map(function(suggestion) {
+      var icon = suggestionIcons[suggestion.icon] || suggestionIcons.hours;
+      return '<button type="button" class="ai2-chip" data-ai-question="' + escapeAiHtml(suggestion.question) + '">' +
+        '<div class="ai2-chip-header"><div class="ai2-chip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' + icon + '</svg></div>' +
+          escapeAiHtml(suggestion.category) + '</div>' +
+        '<div class="ai2-chip-text">"' + escapeAiHtml(suggestion.question) + '"</div>' +
+      '</button>';
     }).join('');
 
     return '<div style="background:var(--gray-50);margin:-16px -16px 32px;border-bottom:var(--border)">' +
@@ -2148,32 +2161,7 @@ if (logHashMatch) {
       '</div>' +
       '<div class="ai2-sugg-wrap">' +
         '<h3 class="ai2-sugg-title">Try asking something like…</h3>' +
-        '<div class="ai2-sugg-grid">' +
-          '<button type="button" class="ai2-chip" onclick="window.ai2Ask(\'How many hours on average did I workout in ' + lastMo + '?\')">' +
-            '<div class="ai2-chip-header"><div class="ai2-chip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div> Training volume</div>' +
-            '<div class="ai2-chip-text">"How many hours on average did I workout in ' + lastMo + '?"</div>' +
-          '</button>' +
-          '<button type="button" class="ai2-chip" onclick="window.ai2Ask(\'How many rest days did I take last month?\')">' +
-            '<div class="ai2-chip-header"><div class="ai2-chip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></div> Rest days</div>' +
-            '<div class="ai2-chip-text">"How many rest days did I take last month?"</div>' +
-          '</button>' +
-          '<button type="button" class="ai2-chip" onclick="window.ai2Ask(\'What percentage of my recorded training was running?\')">' +
-            '<div class="ai2-chip-header"><div class="ai2-chip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg></div> Sport mix</div>' +
-            '<div class="ai2-chip-text">"What percentage of my recorded training was running?"</div>' +
-          '</button>' +
-          '<button type="button" class="ai2-chip" onclick="window.ai2Ask(\'What is my next planned session?\')">' +
-            '<div class="ai2-chip-header"><div class="ai2-chip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></div> Schedule</div>' +
-            '<div class="ai2-chip-text">"What is my next planned session?"</div>' +
-          '</button>' +
-          '<button type="button" class="ai2-chip" onclick="window.ai2Ask(\'How many planned sessions do I have left this month and what are they?\')">' +
-            '<div class="ai2-chip-header"><div class="ai2-chip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></div> Schedule</div>' +
-            '<div class="ai2-chip-text">"How many planned sessions do I have left this month and what are they?"</div>' +
-          '</button>' +
-          '<button type="button" class="ai2-chip" onclick="window.ai2Ask(\'Is my cycling goal on track?\')">' +
-            '<div class="ai2-chip-header"><div class="ai2-chip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg></div> Goals</div>' +
-            '<div class="ai2-chip-text">"Is my cycling goal on track?"</div>' +
-          '</button>' +
-        '</div>' +
+        '<div class="ai2-sugg-grid">' + suggestionsHtml + '</div>' +
       '</div>' +
       '<div class="ai2-composer-wrap">' +
         '<form id="ai-insights-form" class="ai2-composer" onsubmit="return false">' +
@@ -2372,15 +2360,6 @@ if (logHashMatch) {
       `;
       document.head.appendChild(st);
     }
-    window.ai2Ask = function(text) {
-      var input = document.getElementById('ai-insights-question');
-      if (input) {
-        input.value = text;
-        var btn = document.getElementById('ai-insights-submit');
-        if (btn) btn.click();
-      }
-    };
-
     try {
       var promises = [
         fetch(AI_BASE + '/api/profile/ai-insights/status')
@@ -2395,10 +2374,18 @@ if (logHashMatch) {
       var statsResult = statsRes && statsRes.ok ? await statsRes.json().catch(function () { return { stats: [] }; }) : { stats: [] };
 
       if (!statusRes.ok) throw new Error(result.message || 'AI Insights could not load its status.');
-      if (body) body.innerHTML = composerPanel(statsResult.stats, result);
+      if (body) body.innerHTML = composerPanel(statsResult.stats, result, statsResult.suggestions);
       setUsage(result);
       var form = document.getElementById('ai-insights-form');
       if (form) form.addEventListener('submit', submitQuestion);
+      if (body) body.querySelectorAll('[data-ai-question]').forEach(function(chip) {
+        chip.addEventListener('click', function() {
+          var input = document.getElementById('ai-insights-question');
+          if (!input) return;
+          input.value = chip.getAttribute('data-ai-question') || '';
+          submitQuestion();
+        });
+      });
     } catch (err) {
       if (body) body.innerHTML = '<div style="padding:48px 24px;text-align:center;font-size:13px;color:var(--gray-500)">' + escapeAiHtml(err.message || 'AI Insights could not load its status.') + '</div>';
     }

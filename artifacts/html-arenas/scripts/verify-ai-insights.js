@@ -357,7 +357,11 @@ function responseFor(envelope) {
       findings: [{ type: 'metric', path: 'allTime.activityCount', value: count + 1 }],
       limitations: []
     };
-  } else if (ANSWERABLE_QUESTIONS.includes(question)) {
+  } else if (
+    ANSWERABLE_QUESTIONS.includes(question) ||
+    /^What percentage of my recorded training was [a-z][a-z_-]*\?$/.test(question) ||
+    /^Is my (?:[a-z][a-z_-]*|all-sport) (?:distance|frequency|duration|streak) goal on track\?$/.test(question)
+  ) {
     output = {
       findings: findingsForAnswerableQuestion(question, envelope.data),
       limitations: []
@@ -449,8 +453,9 @@ function findingsForAnswerableQuestion(question, data) {
   if (question === `What was my average ride distance in ${LAST_MONTH_LABEL}?`) {
     return [metricFinding(data, monthSportPath(data, LAST_MONTH_KEY, 'cycling', 'averageDistanceKmPerActivity'))];
   }
-  if (question === 'What percentage of my recorded training was running?') {
-    const sportIndex = data.allTime.sports.findIndex((row) => row.sport === 'running');
+  const sportMixMatch = question.match(/^What percentage of my recorded training was ([a-z][a-z_-]*)\?$/);
+  if (sportMixMatch) {
+    const sportIndex = data.allTime.sports.findIndex((row) => row.sport === sportMixMatch[1]);
     return [metricFinding(data, `allTime.sports.${sportIndex}.percentSessions`)];
   }
   if (question === 'What is my next planned session?') {
@@ -472,6 +477,12 @@ function findingsForAnswerableQuestion(question, data) {
   }
   if (question === 'Is my cycling goal on track?') {
     const index = data.goals.active.items.findIndex((goal) => goal.sport === 'cycling');
+    return [{ type: 'goal_projection', path: `goals.active.items.${index}`, value: data.goals.active.items[index] }];
+  }
+  const goalMatch = question.match(/^Is my ((?:[a-z][a-z_-]*|all-sport) (?:distance|frequency|duration|streak) goal) on track\?$/);
+  if (goalMatch) {
+    const index = data.goals.active.items.findIndex((goal) =>
+      `${goal.sport || 'all-sport'} ${goal.type} goal` === goalMatch[1]);
     return [{ type: 'goal_projection', path: `goals.active.items.${index}`, value: data.goals.active.items[index] }];
   }
   if (question === 'How did I do last week on my weightlifting goal?') {
@@ -593,7 +604,7 @@ async function cleanup() {
     await must('cleanup events', admin.from('events').delete().in('created_by', ids));
     await must('cleanup notifications', admin.from('notifications').delete().in('user_id', ids));
   }
-  if (subscriptionId) await must('cleanup subscription', admin.from('subscriptions').delete().eq('id', subscriptionId));
+  if (ids.length) await must('cleanup subscriptions', admin.from('subscriptions').delete().in('owner_id', ids));
   if (clubId) {
     await must('cleanup memberships', admin.from('memberships').delete().eq('club_id', clubId));
     await must('cleanup club', admin.from('clubs').delete().eq('id', clubId));
@@ -621,6 +632,7 @@ async function cleanup() {
       }));
     await makeUser('pro', 'AI Pro Subject Sentinel', {});
     await makeUser('free', 'AI Free Sentinel', {});
+    await makeUser('noGoals', 'AI No Goals Sentinel', {});
     await makeUser('trainingOptout', 'NEVER_MODEL_TRAINING_OPTOUT_SENTINEL', { club_training_analytics_visible: false });
     await makeUser('leaderboardHidden', 'NEVER_MODEL_LEADERBOARD_HIDDEN_SENTINEL', { show_on_leaderboards: false });
 
@@ -667,6 +679,17 @@ async function cleanup() {
       cancel_at_period_end: false
     }).select('id').single());
     subscriptionId = subscription.id;
+    await must('create no-goals Pro subscription', admin.from('subscriptions').insert({
+      owner_type: 'user',
+      owner_id: users.noGoals.id,
+      plan: 'pro',
+      status: 'active',
+      stripe_customer_id: 'cus_ai_nogoals_' + nonce,
+      stripe_subscription_id: 'sub_ai_nogoals_' + nonce,
+      ever_paid: true,
+      last_paid_subscription_id: 'sub_ai_nogoals_' + nonce,
+      cancel_at_period_end: false
+    }));
     writeManifest();
 
     const today = new Date();
@@ -680,7 +703,7 @@ async function cleanup() {
         : new Date(today.getTime() - i * 7 * 86400000);
       activityRows.push({
         user_id: users.pro.id,
-        sport: i === 2 || i === 3 ? 'cycling' : i === 4 ? 'weightlifting' : 'running',
+        sport: i <= 3 ? 'cycling' : i === 4 ? 'weightlifting' : 'running',
         title: 'PRO_PRIVATE_TITLE_' + i,
         date: activityDate.toISOString(),
         duration: i === 2 || i === 3 ? '1.04h' : '1h',
@@ -764,7 +787,7 @@ async function cleanup() {
       {
         user_id: users.pro.id, type: 'frequency', sport: 'weightlifting', target_value: 4,
         unit: null, period: 'weekly', status: 'active', start_date: oldGoalStart,
-        created_at: oldGoalTimestamp, updated_at: oldGoalTimestamp
+        created_at: new Date(Date.now() - 181 * 86400000).toISOString(), updated_at: oldGoalTimestamp
       },
       {
         user_id: users.pro.id, type: 'frequency', sport: 'running', target_value: 7,
@@ -1440,6 +1463,8 @@ async function cleanup() {
     const providerCountBeforeStats = captured.length;
     const usageBeforeStats = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
     const heroStats = await api(proLogin, 'GET', '/api/profile/ai-insights/hero-stats');
+    const noGoalsLogin = await login('noGoals');
+    const noGoalsHero = await api(noGoalsLogin, 'GET', '/api/profile/ai-insights/hero-stats');
     const usageAfterStats = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
     const fixtureContext = captured[captured.length - 1].envelope.data;
     const expectedStats = {
@@ -1461,6 +1486,14 @@ async function cleanup() {
       usageBeforeStats.body.used === usageAfterStats.body.used &&
       usageBeforeStats.body.remaining === usageAfterStats.body.remaining,
       JSON.stringify({ before: usageBeforeStats.body, after: usageAfterStats.body }));
+    check('fixture suggestions use non-running top sport and non-cycling first goal',
+      heroStats.body.suggestions.some((row) => row.question === 'What percentage of my recorded training was cycling?') &&
+      heroStats.body.suggestions.some((row) => row.question === 'Is my weightlifting frequency goal on track?'),
+      JSON.stringify(heroStats.body.suggestions));
+    check('no-activity, no-goal fixture omits sport, next-session, and goal chips',
+      noGoalsHero.status === 200 &&
+      !noGoalsHero.body.suggestions.some((row) => /percentage|next planned|goal on track/.test(row.question)),
+      JSON.stringify(noGoalsHero.body.suggestions));
 
     const { launchBrowser } = await import('./lib/mobile-geometry.js');
     browser = await launchBrowser();
@@ -1552,6 +1585,15 @@ async function cleanup() {
       await proPage.locator('#ai-insights-thread > *').count() >= threadChildrenBeforeChip + 2 &&
       (await proPage.locator('#ai-insights-question').inputValue()) === '' &&
       (await proPage.locator('#ai-insights-error').innerText()).trim() === '');
+    for (const dynamicQuestion of [
+      'What percentage of my recorded training was cycling?',
+      'Is my weightlifting frequency goal on track?'
+    ]) {
+      await proPage.locator('.ai2-chip').filter({ hasText: dynamicQuestion }).click();
+      await proPage.locator('#ai-insights-thread').getByText(dynamicQuestion, { exact: true }).waitFor();
+      check(`dynamic chip renders a verified answer: ${dynamicQuestion}`,
+        (await proPage.locator('#ai-insights-error').innerText()).trim() === '');
+    }
 
     await proPage.route('**/api/profile/ai-insights', async (route) => {
       const providerResponse = await route.fetch();
