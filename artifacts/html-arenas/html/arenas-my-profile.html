@@ -2098,28 +2098,107 @@ if (logHashMatch) {
       '</div>';
   }
 
-  function composerPanel() {
-    return '<div style="max-width:760px;margin:0 auto;padding:18px 14px 26px">' +
-      '<div style="background:var(--yellow-light);border:1px solid #F2D45C;border-radius:10px;padding:11px 13px;font-size:12px;color:var(--gray-700);line-height:1.55;margin-bottom:14px">' +
-        '<strong>Descriptive, not coaching.</strong> AI Insights can explain patterns in your logged data, but it won’t prescribe workouts or comment on diet, weight, body composition, or whether you are under-training.' +
-      '</div>' +
-      '<div id="ai-insights-thread" aria-live="polite" style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px">' +
-        '<div id="ai-insights-empty" style="background:white;border:var(--border);border-radius:var(--radius-lg);padding:28px 20px;text-align:center">' +
-          '<div style="font-size:28px;margin-bottom:9px">✦</div>' +
-          '<div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:5px">What would you like to understand?</div>' +
-          '<div style="font-size:12px;color:var(--gray-500);line-height:1.6">Try “How has my running changed over the last 12 weeks?” or “What are my strongest personal records?”</div>' +
+  function composerPanel(stats, usage) {
+    stats = stats || [];
+    var remainingText = usage ? (usage.limit - usage.used) + ' questions remaining' : '30 questions a month';
+    var d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    var lastMo = d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    
+    var statsHtml = stats.map(function(s) {
+      var svg = '';
+      if (s.icon === 'hours') svg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>';
+      else if (s.icon === 'activities') svg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>';
+      else if (s.icon === 'streak') svg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>';
+      else svg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>';
+      
+      return '<div class="ai2-stat-row">' +
+        '<div class="ai2-stat-icon">' + svg + '</div>' +
+        '<div class="ai2-stat-content">' +
+          '<div class="ai2-stat-value">' + escapeAiHtml(s.value) + '</div>' +
+          '<div class="ai2-stat-label">' + escapeAiHtml(s.label) + (s.detail ? ' · ' + escapeAiHtml(s.detail) : '') + '</div>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    return '<div style="background:var(--gray-50);margin:-16px -16px 32px;border-bottom:var(--border)">' +
+      '<div class="ai2-hero">' +
+        '<div class="ai2-hero-copy">' +
+          '<div class="ai2-sparkle">✦</div>' +
+          '<h2 class="ai2-hero-title">Your data, <span class="ai2-yellow">deeper insights.</span></h2>' +
+          '<p class="ai2-hero-body">Ask questions about your logged training and get answers built from your own records — hours, sessions, distance, sports, rest days, personal records, schedule, and goals. Every number is checked against your data before you see it.</p>' +
+        '</div>' +
+        '<div class="ai2-hero-media">' +
+          '<picture>' +
+            '<source srcset="/html/landing-assets/ai-profile-hiker-800.avif 1x, /html/landing-assets/ai-profile-hiker-1600.avif 2x" type="image/avif">' +
+            '<source srcset="/html/landing-assets/ai-profile-hiker-800.webp 1x, /html/landing-assets/ai-profile-hiker-1600.webp 2x" type="image/webp">' +
+            '<img src="/html/landing-assets/ai-profile-hiker-800.avif" class="ai2-hero-img" alt="Hiker overlooking mountains">' +
+          '</picture>' +
+          (stats.length > 0 ? '<div class="ai2-stats-card" id="ai2-hero-stats">' + statsHtml + '</div>' : '') +
         '</div>' +
       '</div>' +
-      '<form id="ai-insights-form" style="background:white;border:var(--border);border-radius:var(--radius-lg);padding:12px" onsubmit="return false">' +
-        '<label for="ai-insights-question" style="display:block;font-size:11px;font-weight:600;color:var(--gray-700);margin-bottom:7px">Ask about your training data</label>' +
-        '<textarea id="ai-insights-question" maxlength="500" rows="3" placeholder="Ask a complete question or follow up on the conversation…" style="width:100%;box-sizing:border-box;resize:vertical;border:1px solid var(--gray-200);border-radius:8px;padding:10px 11px;font:inherit;font-size:13px;line-height:1.5;color:var(--gray-900);outline:none"></textarea>' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px">' +
-          '<div id="ai-insights-error" style="font-size:11px;color:#A32D2D"></div>' +
-          '<button type="submit" id="ai-insights-submit" style="padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer;white-space:nowrap">Ask AI Insights</button>' +
+      '</div>' + 
+      '<div class="ai2-callout">' +
+        '<div class="ai2-callout-icon">ⓘ</div>' +
+        '<div class="ai2-callout-text">' +
+          '<strong>Descriptive, not coaching.</strong> AI Insights can describe your recorded training, but it won\'t prescribe workouts or comment on diet, weight, body composition, or whether you are under-training.' +
         '</div>' +
-      '</form>' +
-      '<div style="font-size:10px;color:var(--gray-400);line-height:1.5;margin-top:8px;text-align:center">The last three exchanges stay in this browser tab for follow-ups and disappear when you leave or refresh.</div>' +
-    '</div>';
+      '</div>' +
+      '<div class="ai2-sugg-wrap">' +
+        '<h3 class="ai2-sugg-title">Try asking something like…</h3>' +
+        '<div class="ai2-sugg-grid">' +
+          '<button type="button" class="ai2-chip" onclick="window.ai2Ask(\'How many hours on average did I workout in ' + lastMo + '?\')">' +
+            '<div class="ai2-chip-header"><div class="ai2-chip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div> Training volume</div>' +
+            '<div class="ai2-chip-text">"How many hours on average did I workout in ' + lastMo + '?"</div>' +
+          '</button>' +
+          '<button type="button" class="ai2-chip" onclick="window.ai2Ask(\'How many rest days did I take last month?\')">' +
+            '<div class="ai2-chip-header"><div class="ai2-chip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></div> Rest days</div>' +
+            '<div class="ai2-chip-text">"How many rest days did I take last month?"</div>' +
+          '</button>' +
+          '<button type="button" class="ai2-chip" onclick="window.ai2Ask(\'What percentage of my recorded training was running?\')">' +
+            '<div class="ai2-chip-header"><div class="ai2-chip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg></div> Sport mix</div>' +
+            '<div class="ai2-chip-text">"What percentage of my recorded training was running?"</div>' +
+          '</button>' +
+          '<button type="button" class="ai2-chip" onclick="window.ai2Ask(\'What is my next planned session?\')">' +
+            '<div class="ai2-chip-header"><div class="ai2-chip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></div> Schedule</div>' +
+            '<div class="ai2-chip-text">"What is my next planned session?"</div>' +
+          '</button>' +
+          '<button type="button" class="ai2-chip" onclick="window.ai2Ask(\'How many planned sessions do I have left this month and what are they?\')">' +
+            '<div class="ai2-chip-header"><div class="ai2-chip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></div> Schedule</div>' +
+            '<div class="ai2-chip-text">"How many planned sessions do I have left this month and what are they?"</div>' +
+          '</button>' +
+          '<button type="button" class="ai2-chip" onclick="window.ai2Ask(\'Is my cycling goal on track?\')">' +
+            '<div class="ai2-chip-header"><div class="ai2-chip-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg></div> Goals</div>' +
+            '<div class="ai2-chip-text">"Is my cycling goal on track?"</div>' +
+          '</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="ai2-composer-wrap">' +
+        '<form id="ai-insights-form" class="ai2-composer" onsubmit="return false">' +
+          '<label for="ai-insights-question" class="ai2-composer-label">Ask about your training data</label>' +
+          '<textarea id="ai-insights-question" class="ai2-textarea" maxlength="500" rows="3" placeholder="Ask a question or follow up on the conversation…"></textarea>' +
+          '<div class="ai2-composer-footer">' +
+            '<div id="ai-insights-error" style="font-size:11px;color:#A32D2D"></div>' +
+            '<button type="submit" id="ai-insights-submit" class="ai2-submit-btn"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg> Ask AI Insights</button>' +
+          '</div>' +
+        '</form>' +
+        '<div class="ai2-composer-note">The last three exchanges stay in this browser tab for follow-ups and disappear when you leave or refresh.</div>' +
+        '<div id="ai-insights-thread" aria-live="polite" style="display:flex;flex-direction:column;gap:12px;margin-top:16px"></div>' +
+      '</div>' +
+      '<div class="ai2-trust-row">' +
+        '<div class="ai2-trust-item">' +
+          '<div class="ai2-trust-header"><div class="ai2-chip-icon" style="background:var(--yellow);color:var(--gray-900)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path><path d="M12 14v2"></path></svg></div> Your data only</div>' +
+          '<div class="ai2-trust-desc">Answers use only your own activity — never other athletes'.</div>' +
+        '</div>' +
+        '<div class="ai2-trust-item">' +
+          '<div class="ai2-trust-header"><div class="ai2-chip-icon" style="background:var(--yellow);color:var(--gray-900)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 19 6v5c0 4.6-2.8 7.8-7 10-4.2-2.2-7-5.4-7-10V6l7-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></div> Verified answers</div>' +
+          '<div class="ai2-trust-desc">Every metric is checked against your recorded activity before you see it.</div>' +
+        '</div>' +
+        '<div class="ai2-trust-item">' +
+          '<div class="ai2-trust-header"><div class="ai2-chip-icon" style="background:var(--yellow);color:var(--gray-900)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 18.5 3.5 21v-5A8 8 0 1 1 7 18.5H5Z"></path><path d="M8 10h8M8 14h5"></path></svg></div> 30 questions a month</div>' +
+          '<div class="ai2-trust-desc">' + escapeAiHtml(remainingText) + ' · Included with Individual Pro.</div>' +
+        '</div>' +
+      '</div>';
   }
 
   function addTurn(question, response) {
@@ -2139,87 +2218,25 @@ if (logHashMatch) {
       '<div style="background:white;border:var(--border);border-radius:3px 12px 12px 12px;padding:13px 14px">' +
         '<div style="font-size:10px;font-weight:700;letter-spacing:.05em;color:#9A7600;text-transform:uppercase;margin-bottom:6px">✦ AI Insights</div>' +
         '<div style="font-size:13px;color:var(--gray-800);line-height:1.65;white-space:pre-wrap">' + escapeAiHtml(response.answer) + '</div>' +
-        (limitations ? '<ul style="margin:9px 0 0 18px;padding:0;font-size:11px;color:var(--gray-500);line-height:1.5">' + limitations + '</ul>' : '') +
-        (evidence ? '<details style="margin-top:9px"><summary style="font-size:10px;color:var(--gray-400);cursor:pointer">Evidence used</summary><div style="margin-top:4px">' + evidence + '</div></details>' : '') +
+        (limitations ? '<ul style="margin:10px 0 0;padding-left:18px;font-size:12px;color:var(--gray-500);line-height:1.5">' + limitations + '</ul>' : '') +
+        (evidence ? '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--gray-200);font-size:10px;color:var(--gray-400)">Verified data:<br>' + evidence + '</div>' : '') +
       '</div>';
-    while (wrap.firstChild) thread.appendChild(wrap.firstChild);
+    thread.appendChild(wrap);
   }
 
   function addPlainTextTurn(question, response) {
     var empty = document.getElementById('ai-insights-empty');
     if (empty) empty.remove();
     var thread = document.getElementById('ai-insights-thread');
-    if (!thread) throw new Error('AI Insights thread is unavailable');
-
-    var turn = document.createElement('div');
-    var questionRow = document.createElement('div');
-    questionRow.style.cssText = 'display:flex;justify-content:flex-end';
-    var questionBubble = document.createElement('div');
-    questionBubble.style.cssText = 'max-width:82%;background:var(--gray-900);color:white;border-radius:12px 12px 3px 12px;padding:9px 12px;font-size:12px;line-height:1.55';
-    questionBubble.textContent = question;
-    questionRow.appendChild(questionBubble);
-
-    var answerCard = document.createElement('div');
-    answerCard.style.cssText = 'background:white;border:var(--border);border-radius:3px 12px 12px 12px;padding:13px 14px';
-    var label = document.createElement('div');
-    label.style.cssText = 'font-size:10px;font-weight:700;letter-spacing:.05em;color:#9A7600;text-transform:uppercase;margin-bottom:6px';
-    label.textContent = '✦ AI Insights';
-    var answer = document.createElement('div');
-    answer.style.cssText = 'font-size:13px;color:var(--gray-800);line-height:1.65;white-space:pre-wrap';
-    answer.textContent = response.answer == null ? '' : String(response.answer);
-    answerCard.appendChild(label);
-    answerCard.appendChild(answer);
-    turn.appendChild(questionRow);
-    turn.appendChild(answerCard);
-    while (turn.firstChild) thread.appendChild(turn.firstChild);
-  }
-
-  async function submitQuestion() {
-    if (aiBusy) return;
-    var input = document.getElementById('ai-insights-question');
-    var button = document.getElementById('ai-insights-submit');
-    var error = document.getElementById('ai-insights-error');
-    var question = input ? input.value.trim() : '';
-    if (!question) { if (error) error.textContent = 'Enter a question first.'; return; }
-    aiBusy = true;
-    if (error) error.textContent = '';
-    if (button) { button.disabled = true; button.textContent = 'Reviewing your data…'; }
-    try {
-      var result;
-      try {
-        var response = await fetch(AI_BASE + '/api/profile/ai-insights', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: question, history: aiHistory })
-        });
-        result = await response.json().catch(function () { return {}; });
-        if (!response.ok) {
-          if (result.error === 'ai_insights_limit') throw new Error(result.message || 'Monthly question limit reached.');
-          if (result.error === 'pro_required') { document.getElementById('ai-insights-body').innerHTML = lockedPanel(); return; }
-          throw new Error(result.message || 'AI Insights could not complete this request. Please try again.');
-        }
-      } catch (requestError) {
-        if (error) error.textContent = requestError.message || 'AI Insights could not complete this request. Please try again.';
-        return;
-      }
-      try {
-        addTurn(question, result);
-      } catch (renderError) {
-        console.warn('AI Insights enhanced rendering failed; using plain-text fallback:', renderError);
-        try {
-          addPlainTextTurn(question, result);
-        } catch (fallbackError) {
-          if (error) error.textContent = 'AI Insights returned an answer but the page could not display it. Please refresh and try again.';
-          return;
-        }
-      }
-      if (result.historyTurn) aiHistory = aiHistory.concat([result.historyTurn]).slice(-3);
-      if (result.usage) setUsage(result.usage);
-      if (input) input.value = '';
-    } finally {
-      aiBusy = false;
-      if (button) { button.disabled = false; button.textContent = 'Ask AI Insights'; }
-    }
+    if (!thread) return;
+    var wrap = document.createElement('div');
+    wrap.innerHTML =
+      '<div style="display:flex;justify-content:flex-end"><div style="max-width:82%;background:var(--gray-900);color:white;border-radius:12px 12px 3px 12px;padding:9px 12px;font-size:12px;line-height:1.55">' + escapeAiHtml(question) + '</div></div>' +
+      '<div style="background:white;border:var(--border);border-radius:3px 12px 12px 12px;padding:13px 14px">' +
+        '<div style="font-size:10px;font-weight:700;letter-spacing:.05em;color:#9A7600;text-transform:uppercase;margin-bottom:6px">✦ AI Insights</div>' +
+        '<div style="font-size:13px;color:var(--gray-800);line-height:1.65;white-space:pre-wrap">' + escapeAiHtml(response.answer) + '</div>' +
+      '</div>';
+    thread.appendChild(wrap);
   }
 
   async function loadAiInsights() {
@@ -2231,11 +2248,92 @@ if (logHashMatch) {
       if (body) body.innerHTML = lockedPanel();
       return;
     }
+
+    if (!document.getElementById('ai2-styles')) {
+      var st = document.createElement('style');
+      st.id = 'ai2-styles';
+      st.textContent = `
+        .ai2-hero { display: flex; gap: 40px; padding: 32px 24px 48px; max-width: 1000px; margin: 0 auto; align-items: center; }
+        .ai2-hero-copy { flex: 1; }
+        .ai2-sparkle { font-size: 32px; color: var(--yellow); margin-bottom: 16px; }
+        .ai2-hero-title { font-size: 36px; font-weight: 700; color: var(--gray-900); letter-spacing: -0.02em; line-height: 1.1; margin-bottom: 16px; }
+        .ai2-yellow { color: var(--yellow-dark); }
+        .ai2-hero-body { font-size: 15px; color: var(--gray-600); line-height: 1.6; }
+        .ai2-hero-media { flex: 1; position: relative; max-width: 480px; }
+        .ai2-hero-img { width: 100%; border-radius: var(--radius-lg); aspect-ratio: 4/3; object-fit: cover; display: block; }
+        .ai2-stats-card { position: absolute; left: -40px; bottom: 20px; background: white; border: var(--border); border-radius: var(--radius-lg); padding: 16px; display: flex; flex-direction: column; gap: 14px; box-shadow: var(--shadow-md); min-width: 220px; }
+        .ai2-stat-row { display: flex; gap: 12px; align-items: center; }
+        .ai2-stat-icon { width: 32px; height: 32px; background: var(--gray-50); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+        .ai2-stat-icon svg { width: 16px; height: 16px; color: var(--gray-500); }
+        .ai2-stat-content { display: flex; flex-direction: column; }
+        .ai2-stat-value { font-size: 15px; font-weight: 700; color: var(--gray-900); font-family: var(--mono); }
+        .ai2-stat-label { font-size: 11px; color: var(--gray-500); line-height: 1.3; }
+        @media (max-width: 768px) {
+          .ai2-hero { flex-direction: column; gap: 32px; padding: 24px 16px; }
+          .ai2-hero-title { font-size: 28px; }
+          .ai2-stats-card { position: relative; left: 0; bottom: 0; margin-top: -30px; margin-left: 20px; margin-right: 20px; }
+        }
+
+        .ai2-callout { background: var(--yellow-light); border: 1px solid #F2D45C; border-radius: 10px; padding: 12px 16px; font-size: 13px; color: var(--gray-800); line-height: 1.55; margin: 0 auto 32px; max-width: 760px; display: flex; gap: 12px; }
+        .ai2-callout-icon { font-size: 16px; flex-shrink: 0; }
+
+        .ai2-sugg-wrap { max-width: 760px; margin: 0 auto 32px; padding: 0 16px; }
+        .ai2-sugg-title { font-size: 15px; font-weight: 600; color: var(--gray-900); margin-bottom: 16px; }
+        .ai2-sugg-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+        @media (max-width: 768px) {
+          .ai2-sugg-grid { grid-template-columns: 1fr; }
+        }
+        .ai2-chip { text-align: left; background: var(--gray-50); border: 1px solid transparent; border-radius: 12px; padding: 14px; cursor: pointer; transition: all 0.15s; display: flex; flex-direction: column; gap: 8px; font-family: inherit; }
+        .ai2-chip:hover { background: white; border-color: var(--gray-300); box-shadow: var(--shadow); }
+        .ai2-chip-header { display: flex; gap: 8px; align-items: center; font-size: 12px; font-weight: 600; color: var(--gray-900); }
+        .ai2-chip-icon { width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+        .ai2-chip-icon svg { width: 14px; height: 14px; color: var(--gray-600); }
+        .ai2-chip-text { font-size: 12px; color: var(--gray-600); line-height: 1.4; font-weight: 400; font-style: normal; }
+
+        .ai2-composer-wrap { max-width: 760px; margin: 0 auto 32px; padding: 0 16px; }
+        .ai2-composer { background: white; border: var(--border); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 8px; }
+        .ai2-composer-label { display: block; font-size: 13px; font-weight: 600; color: var(--gray-900); margin-bottom: 12px; }
+        .ai2-textarea { width: 100%; box-sizing: border-box; resize: vertical; border: 1px solid var(--gray-200); border-radius: 8px; padding: 12px; font: inherit; font-size: 13px; line-height: 1.5; color: var(--gray-900); outline: none; margin-bottom: 12px; transition: border-color 0.15s; }
+        .ai2-textarea:focus { border-color: var(--yellow); }
+        .ai2-composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .ai2-submit-btn { padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 600; border: 1px solid var(--yellow-dark); background: var(--yellow); color: var(--gray-900); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+        .ai2-submit-btn:hover { filter: brightness(0.95); }
+        .ai2-composer-note { font-size: 11px; color: var(--gray-400); text-align: center; }
+
+        .ai2-trust-row { display: flex; justify-content: space-between; max-width: 760px; margin: 0 auto 32px; padding: 24px 16px 0; border-top: var(--border); gap: 20px; }
+        @media (max-width: 768px) {
+          .ai2-trust-row { flex-direction: column; gap: 20px; }
+        }
+        .ai2-trust-item { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+        .ai2-trust-header { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--gray-900); }
+        .ai2-trust-desc { font-size: 11px; color: var(--gray-500); line-height: 1.5; }
+      `;
+      document.head.appendChild(st);
+    }
+    window.ai2Ask = function(text) {
+      var input = document.getElementById('ai-insights-question');
+      if (input) {
+        input.value = text;
+        var btn = document.getElementById('ai-insights-submit');
+        if (btn) btn.click();
+      }
+    };
+
     try {
-      var response = await fetch(AI_BASE + '/api/profile/ai-insights/status');
-      var result = await response.json().catch(function () { return {}; });
-      if (!response.ok) throw new Error(result.message || 'AI Insights could not load its status.');
-      if (body) body.innerHTML = composerPanel();
+      var promises = [
+        fetch(AI_BASE + '/api/profile/ai-insights/status')
+      ];
+      promises.push(fetch(AI_BASE + '/api/profile/ai-insights/hero-stats').catch(function() { return { ok: false }; }));
+      
+      var responses = await Promise.all(promises);
+      var statusRes = responses[0];
+      var statsRes = responses[1];
+      
+      var result = await statusRes.json().catch(function () { return {}; });
+      var statsResult = statsRes && statsRes.ok ? await statsRes.json().catch(function () { return { stats: [] }; }) : { stats: [] };
+      
+      if (!statusRes.ok) throw new Error(result.message || 'AI Insights could not load its status.');
+      if (body) body.innerHTML = composerPanel(statsResult.stats, result);
       setUsage(result);
       var form = document.getElementById('ai-insights-form');
       if (form) form.addEventListener('submit', submitQuestion);
