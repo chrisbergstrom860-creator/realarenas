@@ -32,8 +32,8 @@ document.addEventListener('DOMContentLoaded', function(){
 <title>Arenas — Sports Community</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,300..900;1,300..900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/hero-trail-runners-800.avif" media="(max-width: 1599px) and (max-resolution: 1.99dppx)">
-<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/hero-trail-runners-1600.avif" media="(min-width: 1600px), (min-resolution: 2dppx)">
+<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/hero-trail-runners-800.avif" media="(max-width: 1279px) and (max-resolution: 1.99dppx)">
+<link rel="preload" as="image" type="image/avif" href="/html/landing-assets/hero-trail-runners-1600.avif" media="(min-width: 1280px), (min-resolution: 2dppx)">
 <link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-mobile-composite-380-2x.avif" media="(max-width: 384px) and (max-resolution: 2.49dppx)">
 <link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-mobile-composite-380-3x.avif" media="(max-width: 384px) and (min-resolution: 2.5dppx)">
 <link rel="preload" as="image" type="image/avif" href="/html/landing-assets/analytics-mobile-composite-390-2x.avif" media="(min-width: 385px) and (max-width: 430px) and (max-resolution: 2.49dppx)">
@@ -88,23 +88,21 @@ html { scroll-behavior: smooth; }
 .page.active { display: block; }
 
 /* ═══════════════════════════
-   SPLIT HERO
+   LANDING HERO
 ═══════════════════════════ */
 .split-hero {
   background: white;
   border-bottom: var(--border);
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  min-height: 520px;
+  display: block;
+  position: relative;
 }
 
-/* Left — headline & CTA */
+/* Hero copy */
 .hero-left {
   padding: 64px 56px 64px 48px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  border-right: var(--border);
   position: relative;
   z-index: 0;
 }
@@ -143,42 +141,41 @@ html { scroll-behavior: smooth; }
   }
 }
 @media (min-width: 1280px) {
-  .hero-left {
+  .split-hero {
+    background-image: image-set(
+      url('/html/landing-assets/hero-trail-runners-1600.avif') type('image/avif'),
+      url('/html/landing-assets/hero-trail-runners-1600.webp') type('image/webp')
+    );
+    background-repeat: no-repeat;
     background-size: cover;
-    background-position: 25% center;
+    background-position: center 56%;
   }
-  .hero-left::before {
+  .split-hero::before {
     content: '';
     position: absolute;
     inset: 0;
     z-index: 0;
     pointer-events: none;
-    background: linear-gradient(90deg, #fff 0, rgba(255,255,255,.99) 450px, rgba(255,255,255,.92) 460px, rgba(255,255,255,.55) 480px, rgba(255,255,255,.18) 510px, rgba(255,255,255,.03) 540px, rgba(255,255,255,0) 570px);
+    background: linear-gradient(90deg,
+      rgba(255,255,255,.99) 0,
+      rgba(255,255,255,.99) calc(50% - 158px),
+      rgba(255,255,255,.92) calc(50% - 130px),
+      rgba(255,255,255,.55) calc(50% - 90px),
+      rgba(255,255,255,.18) calc(50% - 40px),
+      rgba(255,255,255,.03) calc(50% + 20px),
+      rgba(255,255,255,0) calc(50% + 80px));
   }
-}
-@media (min-width: 1280px) and (max-width: 1599px) {
   .hero-left {
-    background-position: 53% center;
+    width: 1176px;
+    max-width: calc(100% - 96px);
+    margin: 0 auto;
+    padding: 64px 0;
+    z-index: 1;
   }
-  .hero-left::before {
-    background: linear-gradient(90deg, #fff 0, #fff 455px, rgba(255,255,255,.99) 460px, rgba(255,255,255,.92) 470px, rgba(255,255,255,.55) 490px, rgba(255,255,255,.18) 520px, rgba(255,255,255,.03) 550px, rgba(255,255,255,0) 580px);
-  }
+  .hero-left > * { max-width: 420px; }
 }
-@media (min-width: 1280px) and (max-width: 1599px) and (max-resolution: 1.99dppx) {
-  .hero-left {
-    background-image: image-set(
-      url('/html/landing-assets/hero-trail-runners-800.avif') type('image/avif'),
-      url('/html/landing-assets/hero-trail-runners-800.webp') type('image/webp')
-    );
-  }
-}
-@media (min-width: 1600px), (min-width: 1280px) and (max-width: 1599px) and (min-resolution: 2dppx) {
-  .hero-left {
-    background-image: image-set(
-      url('/html/landing-assets/hero-trail-runners-1600.avif') type('image/avif'),
-      url('/html/landing-assets/hero-trail-runners-1600.webp') type('image/webp')
-    );
-  }
+@media (min-width: 2200px) {
+  .hero-left { padding-top: 160px; padding-bottom: 160px; }
 }
 .hero-eyebrow {
   display: inline-flex;
@@ -262,88 +259,9 @@ html { scroll-behavior: smooth; }
 .hsp-text { font-size: 13px; color: var(--gray-500); }
 .hsp-text strong { color: var(--gray-900); font-weight: 600; }
 
-/* Right — live feed preview */
-.hero-right {
-  background: var(--gray-50);
-  padding: 28px 28px 0 28px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.hero-right-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-  flex-shrink: 0;
-}
-.live-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--gray-700);
-}
-.live-dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: #10B981;
-  animation: pulse-dot 2s ease-in-out infinite;
-  flex-shrink: 0;
-}
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.6; transform: scale(0.85); }
-}
-.live-count { font-size: 12px; color: var(--gray-400); font-family: var(--mono); }
-.preview-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gray-300); flex-shrink: 0; }
-
-.feed-preview { display: flex; flex-direction: column; gap: 10px; flex: 1; }
-
-/* Activity preview cards */
-.prev-card {
-  background: white;
-  border: var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  transition: border-color 0.15s;
-}
-.prev-card:hover { border-color: var(--gray-300); }
-.prev-card-body { padding: 14px 16px; }
-.prev-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.prev-av {
-  width: 34px; height: 34px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 600; flex-shrink: 0;
-}
-.prev-user { font-size: 13px; font-weight: 600; color: var(--gray-900); }
-.prev-time { font-size: 11px; color: var(--gray-400); }
-.prev-sport-tag {
-  margin-left: auto;
-  font-size: 10px; font-weight: 600;
-  padding: 2px 8px; border-radius: 20px;
-  flex-shrink: 0;
-}
-.prev-stats { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 8px; }
-.prev-stat {
-  background: var(--gray-50); border: var(--border);
-  border-radius: 6px; padding: 3px 8px;
-  font-size: 11px; font-family: var(--mono); color: var(--gray-700);
-  display: flex; flex-direction: column; align-items: center;
-}
-.prev-stat .pv { font-size: 13px; font-weight: 600; color: var(--gray-900); }
-.prev-stat .pl { font-size: 9px; color: var(--gray-400); }
-.prev-desc { font-size: 12px; color: var(--gray-600); line-height: 1.5; }
-
-
-/* fade-in animation for cards */
-.prev-card { opacity: 0; animation: card-in 0.4s ease forwards; }
-.prev-card:nth-child(1) { animation-delay: 0.1s; }
-.prev-card:nth-child(2) { animation-delay: 0.25s; }
-.prev-card:nth-child(3) { animation-delay: 0.4s; }
-@keyframes card-in {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: none; }
 }
 
 /* ── STATS BAR — carbon telemetry band ── */
@@ -689,14 +607,13 @@ html { scroll-behavior: smooth; }
   body:has(#page-landing.active) .topbar-actions { display: none; }
 
   /* Hero — stack to single column, shrink heading, reduce padding */
-  .split-hero { grid-template-columns: minmax(0, 1fr) !important; min-height: auto; }
   .hero-left {
     --hero-band-height: calc(100vw / 2.7);
     padding: calc(var(--hero-band-height) + 32px) 20px 40px !important;
   }
   .hero-eyebrow { font-size: 13px; }
   .hero-h1 { font-size: 56px !important; line-height: .8; margin-bottom: 22px; }
-  .hero-right, .hero-left { width: auto; }
+  .hero-left { width: auto; }
 
   /* All multi-column content grids → single (stats stays 2-col 2x2) */
   .stats-bar-inner { grid-template-columns: 1fr 1fr !important; gap: 16px; }
@@ -772,7 +689,7 @@ html { scroll-behavior: smooth; }
 <!-- ═══════════ LANDING PAGE ═══════════ -->
 <div class="page active" id="page-landing">
 
-  <!-- ── SPLIT HERO ── -->
+  <!-- ── LANDING HERO ── -->
   <div class="split-hero">
 
     <!-- Left: headline + CTA -->
@@ -791,78 +708,6 @@ html { scroll-behavior: smooth; }
       </div>
     </div>
 
-    <!-- Right: live feed preview -->
-    <div class="hero-right">
-      <div class="hero-right-header">
-        <div class="live-badge"><div class="preview-dot"></div>Product preview</div>
-        <div class="live-count">A glimpse of how Arenas works</div>
-      </div>
-
-      <div class="feed-preview">
-
-        <!-- Card 1: Running -->
-        <div class="prev-card">
-          <div class="prev-card-body">
-            <div class="prev-head">
-              <div class="prev-av" style="background:#FFF7ED;color:#9A3412">J</div>
-              <div>
-                <div class="prev-user">Jamie K.</div>
-                <div class="prev-time">7 min ago · London</div>
-              </div>
-              <div class="prev-sport-tag" style="background:#FFF7ED;color:#C2410C;border:1px solid #FDBA74">🏃 Running</div>
-            </div>
-            <div class="prev-stats">
-              <div class="prev-stat"><div class="pv">12.4</div><div class="pl">km</div></div>
-              <div class="prev-stat"><div class="pv">54:22</div><div class="pl">time</div></div>
-              <div class="prev-stat"><div class="pv">4:23</div><div class="pl">/km</div></div>
-              <div class="prev-stat"><div class="pv">148</div><div class="pl">bpm</div></div>
-            </div>
-            <div class="prev-desc">Morning long run done ✓ PB attempt this Sunday — anyone in London want to pace?</div>
-          </div>
-        </div>
-
-        <!-- Card 2: Climbing -->
-        <div class="prev-card">
-          <div class="prev-card-body">
-            <div class="prev-head">
-              <div class="prev-av" style="background:#F5F3FF;color:#6D28D9">SR</div>
-              <div>
-                <div class="prev-user">Sofia R.</div>
-                <div class="prev-time">22 min ago · Barcelona</div>
-              </div>
-              <div class="prev-sport-tag" style="background:#F5F3FF;color:#6D28D9;border:1px solid #C4B5FD">🧗 Climbing</div>
-            </div>
-            <div class="prev-stats">
-              <div class="prev-stat"><div class="pv">V7</div><div class="pl">grade</div></div>
-              <div class="prev-stat"><div class="pv">Sent ✓</div><div class="pl">status</div></div>
-              <div class="prev-stat"><div class="pv">3 wks</div><div class="pl">project</div></div>
-            </div>
-            <div class="prev-desc">Finally sent the V7 at Montserrat — crux was the undercling. Beta in comments.</div>
-          </div>
-        </div>
-
-        <!-- Card 3: Cycling -->
-        <div class="prev-card">
-          <div class="prev-card-body">
-            <div class="prev-head">
-              <div class="prev-av" style="background:#FEF9C3;color:#854D0E">MC</div>
-              <div>
-                <div class="prev-user">Marco C.</div>
-                <div class="prev-time">1h ago · Milan</div>
-              </div>
-              <div class="prev-sport-tag" style="background:#EFF6FF;color:#1E40AF;border:1px solid #93C5FD">🚴 Cycling</div>
-            </div>
-            <div class="prev-stats">
-              <div class="prev-stat"><div class="pv">88</div><div class="pl">km</div></div>
-              <div class="prev-stat"><div class="pv">241</div><div class="pl">avg W</div></div>
-              <div class="prev-stat"><div class="pv">1,240</div><div class="pl">elev m</div></div>
-            </div>
-            <div class="prev-desc">Stelvio approach done — Saturday group ride open, DM to join. Cap 12 riders.</div>
-          </div>
-        </div>
-
-      </div>
-    </div>
   </div>
 
   <!-- Stats bar -->
