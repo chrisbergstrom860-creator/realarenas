@@ -315,12 +315,15 @@ html { scroll-behavior: smooth; }
 .ai-insights-copy { max-width: 520px; }
 .ai-insights-copy p { color: var(--gray-600); font-size: 16px; line-height: 1.6; margin-bottom: 16px; }
 .ai-insights-copy .ai-insights-principle { margin-bottom: 24px; }
-.ai-insights-callouts { display: grid; gap: 24px; grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 8px; }
+.ai-insights-callouts { display: grid; gap: 20px; grid-template-columns: 1fr; }
 .ai-insights-callout { display: grid; gap: 14px; grid-template-columns: 40px minmax(0, 1fr); }
 .ai-insights-callout-icon { align-items: center; background: var(--yellow); border-radius: 10px; color: var(--gray-900); display: flex; height: 40px; justify-content: center; width: 40px; }
 .ai-insights-callout-icon svg { display: block; height: 22px; width: 22px; }
 .ai-insights-callout h3 { color: var(--gray-900); font-size: 16px; font-weight: 600; line-height: 1.3; margin-bottom: 4px; }
 .ai-insights-callout p { color: var(--gray-600); font-size: 16px; line-height: 1.5; margin: 0; }
+@media (min-width: 769px) {
+  .ai-insights-callouts { gap: 14px; }
+}
 .ai-example { background: var(--gray-50); border: var(--border); border-radius: var(--radius-lg); padding: 24px; }
 .ai-example-label { margin-bottom: 20px; }
 .ai-example-thread { display: flex; flex-direction: column; gap: 16px; }
@@ -624,7 +627,6 @@ html { scroll-behavior: smooth; }
   .stats-bar-inner { grid-template-columns: 1fr 1fr !important; gap: 16px; }
   .features-grid { grid-template-columns: 1fr !important; }
   .ai-insights-grid { grid-template-columns: 1fr; gap: 36px; }
-  .ai-insights-callouts { gap: 20px; grid-template-columns: 1fr; margin-top: 0; }
   .analytics-grid { grid-template-columns: 1fr; gap: 36px; }
   .steps-grid { grid-template-columns: 1fr !important; }
   .testimonials { grid-template-columns: 1fr !important; }
@@ -748,6 +750,45 @@ html { scroll-behavior: smooth; }
           <h2 class="section-title ai-insights-title" id="ai-insights-title">Ask your training a question.</h2>
           <p>AI Insights answers questions about your own logged activity — hours, sessions, distance, sports, rest days, personal records. Every training metric shown in an answer is checked against your recorded data before you see it.</p>
           <p class="ai-insights-principle">It describes what you did. It won't tell you what to do.</p>
+          <div class="ai-insights-callouts">
+            <div class="ai-insights-callout">
+              <div class="ai-insights-callout-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+                  <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+                  <path d="M12 14v2"></path>
+                </svg>
+              </div>
+              <div>
+                <h3>Your data only.</h3>
+                <p>Answers use only your own activity — never other athletes'.</p>
+              </div>
+            </div>
+            <div class="ai-insights-callout">
+              <div class="ai-insights-callout-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3 19 6v5c0 4.6-2.8 7.8-7 10-4.2-2.2-7-5.4-7-10V6l7-3Z"></path>
+                  <path d="m9 12 2 2 4-4"></path>
+                </svg>
+              </div>
+              <div>
+                <h3>Verified answers.</h3>
+                <p>Every metric is checked against your recorded activity before you see it.</p>
+              </div>
+            </div>
+            <div class="ai-insights-callout">
+              <div class="ai-insights-callout-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 18.5 3.5 21v-5A8 8 0 1 1 7 18.5H5Z"></path>
+                  <path d="M8 10h8M8 14h5"></path>
+                </svg>
+              </div>
+              <div>
+                <h3>30 questions a month.</h3>
+                <p>Included with Individual Pro.</p>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="ai-example" aria-label="AI Insights example">
           <div class="section-label ai-example-label">Example</div>
@@ -767,45 +808,6 @@ html { scroll-behavior: smooth; }
             <div class="ai-example-turn ai-example-turn--answer">
               <div class="ai-example-role">Answer</div>
               <div class="ai-example-text">Your rest-day count in August 2026 was 18 days.</div>
-            </div>
-          </div>
-        </div>
-        <div class="ai-insights-callouts">
-          <div class="ai-insights-callout">
-            <div class="ai-insights-callout-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="5" y="10" width="14" height="10" rx="2"></rect>
-                <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
-                <path d="M12 14v2"></path>
-              </svg>
-            </div>
-            <div>
-              <h3>Your data only.</h3>
-              <p>Answers use only your own activity — never other athletes'.</p>
-            </div>
-          </div>
-          <div class="ai-insights-callout">
-            <div class="ai-insights-callout-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 3 19 6v5c0 4.6-2.8 7.8-7 10-4.2-2.2-7-5.4-7-10V6l7-3Z"></path>
-                <path d="m9 12 2 2 4-4"></path>
-              </svg>
-            </div>
-            <div>
-              <h3>Verified answers.</h3>
-              <p>Every metric is checked against your recorded activity before you see it.</p>
-            </div>
-          </div>
-          <div class="ai-insights-callout">
-            <div class="ai-insights-callout-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M5 18.5 3.5 21v-5A8 8 0 1 1 7 18.5H5Z"></path>
-                <path d="M8 10h8M8 14h5"></path>
-              </svg>
-            </div>
-            <div>
-              <h3>30 questions a month.</h3>
-              <p>Included with Individual Pro.</p>
             </div>
           </div>
         </div>
