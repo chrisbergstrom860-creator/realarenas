@@ -346,18 +346,6 @@ html { scroll-behavior: smooth; }
   to   { opacity: 1; transform: none; }
 }
 
-/* ── SPORT SCROLL ── */
-.sport-scroll { padding: 18px 0; background: var(--gray-50); border-bottom: var(--border); overflow: hidden; }
-.sport-scroll-inner { display: flex; gap: 8px; animation: scroll-left 32s linear infinite; width: max-content; }
-@keyframes scroll-left { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-.sport-pill {
-  display: flex; align-items: center; gap: 6px;
-  padding: 6px 14px; border-radius: 20px;
-  background: white; border: var(--border);
-  font-size: 13px; font-weight: 500; color: var(--gray-700);
-  white-space: nowrap; flex-shrink: 0;
-}
-
 /* ── STATS BAR — carbon telemetry band ── */
 .stats-bar { background: var(--gray-900); border-bottom: 1px solid var(--gray-900); padding: 36px 24px; position: relative; overflow: hidden; }
 /* Lane lines inside the carbon band — only a shade lighter than the band */
@@ -875,11 +863,6 @@ html { scroll-behavior: smooth; }
 
       </div>
     </div>
-  </div>
-
-  <!-- Scrolling sport pills -->
-  <div class="sport-scroll">
-    <div class="sport-scroll-inner" id="sport-pills"></div>
   </div>
 
   <!-- Stats bar -->
@@ -1526,16 +1509,6 @@ window.addEventListener('load', () => {
       document.querySelectorAll('#main-topnav a').forEach(a => a.classList.remove('nav-active'));
     }
   });
-});
-
-// ── SPORT PILLS STRIP ──
-const sports = ['🏃 Running','🚴 Cycling','🏊 Swimming','🧗 Climbing','⚽ Football','🏀 Basketball','🎾 Tennis','🏋️ Weightlifting','🧘 Yoga','🏄 Surfing','⛷️ Skiing','🥊 Boxing','🏉 Rugby','🏸 Badminton','🤸 Gymnastics','🛶 Rowing','🏇 Horse riding','🥋 Martial arts','🏌️ Golf','🎿 Cross-country skiing'];
-const strip = document.getElementById('sport-pills');
-[...sports, ...sports].forEach(s => {
-  const el = document.createElement('div');
-  el.className = 'sport-pill';
-  el.textContent = s;
-  strip.appendChild(el);
 });
 
 setMode('login');
