@@ -301,8 +301,9 @@ button,select,input,textarea{font-family:var(--font)}
   .hero::before{height:clamp(210px,38vw,340px);bottom:auto;background-image:image-set(url('/html/landing-assets/for-clubs-collage-800.avif') type('image/avif') 1x,url('/html/landing-assets/for-clubs-collage-1600.avif') type('image/avif') 2x,url('/html/landing-assets/for-clubs-collage-800.webp') type('image/webp') 1x,url('/html/landing-assets/for-clubs-collage-1600.webp') type('image/webp') 2x);background-position:center 44%;background-size:cover}
   .hero::after{background:linear-gradient(180deg,rgba(17,24,39,0) 50%,#111827 100%);height:clamp(210px,38vw,340px);bottom:auto}
   .hero-inner{padding:42px 40px 58px}
-  .hero-copy{max-width:none}
-  .hero-callouts{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 28px}
+  .hero-copy{max-width:none;display:flex;flex-direction:column}
+  .hero-actions{order:4;margin-bottom:24px}
+  .hero-callouts{order:5;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 28px;margin-bottom:0}
 }
 @media (max-width: 768px) {
   /* Nav — wrap instead of overflowing the viewport */
@@ -337,13 +338,13 @@ button,select,input,textarea{font-family:var(--font)}
   .form-row { grid-template-columns: 1fr; }
 }
 @media (max-width: 480px) {
-  .hero{padding-top:220px;margin-top:131px}
-  .hero::before,.hero::after{height:220px}
+  .hero{padding-top:175px;margin-top:131px}
+  .hero::before,.hero::after{height:175px}
   .hero::before{background-position:43% 42%}
   .hero-inner{padding-top:28px}
   .hero-title{font-size:34px}
   .hero-sub{font-size:14px}
-  .hero-callouts{grid-template-columns:1fr;gap:16px;margin-bottom:24px}
+  .hero-callouts{grid-template-columns:1fr;gap:16px}
   .hero-callout{display:grid;grid-template-columns:38px 1fr;column-gap:12px}
   .hero-callout-icon{grid-row:1 / span 2;margin:0}
   .hero-actions{align-items:center}
