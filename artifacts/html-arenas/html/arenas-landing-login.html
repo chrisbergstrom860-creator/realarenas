@@ -160,6 +160,9 @@ html { scroll-behavior: smooth; }
   .hero-left {
     background-position: 40% center;
   }
+  .hero-left::before {
+    background: linear-gradient(90deg, #fff 0, #fff 455px, rgba(255,255,255,.99) 460px, rgba(255,255,255,.92) 470px, rgba(255,255,255,.55) 490px, rgba(255,255,255,.18) 520px, rgba(255,255,255,.03) 550px, rgba(255,255,255,0) 580px);
+  }
 }
 @media (min-width: 1280px) and (max-width: 1599px) and (max-resolution: 1.99dppx) {
   .hero-left {
