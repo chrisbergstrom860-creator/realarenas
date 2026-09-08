@@ -260,8 +260,12 @@ async function openBoard(period, width, label) {
       const style = getComputedStyle(element);
       const fg = color(style.color);
       const solidParts = style.backgroundColor.match(/[\d.]+/g) || [];
-      const solidBg = solidParts.slice(0, 3).map(Number);
-      const hasSolidBg = solidParts.length >= 3 && (solidParts.length < 4 || Number(solidParts[3]) > 0);
+      const pseudoParts = getComputedStyle(element, '::before').backgroundColor.match(/[\d.]+/g) || [];
+      const backgroundParts = pseudoParts.length >= 3 &&
+        (pseudoParts.length < 4 || Number(pseudoParts[3]) > 0) ? pseudoParts : solidParts;
+      const solidBg = backgroundParts.slice(0, 3).map(Number);
+      const hasSolidBg = backgroundParts.length >= 3 &&
+        (backgroundParts.length < 4 || Number(backgroundParts[3]) > 0);
       rects.forEach((rect, lineIndex) => {
         let lineWorst = Infinity;
         for (let y = Math.max(0, Math.floor(rect.top - clubRect.top)); y < Math.min(clubRect.height, Math.ceil(rect.bottom - clubRect.top)); y += 2) {

@@ -1573,7 +1573,7 @@ async function cleanup() {
           return (Math.max(one, two) + 0.05) / (Math.min(one, two) + 0.05);
         };
         const selectors = [
-          '.ai2-hero-title', '.ai2-hero-body', '.ai2-stat-value', '.ai2-stat-label',
+          '.ai2-hero-title', '.ai2-yellow', '.ai2-hero-body', '.ai2-stat-value', '.ai2-stat-label',
           '.ai2-callout-text', '.ai2-sugg-title', '.ai2-chip-header', '.ai2-chip-text',
           '.ai2-composer-label', '.ai2-composer-note', '.ai2-trust-header', '.ai2-trust-desc'
         ];
@@ -1583,7 +1583,8 @@ async function cleanup() {
             const style = getComputedStyle(element);
             const foreground = parse(style.color);
             let node = element;
-            let background = null;
+            let background = parse(getComputedStyle(element, '::before').backgroundColor);
+            if (background && background[3] !== 1) background = null;
             while (node && !background) {
               const candidate = parse(getComputedStyle(node).backgroundColor);
               if (candidate && candidate[3] === 1) background = candidate;

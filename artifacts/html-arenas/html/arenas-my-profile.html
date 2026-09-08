@@ -2301,7 +2301,8 @@ if (logHashMatch) {
         .ai2-hero-copy { min-width: 0; }
         .ai2-sparkle { font-size: 32px; color: var(--yellow); margin-bottom: 16px; }
         .ai2-hero-title { font-size: 36px; font-weight: 700; color: var(--gray-900); letter-spacing: -0.02em; line-height: 1.1; margin-bottom: 16px; }
-        .ai2-yellow { color: var(--yellow-dark); }
+        .ai2-yellow { color:var(--gray-900);display:inline-block;position:relative;padding:2px 10px;z-index:0; }
+        .ai2-yellow::before { content:'';position:absolute;inset:3px -2px 5px;background:var(--yellow);transform:skew(-8deg);border-radius:3px;z-index:-1; }
         .ai2-hero-body { font-size: 15px; color: var(--gray-600); line-height: 1.6; }
         .ai2-stats-card { background: white; border: var(--border); border-radius: var(--radius-lg); padding: 16px; display: flex; flex-direction: column; gap: 14px; box-shadow: var(--shadow-md); min-width: 0; width: 100%; }
         .ai2-stat-row { display: flex; gap: 12px; align-items: center; }
