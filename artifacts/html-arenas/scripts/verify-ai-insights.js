@@ -73,6 +73,8 @@ const TWO_MONTHS_AGO_LABEL = monthLabel(TWO_MONTHS_AGO_KEY);
 const ANSWERABLE_QUESTIONS = [
   `How many hours on average did I workout in ${LAST_MONTH_YEAR_LABEL}?`,
   'How many rest days did I take last month?',
+  'How many sessions did I workout last week?',
+  'How many sessions did I workout last month?',
   `How much did I train in ${TWO_MONTHS_AGO_LABEL}?`,
   `How many workouts did I log in ${LAST_MONTH_LABEL}?`,
   'How many hours of weight training did I record last month?',
@@ -429,6 +431,14 @@ function findingsForAnswerableQuestion(question, data) {
   if (question === 'How many rest days did I take last month?') {
     return [metricFinding(data, monthPath(data, lastMonth, 'restDays'))];
   }
+  if (question === 'How many sessions did I workout last week?') {
+    const index = data.last12Weeks.weekly.findIndex((row) => row.relative === 'last_week');
+    return [metricFinding(data, `last12Weeks.weekly.${index}.activityCount`)];
+  }
+  if (question === 'How many sessions did I workout last month?') {
+    const index = data.last12Months.findIndex((row) => row.relative === 'last_month');
+    return [metricFinding(data, `last12Months.${index}.sessions`)];
+  }
   if (question === `How much did I train in ${TWO_MONTHS_AGO_LABEL}?`) {
     return [metricFinding(data, monthPath(data, TWO_MONTHS_AGO_KEY, 'durationHours'))];
   }
@@ -623,8 +633,8 @@ async function cleanup() {
   let browser;
   try {
     writeManifest();
-    check('verification matrix contains exactly 33 preserved-and-extended questions',
-      ANSWERABLE_QUESTIONS.length + NOT_ANSWERABLE_CASES.length + POLICY_REFUSAL_CASES.length === 33,
+    check('verification matrix contains exactly 35 preserved-and-extended questions',
+      ANSWERABLE_QUESTIONS.length + NOT_ANSWERABLE_CASES.length + POLICY_REFUSAL_CASES.length === 35,
       JSON.stringify({
         answerable: ANSWERABLE_QUESTIONS.length,
         notAnswerable: NOT_ANSWERABLE_CASES.length,
@@ -871,18 +881,36 @@ async function cleanup() {
       privacyCapture.body.system.includes('{"type":"metric","path":"last12Months.10.durationHours","value":16.4}') &&
       !privacyCapture.body.system.includes('"value":"exact copied value"'),
       privacyCapture.body.system);
+    check('system prompt requires server-owned relative labels instead of date or position inference',
+      privacyCapture.body.system.includes('relative label exactly matches this_week, last_week, this_month, or last_month') &&
+      privacyCapture.body.system.includes('Never derive a relative period from array position, weekStart, month, or any date arithmetic.'),
+      privacyCapture.body.system);
     check('actual model payload contains the allowlisted data object', !!privacyCapture.envelope.data && privacyCapture.envelope.data.allTime.activityCount === 11, serializedPayload);
     check('actual model payload has 12 timezone-calendar month buckets including zero months',
-      privacyCapture.envelope.data.schemaVersion === 5 &&
+      privacyCapture.envelope.data.schemaVersion === 6 &&
       privacyCapture.envelope.data.last12Months.length === 12 &&
       privacyCapture.envelope.data.last12Months.every((month) =>
         JSON.stringify(Object.keys(month).sort()) === JSON.stringify([
           'activeDays', 'averageDistanceKmPerActivity', 'averageHoursPerWeek',
           'averageSessionDurationHours', 'averageSessionsPerWeek', 'distanceKm',
-          'durationHours', 'month', 'observedDays', 'restDays', 'sessions', 'sports'
+          'durationHours', 'month', 'observedDays', 'relative', 'restDays', 'sessions', 'sports'
         ])
       ),
       JSON.stringify(privacyCapture.envelope.data.last12Months));
+    check('Monday fixture labels the final week current and the preceding week last',
+      privacyCapture.envelope.data.asOfDate === '2026-09-07' &&
+      privacyCapture.envelope.data.last12Weeks.weekly.at(-1).relative === 'this_week' &&
+      privacyCapture.envelope.data.last12Weeks.weekly.at(-2).relative === 'last_week',
+      JSON.stringify(privacyCapture.envelope.data.last12Weeks.weekly.slice(-2)));
+    check('month buckets and plan adherence carry matching server-owned relative labels',
+      privacyCapture.envelope.data.last12Months.at(-1).relative === 'this_month' &&
+      privacyCapture.envelope.data.last12Months.at(-2).relative === 'last_month' &&
+      privacyCapture.envelope.data.calendar.pastPlanAdherence.every((row, index) =>
+        row.relative === privacyCapture.envelope.data.last12Months[index].relative),
+      JSON.stringify({
+        months: privacyCapture.envelope.data.last12Months.slice(-2),
+        adherence: privacyCapture.envelope.data.calendar.pastPlanAdherence.slice(-2)
+      }));
     const lastMonthContext = privacyCapture.envelope.data.last12Months.find((month) => month.month === LAST_MONTH_KEY);
     const expectedLastMonthRows = activityRows.filter((row) =>
       row.user_id === users.pro.id && monthKeyInZone(new Date(row.date), TEST_TIMEZONE) === LAST_MONTH_KEY);
@@ -1367,6 +1395,24 @@ async function cleanup() {
           !result.body.answer.includes(`${countPhrase} was`),
           result.body.answer);
       }
+      if (question === 'How many sessions did I workout last week?') {
+        const previousIndex = providerRecord.envelope.data.last12Weeks.weekly.findIndex((row) => row.relative === 'last_week');
+        const currentIndex = providerRecord.envelope.data.last12Weeks.weekly.findIndex((row) => row.relative === 'this_week');
+        check('last-week evidence uses the labelled previous week, never the current Monday bucket',
+          result.body.evidence.some((item) => item.path === `last12Weeks.weekly.${previousIndex}.activityCount`) &&
+          !result.body.evidence.some((item) => item.path === `last12Weeks.weekly.${currentIndex}.activityCount`) &&
+          result.body.answer.includes('last week (Aug 31 – Sep 6)'),
+          JSON.stringify(result.body));
+      }
+      if (question === 'How many sessions did I workout last month?') {
+        const previousIndex = providerRecord.envelope.data.last12Months.findIndex((row) => row.relative === 'last_month');
+        const currentIndex = providerRecord.envelope.data.last12Months.findIndex((row) => row.relative === 'this_month');
+        check('last-month evidence uses the labelled previous month, never the current month',
+          result.body.evidence.some((item) => item.path === `last12Months.${previousIndex}.sessions`) &&
+          !result.body.evidence.some((item) => item.path === `last12Months.${currentIndex}.sessions`) &&
+          result.body.answer.includes('last month (August 2026)'),
+          JSON.stringify(result.body));
+      }
       if (question === 'How did I do last week on my weightlifting goal?') {
         check('eligible weekly goal history uses the exact past-tense renderer',
           result.body.answer === 'Last week your weightlifting frequency goal reached 3 of 4 sessions and was not achieved.',
@@ -1494,6 +1540,10 @@ async function cleanup() {
       noGoalsHero.status === 200 &&
       !noGoalsHero.body.suggestions.some((row) => /percentage|next planned|goal on track/.test(row.question)),
       JSON.stringify(noGoalsHero.body.suggestions));
+    await must('reset fixture AI usage before browser rendering checks',
+      admin.from('notifications').delete()
+        .eq('user_id', users.pro.id)
+        .eq('type', 'ai_insights_usage'));
 
     const { launchBrowser } = await import('./lib/mobile-geometry.js');
     browser = await launchBrowser();

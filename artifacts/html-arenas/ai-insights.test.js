@@ -13,7 +13,7 @@ const {
 } = require('./ai-insights');
 
 const context = {
-  schemaVersion: 5,
+  schemaVersion: 6,
   asOfDate: '2026-09-10',
   timezone: 'America/Los_Angeles',
   allTime: {
@@ -24,10 +24,15 @@ const context = {
   },
   last12Weeks: {
     distanceKm: 42.5,
+    weekly: [
+      { weekStart: '2026-08-31', relative: 'last_week', activityCount: 4, durationHours: 3.5, distanceKm: 20, points: 40, sports: [] },
+      { weekStart: '2026-09-07', relative: 'this_week', activityCount: 2, durationHours: 1.5, distanceKm: 10, points: 20, sports: [] }
+    ],
     sports: [{ sport: 'running', sessions: 6, averageDistanceKmPerActivity: 7.1 }]
   },
   last12Months: [{
     month: '2026-08',
+    relative: 'last_month',
     sessions: 6,
     durationHours: 7.2,
     distanceKm: 42.5,
@@ -64,7 +69,7 @@ const context = {
       truncated: false,
       byMonth: [{ month: '2026-09', count: 3, included: 3, truncated: false }]
     },
-    pastPlanAdherence: [{ month: '2026-08', done: 3, skipped: 1, stillPlanned: 2 }]
+    pastPlanAdherence: [{ month: '2026-08', relative: 'last_month', done: 3, skipped: 1, stillPlanned: 2 }]
   },
   goals: {
     active: {
@@ -211,6 +216,48 @@ test('calendar, window-sport, rest-day, and average paths render from exact evid
   assert.match(result.answer, /1\.6 hours/);
   assert.match(result.answer, /7\.1 km/);
   assert.equal(result.evidence.length, 4);
+});
+
+test('Monday weekly labels render current and previous periods without array-position inference', () => {
+  const result = validateInsightResponse({
+    findings: [
+      { type: 'metric', path: 'last12Weeks.weekly.0.activityCount', value: 4 },
+      { type: 'metric', path: 'last12Weeks.weekly.1.activityCount', value: 2 }
+    ],
+    limitations: []
+  }, { ...context, asOfDate: '2026-09-07' });
+  assert.equal(result.ok, true);
+  assert.match(result.answer, /last week \(Aug 31 – Sep 6\) was 4/);
+  assert.match(result.answer, /so far this week was 2/);
+  assert.deepEqual(result.evidence.map((item) => item.path), [
+    'last12Weeks.weekly.0.activityCount',
+    'last12Weeks.weekly.1.activityCount'
+  ]);
+});
+
+test('first-of-month labels render previous and current months explicitly', () => {
+  const monthContext = {
+    ...context,
+    asOfDate: '2026-09-01',
+    last12Months: [
+      { ...context.last12Months[0], month: '2026-08', relative: 'last_month', sessions: 6 },
+      { ...context.last12Months[0], month: '2026-09', relative: 'this_month', sessions: 1 }
+    ]
+  };
+  const result = validateInsightResponse({
+    findings: [
+      { type: 'metric', path: 'last12Months.0.sessions', value: 6 },
+      { type: 'metric', path: 'last12Months.1.sessions', value: 1 }
+    ],
+    limitations: []
+  }, monthContext);
+  assert.equal(result.ok, true);
+  assert.match(result.answer, /last month \(August 2026\) was 6/);
+  assert.match(result.answer, /so far in September 2026 was 1/);
+  assert.deepEqual(result.evidence.map((item) => item.path), [
+    'last12Months.0.sessions',
+    'last12Months.1.sessions'
+  ]);
 });
 
 test('calendar and active-goal typed findings render only exact copied records', () => {

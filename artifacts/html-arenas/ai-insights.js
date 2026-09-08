@@ -221,6 +221,35 @@ function formatMetricValue(path, value) {
   return String(value);
 }
 
+function shortDateLabel(key) {
+  return new Date(key + 'T12:00:00Z').toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC'
+  });
+}
+
+function addUtcDays(key, days) {
+  const date = new Date(key + 'T12:00:00Z');
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function weeklyPeriodPhrase(row) {
+  if (row.relative === 'this_week') return 'so far this week';
+  if (row.relative === 'last_week') {
+    return `last week (${shortDateLabel(row.weekStart)} – ${shortDateLabel(addUtcDays(row.weekStart, 6))})`;
+  }
+  return `in the week starting ${row.weekStart}`;
+}
+
+function monthlyPeriodPhrase(row) {
+  const label = humanMonthLabel(row.month);
+  if (row.relative === 'this_month') return `so far in ${label}`;
+  if (row.relative === 'last_month') return `last month (${label})`;
+  return `in ${label}`;
+}
+
 function metricDescription(context, path) {
   const tokens = tokenizePath(path);
   if (!tokens) return null;
@@ -279,7 +308,7 @@ function metricDescription(context, path) {
     const row = context.last12Weeks && context.last12Weeks.weekly && context.last12Weeks.weekly[Number(match[1])];
     if (!row || !row.weekStart) return null;
     const label = match[2] === 'activityCount' ? 'activity count' : match[2] === 'durationHours' ? 'recorded duration' : match[2] === 'distanceKm' ? 'recorded distance' : 'points';
-    return `Your ${label} in the week starting ${row.weekStart}`;
+    return `Your ${label} ${weeklyPeriodPhrase(row)}`;
   }
   match = path.match(/^last12Weeks\.weekly\.(\d+)\.sports\.(\d+)\.(sessions|durationHours|distanceKm)$/);
   if (match) {
@@ -287,7 +316,7 @@ function metricDescription(context, path) {
     const row = week && week.sports && week.sports[Number(match[2])];
     if (!week || !row || !row.sport) return null;
     const label = match[3] === 'sessions' ? 'session count' : match[3] === 'durationHours' ? 'recorded duration' : 'recorded distance';
-    return `Your ${row.sport} ${label} in the week starting ${week.weekStart}`;
+    return `Your ${row.sport} ${label} ${weeklyPeriodPhrase(week)}`;
   }
   match = path.match(/^last12Weeks\.sports\.(\d+)\.(sessions|durationHours|distanceKm|percentSessions|averageSessionDurationHours|averageHoursPerWeek|averageSessionsPerWeek|averageDistanceKmPerActivity)$/);
   if (match) {
@@ -309,7 +338,6 @@ function metricDescription(context, path) {
   if (match) {
     const row = context.last12Months && context.last12Months[Number(match[1])];
     if (!row || !row.month) return null;
-    const monthLabel = new Date(row.month + '-01T00:00:00Z').toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
     const labels = {
       sessions: 'session count',
       durationHours: 'recorded duration',
@@ -322,14 +350,13 @@ function metricDescription(context, path) {
       averageSessionsPerWeek: 'average weekly session count',
       averageDistanceKmPerActivity: 'average recorded distance per activity'
     };
-    return `Your ${labels[match[2]]} in ${monthLabel}`;
+    return `Your ${labels[match[2]]} ${monthlyPeriodPhrase(row)}`;
   }
   match = path.match(/^last12Months\.(\d+)\.sports\.(\d+)\.(sessions|durationHours|distanceKm|percentSessions|averageSessionDurationHours|averageHoursPerWeek|averageSessionsPerWeek|averageDistanceKmPerActivity)$/);
   if (match) {
     const month = context.last12Months && context.last12Months[Number(match[1])];
     const row = month && month.sports && month.sports[Number(match[2])];
     if (!month || !row || !row.sport) return null;
-    const monthLabel = new Date(month.month + '-01T00:00:00Z').toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
     const labels = {
       sessions: 'session count',
       durationHours: 'recorded duration',
@@ -340,7 +367,7 @@ function metricDescription(context, path) {
       averageSessionsPerWeek: 'average weekly session count',
       averageDistanceKmPerActivity: 'average recorded distance per activity'
     };
-    return `Your ${row.sport} ${labels[match[3]]} in ${monthLabel}`;
+    return `Your ${row.sport} ${labels[match[3]]} ${monthlyPeriodPhrase(month)}`;
   }
   match = path.match(/^calendar\.plannedSessions\.byMonth\.(\d+)\.(plannedCount|totalPlannedMinutes|included)$/);
   if (match) {
@@ -844,7 +871,8 @@ function renderTypedFinding(finding, context) {
     } else if (finding.type === 'calendar_event') {
       text = renderEventItem(actual.value, context);
     } else if (finding.type === 'plan_adherence') {
-      text = `In ${actual.value.month}, your plans were ${actual.value.done} done, ${actual.value.skipped} skipped, and ${actual.value.stillPlanned} still planned.`;
+      const phrase = monthlyPeriodPhrase(actual.value);
+      text = `${phrase.charAt(0).toUpperCase() + phrase.slice(1)}, your plans were ${actual.value.done} done, ${actual.value.skipped} skipped, and ${actual.value.stillPlanned} still planned.`;
     } else {
       const goal = actual.value;
       text = `Your active ${goal.sport || 'all-sport'} ${goal.type} goal is ${goal.progress.value} of ${goal.target.value}${goal.target.unit ? ` ${goal.target.unit}` : ''} for the ${goal.period} period, and is ${goal.isComplete ? 'complete' : goal.onTrack ? 'on track' : 'not on track'}.`;
@@ -1049,6 +1077,7 @@ function buildSystemPrompt() {
     'GOALS: use only goal_did_not_exist when the goal’s previousPeriodUnavailableReason says so for the requested recent period; goal_changed_after_period when it says so; goal_type_requires_saved_history for streak or custom goals; goal_period_outside_recent_range when the requested closed period predates previousPeriodRange.windowStart; goal_comparison_unsupported for comparing separate goals; or goal_projection_unsupported for hypothetical catch-up or future projection. Every goal not_answerable finding must include the exact active-goal subjectPath.',
     'Worked example: “How did I do last week on my weightlifting goal?” must use a matching goal_period finding when that weekly period is present; otherwise use a goals-domain reason with that goal’s subjectPath. Never use period_outside_coverage for this question.',
     'last12Months contains 12 athlete-timezone calendar buckets, oldest first, including zero months. Each month has totals, activeDays, restDays, observedDays, common averages, and active-sport summaries.',
+    'RELATIVE PERIODS: when the user says “this week”, “last week”, “this month”, or “last month”, select the weekly, last12Months, or pastPlanAdherence entry whose relative label exactly matches this_week, last_week, this_month, or last_month. Never derive a relative period from array position, weekStart, month, or any date arithmetic.',
     'last12Weeks.sports contains aggregate sport summaries for the detailed 12-week window. Use these direct paths instead of calculating from weekly or daily rows.',
     'calendar contains only the athlete’s own future plans, visible eligible future events, and 12 monthly plan-status counts. plannedSessions.total/included cover all future plan records across planned, done, and skipped statuses. Each byMonth collection is contiguous from the current athlete-timezone month through the later of next month or that collection’s last scheduled item, including exact zero buckets computed before the item caps. A zero bucket is known empty and answerable. A requested future month beyond that collection’s last byMonth bucket is unknown; use calendar_month_out_of_range. Use byMonth.plannedCount for sessions left, and use direct byMonth paths for month counts and planned minutes; never derive a month count from items or use the all-future total for one month.',
     'Use calendar_plan_list or calendar_event_list when the user asks what the month’s matching items are. Canonical list findings contain exactly type, path, and filter; omit value and every other key. The server applies the month filter and renders at most 10 items. If the relevant month bucket is truncated, include CALENDAR_RESULTS_TRUNCATED.',

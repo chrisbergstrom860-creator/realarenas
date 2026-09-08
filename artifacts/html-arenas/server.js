@@ -8773,6 +8773,7 @@ async function buildAiInsightsContext(user) {
     }
     weekly.push({
       weekStart: start,
+      relative: i === 0 ? 'this_week' : i === 1 ? 'last_week' : `${i}_weeks_ago`,
       ...summarize(rows),
       sports: Object.values(bySportMap).map((item) => ({
         sport: item.sport,
@@ -8792,6 +8793,7 @@ async function buildAiInsightsContext(user) {
   const currentMonth = monthKey(now, tz);
   const last12Months = [];
   for (let offset = -11; offset <= 0; offset++) {
+    const monthsAgo = Math.abs(offset);
     const month = shiftMonthKey(currentMonth, offset);
     const monthStart = month + '-01';
     const monthEnd = month === currentMonth
@@ -8803,6 +8805,7 @@ async function buildAiInsightsContext(user) {
     const activeDays = new Set(rows.map((row) => dayKey(row.date, tz))).size;
     last12Months.push({
       month,
+      relative: monthsAgo === 0 ? 'this_month' : monthsAgo === 1 ? 'last_month' : `${monthsAgo}_months_ago`,
       sessions: rows.length,
       durationHours: totals.durationHours,
       distanceKm: totals.distanceKm,
@@ -8817,7 +8820,7 @@ async function buildAiInsightsContext(user) {
     });
   }
   const context = {
-    schemaVersion: 5,
+    schemaVersion: 6,
     asOfDate: today,
     timezone: tz,
     coverage: {
@@ -8885,6 +8888,7 @@ async function buildAiInsightsContext(user) {
     const rows = adherenceRows.filter((row) => String(row.date).slice(0, 7) === monthRow.month);
     return {
       month: monthRow.month,
+      relative: monthRow.relative,
       done: rows.filter((row) => row.status === 'done').length,
       skipped: rows.filter((row) => row.status === 'skipped').length,
       stillPlanned: rows.filter((row) => row.status === 'planned').length
