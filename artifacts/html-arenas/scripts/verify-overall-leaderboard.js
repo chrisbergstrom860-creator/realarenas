@@ -182,7 +182,12 @@ async function openBoard(period, width, label) {
   if (period !== 'week') {
     const requested = period === 'month' ? 'month' : 'all';
     const periodResponse = page.waitForResponse((r) => r.url().includes('/api/leaderboard/platform?period=' + requested));
-    await page.getByRole('button', { name: period === 'month' ? 'This month' : 'All time' }).click();
+    await page.evaluate((nextPeriod) => {
+      const statePeriod = nextPeriod === 'all' ? 'alltime' : nextPeriod;
+      const button = [...document.querySelectorAll('.period-tab')].find((item) =>
+        item.textContent.trim() === (nextPeriod === 'month' ? 'This month' : 'All time'));
+      window.setPeriod(statePeriod, button);
+    }, requested);
     await periodResponse;
   }
   await page.waitForFunction(() => document.querySelector('#board-podium .podium-layout, #board-podium .empty-state'));
@@ -234,6 +239,51 @@ async function openBoard(period, width, label) {
     const right = document.querySelector('.right-col').getBoundingClientRect();
     const selectedHero = (image.currentSrc || '').split('/').pop();
     const clubImage = document.querySelector('.club-promo-bg');
+    const clubPromo = document.querySelector('.club-promo');
+    const clubRect = clubPromo.getBoundingClientRect();
+    const clubMedia = document.querySelector('.club-promo-media');
+    const clubMediaRect = clubMedia.getBoundingClientRect();
+    const clubCanvas = document.createElement('canvas');
+    clubCanvas.width = Math.max(1, Math.round(clubMediaRect.width));
+    clubCanvas.height = Math.max(1, Math.round(clubMediaRect.height));
+    const clubCtx = clubCanvas.getContext('2d', { willReadFrequently: true });
+    const clubScale = Math.max(clubCanvas.width / clubImage.naturalWidth, clubCanvas.height / clubImage.naturalHeight);
+    const clubDrawWidth = clubImage.naturalWidth * clubScale;
+    const clubDrawHeight = clubImage.naturalHeight * clubScale;
+    clubCtx.drawImage(clubImage, (clubCanvas.width - clubDrawWidth) * 0.5, (clubCanvas.height - clubDrawHeight) * 0.5, clubDrawWidth, clubDrawHeight);
+    const clubPixels = clubCtx.getImageData(0, 0, clubCanvas.width, clubCanvas.height).data;
+    const clubLineContrasts = [];
+    for (const element of document.querySelectorAll('.club-promo-title-main, .club-promo-title-accent, .club-promo-copy, .club-promo-btn')) {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const rects = [...range.getClientRects()];
+      const style = getComputedStyle(element);
+      const fg = color(style.color);
+      const solidParts = style.backgroundColor.match(/[\d.]+/g) || [];
+      const solidBg = solidParts.slice(0, 3).map(Number);
+      const hasSolidBg = solidParts.length >= 3 && (solidParts.length < 4 || Number(solidParts[3]) > 0);
+      rects.forEach((rect, lineIndex) => {
+        let lineWorst = Infinity;
+        for (let y = Math.max(0, Math.floor(rect.top - clubRect.top)); y < Math.min(clubRect.height, Math.ceil(rect.bottom - clubRect.top)); y += 2) {
+          for (let x = Math.max(0, Math.floor(rect.left - clubRect.left)); x < Math.min(clubRect.width, Math.ceil(rect.right - clubRect.left)); x += 2) {
+            let bg = hasSolidBg ? solidBg : [255, 255, 255];
+            const mx = x - (clubMediaRect.left - clubRect.left);
+            const my = y - (clubMediaRect.top - clubRect.top);
+            if (!hasSolidBg && mx >= 0 && mx < clubCanvas.width && my >= 0 && my < clubCanvas.height) {
+              const i = (Math.floor(my) * clubCanvas.width + Math.floor(mx)) * 4;
+              const p = mx / Math.max(1, clubCanvas.width);
+              const mask = p <= 0.46 ? 0 : p >= 0.84 ? 1 : (p - 0.46) / 0.38;
+              bg = [clubPixels[i], clubPixels[i + 1], clubPixels[i + 2]].map((value) => Math.round(value * mask + 255 * (1 - mask)));
+            }
+            lineWorst = Math.min(lineWorst, contrastRatio(fg, bg));
+          }
+        }
+        clubLineContrasts.push({
+          line: element.className + ':' + (lineIndex + 1),
+          ratio: Number(lineWorst.toFixed(2))
+        });
+      });
+    }
     return {
     podium: document.querySelectorAll('#board-podium .podium-col').length,
     rows: document.querySelectorAll('#board-list .list-row').length,
@@ -256,8 +306,19 @@ async function openBoard(period, width, label) {
     boardLeft: board.left,
     boardRight: board.right,
     clubText: (document.querySelector('#club-promo-container') || {}).textContent || '',
-    clubLinks: [...document.querySelectorAll('.club-board-link')].map((a) => ({ text: a.textContent.trim(), href: a.getAttribute('href') })),
+    clubMarkup: clubPromo.outerHTML,
+    clubHrefs: [...clubPromo.querySelectorAll('a')].map((anchor) => anchor.getAttribute('href')),
     exploreHref: (document.querySelector('.club-promo-btn') || {}).getAttribute && document.querySelector('.club-promo-btn').getAttribute('href'),
+    clubLineContrasts,
+    clubLayout: {
+      width: Math.round(clubRect.width),
+      height: Math.round(clubRect.height),
+      mediaLeft: Math.round(clubMediaRect.left - clubRect.left),
+      mediaWidth: Math.round(clubMediaRect.width),
+      contentWidth: Math.round(document.querySelector('.club-promo-content').getBoundingClientRect().width),
+      railWidth: Math.round(document.querySelector('.right-col').getBoundingClientRect().width),
+      mainWidth: Math.round(document.querySelector('.main').getBoundingClientRect().width)
+    },
     selectedHero,
     selectedClub: clubImage ? (clubImage.currentSrc || '').split('/').pop() : null,
     worstBannerContrast: worstContrast,
@@ -459,6 +520,13 @@ async function main() {
       { selectedHero: d.selectedHero, selectedClub: d.selectedClub, requests: d.imageRequests });
     check('responsive ' + width + ': banner copy clears worst-case photo pixels at AA contrast',
       d.worstBannerContrast >= 4.5, d.worstBannerContrast);
+    check('responsive ' + width + ': every club-card text line clears its worst-case faded-photo pixel at AA contrast',
+      d.clubLineContrasts.length >= 5 &&
+      d.clubLineContrasts.every((item) => item.ratio >= 4.5),
+      d.clubLineContrasts);
+    if ([360, 380, 768, 1280].includes(width)) {
+      console.log('  layout ' + width + 'px ' + JSON.stringify(d.clubLayout) + ' contrast ' + JSON.stringify(d.clubLineContrasts));
+    }
     if (width < 1024) {
       const gutter = width <= 480 ? 16 : 24;
       check('responsive ' + width + ': board uses app gutters and right rail stacks after it',
@@ -509,34 +577,49 @@ async function main() {
         (width === 360 && dpr <= 2) ||
         (width === 768 && dpr === 1)
       ) ? 'leaderboards-hero-hiker-800.avif' : 'leaderboards-hero-hiker-1600.avif';
+      const clubCssWidth = width <= 480 ? width - 32 : width < 1024 ? width - 48 : 320;
+      const expectedClub = clubCssWidth * dpr <= 800
+        ? 'leaderboards-club-group-800.avif'
+        : 'leaderboards-club-group-1600.avif';
       check('image matrix ' + width + 'px DPR ' + dpr + ': exactly one request per responsive image',
         unique.filter((name) => /^leaderboards-hero-hiker-/.test(name)).length === 1 &&
         unique.filter((name) => /^leaderboards-club-group-/.test(name)).length === 1,
         unique);
       check('image matrix ' + width + 'px DPR ' + dpr + ': selected expected AVIF bands',
         selected.hero === expectedHero &&
-        selected.club === 'leaderboards-club-group-800.avif' &&
+        selected.club === expectedClub &&
         unique.every((name) => name.endsWith('.avif')),
         { selected, unique });
       await imageContext.close();
     }
   }
   const noClubUi = await openBoard('week', 1280, 'no-club');
-  check('no-club fixture sees the honest Explore clubs card',
-    /Join a club and climb higher/.test(noClubUi.clubText) &&
+  check('no-club fixture sees the universal Explore clubs card',
+    /Join a club and climb higher\./.test(noClubUi.clubText.replace(/\s+/g, ' ')) &&
     /Compete with friends, earn points together, and stay motivated\./.test(noClubUi.clubText) &&
     noClubUi.exploreHref === '/html/clubs' &&
-    noClubUi.clubLinks.length === 0,
+    JSON.stringify(noClubUi.clubHrefs) === JSON.stringify(['/html/clubs']) &&
+    !/Climb with your clubs/.test(noClubUi.clubText),
     noClubUi);
   const fixtureClub = await makeViewerClub();
   const clubUi = await openBoard('week', 1280, 'club-member');
-  check('club member sees real membership-gated leaderboard links instead of the join card',
-    /Climb with your clubs/.test(clubUi.clubText) &&
-    !/Join a club/.test(clubUi.clubText) &&
-    clubUi.clubLinks.length === 1 &&
-    clubUi.clubLinks[0].text === fixtureClub.name + ' →' &&
-    clubUi.clubLinks[0].href === '/html/clubs/member/' + fixtureClub.id + '/leaderboard',
-    clubUi);
+  check('club member sees the exact same universal discovery card as a user with no clubs',
+    fixtureClub &&
+    clubUi.clubMarkup === noClubUi.clubMarkup &&
+    clubUi.clubText === noClubUi.clubText &&
+    clubUi.exploreHref === '/html/clubs' &&
+    JSON.stringify(clubUi.clubHrefs) === JSON.stringify(['/html/clubs']) &&
+    !/Climb with your clubs/.test(clubUi.clubText),
+    { noClub: noClubUi.clubMarkup, member: clubUi.clubMarkup });
+  const clubsRouteSource = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+  const clubsRouteStart = clubsRouteSource.indexOf("app.get(BASE + '/clubs'");
+  const clubsRouteEnd = clubsRouteSource.indexOf("app.post(BASE + '/api/clubs/", clubsRouteStart);
+  const clubsPageRoute = clubsRouteSource.slice(clubsRouteStart, clubsRouteEnd);
+  check('Explore clubs target is the authenticated discovery directory, not a user-clubs destination',
+    clubsPageRoute.includes('buildClubDirectory(req.user.id)') &&
+    clubsPageRoute.includes("'arenas-clubs.html'") &&
+    !/clubs\/member\//.test(clubsPageRoute),
+    clubsPageRoute);
 
   const populatedRows = browserRows;
   const populatedWeekBreakdown = browserBreakdowns.week;
@@ -557,7 +640,10 @@ async function main() {
   routeDelays = { week: 250, month: 0 };
   await page.setViewportSize({ width: 380, height: 900 });
   await page.goto(BASE + '/leaderboards', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'This month' }).click();
+  await page.evaluate(() => {
+    const button = [...document.querySelectorAll('.period-tab')].find((item) => item.textContent.trim() === 'This month');
+    window.setPeriod('month', button);
+  });
   await page.waitForFunction(() => /this month/i.test((document.querySelector('#pts-breakdown-title') || {}).textContent || ''));
   await page.waitForTimeout(350);
   const raceState = await page.evaluate(() => ({

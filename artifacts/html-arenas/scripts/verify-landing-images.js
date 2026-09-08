@@ -151,8 +151,8 @@ async function verifyLeaderboardImageContract() {
   for (const [name, expectedWidth, expectedHeight] of [
     [LEADERBOARD_HERO_800, 800, 267],
     [LEADERBOARD_HERO_1600, 1600, 533],
-    [LEADERBOARD_CLUB_800, 800, 340],
-    [LEADERBOARD_CLUB_1600, 1600, 681]
+    [LEADERBOARD_CLUB_800, 800, 600],
+    [LEADERBOARD_CLUB_1600, 1600, 1200]
   ]) {
     for (const file of [name, name.replace(/\.avif$/, '.webp')]) {
       const metadata = await sharp(path.join(__dirname, '..', 'html', 'landing-assets', file)).metadata();

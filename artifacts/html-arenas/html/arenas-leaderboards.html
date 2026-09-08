@@ -119,18 +119,19 @@ document.addEventListener('DOMContentLoaded', function(){
 .ts-bar { height: 100%; border-radius: 3px; }
 .ts-pct { font-family:var(--mono);font-size: 11px; color: var(--gray-500); width: 32px; text-align: right; }
 
-.club-promo { display:grid;grid-template-columns:minmax(0,1fr) 116px;min-height:154px;background:var(--gray-900);color:white }
-.club-promo-media { min-width:0;overflow:hidden }
+.club-card { border-radius:14px }
+.club-promo { position:relative;min-height:232px;background:white;color:var(--gray-900);overflow:hidden;isolation:isolate }
+.club-promo-media { position:absolute;z-index:0;inset:0 0 0 24%;overflow:hidden;-webkit-mask-image:linear-gradient(to right,transparent 0%,transparent 46%,#000 84%,#000 100%);mask-image:linear-gradient(to right,transparent 0%,transparent 46%,#000 84%,#000 100%) }
 .club-promo-media picture { display:block;height:100% }
 .club-promo-bg { width:100%;height:100%;object-fit:cover;object-position:center;display:block }
-.club-promo-content { padding:18px;min-width:0 }
-.club-promo-title { font-size:15px;font-weight:700;margin-bottom:5px;line-height:1.25 }
-.club-promo-copy { font-size:12px;color:rgba(255,255,255,.86);line-height:1.4;margin-bottom:12px }
-.club-promo-btn { display: inline-flex; align-items: center; justify-content: center; background: var(--yellow); color: var(--gray-900); font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 6px; text-decoration: none; border: none; cursor: pointer; transition: background 0.1s; }
+.club-promo-content { position:relative;z-index:1;padding:20px;max-width:74%;min-width:0 }
+.club-promo-trophy { width:28px;height:28px;display:block;margin-bottom:10px;color:var(--yellow-dark) }
+.club-promo-title { font-size:22px;font-weight:800;margin-bottom:9px;line-height:1.08;letter-spacing:-.025em }
+.club-promo-title-main,.club-promo-title-accent { display:block;width:max-content;max-width:100% }
+.club-promo-title-accent { color:var(--yellow);background:var(--gray-900);border-radius:3px;padding:1px 4px;margin-top:3px;box-decoration-break:clone;-webkit-box-decoration-break:clone }
+.club-promo-copy { font-size:13px;color:var(--gray-700);line-height:1.42;margin-bottom:14px;max-width:190px }
+.club-promo-btn { display:inline-flex;align-items:center;justify-content:center;background:var(--yellow);color:var(--gray-900);font-size:13px;font-weight:700;padding:9px 15px;border-radius:7px;text-decoration:none;border:none;cursor:pointer;transition:background .1s;white-space:nowrap }
 .club-promo-btn:hover { background: var(--yellow-light); }
-.club-board-links { display:flex;flex-direction:column;align-items:flex-start;gap:7px }
-.club-board-link { color:white;font-size:12px;font-weight:600;text-underline-offset:3px }
-.club-board-link:hover { color:var(--yellow) }
 
 .hpw-link{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--gray-500);text-decoration:none}
 .hpw-link:hover{color:var(--gray-700);text-decoration:underline}
@@ -140,6 +141,10 @@ document.addEventListener('DOMContentLoaded', function(){
 @media (max-width: 1023px) {
     .main { grid-template-columns: 1fr; }
     .right-col { grid-column:1; }
+    .club-promo { min-height:220px }
+    .club-promo-content { max-width:54%;padding:26px }
+    .club-promo-title { font-size:25px }
+    .club-promo-copy { max-width:300px }
 }
 
 @media (max-width: 480px) {
@@ -153,7 +158,7 @@ document.addEventListener('DOMContentLoaded', function(){
     .page-header-right,.period-tabs { width:100% }
     .period-tab { flex:1;padding:8px 6px }
     .board-container { order:1; width:100%; }
-    .right-col { order:2; width:100%; }
+    .right-col { order:2;width:100%;align-self:stretch }
     .side-title, .side-title-light { padding-top:16px; }
     .pts-row { padding:10px 16px; }
     .pts-total { padding:12px 16px; }
@@ -184,7 +189,11 @@ document.addEventListener('DOMContentLoaded', function(){
     .list-break { padding: 8px 16px; }
     .unranked-state { padding: 20px 16px; }
     .list-rank { width: 32px; margin-right: 8px; }
-    .club-promo { grid-template-columns:minmax(0,1fr) 104px }
+    .club-promo { min-height:244px }
+    .club-promo-media { left:18% }
+    .club-promo-content { max-width:78%;padding:18px }
+    .club-promo-title { font-size:21px }
+    .club-promo-copy { max-width:190px }
 }
 
 /* shell */
@@ -558,27 +567,19 @@ document.addEventListener('DOMContentLoaded', function(){
   function renderClubPromo() {
     var container = document.getElementById('club-promo-container');
     if (!container) return;
-    var clubs = (window.ARENAS_DATA && window.ARENAS_DATA.clubs) || [];
     var avif = '/html/landing-assets/leaderboards-club-group-800.avif 800w, /html/landing-assets/leaderboards-club-group-1600.avif 1600w';
     var webp = '/html/landing-assets/leaderboards-club-group-800.webp 800w, /html/landing-assets/leaderboards-club-group-1600.webp 1600w';
     var media = '<div class="club-promo-media"><picture>' +
-      '<source srcset="' + avif + '" sizes="116px" type="image/avif">' +
-      '<source srcset="' + webp + '" sizes="116px" type="image/webp">' +
+      '<source srcset="' + avif + '" sizes="(max-width:480px) calc(100vw - 32px), (max-width:1023px) calc(100vw - 48px), 320px" type="image/avif">' +
+      '<source srcset="' + webp + '" sizes="(max-width:480px) calc(100vw - 32px), (max-width:1023px) calc(100vw - 48px), 320px" type="image/webp">' +
       '<img src="/html/landing-assets/leaderboards-club-group-800.webp" class="club-promo-bg" alt="">' +
     '</picture></div>';
-    var content;
-    if (clubs.length) {
-      var links = clubs.map(function(club) {
-        return '<a class="club-board-link" href="' + B + '/clubs/member/' + encodeURIComponent(club.id) + '/leaderboard">' + esc(club.name || 'Club') + ' →</a>';
-      }).join('');
-      content = '<div class="club-promo-content"><div class="club-promo-title">Climb with your clubs</div>' +
-        '<div class="club-promo-copy">Open a club leaderboard to see how you rank.</div>' +
-        '<div class="club-board-links">' + links + '</div></div>';
-    } else {
-      content = '<div class="club-promo-content"><div class="club-promo-title">Join a club and climb higher</div>' +
-        '<div class="club-promo-copy">Compete with friends, earn points together, and stay motivated.</div>' +
-        '<a href="' + B + '/clubs" class="club-promo-btn">Explore clubs →</a></div>';
-    }
+    var trophy = '<svg class="club-promo-trophy" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M8 4h8v4a4 4 0 0 1-8 0V4Z"/><path d="M8 6H5v1a4 4 0 0 0 4 4M16 6h3v1a4 4 0 0 1-4 4M12 12v4M8 20h8M10 16h4v4"/></svg>';
+    var content = '<div class="club-promo-content">' + trophy +
+      '<div class="club-promo-title"><span class="club-promo-title-main">Join a club and </span><span class="club-promo-title-accent">climb higher.</span></div>' +
+      '<div class="club-promo-copy">Compete with friends, earn points together, and stay motivated.</div>' +
+      '<a href="' + B + '/clubs" class="club-promo-btn">Explore clubs →</a></div>';
     container.style.display = 'block';
     container.innerHTML = '<div class="club-promo">' + content + media + '</div>';
   }
