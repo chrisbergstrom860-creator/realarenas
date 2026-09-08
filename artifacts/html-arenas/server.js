@@ -15038,47 +15038,15 @@ app.post(BASE + '/auth/join/:token/existing', requireAuth, async (req, res) => {
     return res.status(500).json({ error: 'Could not join club' });
   }
 });
-const LANDING_ASSET_FILES = new Set([
-  'hero-trail-runners-800.avif',
-  'hero-trail-runners-800.webp',
-  'hero-trail-runners-1600.avif',
-  'hero-trail-runners-1600.webp',
-  'for-clubs-collage-800.avif',
-  'for-clubs-collage-800.webp',
-  'for-clubs-collage-1600.avif',
-  'for-clubs-collage-1600.webp',
-  'leaderboards-hero-hiker-800.avif',
-  'leaderboards-hero-hiker-800.webp',
-  'leaderboards-hero-hiker-1600.avif',
-  'leaderboards-hero-hiker-1600.webp',
-  'leaderboards-club-group-800.avif',
-  'leaderboards-club-group-800.webp',
-  'leaderboards-club-group-1600.avif',
-  'leaderboards-club-group-1600.webp',
-  'analytics-weekly-activity-800.avif',
-  'analytics-weekly-activity-800.webp',
-  'analytics-weekly-activity-1600.avif',
-  'analytics-weekly-activity-1600.webp',
-  'analytics-mobile-composite-380-2x.avif',
-  'analytics-mobile-composite-380-2x.webp',
-  'analytics-mobile-composite-380-3x.avif',
-  'analytics-mobile-composite-380-3x.webp',
-  'analytics-mobile-composite-390-2x.avif',
-  'analytics-mobile-composite-390-2x.webp',
-  'analytics-mobile-composite-390-3x.avif',
-  'analytics-mobile-composite-390-3x.webp',
-  'analytics-mobile-composite-600-2x.avif',
-  'analytics-mobile-composite-600-2x.webp',
-  'analytics-mobile-composite-600-3x.avif',
-  'analytics-mobile-composite-600-3x.webp',
-  'analytics-mobile-composite-767-2x.avif',
-  'analytics-mobile-composite-767-2x.webp',
-  'analytics-mobile-composite-767-3x.avif',
-  'analytics-mobile-composite-767-3x.webp'
-]);
+const LANDING_ASSET_MANIFEST = JSON.parse(
+  fs.readFileSync(path.join(HTML, 'landing-assets', 'manifest.json'), 'utf8')
+);
+const LANDING_ASSET_FILES = new Set(
+  Object.values(LANDING_ASSET_MANIFEST.assets || {}).map((entry) => entry.file)
+);
 app.get(['/html/landing-assets/:file', '/landing-assets/:file'], (req, res) => {
   if (!LANDING_ASSET_FILES.has(req.params.file)) return res.status(404).end();
-  if (process.env.NODE_ENV === 'production') res.set('Cache-Control', 'public, max-age=86400');
+  res.set('Cache-Control', 'public, max-age=31536000, immutable');
   res.type(req.params.file.endsWith('.avif') ? 'image/avif' : 'image/webp');
   res.sendFile(path.join(HTML, 'landing-assets', req.params.file));
 });

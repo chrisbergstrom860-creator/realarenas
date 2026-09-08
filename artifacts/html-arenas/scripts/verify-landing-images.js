@@ -19,24 +19,36 @@ const LANDING_URL = BASE_URL + '/landing';
 const FOR_CLUBS_URL = BASE_URL + '/for-clubs';
 const ASSET_URL = BASE_URL + '/landing-assets/';
 const EXECUTABLE = process.env.REPLIT_PLAYWRIGHT_CHROMIUM_EXECUTABLE;
+const ASSET_DIR = path.join(__dirname, '..', 'html', 'landing-assets');
+const MANIFEST = JSON.parse(fs.readFileSync(path.join(ASSET_DIR, 'manifest.json'), 'utf8'));
+const asset = (logicalName) => {
+  const entry = MANIFEST.assets && MANIFEST.assets[logicalName];
+  if (!entry || !entry.file) throw new Error(`Missing landing asset manifest entry: ${logicalName}`);
+  return entry.file;
+};
 
-const HERO_800 = 'hero-trail-runners-800.avif';
-const HERO_1600 = 'hero-trail-runners-1600.avif';
-const CLUBS_800 = 'for-clubs-collage-800.avif';
-const CLUBS_1600 = 'for-clubs-collage-1600.avif';
-const ANALYTICS_800 = 'analytics-weekly-activity-800.avif';
-const ANALYTICS_1600 = 'analytics-weekly-activity-1600.avif';
-const LEADERBOARD_HERO_800 = 'leaderboards-hero-hiker-800.avif';
-const LEADERBOARD_HERO_1600 = 'leaderboards-hero-hiker-1600.avif';
-const LEADERBOARD_CLUB_800 = 'leaderboards-club-group-800.avif';
-const LEADERBOARD_CLUB_1600 = 'leaderboards-club-group-1600.avif';
-const LEADERBOARD_HERO_HASHES = {
+const HERO_800 = asset('hero-trail-runners-800.avif');
+const HERO_1600 = asset('hero-trail-runners-1600.avif');
+const CLUBS_800 = asset('for-clubs-collage-800.avif');
+const CLUBS_1600 = asset('for-clubs-collage-1600.avif');
+const ANALYTICS_800 = asset('analytics-weekly-activity-800.avif');
+const ANALYTICS_1600 = asset('analytics-weekly-activity-1600.avif');
+const LEADERBOARD_HERO_800 = asset('leaderboards-hero-hiker-800.avif');
+const LEADERBOARD_HERO_1600 = asset('leaderboards-hero-hiker-1600.avif');
+const LEADERBOARD_CLUB_800 = asset('leaderboards-club-group-800.avif');
+const LEADERBOARD_CLUB_1600 = asset('leaderboards-club-group-1600.avif');
+const APPROVED_LEADERBOARD_HERO_HASHES = {
   'leaderboards-hero-hiker-800.avif': 'e663dc32c5504b85fbb2e16670dcef8001bfd3d21c1877a044b06a6efe5d1649',
   'leaderboards-hero-hiker-800.webp': '3a9c8f714e0634f856034ff43924d6972a728de8eddb2ab3bba6fce1289f534d',
   'leaderboards-hero-hiker-1600.avif': '231688edb3386df1cc6595b0c97b7ada2797e09f85e1b943b2107062a09b07a8',
   'leaderboards-hero-hiker-1600.webp': '291705176ef7ac12187e32c8a1cb6cd7044f48ab5b9e84d0d23cd1f8e6d0e635'
 };
-const mobile = (width, density) => `analytics-mobile-composite-${width}-${density}x.avif`;
+const LEADERBOARD_HERO_HASHES = Object.fromEntries(
+  Object.entries(APPROVED_LEADERBOARD_HERO_HASHES)
+    .map(([logicalName, digest]) => [asset(logicalName), digest])
+);
+const mobile = (width, density) =>
+  asset(`analytics-mobile-composite-${width}-${density}x.avif`);
 
 // Explicit width/DPR contract. `null` means that image category must make zero
 // requests at that width and DPR.
@@ -73,9 +85,9 @@ const BOUNDARIES = [
   [1599, 1600]
 ];
 
-const HERO_RE = /^hero-trail-runners-(?:800|1600)\.(?:avif|webp)$/;
-const CLUBS_RE = /^for-clubs-collage-(?:800|1600)\.(?:avif|webp)$/;
-const ANALYTICS_RE = /^analytics-(?:weekly-activity-(?:800|1600)|mobile-composite-(?:380|390|600|767)-(?:2|3)x)\.(?:avif|webp)$/;
+const HERO_RE = /^hero-trail-runners-(?:800|1600)\.[0-9a-f]{12}\.(?:avif|webp)$/;
+const CLUBS_RE = /^for-clubs-collage-(?:800|1600)\.[0-9a-f]{12}\.(?:avif|webp)$/;
+const ANALYTICS_RE = /^analytics-(?:weekly-activity-(?:800|1600)|mobile-composite-(?:380|390|600|767)-(?:2|3)x)\.[0-9a-f]{12}\.(?:avif|webp)$/;
 
 let passes = 0;
 let failures = 0;
@@ -116,19 +128,36 @@ function assertImageRequests(caseKey, label, expected, files) {
 }
 
 function expectedAssetFiles() {
-  const avifs = new Set();
-  for (const row of EXPECTATIONS) {
-    for (const file of [...row.hero, ...row.analytics]) {
-      if (file) avifs.add(file);
-    }
+  return Object.values(MANIFEST.assets).map((entry) => entry.file).sort();
+}
+
+function verifyManifestAndReferences() {
+  const entries = Object.entries(MANIFEST.assets || {});
+  const allowedFiles = new Set(entries.map(([, entry]) => entry.file));
+  check(null, 'manifest has the complete 36-image inventory', entries.length === 36, '36', String(entries.length));
+  for (const [logicalName, entry] of entries) {
+    const extension = path.extname(logicalName).replace('.', '');
+    const pattern = new RegExp(`\\.${entry.sha256.slice(0, MANIFEST.hashLength)}\\.${extension}$`);
+    check(null, `${logicalName} filename carries its content hash`,
+      pattern.test(entry.file) && /^[a-z0-9-]+\.[0-9a-f]{12}\.(?:avif|webp)$/.test(entry.file),
+      `*.${entry.sha256.slice(0, 12)}.${extension}`, entry.file);
+    const filePath = path.join(ASSET_DIR, entry.file);
+    const digest = crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+    check(null, `${entry.file} bytes match manifest digest`,
+      digest === entry.sha256, entry.sha256, digest);
   }
-  avifs.add(CLUBS_800);
-  avifs.add(CLUBS_1600);
-  avifs.add(LEADERBOARD_HERO_800);
-  avifs.add(LEADERBOARD_HERO_1600);
-  avifs.add(LEADERBOARD_CLUB_800);
-  avifs.add(LEADERBOARD_CLUB_1600);
-  return [...avifs].sort().flatMap((file) => [file, file.replace(/\.avif$/, '.webp')]);
+  for (const htmlName of [
+    'arenas-landing-login.html',
+    'arenas-for-clubs.html',
+    'arenas-leaderboards.html'
+  ]) {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'html', htmlName), 'utf8');
+    const references = [...html.matchAll(/\/html\/landing-assets\/([^"'()\s,]+)/g)]
+      .map((match) => match[1]);
+    check(null, `${htmlName} uses only manifest-backed hashed image names`,
+      references.length > 0 && references.every((file) => allowedFiles.has(file)),
+      'all image URLs in manifest', receivedList(references.filter((file) => !allowedFiles.has(file))));
+  }
 }
 
 async function verifyServedFiles() {
@@ -148,21 +177,32 @@ async function verifyServedFiles() {
     const receivedType = (response.headers.get('content-type') || '').split(';')[0];
     check(null, file, response.status === 200 && receivedType === expectedType,
       `HTTP 200 ${expectedType}`, `HTTP ${response.status} ${receivedType || '(no content-type)'}`);
+    check(null, `${file} immutable cache policy`,
+      response.headers.get('cache-control') === 'public, max-age=31536000, immutable',
+      'public, max-age=31536000, immutable', response.headers.get('cache-control'));
   }
-  console.log(`  ok  ${files.length - failures}/${files.length} served files`);
+  for (const logicalName of Object.keys(MANIFEST.assets)) {
+    const response = await fetch(ASSET_URL + logicalName, {
+      headers: { 'Cache-Control': 'no-cache' }
+    });
+    check(null, `${logicalName} old fixed URL is retired`,
+      response.status === 404, 'HTTP 404', `HTTP ${response.status}`);
+  }
+  console.log(`  ok  checked ${files.length} immutable files and ${files.length} retired fixed URLs`);
 }
 
 async function verifyLeaderboardImageContract() {
   const html = fs.readFileSync(path.join(__dirname, '..', 'html', 'arenas-leaderboards.html'), 'utf8');
   console.log('— Leaderboards responsive image contract —');
-  for (const [name, expectedWidth, expectedHeight] of [
-    [LEADERBOARD_HERO_800, 800, 267],
-    [LEADERBOARD_HERO_1600, 1600, 533],
-    [LEADERBOARD_CLUB_800, 800, 600],
-    [LEADERBOARD_CLUB_1600, 1600, 1200]
+  for (const [logicalAvif, expectedWidth, expectedHeight] of [
+    ['leaderboards-hero-hiker-800.avif', 800, 267],
+    ['leaderboards-hero-hiker-1600.avif', 1600, 533],
+    ['leaderboards-club-group-800.avif', 800, 600],
+    ['leaderboards-club-group-1600.avif', 1600, 1200]
   ]) {
-    for (const file of [name, name.replace(/\.avif$/, '.webp')]) {
-      const assetPath = path.join(__dirname, '..', 'html', 'landing-assets', file);
+    for (const logicalName of [logicalAvif, logicalAvif.replace(/\.avif$/, '.webp')]) {
+      const file = asset(logicalName);
+      const assetPath = path.join(ASSET_DIR, file);
       const metadata = await sharp(assetPath).metadata();
       check(null, `${file} dimensions`,
         metadata.width === expectedWidth && metadata.height === expectedHeight,
@@ -176,11 +216,15 @@ async function verifyLeaderboardImageContract() {
     }
   }
   check(null, 'Leaderboards hero declares AVIF and WebP 800/1600 source sets',
-    /leaderboards-hero-hiker-800\.avif 800w[^]*leaderboards-hero-hiker-1600\.avif 1600w/.test(html) &&
-    /leaderboards-hero-hiker-800\.webp 800w[^]*leaderboards-hero-hiker-1600\.webp 1600w/.test(html));
+    html.includes(`${asset('leaderboards-hero-hiker-800.avif')} 800w`) &&
+    html.includes(`${asset('leaderboards-hero-hiker-1600.avif')} 1600w`) &&
+    html.includes(`${asset('leaderboards-hero-hiker-800.webp')} 800w`) &&
+    html.includes(`${asset('leaderboards-hero-hiker-1600.webp')} 1600w`));
   check(null, 'Leaderboards club image declares AVIF and WebP 800/1600 source sets',
-    /leaderboards-club-group-800\.avif 800w[^]*leaderboards-club-group-1600\.avif 1600w/.test(html) &&
-    /leaderboards-club-group-800\.webp 800w[^]*leaderboards-club-group-1600\.webp 1600w/.test(html));
+    html.includes(`${asset('leaderboards-club-group-800.avif')} 800w`) &&
+    html.includes(`${asset('leaderboards-club-group-1600.avif')} 1600w`) &&
+    html.includes(`${asset('leaderboards-club-group-800.webp')} 800w`) &&
+    html.includes(`${asset('leaderboards-club-group-1600.webp')} 1600w`));
   console.log('  ok  Leaderboards assets and source sets');
 }
 
@@ -327,6 +371,7 @@ function reportBoundaryFailures() {
 }
 
 (async () => {
+  verifyManifestAndReferences();
   await verifyServedFiles();
   await verifyLeaderboardImageContract();
   await verifyBrowserMatrix();

@@ -13,6 +13,14 @@ const BASE = 'http://localhost:80/html';
 const PW = 'ArenasTest!234';
 const MANIFEST = '/tmp/verify-overall-leaderboard-manifest.json';
 const SHOTS = '/tmp/overall-leaderboard-screenshots';
+const landingManifest = JSON.parse(fs.readFileSync(
+  path.join(__dirname, '..', 'html', 'landing-assets', 'manifest.json'), 'utf8'
+));
+const landingAsset = (logicalName) => {
+  const entry = landingManifest.assets && landingManifest.assets[logicalName];
+  if (!entry || !entry.file) throw new Error('Missing landing asset manifest entry: ' + logicalName);
+  return entry.file;
+};
 const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { persistSession: false } });
 const defs = {
@@ -550,7 +558,9 @@ async function main() {
 
   for (const width of [360, 380, 768, 1280, 1600, 1920]) {
     const d = await openBoard('week', width, 'responsive');
-    const expectedHero = width >= 1024 ? 'leaderboards-hero-hiker-1600.avif' : 'leaderboards-hero-hiker-800.avif';
+    const expectedHero = landingAsset(width >= 1024
+      ? 'leaderboards-hero-hiker-1600.avif'
+      : 'leaderboards-hero-hiker-800.avif');
     check('responsive ' + width + ': no horizontal overflow',
       d.documentWidth <= d.viewportWidth, d);
     check('responsive ' + width + ': exact one hero and one club image request',
@@ -559,7 +569,7 @@ async function main() {
       d.imageRequests);
     check('responsive ' + width + ': AVIF band selection is correct',
       d.selectedHero === expectedHero &&
-      d.selectedClub === 'leaderboards-club-group-800.avif' &&
+      d.selectedClub === landingAsset('leaderboards-club-group-800.avif') &&
       d.imageRequests.every((name) => name.endsWith('.avif')),
       { selectedHero: d.selectedHero, selectedClub: d.selectedClub, requests: d.imageRequests });
     check('responsive ' + width + ': banner copy clears worst-case photo pixels at AA contrast',
@@ -626,14 +636,16 @@ async function main() {
         club: (document.querySelector('.club-promo-bg').currentSrc || '').split('/').pop()
       }));
       const unique = [...new Set(requested)];
-      const expectedHero = (
+      const expectedHero = landingAsset(
         (width === 360 && dpr <= 2) ||
         (width === 768 && dpr === 1)
-      ) ? 'leaderboards-hero-hiker-800.avif' : 'leaderboards-hero-hiker-1600.avif';
+          ? 'leaderboards-hero-hiker-800.avif'
+          : 'leaderboards-hero-hiker-1600.avif'
+      );
       const clubCssWidth = width <= 480 ? width - 32 : width < 1024 ? width - 48 : 320;
-      const expectedClub = clubCssWidth * dpr <= 800
+      const expectedClub = landingAsset(clubCssWidth * dpr <= 800
         ? 'leaderboards-club-group-800.avif'
-        : 'leaderboards-club-group-1600.avif';
+        : 'leaderboards-club-group-1600.avif');
       check('image matrix ' + width + 'px DPR ' + dpr + ': exactly one request per responsive image',
         unique.filter((name) => /^leaderboards-hero-hiker-/.test(name)).length === 1 &&
         unique.filter((name) => /^leaderboards-club-group-/.test(name)).length === 1,
