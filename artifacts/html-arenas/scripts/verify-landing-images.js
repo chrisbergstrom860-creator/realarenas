@@ -8,6 +8,9 @@
 // Run: pnpm verify:landing-images
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+const sharp = require('sharp');
 const { chromium } = require('playwright-core');
 
 const BASE_URL = 'http://localhost:80/html';
@@ -22,6 +25,10 @@ const CLUBS_800 = 'for-clubs-collage-800.avif';
 const CLUBS_1600 = 'for-clubs-collage-1600.avif';
 const ANALYTICS_800 = 'analytics-weekly-activity-800.avif';
 const ANALYTICS_1600 = 'analytics-weekly-activity-1600.avif';
+const LEADERBOARD_HERO_800 = 'leaderboards-hero-hiker-800.avif';
+const LEADERBOARD_HERO_1600 = 'leaderboards-hero-hiker-1600.avif';
+const LEADERBOARD_CLUB_800 = 'leaderboards-club-group-800.avif';
+const LEADERBOARD_CLUB_1600 = 'leaderboards-club-group-1600.avif';
 const mobile = (width, density) => `analytics-mobile-composite-${width}-${density}x.avif`;
 
 // Explicit width/DPR contract. `null` means that image category must make zero
@@ -110,6 +117,10 @@ function expectedAssetFiles() {
   }
   avifs.add(CLUBS_800);
   avifs.add(CLUBS_1600);
+  avifs.add(LEADERBOARD_HERO_800);
+  avifs.add(LEADERBOARD_HERO_1600);
+  avifs.add(LEADERBOARD_CLUB_800);
+  avifs.add(LEADERBOARD_CLUB_1600);
   return [...avifs].sort().flatMap((file) => [file, file.replace(/\.avif$/, '.webp')]);
 }
 
@@ -132,6 +143,31 @@ async function verifyServedFiles() {
       `HTTP 200 ${expectedType}`, `HTTP ${response.status} ${receivedType || '(no content-type)'}`);
   }
   console.log(`  ok  ${files.length - failures}/${files.length} served files`);
+}
+
+async function verifyLeaderboardImageContract() {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'html', 'arenas-leaderboards.html'), 'utf8');
+  console.log('— Leaderboards responsive image contract —');
+  for (const [name, expectedWidth, expectedHeight] of [
+    [LEADERBOARD_HERO_800, 800, 267],
+    [LEADERBOARD_HERO_1600, 1600, 533],
+    [LEADERBOARD_CLUB_800, 800, 340],
+    [LEADERBOARD_CLUB_1600, 1600, 681]
+  ]) {
+    for (const file of [name, name.replace(/\.avif$/, '.webp')]) {
+      const metadata = await sharp(path.join(__dirname, '..', 'html', 'landing-assets', file)).metadata();
+      check(null, `${file} dimensions`,
+        metadata.width === expectedWidth && metadata.height === expectedHeight,
+        `${expectedWidth}x${expectedHeight}`, `${metadata.width}x${metadata.height}`);
+    }
+  }
+  check(null, 'Leaderboards hero declares AVIF and WebP 800/1600 source sets',
+    /leaderboards-hero-hiker-800\.avif 800w[^]*leaderboards-hero-hiker-1600\.avif 1600w/.test(html) &&
+    /leaderboards-hero-hiker-800\.webp 800w[^]*leaderboards-hero-hiker-1600\.webp 1600w/.test(html));
+  check(null, 'Leaderboards club image declares AVIF and WebP 800/1600 source sets',
+    /leaderboards-club-group-800\.avif 800w[^]*leaderboards-club-group-1600\.avif 1600w/.test(html) &&
+    /leaderboards-club-group-800\.webp 800w[^]*leaderboards-club-group-1600\.webp 1600w/.test(html));
+  console.log('  ok  Leaderboards assets and source sets');
 }
 
 async function verifyBrowserMatrix() {
@@ -278,6 +314,7 @@ function reportBoundaryFailures() {
 
 (async () => {
   await verifyServedFiles();
+  await verifyLeaderboardImageContract();
   await verifyBrowserMatrix();
   await verifyForClubsMatrix();
   reportBoundaryFailures();

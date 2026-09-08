@@ -32,6 +32,7 @@ const email = (k) => `overall-lb-${k}@arenas-test.dev`;
 const users = {}, records = [];
 let failures = 0, browser, page, browserRows = [], browserBreakdowns = {};
 let routeDelays = {}, routeFailures = {};
+let imageRequests = [];
 function check(name, ok, detail) {
   if (ok) console.log('  ok  ' + name);
   else { failures++; console.log('FAIL  ' + name + (detail ? ' — ' + JSON.stringify(detail).slice(0, 500) : '')); }
@@ -62,9 +63,14 @@ async function deleteUserRows(id) {
   ]) await admin.from(table).delete().eq(col, id);
 }
 async function cleanup(entries) {
+  const clubs = entries.filter((x) => x.type === 'club').map((x) => x.id);
   const acts = entries.filter((x) => x.type === 'activity').map((x) => x.id);
   const ids = [...new Set(entries.filter((x) => x.type === 'user').map((x) => x.id))];
   if (acts.length) await admin.from('activities').delete().in('id', acts);
+  if (clubs.length) {
+    await admin.from('memberships').delete().in('club_id', clubs);
+    await admin.from('clubs').delete().in('id', clubs);
+  }
   for (const id of ids) { await deleteUserRows(id); await admin.auth.admin.deleteUser(id); }
 }
 async function recover() {
@@ -82,6 +88,25 @@ async function makeUser(k) {
   });
   if (error) throw new Error('create ' + k + ': ' + error.message);
   users[k] = { id: data.user.id }; save({ type: 'user', id: data.user.id, email: email(k) });
+}
+async function makeViewerClub() {
+  const handle = 'overall-fixture-' + Date.now().toString(36);
+  const { data: club, error: clubError } = await admin.from('clubs').insert({
+    name: 'Overall Fixture Club',
+    handle,
+    sport: 'running',
+    owner_id: users.viewer.id,
+    visibility: 'private'
+  }).select('id, name').single();
+  if (clubError) throw new Error('create club: ' + clubError.message);
+  save({ type: 'club', id: club.id });
+  const { error: memberError } = await admin.from('memberships').insert({
+    club_id: club.id,
+    user_id: users.viewer.id,
+    role: 'admin'
+  });
+  if (memberError) throw new Error('create membership: ' + memberError.message);
+  return club;
 }
 async function login(k) {
   const r = await fetch(BASE + '/auth/login', { method: 'POST', redirect: 'manual',
@@ -150,6 +175,7 @@ function uiRow(k, rank, points, activityCount, isMe) {
 }
 async function openBoard(period, width, label) {
   await page.setViewportSize({ width, height: 900 });
+  imageRequests = [];
   const weekResponse = page.waitForResponse((r) => r.url().includes('/api/leaderboard/platform?period=week'));
   await page.goto(BASE + '/leaderboards', { waitUntil: 'domcontentloaded' });
   await weekResponse;
@@ -164,8 +190,51 @@ async function openBoard(period, width, label) {
     const breakdown = document.querySelector('#pts-breakdown-body');
     return breakdown && !/Loading/.test(breakdown.textContent || '');
   });
+  await page.waitForFunction(() => [...document.querySelectorAll('.page-header-bg, .club-promo-bg')].every((img) => img.complete));
   await page.screenshot({ path: path.join(SHOTS, label + '-' + width + '.png'), fullPage: true });
-  return page.evaluate(() => ({
+  const result = await page.evaluate(async () => {
+    const contrastRatio = (a, b) => {
+      const lum = (rgb) => {
+        const c = rgb.map((v) => {
+          const n = v / 255;
+          return n <= 0.04045 ? n / 12.92 : Math.pow((n + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+      };
+      const x = lum(a), y = lum(b);
+      return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+    };
+    const image = document.querySelector('.page-header-bg');
+    const header = document.querySelector('.page-header');
+    const h = header.getBoundingClientRect();
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(h.width));
+    canvas.height = Math.max(1, Math.round(h.height));
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight);
+    const dw = image.naturalWidth * scale, dh = image.naturalHeight * scale;
+    ctx.drawImage(image, (canvas.width - dw) * 0.5, (canvas.height - dh) * 0.55, dw, dh);
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    const color = (value) => (value.match(/\d+(?:\.\d+)?/g) || []).slice(0, 3).map(Number);
+    let worstContrast = Infinity;
+    for (const element of document.querySelectorAll('.page-kicker, .page-header-left h1, .page-header-left h1 span, .page-header-left p, .period-tab:not(.active)')) {
+      const r = element.getBoundingClientRect();
+      const fg = color(getComputedStyle(element).color);
+      for (let y = Math.max(0, Math.floor(r.top - h.top)); y < Math.min(canvas.height, Math.ceil(r.bottom - h.top)); y += 2) {
+        for (let x = Math.max(0, Math.floor(r.left - h.left)); x < Math.min(canvas.width, Math.ceil(r.right - h.left)); x += 2) {
+          const i = (y * canvas.width + x) * 4;
+          const p = x / Math.max(1, canvas.width - 1);
+          const alpha = p <= 0.54 ? 0.9 + (0.72 - 0.9) * (p / 0.54) : 0.72 + (0.54 - 0.72) * ((p - 0.54) / 0.46);
+          const bg = [pixels[i], pixels[i + 1], pixels[i + 2]].map((v) => Math.round(v * (1 - alpha)));
+          worstContrast = Math.min(worstContrast, contrastRatio(fg, bg));
+        }
+      }
+    }
+    const board = document.querySelector('.board-container').getBoundingClientRect();
+    const right = document.querySelector('.right-col').getBoundingClientRect();
+    const selectedHero = (image.currentSrc || '').split('/').pop();
+    const clubImage = document.querySelector('.club-promo-bg');
+    return {
     podium: document.querySelectorAll('#board-podium .podium-col').length,
     rows: document.querySelectorAll('#board-list .list-row').length,
     mine: document.querySelectorAll('.is-you').length,
@@ -175,11 +244,30 @@ async function openBoard(period, width, label) {
     layout: document.querySelector('#board-podium .podium-layout') && document.querySelector('#board-podium .podium-layout').className,
     breakdownTitle: (document.querySelector('#pts-breakdown-title') || {}).textContent || '',
     breakdownTotal: (document.querySelector('.pts-total strong') || {}).textContent || '',
+    breakdownText: (document.querySelector('#pts-breakdown-body') || {}).textContent || '',
     breakdownRows: [...document.querySelectorAll('.pts-row')].filter((el) => getComputedStyle(el).display !== 'none').map((el) => el.textContent.trim()),
+    topSportsText: (document.querySelector('#top-sports-body') || {}).textContent || '',
+    topPercentages: [...document.querySelectorAll('.ts-pct')].map((el) => Number(el.textContent.replace('%', ''))),
+    topSportRows: document.querySelectorAll('.ts-row').length,
     breakdownTop: document.querySelector('.points-card').getBoundingClientRect().top,
-    boardTop: document.querySelector('.board-container').getBoundingClientRect().top,
-    viewportHeight: innerHeight
-  }));
+    boardTop: board.top,
+    boardBottom: board.bottom,
+    rightTop: right.top,
+    boardLeft: board.left,
+    boardRight: board.right,
+    clubText: (document.querySelector('#club-promo-container') || {}).textContent || '',
+    clubLinks: [...document.querySelectorAll('.club-board-link')].map((a) => ({ text: a.textContent.trim(), href: a.getAttribute('href') })),
+    exploreHref: (document.querySelector('.club-promo-btn') || {}).getAttribute && document.querySelector('.club-promo-btn').getAttribute('href'),
+    selectedHero,
+    selectedClub: clubImage ? (clubImage.currentSrc || '').split('/').pop() : null,
+    worstBannerContrast: worstContrast,
+    viewportHeight: innerHeight,
+    viewportWidth: innerWidth,
+    documentWidth: document.documentElement.scrollWidth
+    };
+  });
+  result.imageRequests = [...new Set(imageRequests)];
+  return result;
 }
 async function main() {
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY)
@@ -248,6 +336,10 @@ async function main() {
     sevenMonth.body.viewerBreakdown.rows.length === 7 &&
     sevenMonth.body.viewerBreakdown.rows.reduce((sum, item) => sum + item.points, 0) === sevenMonth.body.viewerBreakdown.total,
     sevenMonth.body.viewerBreakdown);
+  check('platform endpoint viewerBreakdown total exactly matches the viewer leaderboard row',
+    row(sevenMonth.body, 'viewer') &&
+    row(sevenMonth.body, 'viewer').points === sevenMonth.body.viewerBreakdown.total,
+    { viewer: row(sevenMonth.body, 'viewer'), breakdown: sevenMonth.body.viewerBreakdown });
 
   // Real API tie ordering: activity count, then display name, then user ID.
   await clearActivities();
@@ -275,6 +367,8 @@ async function main() {
   await context.addCookies(browserCookies(users.viewer.cookie));
   const errors = [], badRoutes = [];
   page = await context.newPage();
+  const session = await context.newCDPSession(page);
+  await session.send('Network.setCacheDisabled', { cacheDisabled: true });
   await page.route('**/api/leaderboard/platform?*', async (route) => {
     const period = new URL(route.request().url()).searchParams.get('period') || 'week';
     if (routeDelays[period]) await new Promise((resolve) => setTimeout(resolve, routeDelays[period]));
@@ -296,6 +390,15 @@ async function main() {
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('response', (r) => { if (/\/api\/(?:following|follows|clubs)/.test(r.url())) badRoutes.push(r.url()); });
+  page.on('request', (request) => {
+    try {
+      const pathname = new URL(request.url()).pathname;
+      const marker = '/landing-assets/';
+      if (pathname.includes(marker) && /leaderboards-(?:hero-hiker|club-group)-/.test(pathname)) {
+        imageRequests.push(pathname.slice(pathname.indexOf(marker) + marker.length));
+      }
+    } catch {}
+  });
 
   // Inside: three podium + two population list slots, exactly once for viewer.
   browserRows = [
@@ -306,9 +409,9 @@ async function main() {
     uiRow('echo', 5, 600, 6)
   ];
   browserBreakdowns = {
-    week: { total: 100, rows: [{ sport: 'running', points: 100 }] },
-    month: sevenMonth.body.viewerBreakdown,
-    all: { total: 220, rows: [{ sport: 'cycling', points: 120 }, { sport: 'running', points: 100 }] }
+    week: { total: 900, rows: [{ sport: 'running', points: 450 }, { sport: 'cycling', points: 225 }, { sport: 'hiking', points: 135 }, { sport: 'yoga', points: 90 }] },
+    month: { total: 900, rows: [{ sport: 'running', points: 277 }, { sport: 'cycling', points: 199 }, { sport: 'climbing', points: 150 }, { sport: 'swimming', points: 100 }, { sport: 'hockey', points: 90 }, { sport: 'basketball', points: 50 }, { sport: 'hiking', points: 34 }] },
+    all: { total: 900, rows: [{ sport: 'cycling', points: 500 }, { sport: 'running', points: 400 }] }
   };
   for (const period of ['week', 'month', 'all']) {
     for (const width of [1280, 380]) {
@@ -317,24 +420,138 @@ async function main() {
         d.podium + d.rows === 5 && d.mine === 1 && d.breakCount === 0, d);
       check(period + ' inside ' + width + ': selector updates matching breakdown title and total',
         d.breakdownTitle.toLowerCase().includes(period === 'all' ? 'all time' : 'this ' + period) &&
-        d.breakdownTotal === (period === 'week' ? '100 pts' : period === 'month' ? '355 pts' : '220 pts'), d);
+        d.breakdownTotal === '900 pts', d);
+      check(period + ' inside ' + width + ': panel total equals the viewer leaderboard points',
+        d.breakdownTotal === '900 pts' && d.boardText.includes('900 pts'), d);
+      check(period + ' inside ' + width + ': displayed sport percentages sum to 100',
+        d.topPercentages.length === browserBreakdowns[period].rows.length &&
+        d.topPercentages.reduce((sum, value) => sum + value, 0) === 100, d.topPercentages);
       if (width === 380) {
-        check(period + ' mobile: compact breakdown is above the board and board begins in the initial viewport',
-          d.breakdownTop < d.boardTop && d.boardTop < d.viewportHeight, d);
+        check(period + ' mobile: board comes before the stacked right rail',
+          d.boardTop < d.rightTop && d.rightTop >= d.boardBottom, d);
       }
     }
   }
   const monthUi = await openBoard('month', 1280, 'month-seven-sports');
   const monthDisplayed = monthUi.breakdownRows;
   const displayedValues = monthDisplayed.map((text) => Number((text.match(/([\d,]+)\s*pts$/) || [])[1].replace(/,/g, '')));
-  check('desktop seven-sport breakdown displays six sport rows plus Other sports',
+  check('desktop seven-sport breakdown displays every real sport row without a synthetic Other row',
     monthDisplayed.length === 7 &&
-    monthDisplayed.filter((text) => !text.startsWith('Other sports')).length === 6 &&
-    monthDisplayed.some((text) => text.startsWith('Other sports')), monthDisplayed);
-  check('displayed sport rows plus Other sports equal the exact total',
+    !monthDisplayed.some((text) => text.startsWith('Other sports')), monthDisplayed);
+  check('displayed sport rows equal the exact total',
     displayedValues.every(Number.isFinite) &&
-    displayedValues.reduce((sum, value) => sum + value, 0) === sevenMonth.body.viewerBreakdown.total,
-    { monthDisplayed, displayedValues, total: sevenMonth.body.viewerBreakdown.total });
+    displayedValues.reduce((sum, value) => sum + value, 0) === 900,
+    { monthDisplayed, displayedValues, total: 900 });
+
+  for (const width of [360, 380, 768, 1280, 1600]) {
+    const d = await openBoard('week', width, 'responsive');
+    const expectedHero = width >= 1024 ? 'leaderboards-hero-hiker-1600.avif' : 'leaderboards-hero-hiker-800.avif';
+    check('responsive ' + width + ': no horizontal overflow',
+      d.documentWidth <= d.viewportWidth, d);
+    check('responsive ' + width + ': exact one hero and one club image request',
+      d.imageRequests.filter((name) => /^leaderboards-hero-hiker-/.test(name)).length === 1 &&
+      d.imageRequests.filter((name) => /^leaderboards-club-group-/.test(name)).length === 1,
+      d.imageRequests);
+    check('responsive ' + width + ': AVIF band selection is correct',
+      d.selectedHero === expectedHero &&
+      d.selectedClub === 'leaderboards-club-group-800.avif' &&
+      d.imageRequests.every((name) => name.endsWith('.avif')),
+      { selectedHero: d.selectedHero, selectedClub: d.selectedClub, requests: d.imageRequests });
+    check('responsive ' + width + ': banner copy clears worst-case photo pixels at AA contrast',
+      d.worstBannerContrast >= 4.5, d.worstBannerContrast);
+    if (width < 1024) {
+      const gutter = width <= 480 ? 16 : 24;
+      check('responsive ' + width + ': board uses app gutters and right rail stacks after it',
+        Math.abs(d.boardLeft - gutter) <= 1 &&
+        Math.abs(d.boardRight - (width - gutter)) <= 1 &&
+        d.rightTop >= d.boardBottom, d);
+    }
+  }
+  for (const width of [360, 768, 1280, 1600, 1920]) {
+    for (const dpr of [1, 2, 3]) {
+      const imageContext = await browser.newContext({
+        viewport: { width, height: 900 },
+        deviceScaleFactor: dpr,
+        serviceWorkers: 'block',
+        extraHTTPHeaders: { 'Cache-Control': 'no-cache' }
+      });
+      await imageContext.addCookies(browserCookies(users.viewer.cookie));
+      const imagePage = await imageContext.newPage();
+      const imageSession = await imageContext.newCDPSession(imagePage);
+      await imageSession.send('Network.setCacheDisabled', { cacheDisabled: true });
+      const requested = [];
+      imagePage.on('request', (request) => {
+        try {
+          const pathname = new URL(request.url()).pathname;
+          const marker = '/landing-assets/';
+          if (pathname.includes(marker) && /leaderboards-(?:hero-hiker|club-group)-/.test(pathname)) {
+            requested.push(pathname.slice(pathname.indexOf(marker) + marker.length));
+          }
+        } catch {}
+      });
+      await imagePage.route('**/api/leaderboard/platform?*', (route) => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          leaderboard: browserRows,
+          period: 'week',
+          sport: 'all',
+          viewerBreakdown: browserBreakdowns.week
+        })
+      }));
+      await imagePage.goto(BASE + '/leaderboards?image-matrix=' + width + '-' + dpr, { waitUntil: 'networkidle' });
+      const selected = await imagePage.evaluate(() => ({
+        hero: (document.querySelector('.page-header-bg').currentSrc || '').split('/').pop(),
+        club: (document.querySelector('.club-promo-bg').currentSrc || '').split('/').pop()
+      }));
+      const unique = [...new Set(requested)];
+      const expectedHero = (
+        (width === 360 && dpr <= 2) ||
+        (width === 768 && dpr === 1)
+      ) ? 'leaderboards-hero-hiker-800.avif' : 'leaderboards-hero-hiker-1600.avif';
+      check('image matrix ' + width + 'px DPR ' + dpr + ': exactly one request per responsive image',
+        unique.filter((name) => /^leaderboards-hero-hiker-/.test(name)).length === 1 &&
+        unique.filter((name) => /^leaderboards-club-group-/.test(name)).length === 1,
+        unique);
+      check('image matrix ' + width + 'px DPR ' + dpr + ': selected expected AVIF bands',
+        selected.hero === expectedHero &&
+        selected.club === 'leaderboards-club-group-800.avif' &&
+        unique.every((name) => name.endsWith('.avif')),
+        { selected, unique });
+      await imageContext.close();
+    }
+  }
+  const noClubUi = await openBoard('week', 1280, 'no-club');
+  check('no-club fixture sees the honest Explore clubs card',
+    /Join a club and climb higher/.test(noClubUi.clubText) &&
+    /Compete with friends, earn points together, and stay motivated\./.test(noClubUi.clubText) &&
+    noClubUi.exploreHref === '/html/clubs' &&
+    noClubUi.clubLinks.length === 0,
+    noClubUi);
+  const fixtureClub = await makeViewerClub();
+  const clubUi = await openBoard('week', 1280, 'club-member');
+  check('club member sees real membership-gated leaderboard links instead of the join card',
+    /Climb with your clubs/.test(clubUi.clubText) &&
+    !/Join a club/.test(clubUi.clubText) &&
+    clubUi.clubLinks.length === 1 &&
+    clubUi.clubLinks[0].text === fixtureClub.name + ' →' &&
+    clubUi.clubLinks[0].href === '/html/clubs/member/' + fixtureClub.id + '/leaderboard',
+    clubUi);
+
+  const populatedRows = browserRows;
+  const populatedWeekBreakdown = browserBreakdowns.week;
+  browserRows = browserRows.filter((item) => !item.isMe);
+  browserBreakdowns.week = { total: 0, rows: [] };
+  const emptyUi = await openBoard('week', 380, 'empty-viewer-period');
+  check('zero-activity period renders honest personal-panel empty states without placeholder sport numbers',
+    /No points yet this week\. Log an activity to see your sport breakdown\./.test(emptyUi.breakdownText) &&
+    /Total this week0 pts/.test(emptyUi.breakdownText.replace(/\s+/g, ' ')) &&
+    emptyUi.breakdownRows.length === 0 &&
+    emptyUi.topSportsText.trim() === 'No sport shares yet this week.' &&
+    emptyUi.topPercentages.length === 0,
+    emptyUi);
+  browserRows = populatedRows;
+  browserBreakdowns.week = populatedWeekBreakdown;
 
   // An older slow request must not overwrite the newer selected period.
   routeDelays = { week: 250, month: 0 };
@@ -351,7 +568,7 @@ async function main() {
   check('out-of-order responses cannot overwrite the newly selected period',
     raceState.active.trim() === 'This month' &&
     /this month/i.test(raceState.title) &&
-    raceState.total === '355 pts',
+    raceState.total === '900 pts',
     raceState);
   routeDelays = {};
 
@@ -465,7 +682,7 @@ async function main() {
       if (ids.length) { const { data } = await admin.from('activities').select('id').in('id', ids); check('cleanup residue: activities absent', !(data || []).length, data); }
       fs.rmSync(MANIFEST, { force: true });
     } catch (err) { failures++; console.log('FAIL  cleanup — ' + err.message); }
-    console.log('Coverage: platform period/ranking rules, five-row viewer states, responsive screenshots, source/network scope guards, and manifest cleanup.');
+    console.log('Coverage: platform period/ranking rules, exact viewer totals/shares, five responsive screenshots and image bands, both club-card states, source/network scope guards, and manifest cleanup.');
     console.log('Constraint: this authenticated localhost integration verifier requires live Supabase service-role credentials and Playwright.');
     console.log(failures ? '\\n' + failures + ' FAILURE(S)' : '\\nALL CHECKS PASSED');
     process.exitCode = failures ? 1 : 0;

@@ -31,14 +31,20 @@ document.addEventListener('DOMContentLoaded', function(){
 <script src="/html/arenas-club-create.js"></script>
 <style>
 /* ── PAGE HEADER ── */
-.page-header { grid-column: 1 / -1; margin: -24px -24px 0; background: white; border-bottom: var(--border); padding: 28px 24px; }
-.page-header-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
-.page-header-left h1 { font-size: 26px; font-weight: 700; color: var(--gray-900); margin-bottom: 4px; letter-spacing: -0.01em; }
-.page-header-left p { font-size: 14px; color: var(--gray-500); }
-.page-header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.period-tabs { display: flex; background: var(--gray-100); border-radius: 9px; padding: 3px; gap: 2px; border: var(--border); }
-.period-tab { padding: 6px 16px; border-radius: 7px; font-size: 13px; font-weight: 500; border: none; background: transparent; color: var(--gray-500); cursor: pointer; font-family: var(--font); transition: all 0.12s; }
-.period-tab.active { background: white; color: var(--gray-900); box-shadow: var(--shadow); }
+.page-header { grid-column: 1 / -1; margin: -24px -24px 0; background: var(--gray-900); border-bottom: var(--border); padding: 0; position: relative; overflow: hidden; }
+.page-header::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(3,7,18,.9) 0%, rgba(3,7,18,.72) 54%, rgba(3,7,18,.54) 100%); z-index: 1; }
+.page-header picture { position: absolute; inset: 0; display: block; }
+.page-header-bg { width: 100%; height: 100%; object-fit: cover; object-position: center 55%; display: block; }
+.page-header-inner { min-height: 232px; max-width: 1280px; margin: 0 auto; display: flex; align-items: flex-end; justify-content: space-between; gap: 32px; padding: 40px 24px 32px; position: relative; z-index: 2; }
+.page-header-left { min-width: 0; }
+.page-kicker { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; color: white; font-size: 13px; font-weight: 700; }
+.page-header-left h1 { font-size: 36px; line-height: 1.05; font-weight: 700; color: white; margin-bottom: 10px; letter-spacing: -0.025em; }
+.page-header-left p { font-size: 15px; line-height: 1.45; color: white; max-width: 620px; }
+.page-header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex-shrink: 0; }
+.period-tabs { display: flex; background: rgba(255,255,255,0.1); border-radius: 9px; padding: 3px; gap: 2px; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(8px); }
+.period-tab { padding: 7px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; border: none; background: transparent; color: white; cursor: pointer; font-family: var(--font); transition: all 0.12s; white-space: nowrap; }
+.period-tab:hover { color: white; }
+.period-tab.active { background: var(--yellow); color: var(--gray-900); box-shadow: var(--shadow); }
 
 /* ── BOARD CONTAINER ── */
 .board-container { background: white; border: var(--border); border-radius: var(--radius-lg); overflow: hidden; display: flex; flex-direction: column; }
@@ -94,31 +100,64 @@ document.addEventListener('DOMContentLoaded', function(){
 .unranked-copy, .empty-copy { color: var(--gray-500); font-size: 13px; margin-top: 4px; }
 .empty-state { padding: 60px 24px; text-align: center; width: 100%; }
 
-.right-col { display: flex; flex-direction: column; gap: 14px; }
+.right-col { display: flex; flex-direction: column; gap: 20px; }
 .side-card { background: white; border: var(--border); border-radius: var(--radius-lg); overflow: hidden; }
-.side-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--gray-500); padding: 14px 16px 8px; }
-.pts-row { display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:var(--border);font-size:13px;gap:12px }
-.pts-sport { display:flex;align-items:center;gap:8px;color:var(--gray-700);min-width:0 }
-.pts-sport-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0 }
-.pts-val { font-family:var(--mono);font-weight:600;color:var(--gray-900);white-space:nowrap }
-.pts-empty { padding:10px 16px 14px;color:var(--gray-500);font-size:13px }
-.pts-total { padding:10px 16px;background:var(--gray-50);border-top:var(--border);display:flex;justify-content:space-between;font-size:13px }
-.pts-total strong { font-family:var(--mono);font-size:16px;color:var(--gray-900) }
+.side-title { font-size: 13px; font-weight: 700; color: var(--gray-900); padding: 16px 20px 12px; border-bottom: var(--border); }
+.side-title-light { font-size: 13px; font-weight: 700; color: var(--gray-900); padding: 16px 20px 8px; }
 
-.hpw-link{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--gray-500);text-decoration:none}
+.pts-row { display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-bottom:var(--border);font-size:13px;gap:12px }
+.pts-sport { display:flex;align-items:center;gap:10px;color:var(--gray-700);min-width:0 }
+.sport-icon { width: 22px; text-align: center; flex: 0 0 22px; }
+.pts-val { font-family:var(--mono);font-weight:600;color:var(--gray-900);white-space:nowrap }
+.pts-empty { padding:12px 20px 16px;color:var(--gray-500);font-size:13px }
+.pts-total { padding:12px 20px;display:flex;justify-content:space-between;gap:12px;font-size:13px;color:var(--gray-900);border-top:var(--border);background:var(--gray-50) }
+.pts-total strong { font-family:var(--mono);font-size:16px; }
+
+.ts-row { display:grid;grid-template-columns:22px minmax(72px,90px) minmax(64px,1fr) 34px;align-items:center;padding:8px 20px;font-size:13px;gap:8px }
+.ts-label { color: var(--gray-700); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ts-bar-wrap { height: 6px; background: var(--gray-100); border-radius: 3px; overflow: hidden; }
+.ts-bar { height: 100%; border-radius: 3px; }
+.ts-pct { font-family:var(--mono);font-size: 11px; color: var(--gray-500); width: 32px; text-align: right; }
+
+.club-promo { display:grid;grid-template-columns:minmax(0,1fr) 116px;min-height:154px;background:var(--gray-900);color:white }
+.club-promo-media { min-width:0;overflow:hidden }
+.club-promo-media picture { display:block;height:100% }
+.club-promo-bg { width:100%;height:100%;object-fit:cover;object-position:center;display:block }
+.club-promo-content { padding:18px;min-width:0 }
+.club-promo-title { font-size:15px;font-weight:700;margin-bottom:5px;line-height:1.25 }
+.club-promo-copy { font-size:12px;color:rgba(255,255,255,.86);line-height:1.4;margin-bottom:12px }
+.club-promo-btn { display: inline-flex; align-items: center; justify-content: center; background: var(--yellow); color: var(--gray-900); font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 6px; text-decoration: none; border: none; cursor: pointer; transition: background 0.1s; }
+.club-promo-btn:hover { background: var(--yellow-light); }
+.club-board-links { display:flex;flex-direction:column;align-items:flex-start;gap:7px }
+.club-board-link { color:white;font-size:12px;font-weight:600;text-underline-offset:3px }
+.club-board-link:hover { color:var(--yellow) }
+
+.hpw-link{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--gray-500);text-decoration:none}
 .hpw-link:hover{color:var(--gray-700);text-decoration:underline}
+
+.main { width: 100%; max-width: 1280px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: minmax(0,1fr) 320px; gap: 20px; align-items: start; align-content: start; }
+
+@media (max-width: 1023px) {
+    .main { grid-template-columns: 1fr; }
+    .right-col { grid-column:1; }
+}
 
 @media (max-width: 480px) {
     .main { display:flex; flex-direction:column; gap:12px; padding:16px; }
-    .page-header { width:calc(100% + 32px); margin:-16px -16px 0; padding:16px; }
-    .page-header-inner { gap:12px; }
-    .page-header-left p { display:none; }
-    .right-col { order:1; width:100%; }
-    .board-container { order:2; width:100%; }
-    .points-card .pts-row:nth-child(n+4) { display:none; }
-    .points-card .side-title { padding-top:10px; }
-    .pts-row { padding:6px 12px; }
-    .pts-total { padding:7px 12px; }
+    .page-header { width:calc(100% + 32px); margin:-16px -16px 0; padding:0; }
+    .page-header::before { background:rgba(3,7,18,.76); }
+    .page-header-bg { object-position:62% center; }
+    .page-header-inner { min-height:270px;align-items:flex-start;flex-direction:column;justify-content:flex-end;gap:18px;padding:28px 16px 22px }
+    .page-header-left h1 { font-size:30px }
+    .page-header-left p { font-size:14px }
+    .page-header-right,.period-tabs { width:100% }
+    .period-tab { flex:1;padding:8px 6px }
+    .board-container { order:1; width:100%; }
+    .right-col { order:2; width:100%; }
+    .side-title, .side-title-light { padding-top:16px; }
+    .pts-row { padding:10px 16px; }
+    .pts-total { padding:12px 16px; }
+    .ts-row { padding: 8px 16px; }
     .board-podium { padding: 16px 16px 0 16px; background: white; }
     .podium-layout { flex-direction: column; align-items: stretch; gap: 8px; }
     .podium-layout.p-3 .p-rank-2 { order: 0; }
@@ -145,9 +184,9 @@ document.addEventListener('DOMContentLoaded', function(){
     .list-break { padding: 8px 16px; }
     .unranked-state { padding: 20px 16px; }
     .list-rank { width: 32px; margin-right: 8px; }
+    .club-promo { grid-template-columns:minmax(0,1fr) 104px }
 }
 
-.main { width: 100%; max-width: 1280px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: 1fr 296px; gap: 20px; align-items: start; align-content: start; }
 /* shell */
 .topbar-search { display: flex; align-items: center; gap: 8px; background: var(--gray-50); border: var(--border); border-radius: 7px; padding: 6px 12px; width: 260px; }
 .topbar-search input { background: none; border: none; outline: none; font-size: 13px; color: var(--gray-700); width: 100%; }
@@ -207,11 +246,16 @@ document.addEventListener('DOMContentLoaded', function(){
 
 <main class="main">
 <div class="page-header">
+  <picture>
+    <source srcset="/html/landing-assets/leaderboards-hero-hiker-800.avif 800w, /html/landing-assets/leaderboards-hero-hiker-1600.avif 1600w" sizes="(min-width:1024px) calc(100vw - 216px), 100vw" type="image/avif">
+    <source srcset="/html/landing-assets/leaderboards-hero-hiker-800.webp 800w, /html/landing-assets/leaderboards-hero-hiker-1600.webp 1600w" sizes="(min-width:1024px) calc(100vw - 216px), 100vw" type="image/webp">
+    <img src="/html/landing-assets/leaderboards-hero-hiker-800.webp" class="page-header-bg" alt="">
+  </picture>
   <div class="page-header-inner">
     <div class="page-header-left">
-      <h1>Leaderboards</h1>
-      <p>Rankings across your sports — the weekly board starts fresh every Monday in your timezone.</p>
-      <a class="hpw-link" href="/html/how-points-work" style="margin-top:6px">ⓘ How points work</a>
+      <div class="page-kicker"><span aria-hidden="true">🏆</span> Leaderboards</div>
+      <h1>Move together. <span style="color:var(--yellow)">Climb higher.</span></h1>
+      <p>Rankings across all sports — the weekly board starts fresh every Monday in your timezone.</p>
     </div>
     <div class="page-header-right">
       <div class="period-tabs">
@@ -226,12 +270,22 @@ document.addEventListener('DOMContentLoaded', function(){
 <div class="board-container">
   <div class="board-podium" id="board-podium"></div>
   <div class="board-list" id="board-list"></div>
+  <a class="hpw-link" href="/html/how-points-work" style="margin:14px 20px">ⓘ How points work</a>
 </div>
 
 <div class="right-col">
   <div class="side-card points-card">
-    <div class="side-title" id="pts-breakdown-title">Your points breakdown</div>
+    <div class="side-title" id="pts-breakdown-title">Your points — all time</div>
     <div id="pts-breakdown-body"><div class="pts-empty">Loading…</div></div>
+  </div>
+
+  <div class="side-card topsports-card">
+    <div class="side-title-light">Top sports</div>
+    <div id="top-sports-body"><div class="pts-empty">Loading…</div></div>
+  </div>
+
+  <div class="side-card club-card" id="club-promo-container" style="display:none">
+    <!-- Injected by script based on ARENAS_DATA.clubs -->
   </div>
 </div>
 </main>
@@ -298,8 +352,24 @@ document.addEventListener('DOMContentLoaded', function(){
   }
   function sportMeta(id) {
     var found = (window.ARENAS_SPORTS || []).find(function (s) { return s.id === id; });
-    return found || { label: id === 'other' ? 'Other' : String(id || 'Other').replace(/(^|_)([a-z])/g, function(_, p, c){ return (p ? ' ' : '') + c.toUpperCase(); }), colors: {} };
+    return found || { id: id, label: id === 'other' ? 'Other' : String(id || 'Other').replace(/(^|_)([a-z])/g, function(_, p, c){ return (p ? ' ' : '') + c.toUpperCase(); }), colors: {} };
   }
+  function getSportIcon(id) {
+    return (window.ARENAS_SPORT_ICONS || {})[id] || '🏟';
+  }
+  function roundedShares(rows, total) {
+    if (!rows.length || total <= 0) return [];
+    var shares = rows.map(function(row, index) {
+      var exact = (Math.max(0, Number(row.points) || 0) / total) * 100;
+      return { index: index, floor: Math.floor(exact), remainder: exact - Math.floor(exact) };
+    });
+    var left = 100 - shares.reduce(function(sum, item) { return sum + item.floor; }, 0);
+    shares.slice().sort(function(a, b) {
+      return b.remainder - a.remainder || a.index - b.index;
+    }).slice(0, left).forEach(function(item) { shares[item.index].floor += 1; });
+    return shares.map(function(item) { return item.floor; });
+  }
+
   function renderBreakdown() {
     var title = document.getElementById('pts-breakdown-title');
     var body = document.getElementById('pts-breakdown-body');
@@ -307,20 +377,41 @@ document.addEventListener('DOMContentLoaded', function(){
     if (title) title.textContent = 'Your points — ' + periodLabel();
     if (loadError || !breakdown) {
       body.innerHTML = '<div class="pts-empty">Your points are unavailable right now. Please try again.</div>';
+      renderTopSports([], 0, true);
       return;
     }
     var rows = (breakdown.rows || []).slice();
-    if (rows.length > 6) {
-      var otherPoints = rows.slice(6).reduce(function(sum, row) { return sum + (Number(row.points) || 0); }, 0);
-      rows = rows.slice(0, 6).concat([{ sport: '__other_sports__', points: otherPoints }]);
-    }
     var rowsHtml = rows.map(function(row) {
-      var meta = row.sport === '__other_sports__' ? { label: 'Other sports', colors: { bg: 'var(--gray-400)' } } : sportMeta(row.sport);
-      var color = (meta.colors && (meta.colors.text || meta.colors.bg)) || 'var(--gray-400)';
-      return '<div class="pts-row"><div class="pts-sport"><span class="pts-sport-dot" style="background:' + color + '"></span><span>' + esc(meta.label) + '</span></div><span class="pts-val">' + fmt(row.points) + ' pts</span></div>';
+      var meta = sportMeta(row.sport);
+      return '<div class="pts-row"><div class="pts-sport"><span class="sport-icon" aria-hidden="true">' + getSportIcon(row.sport) + '</span><span>' + esc(meta.label) + '</span></div><span class="pts-val">' + fmt(row.points) + ' pts</span></div>';
     }).join('');
-    var empty = rows.length ? '' : '<div class="pts-empty">No points logged ' + periodLabel() + '.</div>';
+    var empty = rows.length ? '' : '<div class="pts-empty">No points yet ' + periodLabel() + '. Log an activity to see your sport breakdown.</div>';
     body.innerHTML = empty + rowsHtml + '<div class="pts-total"><span>Total ' + periodLabel() + '</span><strong>' + fmt(breakdown.total) + ' pts</strong></div>';
+    renderTopSports(rows, breakdown.total);
+  }
+
+  function renderTopSports(rows, total, unavailable) {
+    var body = document.getElementById('top-sports-body');
+    if (!body) return;
+    if (unavailable) {
+      body.innerHTML = '<div class="pts-empty">Your sport shares are unavailable right now. Please try again.</div>';
+      return;
+    }
+    if (!rows.length || total <= 0) {
+      body.innerHTML = '<div class="pts-empty">No sport shares yet ' + periodLabel() + '.</div>';
+      return;
+    }
+    var percentages = roundedShares(rows, total);
+    body.innerHTML = rows.map(function(row, index) {
+      var meta = sportMeta(row.sport);
+      var color = (meta.colors && (meta.colors.text || meta.colors.bg)) || 'var(--gray-400)';
+      return '<div class="ts-row">' +
+        '<span class="sport-icon" aria-hidden="true">' + getSportIcon(row.sport) + '</span>' +
+        '<span class="ts-label">' + esc(meta.label) + '</span>' +
+        '<span class="ts-bar-wrap"><span class="ts-bar" style="display:block;width:' + percentages[index] + '%;background:' + color + '"></span></span>' +
+        '<span class="ts-pct">' + percentages[index] + '%</span>' +
+      '</div>';
+    }).join('') + '<div style="height:10px"></div>';
   }
 
   function renderPodiumCol(row, displayRank) {
@@ -464,7 +555,36 @@ document.addEventListener('DOMContentLoaded', function(){
     '</div>';
   }
 
+  function renderClubPromo() {
+    var container = document.getElementById('club-promo-container');
+    if (!container) return;
+    var clubs = (window.ARENAS_DATA && window.ARENAS_DATA.clubs) || [];
+    var avif = '/html/landing-assets/leaderboards-club-group-800.avif 800w, /html/landing-assets/leaderboards-club-group-1600.avif 1600w';
+    var webp = '/html/landing-assets/leaderboards-club-group-800.webp 800w, /html/landing-assets/leaderboards-club-group-1600.webp 1600w';
+    var media = '<div class="club-promo-media"><picture>' +
+      '<source srcset="' + avif + '" sizes="116px" type="image/avif">' +
+      '<source srcset="' + webp + '" sizes="116px" type="image/webp">' +
+      '<img src="/html/landing-assets/leaderboards-club-group-800.webp" class="club-promo-bg" alt="">' +
+    '</picture></div>';
+    var content;
+    if (clubs.length) {
+      var links = clubs.map(function(club) {
+        return '<a class="club-board-link" href="' + B + '/clubs/member/' + encodeURIComponent(club.id) + '/leaderboard">' + esc(club.name || 'Club') + ' →</a>';
+      }).join('');
+      content = '<div class="club-promo-content"><div class="club-promo-title">Climb with your clubs</div>' +
+        '<div class="club-promo-copy">Open a club leaderboard to see how you rank.</div>' +
+        '<div class="club-board-links">' + links + '</div></div>';
+    } else {
+      content = '<div class="club-promo-content"><div class="club-promo-title">Join a club and climb higher</div>' +
+        '<div class="club-promo-copy">Compete with friends, earn points together, and stay motivated.</div>' +
+        '<a href="' + B + '/clubs" class="club-promo-btn">Explore clubs →</a></div>';
+    }
+    container.style.display = 'block';
+    container.innerHTML = '<div class="club-promo">' + content + media + '</div>';
+  }
+
   load();
+  renderClubPromo();
 })();
 </script>
 </div>
