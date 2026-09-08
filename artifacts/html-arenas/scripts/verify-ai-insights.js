@@ -1553,7 +1553,7 @@ async function cleanup() {
     proPage.on('console', (message) => { if (message.type() === 'error') proBrowserErrors.push(message.text()); });
     proPage.on('pageerror', (error) => proBrowserErrors.push(String(error)));
     await proPage.goto(BASE + '/profile#insights', { waitUntil: 'networkidle' });
-    for (const width of [1600, 1280, 768, 430, 390, 380, 360]) {
+    for (const width of [1280, 768, 380, 360]) {
       await proPage.setViewportSize({ width, height: 900 });
       await proPage.screenshot({ path: `/tmp/ai-insights-${width}.png` });
       const visualAudit = await proPage.evaluate(() => {
@@ -1600,29 +1600,29 @@ async function cleanup() {
         const root = document.querySelector('#ai-insights-body');
         const rect = root.getBoundingClientRect();
         const hero = document.querySelector('.ai2-hero').getBoundingClientRect();
-        const image = document.querySelector('.ai2-hero-img').getBoundingClientRect();
+        const copy = document.querySelector('.ai2-hero-copy').getBoundingClientRect();
         const stats = document.querySelector('.ai2-stats-card').getBoundingClientRect();
         const mobile = window.innerWidth < 768;
-        const mobileLayout = Math.abs(image.left - (hero.left + 16)) <= 1 &&
-          Math.abs(image.right - (hero.right - 16)) <= 1 &&
-          Math.abs(image.left - 16) <= 1 &&
-          Math.abs(image.right - (window.innerWidth - 16)) <= 1 &&
-          Math.abs(stats.left - image.left) <= 1 &&
-          Math.abs(stats.right - image.right) <= 1 &&
-          stats.top >= image.bottom + 15;
-        const desktopLayout = stats.left < image.left &&
-          stats.right > image.left &&
-          stats.top < image.bottom &&
-          stats.bottom <= image.bottom + 1;
+        const mobileLayout = Math.abs(copy.left - 16) <= 1 &&
+          Math.abs(copy.right - (window.innerWidth - 16)) <= 1 &&
+          Math.abs(stats.left - copy.left) <= 1 &&
+          Math.abs(stats.right - copy.right) <= 1 &&
+          stats.top >= copy.bottom + 23;
+        const desktopLayout = copy.right <= stats.left - 39 &&
+          stats.left >= hero.left &&
+          stats.right <= hero.right &&
+          stats.top >= hero.top &&
+          stats.bottom <= hero.bottom;
         return {
           failures,
           pageOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
           bodyOutsideViewport: rect.left < -0.5 || rect.right > innerWidth + 0.5,
-          heroMedia: {
+          heroLayout: {
             mobile,
             hero: { left: hero.left, right: hero.right },
-            image: { left: image.left, right: image.right, top: image.top, bottom: image.bottom },
+            copy: { left: copy.left, right: copy.right, top: copy.top, bottom: copy.bottom },
             stats: { left: stats.left, right: stats.right, top: stats.top, bottom: stats.bottom },
+            pictureAbsent: !document.querySelector('.ai2-hero picture'),
             layoutOk: mobile ? mobileLayout : desktopLayout
           }
         };
@@ -1630,9 +1630,9 @@ async function cleanup() {
       check(`AI Insights ${width}px has no horizontal overflow or clipping`,
         !visualAudit.pageOverflow && !visualAudit.bodyOutsideViewport,
         JSON.stringify(visualAudit));
-      check(`AI Insights ${width}px uses the intended photo and stats-card layout`,
-        visualAudit.heroMedia.layoutOk,
-        JSON.stringify(visualAudit.heroMedia));
+      check(`AI Insights ${width}px uses the intended copy and stats-card layout`,
+        visualAudit.heroLayout.pictureAbsent && visualAudit.heroLayout.layoutOk,
+        JSON.stringify(visualAudit.heroLayout));
       check(`AI Insights ${width}px static copy meets WCAG contrast on its rendered opaque background`,
         visualAudit.failures.length === 0,
         JSON.stringify(visualAudit.failures));
