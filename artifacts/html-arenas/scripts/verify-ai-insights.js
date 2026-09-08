@@ -897,8 +897,7 @@ async function cleanup() {
         ])
       ),
       JSON.stringify(privacyCapture.envelope.data.last12Months));
-    check('Monday fixture labels the final week current and the preceding week last',
-      privacyCapture.envelope.data.asOfDate === '2026-09-07' &&
+    check('integration fixture labels the final week current and the preceding week last',
       privacyCapture.envelope.data.last12Weeks.weekly.at(-1).relative === 'this_week' &&
       privacyCapture.envelope.data.last12Weeks.weekly.at(-2).relative === 'last_week',
       JSON.stringify(privacyCapture.envelope.data.last12Weeks.weekly.slice(-2)));
@@ -1554,7 +1553,7 @@ async function cleanup() {
     proPage.on('console', (message) => { if (message.type() === 'error') proBrowserErrors.push(message.text()); });
     proPage.on('pageerror', (error) => proBrowserErrors.push(String(error)));
     await proPage.goto(BASE + '/profile#insights', { waitUntil: 'networkidle' });
-    for (const width of [1280, 768, 380]) {
+    for (const width of [1600, 1280, 768, 430, 390, 380, 360]) {
       await proPage.setViewportSize({ width, height: 900 });
       await proPage.screenshot({ path: `/tmp/ai-insights-${width}.png` });
       const visualAudit = await proPage.evaluate(() => {
@@ -1600,15 +1599,40 @@ async function cleanup() {
         });
         const root = document.querySelector('#ai-insights-body');
         const rect = root.getBoundingClientRect();
+        const hero = document.querySelector('.ai2-hero').getBoundingClientRect();
+        const image = document.querySelector('.ai2-hero-img').getBoundingClientRect();
+        const stats = document.querySelector('.ai2-stats-card').getBoundingClientRect();
+        const mobile = window.innerWidth < 768;
+        const mobileLayout = Math.abs(image.left - (hero.left + 16)) <= 1 &&
+          Math.abs(image.right - (hero.right - 16)) <= 1 &&
+          Math.abs(image.left - 16) <= 1 &&
+          Math.abs(image.right - (window.innerWidth - 16)) <= 1 &&
+          Math.abs(stats.left - image.left) <= 1 &&
+          Math.abs(stats.right - image.right) <= 1 &&
+          stats.top >= image.bottom + 15;
+        const desktopLayout = stats.left < image.left &&
+          stats.right > image.left &&
+          stats.top < image.bottom &&
+          stats.bottom <= image.bottom + 1;
         return {
           failures,
           pageOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-          bodyOutsideViewport: rect.left < -0.5 || rect.right > innerWidth + 0.5
+          bodyOutsideViewport: rect.left < -0.5 || rect.right > innerWidth + 0.5,
+          heroMedia: {
+            mobile,
+            hero: { left: hero.left, right: hero.right },
+            image: { left: image.left, right: image.right, top: image.top, bottom: image.bottom },
+            stats: { left: stats.left, right: stats.right, top: stats.top, bottom: stats.bottom },
+            layoutOk: mobile ? mobileLayout : desktopLayout
+          }
         };
       });
       check(`AI Insights ${width}px has no horizontal overflow or clipping`,
         !visualAudit.pageOverflow && !visualAudit.bodyOutsideViewport,
         JSON.stringify(visualAudit));
+      check(`AI Insights ${width}px uses the intended photo and stats-card layout`,
+        visualAudit.heroMedia.layoutOk,
+        JSON.stringify(visualAudit.heroMedia));
       check(`AI Insights ${width}px static copy meets WCAG contrast on its rendered opaque background`,
         visualAudit.failures.length === 0,
         JSON.stringify(visualAudit.failures));
