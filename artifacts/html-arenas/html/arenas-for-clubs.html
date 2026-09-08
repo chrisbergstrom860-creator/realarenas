@@ -302,6 +302,7 @@ button,select,input,textarea{font-family:var(--font)}
   /* Nav — wrap instead of overflowing the viewport */
   .nav { height: auto; flex-wrap: wrap; padding: 10px 16px; gap: 10px; }
   .nav-links { width: 100%; margin-left: 0; flex-wrap: wrap; justify-content: center; gap: 6px; }
+  .nav-cta { display: none; }
 
   /* Hero — collapse the fixed 1fr/440px split that caused horizontal scroll */
   .hero{padding-top:clamp(220px,58vw,300px);margin-top:95px}
@@ -331,9 +332,9 @@ button,select,input,textarea{font-family:var(--font)}
   .form-row { grid-template-columns: 1fr; }
 }
 @media (max-width: 480px) {
-  .hero{padding-top:175px;margin-top:131px}
+  .hero{padding-top:175px;margin-top:95px}
   .hero::before,.hero::after{height:175px}
-  .hero::before{background-position:43% 42%}
+  .hero::before{background-position:43% 0%}
   .hero-inner{padding-top:28px}
   .hero-title{font-size:34px}
   .hero-sub{font-size:14px}
