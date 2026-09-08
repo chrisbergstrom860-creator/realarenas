@@ -218,7 +218,10 @@ async function openBoard(period, width, label) {
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const scale = Math.max(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight);
     const dw = image.naturalWidth * scale, dh = image.naturalHeight * scale;
-    ctx.drawImage(image, (canvas.width - dw) * 0.5, (canvas.height - dh) * 0.55, dw, dh);
+    const heroPosition = { x: 0.5, y: 0.6 };
+    const heroDrawX = (canvas.width - dw) * heroPosition.x;
+    const heroDrawY = (canvas.height - dh) * heroPosition.y;
+    ctx.drawImage(image, heroDrawX, heroDrawY, dw, dh);
     const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     const color = (value) => (value.match(/\d+(?:\.\d+)?/g) || []).slice(0, 3).map(Number);
     let worstContrast = Infinity;
@@ -238,6 +241,23 @@ async function openBoard(period, width, label) {
     const board = document.querySelector('.board-container').getBoundingClientRect();
     const right = document.querySelector('.right-col').getBoundingClientRect();
     const selectedHero = (image.currentSrc || '').split('/').pop();
+    const selectedHeroWidth = selectedHero.includes('-800.') ? 800 : 1600;
+    const selectedHeroHeight = selectedHeroWidth === 800 ? 267 : 533;
+    const encodedScaleX = selectedHeroWidth / image.naturalWidth;
+    const encodedScaleY = selectedHeroHeight / image.naturalHeight;
+    const headline = document.querySelector('.page-header-left').getBoundingClientRect();
+    const hikerSourceBounds = {
+      left: image.naturalWidth * (1060 / 1600),
+      top: image.naturalHeight * (135 / 533),
+      right: image.naturalWidth * (1225 / 1600),
+      bottom: image.naturalHeight * (474 / 533)
+    };
+    const hikerRenderedBounds = {
+      left: heroDrawX + hikerSourceBounds.left * scale,
+      top: heroDrawY + hikerSourceBounds.top * scale,
+      right: heroDrawX + hikerSourceBounds.right * scale,
+      bottom: heroDrawY + hikerSourceBounds.bottom * scale
+    };
     const clubImage = document.querySelector('.club-promo-bg');
     const clubPromo = document.querySelector('.club-promo');
     const clubRect = clubPromo.getBoundingClientRect();
@@ -324,6 +344,26 @@ async function openBoard(period, width, label) {
       mainWidth: Math.round(document.querySelector('.main').getBoundingClientRect().width)
     },
     selectedHero,
+    heroImage: {
+      naturalWidth: image.naturalWidth,
+      naturalHeight: image.naturalHeight,
+      selectedWidth: selectedHeroWidth,
+      selectedHeight: selectedHeroHeight,
+      renderedWidth: Math.round(h.width),
+      renderedHeight: Math.round(h.height),
+      position: getComputedStyle(image).objectPosition,
+      visibleSource: {
+        x: Number((Math.max(0, -heroDrawX / scale) * encodedScaleX).toFixed(1)),
+        y: Number((Math.max(0, -heroDrawY / scale) * encodedScaleY).toFixed(1)),
+        width: Number((Math.min(image.naturalWidth, canvas.width / scale) * encodedScaleX).toFixed(1)),
+        height: Number((Math.min(image.naturalHeight, canvas.height / scale) * encodedScaleY).toFixed(1))
+      },
+      hikerFullyVisible: hikerRenderedBounds.left >= 0 &&
+        hikerRenderedBounds.top >= 0 &&
+        hikerRenderedBounds.right <= canvas.width &&
+        hikerRenderedBounds.bottom <= canvas.height,
+      headlineClearance: Number((hikerRenderedBounds.left - (headline.right - h.left)).toFixed(1))
+    },
     selectedClub: clubImage ? (clubImage.currentSrc || '').split('/').pop() : null,
     worstBannerContrast: worstContrast,
     viewportHeight: innerHeight,
@@ -508,7 +548,7 @@ async function main() {
     displayedValues.reduce((sum, value) => sum + value, 0) === 900,
     { monthDisplayed, displayedValues, total: 900 });
 
-  for (const width of [360, 380, 768, 1280, 1600]) {
+  for (const width of [360, 380, 768, 1280, 1600, 1920]) {
     const d = await openBoard('week', width, 'responsive');
     const expectedHero = width >= 1024 ? 'leaderboards-hero-hiker-1600.avif' : 'leaderboards-hero-hiker-800.avif';
     check('responsive ' + width + ': no horizontal overflow',
@@ -524,12 +564,21 @@ async function main() {
       { selectedHero: d.selectedHero, selectedClub: d.selectedClub, requests: d.imageRequests });
     check('responsive ' + width + ': banner copy clears worst-case photo pixels at AA contrast',
       d.worstBannerContrast >= 4.5, d.worstBannerContrast);
+    if ([1280, 1600, 1920].includes(width)) {
+      check('responsive ' + width + ': hiker is fully visible and clear of the headline block',
+        d.heroImage.hikerFullyVisible && d.heroImage.headlineClearance >= 24, d.heroImage);
+      check('responsive ' + width + ': hero focal position is the approved 50% 60%',
+        d.heroImage.position === '50% 60%', d.heroImage.position);
+    }
     check('responsive ' + width + ': every club-card text line clears its worst-case faded-photo pixel at AA contrast',
       d.clubLineContrasts.length >= 5 &&
       d.clubLineContrasts.every((item) => item.ratio >= 4.5),
       d.clubLineContrasts);
-    if ([360, 380, 768, 1280].includes(width)) {
-      console.log('  layout ' + width + 'px ' + JSON.stringify(d.clubLayout) + ' contrast ' + JSON.stringify(d.clubLineContrasts));
+    if ([380, 768, 1280, 1600, 1920].includes(width)) {
+      console.log('  layout ' + width + 'px ' + JSON.stringify(d.clubLayout) +
+        ' hero ' + JSON.stringify(d.heroImage) +
+        ' bannerContrast ' + d.worstBannerContrast.toFixed(4) +
+        ' clubContrast ' + JSON.stringify(d.clubLineContrasts));
     }
     if (width < 1024) {
       const gutter = width <= 480 ? 16 : 24;
@@ -772,7 +821,7 @@ async function main() {
       if (ids.length) { const { data } = await admin.from('activities').select('id').in('id', ids); check('cleanup residue: activities absent', !(data || []).length, data); }
       fs.rmSync(MANIFEST, { force: true });
     } catch (err) { failures++; console.log('FAIL  cleanup — ' + err.message); }
-    console.log('Coverage: platform period/ranking rules, exact viewer totals/shares, five responsive screenshots and image bands, both club-card states, source/network scope guards, and manifest cleanup.');
+    console.log('Coverage: platform period/ranking rules, exact viewer totals/shares, six responsive screenshots and image bands, both club-card states, source/network scope guards, and manifest cleanup.');
     console.log('Constraint: this authenticated localhost integration verifier requires live Supabase service-role credentials and Playwright.');
     console.log(failures ? '\\n' + failures + ' FAILURE(S)' : '\\nALL CHECKS PASSED');
     process.exitCode = failures ? 1 : 0;

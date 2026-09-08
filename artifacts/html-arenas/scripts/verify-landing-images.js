@@ -10,6 +10,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const sharp = require('sharp');
 const { chromium } = require('playwright-core');
 
@@ -29,6 +30,12 @@ const LEADERBOARD_HERO_800 = 'leaderboards-hero-hiker-800.avif';
 const LEADERBOARD_HERO_1600 = 'leaderboards-hero-hiker-1600.avif';
 const LEADERBOARD_CLUB_800 = 'leaderboards-club-group-800.avif';
 const LEADERBOARD_CLUB_1600 = 'leaderboards-club-group-1600.avif';
+const LEADERBOARD_HERO_HASHES = {
+  'leaderboards-hero-hiker-800.avif': 'e663dc32c5504b85fbb2e16670dcef8001bfd3d21c1877a044b06a6efe5d1649',
+  'leaderboards-hero-hiker-800.webp': '3a9c8f714e0634f856034ff43924d6972a728de8eddb2ab3bba6fce1289f534d',
+  'leaderboards-hero-hiker-1600.avif': '231688edb3386df1cc6595b0c97b7ada2797e09f85e1b943b2107062a09b07a8',
+  'leaderboards-hero-hiker-1600.webp': '291705176ef7ac12187e32c8a1cb6cd7044f48ab5b9e84d0d23cd1f8e6d0e635'
+};
 const mobile = (width, density) => `analytics-mobile-composite-${width}-${density}x.avif`;
 
 // Explicit width/DPR contract. `null` means that image category must make zero
@@ -155,10 +162,17 @@ async function verifyLeaderboardImageContract() {
     [LEADERBOARD_CLUB_1600, 1600, 1200]
   ]) {
     for (const file of [name, name.replace(/\.avif$/, '.webp')]) {
-      const metadata = await sharp(path.join(__dirname, '..', 'html', 'landing-assets', file)).metadata();
+      const assetPath = path.join(__dirname, '..', 'html', 'landing-assets', file);
+      const metadata = await sharp(assetPath).metadata();
       check(null, `${file} dimensions`,
         metadata.width === expectedWidth && metadata.height === expectedHeight,
         `${expectedWidth}x${expectedHeight}`, `${metadata.width}x${metadata.height}`);
+      if (LEADERBOARD_HERO_HASHES[file]) {
+        const digest = crypto.createHash('sha256').update(fs.readFileSync(assetPath)).digest('hex');
+        check(null, `${file} is the approved wide-hiker encode`,
+          digest === LEADERBOARD_HERO_HASHES[file],
+          LEADERBOARD_HERO_HASHES[file], digest);
+      }
     }
   }
   check(null, 'Leaderboards hero declares AVIF and WebP 800/1600 source sets',
