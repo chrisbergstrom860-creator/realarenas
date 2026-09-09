@@ -478,33 +478,36 @@ html { scroll-behavior: smooth; }
 .auth-page { min-height: calc(100vh - 56px); display: grid; grid-template-columns: 1fr 1fr; }
 
 .auth-left {
-  background: var(--gray-900); padding: 56px 48px;
-  display: flex; flex-direction: column; justify-content: space-between;
-  position: relative; overflow: hidden;
+  background: var(--gray-900); position: relative; overflow: hidden;
+  min-width: 0;
 }
-.auth-left::before {
-  content: ''; position: absolute; top: -100px; right: -100px;
-  width: 400px; height: 400px;
-  background: radial-gradient(circle, rgba(255,210,30,0.15) 0%, transparent 70%);
+.auth-left-media, .auth-left-media img, .auth-left-scrim { position: absolute; inset: 0; width: 100%; height: 100%; }
+.auth-left-media img { object-fit: cover; object-position: 58% 50%; }
+.auth-left-scrim {
+  background:
+    linear-gradient(180deg, rgba(5,14,24,.38) 0%, rgba(5,14,24,.12) 44%, rgba(3,11,8,.91) 100%),
+    linear-gradient(90deg, rgba(6,17,29,.92) 0%, rgba(6,17,29,.76) 43%, rgba(6,17,29,.20) 76%, rgba(6,17,29,.08) 100%);
   pointer-events: none;
 }
-.auth-left-top { position: relative; z-index: 1; }
-.auth-left-tagline { font-size: 30px; font-weight: 700; color: white; line-height: 1.25; margin-bottom: 16px; letter-spacing: -0.01em; }
-.auth-left-tagline em { font-style: normal; color: var(--yellow); }
-.auth-left-sub { font-size: 15px; color: var(--gray-400); line-height: 1.6; max-width: 340px; }
-.auth-preview { display: flex; flex-direction: column; gap: 10px; margin-top: 40px; position: relative; z-index: 1; }
-.auth-preview-card {
-  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
-  border-radius: var(--radius-lg); padding: 14px; display: flex; align-items: center; gap: 12px;
+.auth-left-content {
+  position: relative; z-index: 1; min-height: calc(100vh - 56px);
+  padding: 34px clamp(30px, 3.4vw, 58px) 30px;
+  display: flex; flex-direction: column;
 }
-.apc-avatar { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0; }
-.apc-info { flex: 1; }
-.apc-name { font-size: 13px; font-weight: 600; color: white; }
-.apc-stats { display: flex; gap: 5px; margin-top: 4px; flex-wrap: wrap; }
-.apc-stat { background: rgba(255,255,255,0.08); border-radius: 5px; padding: 2px 7px; font-size: 10px; font-family: var(--mono); color: var(--gray-300); }
-.auth-left-stats { display: flex; gap: 28px; position: relative; z-index: 1; }
-.auth-ls .n { font-size: 22px; font-weight: 700; color: white; font-family: var(--mono); }
-.auth-ls .l { font-size: 12px; color: var(--gray-500); margin-top: 2px; }
+.auth-photo-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.auth-photo-brand { display: flex; align-items: center; gap: 10px; color: white; font-size: 22px; font-weight: 800; letter-spacing: -.03em; }
+.auth-photo-brand img { width: 40px; height: 40px; border-radius: 9px; }
+.auth-photo-kicker { color: white; font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .28em; white-space: nowrap; }
+.auth-photo-copy { margin-top: clamp(38px, 7vh, 72px); max-width: 500px; }
+.auth-photo-title { color: white; font-size: clamp(42px, 3.45vw, 62px); line-height: .98; letter-spacing: -.045em; font-weight: 800; }
+.auth-photo-title em { display: block; color: var(--yellow); font-style: normal; }
+.auth-photo-sub { color: white; font-size: 15px; line-height: 1.55; max-width: 390px; margin-top: 18px; }
+.auth-callouts { margin-top: auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; padding-top: 30px; }
+.auth-callout { color: white; text-align: center; padding: 0 12px; border-left: 1px solid rgba(255,255,255,.34); }
+.auth-callout:first-child { border-left: 0; }
+.auth-callout svg { width: 25px; height: 25px; display: block; margin: 0 auto 8px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.auth-callout-title { font-size: 13px; font-weight: 700; }
+.auth-callout-copy { font-size: 10px; line-height: 1.35; margin-top: 5px; color: white; }
 
 .auth-right {
   background: white; padding: 56px 48px;
@@ -1036,37 +1039,39 @@ html { scroll-behavior: smooth; }
 
     <!-- Left panel -->
     <div class="auth-left">
-      <div class="auth-left-top">
-        <div class="auth-left-tagline">Every sport.<br><em>One community.</em></div>
-        <div class="auth-left-sub">Share workouts, climb leaderboards, discover events, and connect with athletes across every sport.</div>
-        <div class="auth-preview">
-          <div class="auth-preview-card">
-            <div class="apc-avatar" style="background:#FFF7ED;color:#9A3412">J</div>
-            <div class="apc-info">
-              <div class="apc-name">Jamie K. <span style="color:var(--gray-500);font-weight:400;font-size:11px">· Running</span></div>
-              <div class="apc-stats"><div class="apc-stat">12.4 km</div><div class="apc-stat">4:23/km</div><div class="apc-stat">148 bpm</div></div>
-            </div>
+      <picture class="auth-left-media" aria-hidden="true">
+        <source type="image/avif" media="(min-width: 769px)" srcset="/html/landing-assets/auth-football-800.232279da6231.avif 800w, /html/landing-assets/auth-football-1536.89a13a7b2e2b.avif 1536w" sizes="50vw">
+        <source type="image/webp" media="(min-width: 769px)" srcset="/html/landing-assets/auth-football-800.8f8b23c1648f.webp 800w, /html/landing-assets/auth-football-1536.1f3d6cbcfd68.webp 1536w" sizes="50vw">
+        <img alt="">
+      </picture>
+      <div class="auth-left-scrim"></div>
+      <div class="auth-left-content">
+        <div class="auth-photo-head">
+          <div class="auth-photo-brand"><img src="/html/arenas-icon.svg" alt="">arenas</div>
+          <div class="auth-photo-kicker">MOVE · CONNECT · BELONG</div>
+        </div>
+        <div class="auth-photo-copy">
+          <h1 class="auth-photo-title">More movement.<em>A stronger you.</em></h1>
+          <p class="auth-photo-sub">Track your activities, set goals, join clubs, discover events, and connect with athletes across every sport.</p>
+        </div>
+        <div class="auth-callouts">
+          <div class="auth-callout">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>
+            <div class="auth-callout-title">Track</div><div class="auth-callout-copy">Log your activities and see your progress.</div>
           </div>
-          <div class="auth-preview-card">
-            <div class="apc-avatar" style="background:#F5F3FF;color:#6D28D9">SR</div>
-            <div class="apc-info">
-              <div class="apc-name">Sofia R. <span style="color:var(--gray-500);font-weight:400;font-size:11px">· Climbing</span></div>
-              <div class="apc-stats"><div class="apc-stat">V7 sent ✓</div><div class="apc-stat">3-wk project</div></div>
-            </div>
+          <div class="auth-callout">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <div class="auth-callout-title">Connect</div><div class="auth-callout-copy">Join clubs and meet athletes like you.</div>
           </div>
-          <div class="auth-preview-card">
-            <div class="apc-avatar" style="background:#FEF9C3;color:#854D0E">MC</div>
-            <div class="apc-info">
-              <div class="apc-name">Marco C. <span style="color:var(--gray-500);font-weight:400;font-size:11px">· Cycling</span></div>
-              <div class="apc-stats"><div class="apc-stat">88 km</div><div class="apc-stat">241W avg</div><div class="apc-stat">1,240m</div></div>
-            </div>
+          <div class="auth-callout">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4ZM7 6H4v2a4 4 0 0 0 4 4M17 6h3v2a4 4 0 0 1-4 4"/></svg>
+            <div class="auth-callout-title">Compete</div><div class="auth-callout-copy">Climb leaderboards and earn achievements.</div>
+          </div>
+          <div class="auth-callout">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2v4M18 2v4M3 9h18M5 4h14a2 2 0 0 1 2 2v15H3V6a2 2 0 0 1 2-2ZM8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01"/></svg>
+            <div class="auth-callout-title">Discover</div><div class="auth-callout-copy">Find events and activities from your clubs.</div>
           </div>
         </div>
-      </div>
-      <div class="auth-left-stats">
-        <div class="auth-ls"><div class="n">14</div><div class="l">Sports</div></div>
-        <div class="auth-ls"><div class="n">PRs</div><div class="l">Tracked</div></div>
-        <div class="auth-ls"><div class="n">$0</div><div class="l">Free plan</div></div>
       </div>
     </div>
 

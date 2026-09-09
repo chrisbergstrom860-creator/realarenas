@@ -122,6 +122,30 @@
       "width": 800,
       "height": 600
     },
+    "auth-football-1536.avif": {
+      "file": "auth-football-1536.89a13a7b2e2b.avif",
+      "sha256": "89a13a7b2e2b4c0d0bbfa434491027675a89ef53966dc2a0e5b001e9d694891d",
+      "width": 1536,
+      "height": 1024
+    },
+    "auth-football-1536.webp": {
+      "file": "auth-football-1536.1f3d6cbcfd68.webp",
+      "sha256": "1f3d6cbcfd68f8175f28bb9c009af58541bd188057f552a8623c4b0dc6c01bf0",
+      "width": 1536,
+      "height": 1024
+    },
+    "auth-football-800.avif": {
+      "file": "auth-football-800.232279da6231.avif",
+      "sha256": "232279da623108076039cb6b05bdea9c285b50de63ba62e9ec3f51180fc6774f",
+      "width": 800,
+      "height": 533
+    },
+    "auth-football-800.webp": {
+      "file": "auth-football-800.8f8b23c1648f.webp",
+      "sha256": "8f8b23c1648fc5f40f8fce6e3d1b0e9fc55fa920baa6af00a5dba6bb8e2977aa",
+      "width": 800,
+      "height": 533
+    },
     "for-clubs-collage-1600.avif": {
       "file": "for-clubs-collage-1600.9f91c088b62f.avif",
       "sha256": "9f91c088b62f09f5f44d826e85830ddc60e5cb7bfb635a747e0d55438cdf5042",

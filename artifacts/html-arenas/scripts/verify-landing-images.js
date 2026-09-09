@@ -37,6 +37,8 @@ const LEADERBOARD_HERO_800 = asset('leaderboards-hero-hiker-800.avif');
 const LEADERBOARD_HERO_1600 = asset('leaderboards-hero-hiker-1600.avif');
 const LEADERBOARD_CLUB_800 = asset('leaderboards-club-group-800.avif');
 const LEADERBOARD_CLUB_1600 = asset('leaderboards-club-group-1600.avif');
+const AUTH_800 = asset('auth-football-800.avif');
+const AUTH_1536 = asset('auth-football-1536.avif');
 const APPROVED_LEADERBOARD_HERO_HASHES = {
   'leaderboards-hero-hiker-800.avif': 'e663dc32c5504b85fbb2e16670dcef8001bfd3d21c1877a044b06a6efe5d1649',
   'leaderboards-hero-hiker-800.webp': '3a9c8f714e0634f856034ff43924d6972a728de8eddb2ab3bba6fce1289f534d',
@@ -88,6 +90,7 @@ const BOUNDARIES = [
 const HERO_RE = /^hero-trail-runners-(?:800|1600)\.[0-9a-f]{12}\.(?:avif|webp)$/;
 const CLUBS_RE = /^for-clubs-collage-(?:800|1600)\.[0-9a-f]{12}\.(?:avif|webp)$/;
 const ANALYTICS_RE = /^analytics-(?:weekly-activity-(?:800|1600)|mobile-composite-(?:380|390|600|767)-(?:2|3)x)\.[0-9a-f]{12}\.(?:avif|webp)$/;
+const AUTH_RE = /^auth-football-(?:800|1536)\.[0-9a-f]{12}\.(?:avif|webp)$/;
 
 let passes = 0;
 let failures = 0;
@@ -134,7 +137,7 @@ function expectedAssetFiles() {
 function verifyManifestAndReferences() {
   const entries = Object.entries(MANIFEST.assets || {});
   const allowedFiles = new Set(entries.map(([, entry]) => entry.file));
-  check(null, 'manifest has the complete 36-image inventory', entries.length === 36, '36', String(entries.length));
+  check(null, 'manifest has the complete 40-image inventory', entries.length === 40, '40', String(entries.length));
   for (const [logicalName, entry] of entries) {
     const extension = path.extname(logicalName).replace('.', '');
     const pattern = new RegExp(`\\.${entry.sha256.slice(0, MANIFEST.hashLength)}\\.${extension}$`);
@@ -226,6 +229,72 @@ async function verifyLeaderboardImageContract() {
     html.includes(`${asset('leaderboards-club-group-800.webp')} 800w`) &&
     html.includes(`${asset('leaderboards-club-group-1600.webp')} 1600w`));
   console.log('  ok  Leaderboards assets and source sets');
+}
+
+async function verifyAuthImageContract() {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'html', 'arenas-landing-login.html'), 'utf8');
+  console.log('— Auth photo responsive image contract —');
+  for (const [logicalAvif, expectedWidth, expectedHeight] of [
+    ['auth-football-800.avif', 800, 533],
+    ['auth-football-1536.avif', 1536, 1024]
+  ]) {
+    for (const logicalName of [logicalAvif, logicalAvif.replace(/\.avif$/, '.webp')]) {
+      const file = asset(logicalName);
+      const metadata = await sharp(path.join(ASSET_DIR, file)).metadata();
+      check(null, `${file} dimensions`,
+        metadata.width === expectedWidth && metadata.height === expectedHeight,
+        `${expectedWidth}x${expectedHeight}`, `${metadata.width}x${metadata.height}`);
+    }
+  }
+  check(null, 'Auth photo declares AVIF and WebP 800/1536 source sets',
+    html.includes(`${asset('auth-football-800.avif')} 800w`) &&
+    html.includes(`${asset('auth-football-1536.avif')} 1536w`) &&
+    html.includes(`${asset('auth-football-800.webp')} 800w`) &&
+    html.includes(`${asset('auth-football-1536.webp')} 1536w`));
+}
+
+async function verifyAuthImageMatrix() {
+  const browser = await chromium.launch({
+    headless: true, executablePath: EXECUTABLE, args: ['--no-sandbox']
+  });
+  const widths = [380, 1280, 1440, 1600, 1920];
+  console.log(`— Auth photo browser matrix (${widths.length * 2} fresh-cache cases) —`);
+  try {
+    for (const width of widths) {
+      for (const dpr of [1, 2]) {
+        const caseKey = `Auth photo ${width}px DPR ${dpr}`;
+        const expected = width <= 768 ? null : (dpr === 1 && width <= 1600 ? AUTH_800 : AUTH_1536);
+        const context = await browser.newContext({
+          viewport: { width, height: 900 }, deviceScaleFactor: dpr,
+          serviceWorkers: 'block', extraHTTPHeaders: { 'Cache-Control': 'no-cache' }
+        });
+        const page = await context.newPage();
+        const session = await context.newCDPSession(page);
+        await session.send('Network.setCacheDisabled', { cacheDisabled: true });
+        const requested = [];
+        page.on('request', (request) => {
+          try {
+            const pathname = new URL(request.url()).pathname;
+            const prefix = '/html/landing-assets/';
+            if (pathname.startsWith(prefix)) requested.push(pathname.slice(prefix.length));
+          } catch {}
+        });
+        await page.goto(`${LANDING_URL}?verify-auth-photo=${width}-${dpr}#login`, {
+          waitUntil: 'networkidle', timeout: 30000
+        });
+        const auth = requested.filter((file) => AUTH_RE.test(file));
+        assertImageRequests(caseKey, 'Auth photo', expected, auth);
+        const panelDisplay = await page.locator('.auth-left').evaluate((node) => getComputedStyle(node).display);
+        check(caseKey, 'Auth photo panel visibility',
+          width <= 768 ? panelDisplay === 'none' : panelDisplay !== 'none',
+          width <= 768 ? 'none' : 'rendered', panelDisplay);
+        if (!failedCases.has(caseKey)) console.log(`  ok  ${caseKey} — ${receivedList(auth)}`);
+        await context.close();
+      }
+    }
+  } finally {
+    await browser.close();
+  }
 }
 
 async function verifyBrowserMatrix() {
@@ -374,14 +443,16 @@ function reportBoundaryFailures() {
   verifyManifestAndReferences();
   await verifyServedFiles();
   await verifyLeaderboardImageContract();
+  await verifyAuthImageContract();
   await verifyBrowserMatrix();
   await verifyForClubsMatrix();
+  await verifyAuthImageMatrix();
   reportBoundaryFailures();
   if (failures) {
     console.log(`\nverify-landing-images FAILED (${failures} failures, ${passes} passes)`);
     process.exit(1);
   }
-  console.log(`\nverify-landing-images OK (${passes} assertions; ${EXPECTATIONS.length * 3 + 18} browser cases; ${expectedAssetFiles().length} served files)`);
+  console.log(`\nverify-landing-images OK (${passes} assertions; ${EXPECTATIONS.length * 3 + 28} browser cases; ${expectedAssetFiles().length} served files)`);
 })().catch((error) => {
   console.error('verify-landing-images FATAL:', error && error.stack ? error.stack : error);
   process.exit(1);
