@@ -78,22 +78,10 @@ button,select,input,textarea{font-family:var(--font)}
 }
 .side-col{padding:20px 16px;display:flex;flex-direction:column;gap:14px;position:sticky;top:var(--topbar-h);height:calc(100vh - var(--topbar-h));overflow-y:auto}
 .side-col::-webkit-scrollbar{display:none}
-/* Mobile rail restructure (user spec): the rail would otherwise stack BELOW
-   the whole feed where nobody scrolls. Keep ONLY the Activity streak card
-   and lift the whole rail above the feed column — CSS reorder on the .main
-   grid child (single render, no duplicated markup to drift). Your week /
-   Athletes to follow / Quick actions are hidden via .sc-mobile-hide (the
-   ONE hiding mechanism on this page). Gated on body:has(.bottom-nav) in the
-   768px block, same convention as the Challenges rail; CSS-only hide so
-   desktop resize/rotate keeps working. Geometry guard pins the mobile rail
-   to EXACTLY 1 visible card. */
-@media (max-width:768px){
-  body:has(.bottom-nav) .side-col{order:-1;padding:14px 14px 0}
-  body:has(.bottom-nav) .sc-mobile-hide{display:none}
-}
+/* Cards stack natively below feed on mobile per layout specs. */
 
 /* ── FEED HEADER ── */
-.feed-header{padding:16px 20px 0;border-bottom:var(--border);background:white;position:sticky;top:var(--topbar-h);z-index:90}
+
 .feed-header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .feed-title{font-size:18px;font-weight:700;color:var(--gray-900);letter-spacing:-.01em}
 .filter-bar{display:flex;align-items:center;gap:6px;padding-bottom:12px;overflow-x:auto}
@@ -205,7 +193,7 @@ button,select,input,textarea{font-family:var(--font)}
 .side-title{font-size:13px;font-weight:600;color:var(--gray-900);display:flex;align-items:center;gap:6px}
 
 /* Streak */
-.streak-days{display:flex;gap:3px;padding:10px 16px}
+.streak-days{display:flex;flex-direction:column;padding:10px 0 0}
 .s-dot{width:22px;height:22px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:600;flex-shrink:0}
 .sd-on{background:var(--green-light);color:#166534}
 .sd-off{background:var(--gray-100);color:var(--gray-300)}
@@ -245,11 +233,11 @@ button,select,input,textarea{font-family:var(--font)}
 .form-label{font-size:12px;font-weight:600;color:var(--gray-700);margin-bottom:4px;display:block}
 
 /* ── TOAST ── */
-.post-composer{background:#FFF3C4;border:1.5px solid var(--yellow);border-radius:var(--radius-lg);padding:14px 20px;margin-top:14px}
-.composer-top{display:flex;gap:10px;align-items:flex-start}
+
+
 .composer-av{width:36px;height:36px;border-radius:50%;background:var(--yellow);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--gray-900);flex-shrink:0}
-.composer-input{flex:1;background:white;border:var(--border);border-radius:var(--radius-lg);padding:10px 14px;font-size:14px;font-family:var(--font);resize:none;min-height:44px;max-height:120px;outline:none;transition:border-color .15s,min-height .2s;color:var(--gray-800);line-height:1.5}
-.composer-input:focus{border-color:var(--gray-400);box-shadow:0 0 0 3px rgba(107,114,128,.08);min-height:80px}
+
+
 .composer-input::placeholder{color:var(--gray-400)}
 .composer-bottom{margin-top:10px;padding-top:10px;border-top:1px solid #F0DE96}
 .composer-options{display:flex;flex-direction:column;margin-bottom:10px}
@@ -270,9 +258,9 @@ button,select,input,textarea{font-family:var(--font)}
 .char-count.danger{color:var(--red)}
 .composer-cancel{padding:6px 14px;border-radius:7px;font-size:13px;border:var(--border);background:white;color:var(--gray-600);cursor:pointer}
 .composer-cancel:hover{background:var(--gray-50)}
-.composer-post-btn{padding:6px 16px;border-radius:7px;font-size:13px;font-weight:600;background:var(--gray-900);color:white;border:none;cursor:pointer;transition:all .13s}
-.composer-post-btn:hover:not(:disabled){background:var(--gray-700)}
-.composer-post-btn:disabled{opacity:.4;cursor:default}
+
+
+
 .composer-photo-row{display:flex}
 .c-photo-chip{padding:4px 11px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer;transition:all .12s}
 .c-photo-chip:hover{border-color:var(--gray-400)}
@@ -295,6 +283,188 @@ button,select,input,textarea{font-family:var(--font)}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--gray-900);color:white;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:500;z-index:999;transition:transform .3s ease;white-space:nowrap;box-shadow:var(--shadow-md)}
 /* Activity notes/body CSS is shared (arenas.css: .ac-title/.ac-notes-box/
    .fa-notes) — rendered by arenas-activity-card.js. */
+
+/* ── FEED BANNER ── */
+.feed-banner-wrap {
+  margin-bottom: 24px;
+}
+.feed-banner-visual {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  padding: 32px 32px 54px;
+  background: var(--gray-900);
+}
+.feed-banner-bg {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 0;
+}
+.feed-banner-bg::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(90deg, rgba(3,10,22,.86) 0%, rgba(3,10,22,.72) 42%, rgba(3,10,22,.24) 74%, rgba(3,10,22,.08) 100%);
+}
+.feed-banner-bg img {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.feed-banner-content {
+  position: relative;
+  z-index: 2;
+  color: white;
+}
+.feed-banner-title {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.08;
+  max-width: 260px;
+  margin-bottom: 4px;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  letter-spacing: -0.02em;
+}
+.feed-banner-sub {
+  font-size: 14px;
+  opacity: 0.95;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+
+.post-composer {
+  position: relative;
+  z-index: 10;
+  background: white;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+  margin: -34px 20px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--gray-200);
+}
+.composer-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.composer-input-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+.composer-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  font-size: 14px;
+  font-family: var(--font);
+  resize: none;
+  min-height: 40px;
+  max-height: 120px;
+  outline: none;
+  color: var(--gray-800);
+  line-height: 1.5;
+  padding: 9px 4px;
+}
+.composer-input::placeholder {
+  color: var(--gray-400);
+}
+.composer-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 8px;
+}
+.composer-icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--gray-500);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 6px;
+  transition: all 0.12s;
+}
+.composer-icon-btn:hover {
+  background: var(--gray-50);
+  color: var(--gray-800);
+}
+.composer-post-btn {
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--yellow);
+  color: var(--gray-900);
+  border: none;
+  cursor: pointer;
+  transition: all .13s;
+}
+.composer-post-btn:hover:not(:disabled) {
+  background: #fcd34d;
+}
+.composer-post-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.composer-bottom {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--gray-100);
+}
+/* Override .feed-header so it doesn't have top border if it's below banner */
+.feed-header {
+  padding: 0;
+  border-bottom: none;
+  position: static;
+  background: transparent;
+}
+.filter-bar {
+  padding-top: 4px;
+}
+
+@media (max-width: 768px) {
+  .feed-banner-wrap {
+    margin-left: -14px;
+    margin-right: -14px;
+    margin-bottom: 16px;
+  }
+  .feed-banner-visual {
+    border-radius: 0;
+    height: 120px;
+    min-height: 120px;
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+  }
+  .feed-banner-bg::after {
+    background: linear-gradient(90deg, rgba(3,10,22,.88) 0%, rgba(3,10,22,.66) 100%);
+  }
+  .feed-banner-title {
+    font-size: 22px;
+  }
+  .feed-banner-sub {
+    font-size: 13px;
+    line-height: 1.35;
+  }
+  .post-composer {
+    margin: 14px 14px 0;
+    box-shadow: none;
+    border: var(--border);
+  }
+  .composer-input {
+    min-height: 72px;
+  }
+  .feed-header {
+    padding: 0;
+  }
+  .side-col {
+    position: static;
+    height: auto;
+    overflow: visible;
+    padding: 0 14px 90px;
+  }
+}
+
 </style>
 </head>
 <body>
@@ -353,10 +523,88 @@ button,select,input,textarea{font-family:var(--font)}
 
   <!-- FEED COLUMN -->
   <div class="feed-col">
-    <div class="feed-header">
-      <div class="feed-header-top">
-        <div class="feed-title">Your feed</div>
+    <div class="feed-banner-wrap">
+      <div class="feed-banner-visual">
+        <picture class="feed-banner-bg">
+          <source type="image/avif" srcset="/html/landing-assets/feed-yoga-800.dba609fb5084.avif 800w, /html/landing-assets/feed-yoga-1600.975fb889ad6c.avif 1600w" sizes="(max-width: 768px) 100vw, 656px">
+          <source type="image/webp" srcset="/html/landing-assets/feed-yoga-800.78a0632adc73.webp 800w, /html/landing-assets/feed-yoga-1600.dc6c5c4b6261.webp 1600w" sizes="(max-width: 768px) 100vw, 656px">
+          <img src="/html/landing-assets/feed-yoga-800.78a0632adc73.webp" alt="Athlete meditating above the coast at sunset" loading="eager">
+        </picture>
+        <div class="feed-banner-content">
+          <h1 class="feed-banner-title">A more active you, together</h1>
+          <p class="feed-banner-sub">Share your journey. Inspire others. Build your community.</p>
+        </div>
       </div>
+
+      <!-- POST COMPOSER -->
+      <div class="post-composer" id="post-composer">
+        <div class="composer-top">
+          <div class="composer-av">·</div>
+          <div class="composer-input-wrap">
+            <textarea
+              class="composer-input"
+              id="composer-input"
+              placeholder="What are you training? Share a note with your followers…"
+              maxlength="280"
+              oninput="updateComposer(this.value)"
+            ></textarea>
+          </div>
+          <div class="composer-top-actions">
+            <button type="button" class="composer-icon-btn" onclick="document.getElementById('composer-photo-input').click()" title="Add photo" aria-label="Add photo">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+            </button>
+            <button type="button" class="composer-post-btn" id="composer-post-btn" onclick="submitPost()" disabled>Post</button>
+          </div>
+        </div>
+        <div class="composer-bottom" id="composer-bottom" style="display:none">
+          <div class="composer-options">
+            <div class="composer-sec">
+              <div class="composer-sec-label">Sport</div>
+              <div class="composer-sport-chips" id="composer-sports"></div>
+            <script>
+            (function () {
+              var mine = (window.ARENAS_DATA && window.ARENAS_DATA.sports) || [];
+              var by = window.ARENAS_SPORTS_BY_ID || {};
+              var COMPOSER_SPORTS = mine.filter(function (id) { return by[id]; });
+              if (!COMPOSER_SPORTS.length) COMPOSER_SPORTS = (window.ARENAS_SPORTS || []).map(function (s) { return s.id; });
+              var wrap = document.getElementById('composer-sports');
+              if (!wrap) return;
+              wrap.innerHTML = COMPOSER_SPORTS.map(function (id) {
+                var s = by[id]; if (!s) return '';
+                return '<button type="button" class="c-sport-chip" onclick="selectComposerSport(this,\'' + s.id + '\')">' + s.emoji + ' ' + s.label + '</button>';
+              }).join('');
+            })();
+            </script>
+            </div>
+            <div class="composer-sec">
+              <div class="composer-sec-label">Feeling</div>
+              <div class="composer-feelings">
+                <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'great')">💪 Feeling great</button>
+                <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'tired')">😴 Tired</button>
+                <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'injured')">🤕 Injured</button>
+                <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'motivated')">🔥 Motivated</button>
+              </div>
+            </div>
+            <div class="composer-sec" style="display:none">
+              <div class="composer-photo-row">
+                <input type="file" id="composer-photo-input" style="display:none" accept="image/jpeg,image/png,image/webp" onchange="composerPhotoPicked(this)">
+              </div>
+            </div>
+            <!-- Move preview outside so it shows when picked -->
+            <div class="composer-photo-preview" id="composer-photo-preview" style="display:none">
+              <img id="composer-photo-img" alt="Photo preview">
+              <button type="button" class="composer-photo-remove" onclick="removeComposerPhoto()" aria-label="Remove photo">✕</button>
+            </div>
+          </div>
+          <div class="composer-footer">
+            <span class="char-count" id="char-count">280</span>
+            <button class="composer-cancel" onclick="cancelPost()">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feed-header">
       <div class="filter-bar" id="filter-bar">
         <div class="f-pill on" onclick="setFilter(this,'all')">All</div>
         <div class="f-pill" onclick="setFilter(this,'clubs')" id="f-pill-clubs">🤝 Clubs only</div>
@@ -387,74 +635,6 @@ button,select,input,textarea{font-family:var(--font)}
       </script>
     </div>
 
-    <!-- POST COMPOSER -->
-    <div class="post-composer" id="post-composer">
-      <div class="composer-top">
-        <div class="composer-av">·</div>
-        <textarea
-          class="composer-input"
-          id="composer-input"
-          placeholder="What are you training? Share a note with your followers…"
-          maxlength="280"
-          oninput="updateComposer(this.value)"
-        ></textarea>
-      </div>
-      <div class="composer-bottom" id="composer-bottom" style="display:none">
-        <div class="composer-options">
-          <div class="composer-sec">
-            <div class="composer-sec-label">Sport</div>
-            <div class="composer-sport-chips" id="composer-sports"></div>
-          <script>
-          // Composer sport chips rendered from the sports registry. Session ②:
-          // like the filter pills, the chips are the viewer's own profile
-          // sports (ARENAS_DATA.sports). Session ③: users who haven't picked
-          // sports fall back to the FULL registry (the old curated four made
-          // 10 sports untaggable for them and went stale on every registry
-          // addition; the chip row wraps, and only sport-less users see it).
-          (function () {
-            var mine = (window.ARENAS_DATA && window.ARENAS_DATA.sports) || [];
-            var by = window.ARENAS_SPORTS_BY_ID || {};
-            var COMPOSER_SPORTS = mine.filter(function (id) { return by[id]; });
-            if (!COMPOSER_SPORTS.length) COMPOSER_SPORTS = (window.ARENAS_SPORTS || []).map(function (s) { return s.id; });
-            var wrap = document.getElementById('composer-sports');
-            if (!wrap) return;
-            wrap.innerHTML = COMPOSER_SPORTS.map(function (id) {
-              var s = by[id]; if (!s) return '';
-              return '<button type="button" class="c-sport-chip" onclick="selectComposerSport(this,\'' + s.id + '\')">' + s.emoji + ' ' + s.label + '</button>';
-            }).join('');
-          })();
-          </script>
-          </div>
-          <div class="composer-sec">
-            <div class="composer-sec-label">Feeling</div>
-            <div class="composer-feelings">
-              <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'great')">💪 Feeling great</button>
-              <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'tired')">😴 Tired</button>
-              <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'injured')">🤕 Injured</button>
-              <button type="button" class="c-feel-chip" onclick="selectFeeling(this,'motivated')">🔥 Motivated</button>
-            </div>
-          </div>
-          <!-- No section label here: the button is its own label ("📷 Photo")
-               and a header above a single control read redundant on review. -->
-          <div class="composer-sec">
-          <div class="composer-photo-row">
-            <button type="button" class="c-photo-chip" id="composer-photo-btn" onclick="document.getElementById('composer-photo-input').click()">📷 Photo</button>
-            <input type="file" id="composer-photo-input" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="composerPhotoPicked(this)">
-          </div>
-          <div class="composer-photo-preview" id="composer-photo-preview" style="display:none">
-            <img id="composer-photo-img" alt="Photo preview">
-            <button type="button" class="composer-photo-remove" onclick="removeComposerPhoto()" aria-label="Remove photo">✕</button>
-          </div>
-          </div>
-        </div>
-        <div class="composer-footer">
-          <span class="char-count" id="char-count">280</span>
-          <button class="composer-cancel" onclick="cancelPost()">Cancel</button>
-          <button class="composer-post-btn" id="composer-post-btn" onclick="submitPost()" disabled>Post note</button>
-        </div>
-      </div>
-    </div>
-
     <div class="feed-items" id="feed-items">
 
     </div>
@@ -464,32 +644,44 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="side-col">
 
     <!-- Your stats -->
-    <div class="side-card sc-mobile-hide">
-      <div class="side-hdr">
-        <span class="side-title">📊 Your week</span>
+    <div class="side-card ">
+      <div class="side-hdr" style="border-bottom:none;padding-bottom:4px">
+        <span class="side-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--blue);margin-right:2px"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+          Your week
+        </span>
+        <a href="profile#stats" style="font-size:12px;color:var(--blue);text-decoration:none;font-weight:500;">View details &rarr;</a>
       </div>
       <div id="yourweek-body"></div>
     </div>
 
     <!-- Streak -->
     <div class="side-card">
-      <div class="side-hdr">
-        <span class="side-title">🔥 Activity streak</span>
-        <span id="streak-count" style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--orange)"></span>
+      <div class="side-hdr" style="border-bottom:none;padding-bottom:4px">
+        <span class="side-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--orange);margin-right:2px"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
+          Activity streak
+        </span>
+        <span id="streak-count" style="font-size:13px;font-weight:600;color:var(--orange)"></span>
       </div>
       <div class="streak-days" id="streak-days"></div>
       <div id="streak-foot" style="padding:0 14px 12px;font-size:12px;color:var(--orange);font-weight:500"></div>
     </div>
 
     <!-- Who to follow -->
-    <div class="side-card sc-mobile-hide" id="follow-card" style="display:none">
-      <div class="side-hdr"><span class="side-title">👥 Athletes to follow</span></div>
+    <div class="side-card " id="follow-card" style="display:none">
+      <div class="side-hdr" style="border-bottom:none;padding-bottom:4px">
+        <span class="side-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--blue);margin-right:2px"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          Suggested athletes
+        </span>
+        <a href="athletes" style="font-size:12px;color:var(--blue);text-decoration:none;font-weight:500;">View all</a>
+      </div>
       <div id="follow-list"></div>
-      <div onclick="nav('/athletes')" style="padding:9px 14px;border-top:var(--border);font-size:12px;font-weight:500;color:var(--gray-600);cursor:pointer;text-align:center;transition:background .1s" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background=''">See all athletes →</div>
     </div>
 
     <!-- Quick actions -->
-    <div class="side-card sc-mobile-hide">
+    <div class="side-card ">
       <div class="side-hdr"><span class="side-title">⚡ Quick actions</span></div>
       <div class="qa-item" onclick="nav('/log')">
         <div class="qa-icon" style="background:var(--orange-light)">📝</div>
@@ -680,7 +872,7 @@ function cancelPost() {
   composerSport = null;
   composerFeeling = null;
   const btn = document.getElementById('composer-post-btn');
-  btn.textContent = 'Post note';
+  btn.textContent = 'Post';
   btn.disabled = true;
 }
 
@@ -717,7 +909,7 @@ async function submitPost() {
 
     if (data.error) {
       showToast('Error: ' + data.error);
-      btn.textContent = 'Post note';
+      btn.textContent = 'Post';
       btn.disabled = false;
       return;
     }
@@ -729,7 +921,7 @@ async function submitPost() {
     showToast('✓ Note posted — your followers can see it now!');
   } catch (err) {
     showToast('Something went wrong — please try again');
-    btn.textContent = 'Post note';
+    btn.textContent = 'Post';
     btn.disabled = false;
   }
 }
@@ -1137,29 +1329,48 @@ renderFeedEmptyState();
 (function () {
   var data = window.ARENAS_DATA || {};
 
-  // Your week — real weekly km + this-week club rank.
+  // Your week — real weekly km + this-week club rank + activities + bars
   (function () {
     var body = document.getElementById('yourweek-body');
     if (!body) return;
     var week = data.week || { activities: 0, km: 0 };
-    if (!week.activities) {
-      body.innerHTML = '<div style="padding:16px 14px;text-align:center">'
-        + '<div style="font-size:12px;color:var(--gray-500)">No activities logged this week yet</div>'
-        + '<a href="' + (window.BASE || '') + '/log" style="display:inline-block;margin-top:6px;font-size:12px;color:var(--orange);text-decoration:none;font-weight:500">Log your first activity →</a>'
-        + '</div>';
-      return;
-    }
     var rank = data.clubRank;
-    var kmCell = '<div style="padding:12px 14px;text-align:center' + (rank ? ';border-right:var(--border)' : '') + '">'
-      + '<div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">' + week.km + '</div>'
-      + '<div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">km this week</div>'
+
+    // Stats row
+    var kmCell = '<div style="text-align:center">'
+      + '<div style="font-size:24px;font-weight:700;color:var(--gray-900)">' + week.km + '</div>'
+      + '<div style="font-size:9px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.05em;margin-top:4px">KM this week</div>'
       + '</div>';
-    var rankCell = rank ? '<div style="padding:12px 14px;text-align:center">'
-      + '<div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">#' + rank.rank + '</div>'
-      + '<div style="font-size:10px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.05em;margin-top:2px">Club rank</div>'
-      + '<div style="font-size:10px;color:var(--gray-400);font-family:var(--mono);margin-top:2px">of ' + rank.total + '</div>'
+
+    var rankCell = rank ? '<div style="text-align:center;border-left:var(--border);border-right:var(--border)">'
+      + '<div style="font-size:24px;font-weight:700;color:var(--gray-900)">#' + rank.rank + '</div>'
+      + '<div style="font-size:9px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.05em;margin-top:4px;line-height:1.2">Club rank<br><span style="text-transform:none;letter-spacing:0;color:var(--gray-400)">of ' + rank.total + '</span></div>'
       + '</div>' : '';
-    body.innerHTML = '<div style="display:grid;grid-template-columns:' + (rank ? '1fr 1fr' : '1fr') + ';gap:0">' + kmCell + rankCell + '</div>';
+
+    var actCell = '<div style="text-align:center">'
+      + '<div style="font-size:24px;font-weight:700;color:var(--gray-900)">' + week.activities + '</div>'
+      + '<div style="font-size:9px;color:var(--gray-500);text-transform:uppercase;letter-spacing:.05em;margin-top:4px">Activities</div>'
+      + '</div>';
+
+    var statsRow = '<div style="display:grid;grid-template-columns:' + (rank ? '1fr 1fr 1fr' : '1fr 1fr') + ';padding:16px 20px 18px">' + kmCell + rankCell + actCell + '</div>';
+
+    // Bars chart
+    var strip = data.dayStrip || [];
+    var barsHtml = strip.map(function(d) {
+      var isActive = d.state === 'active';
+      var h = isActive ? '82%' : '15%';
+      var bg = isActive ? 'var(--yellow)' : 'var(--gray-100)';
+      return '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1">'
+        + '<div style="height:44px;width:12px;background:transparent;display:flex;align-items:flex-end">'
+        + '<div style="width:100%;height:' + h + ';background:' + bg + ';border-radius:3px"></div>'
+        + '</div>'
+        + '<div style="font-size:9px;font-weight:600;color:var(--gray-400)">' + d.label.charAt(0) + '</div>'
+        + '</div>';
+    }).join('');
+
+    var chartRow = '<div style="display:flex;justify-content:space-between;padding:0 20px 16px">' + barsHtml + '</div>';
+
+    body.innerHTML = statsRow + chartRow;
   })();
 
   // Activity streak — real current streak + real this-week day dots.
@@ -1172,9 +1383,21 @@ renderFeedEmptyState();
     var strip = data.dayStrip || [];
     var cls = { active: 'sd-on', today: 'sd-today', rest: 'sd-off', future: 'sd-off' };
     var tip = { active: ' — active', today: ' — today, log something', rest: ' — rest day', future: '' };
-    daysEl.innerHTML = strip.map(function (d) {
-      return '<div class="s-dot ' + (cls[d.state] || 'sd-off') + '" title="' + escFeedAct((d.name || '') + (tip[d.state] || '')) + '">' + escFeedAct(d.label) + '</div>';
-    }).join('');
+    var labelsHtml = '<div style="display:flex;gap:3px;padding:0 16px;margin-bottom:4px">' + strip.map(function(d) {
+      return '<div style="width:22px;text-align:center;font-size:9px;font-weight:600;color:var(--gray-400)">' + d.label.charAt(0) + '</div>';
+    }).join('') + '</div>';
+
+    var dotsHtml = '<div style="display:flex;gap:3px;padding:0 16px 12px">' + strip.map(function(d) {
+      var content = '';
+      if (d.state === 'active') {
+         content = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+      } else if (d.state === 'today') {
+         // Today might be active or not, if not, it's just the border (handled by class).
+      }
+      return '<div class="s-dot ' + (cls[d.state] || 'sd-off') + '" title="' + escFeedAct((d.name || '') + (tip[d.state] || '')) + '">' + content + '</div>';
+    }).join('') + '</div>';
+
+    daysEl.innerHTML = labelsHtml + dotsHtml;
     if (streak > 0) {
       if (countEl) countEl.textContent = streak + (streak === 1 ? ' day' : ' days');
       if (footEl) footEl.textContent = 'Keep it going — log today to extend your streak.';

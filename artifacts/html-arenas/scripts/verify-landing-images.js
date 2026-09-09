@@ -1,4 +1,4 @@
-// Permanent regression guard for landing-page hero/analytics and For Clubs hero image bands.
+// Permanent regression guard for responsive content images, including feed.
 //
 // The expectation table is deliberately explicit. Responsive-band changes must
 // update a visible row here rather than silently teaching the verifier to accept
@@ -39,6 +39,8 @@ const LEADERBOARD_CLUB_800 = asset('leaderboards-club-group-800.avif');
 const LEADERBOARD_CLUB_1600 = asset('leaderboards-club-group-1600.avif');
 const AUTH_800 = asset('auth-football-800.avif');
 const AUTH_1536 = asset('auth-football-1536.avif');
+const FEED_800 = asset('feed-yoga-800.avif');
+const FEED_1600 = asset('feed-yoga-1600.avif');
 const APPROVED_LEADERBOARD_HERO_HASHES = {
   'leaderboards-hero-hiker-800.avif': 'e663dc32c5504b85fbb2e16670dcef8001bfd3d21c1877a044b06a6efe5d1649',
   'leaderboards-hero-hiker-800.webp': '3a9c8f714e0634f856034ff43924d6972a728de8eddb2ab3bba6fce1289f534d',
@@ -91,6 +93,7 @@ const HERO_RE = /^hero-trail-runners-(?:800|1600)\.[0-9a-f]{12}\.(?:avif|webp)$/
 const CLUBS_RE = /^for-clubs-collage-(?:800|1600)\.[0-9a-f]{12}\.(?:avif|webp)$/;
 const ANALYTICS_RE = /^analytics-(?:weekly-activity-(?:800|1600)|mobile-composite-(?:380|390|600|767)-(?:2|3)x)\.[0-9a-f]{12}\.(?:avif|webp)$/;
 const AUTH_RE = /^auth-football-(?:800|1536)\.[0-9a-f]{12}\.(?:avif|webp)$/;
+const FEED_RE = /^feed-yoga-(?:800|1600)\.[0-9a-f]{12}\.(?:avif|webp)$/;
 
 let passes = 0;
 let failures = 0;
@@ -137,7 +140,7 @@ function expectedAssetFiles() {
 function verifyManifestAndReferences() {
   const entries = Object.entries(MANIFEST.assets || {});
   const allowedFiles = new Set(entries.map(([, entry]) => entry.file));
-  check(null, 'manifest has the complete 40-image inventory', entries.length === 40, '40', String(entries.length));
+  check(null, 'manifest has the complete 44-image inventory', entries.length === 44, '44', String(entries.length));
   for (const [logicalName, entry] of entries) {
     const extension = path.extname(logicalName).replace('.', '');
     const pattern = new RegExp(`\\.${entry.sha256.slice(0, MANIFEST.hashLength)}\\.${extension}$`);
@@ -152,7 +155,8 @@ function verifyManifestAndReferences() {
   for (const htmlName of [
     'arenas-landing-login.html',
     'arenas-for-clubs.html',
-    'arenas-leaderboards.html'
+    'arenas-leaderboards.html',
+    'arenas-feed.html'
   ]) {
     const html = fs.readFileSync(path.join(__dirname, '..', 'html', htmlName), 'utf8');
     const references = [...html.matchAll(/\/html\/landing-assets\/([^"'()\s,]+)/g)]
@@ -251,6 +255,75 @@ async function verifyAuthImageContract() {
     html.includes(`${asset('auth-football-1536.avif')} 1536w`) &&
     html.includes(`${asset('auth-football-800.webp')} 800w`) &&
     html.includes(`${asset('auth-football-1536.webp')} 1536w`));
+}
+
+async function verifyFeedImageContract() {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'html', 'arenas-feed.html'), 'utf8');
+  console.log('— Feed banner responsive image contract —');
+  for (const [logicalAvif, expectedWidth, expectedHeight] of [
+    ['feed-yoga-800.avif', 800, 300],
+    ['feed-yoga-1600.avif', 1600, 600]
+  ]) {
+    for (const logicalName of [logicalAvif, logicalAvif.replace(/\.avif$/, '.webp')]) {
+      const file = asset(logicalName);
+      const metadata = await sharp(path.join(ASSET_DIR, file)).metadata();
+      check(null, `${file} dimensions`,
+        metadata.width === expectedWidth && metadata.height === expectedHeight,
+        `${expectedWidth}x${expectedHeight}`, `${metadata.width}x${metadata.height}`);
+    }
+  }
+  check(null, 'Feed banner declares AVIF and WebP 800/1600 source sets',
+    html.includes(`${asset('feed-yoga-800.avif')} 800w`) &&
+    html.includes(`${asset('feed-yoga-1600.avif')} 1600w`) &&
+    html.includes(`${asset('feed-yoga-800.webp')} 800w`) &&
+    html.includes(`${asset('feed-yoga-1600.webp')} 1600w`));
+}
+
+async function verifyFeedImageMatrix() {
+  const browser = await chromium.launch({
+    headless: true, executablePath: EXECUTABLE, args: ['--no-sandbox']
+  });
+  const widths = [360, 380, 768, 1280, 1920];
+  console.log(`— Feed banner browser matrix (${widths.length * 2} fresh-cache cases) —`);
+  try {
+    for (const width of widths) {
+      for (const dpr of [1, 2]) {
+        const caseKey = `Feed banner ${width}px DPR ${dpr}`;
+        const slotWidth = width <= 768 ? width : 656;
+        const expected = slotWidth * dpr <= 800 ? FEED_800 : FEED_1600;
+        const context = await browser.newContext({
+          viewport: { width, height: 500 }, deviceScaleFactor: dpr,
+          serviceWorkers: 'block', extraHTTPHeaders: { 'Cache-Control': 'no-cache' }
+        });
+        const page = await context.newPage();
+        const session = await context.newCDPSession(page);
+        await session.send('Network.setCacheDisabled', { cacheDisabled: true });
+        const requested = [];
+        page.on('request', (request) => {
+          try {
+            const pathname = new URL(request.url()).pathname;
+            const prefix = '/html/landing-assets/';
+            if (pathname.startsWith(prefix)) requested.push(pathname.slice(prefix.length));
+          } catch {}
+        });
+        await page.setContent(
+          '<style>body{margin:0}.band{display:block;width:' + (width <= 768 ? '100vw' : '656px') + ';height:180px}.band img{width:100%;height:100%;object-fit:cover}</style>' +
+          '<picture class="band">' +
+          '<source type="image/avif" srcset="' + ASSET_URL + asset('feed-yoga-800.avif') + ' 800w, ' + ASSET_URL + asset('feed-yoga-1600.avif') + ' 1600w" sizes="(max-width: 768px) 100vw, 656px">' +
+          '<source type="image/webp" srcset="' + ASSET_URL + asset('feed-yoga-800.webp') + ' 800w, ' + ASSET_URL + asset('feed-yoga-1600.webp') + ' 1600w" sizes="(max-width: 768px) 100vw, 656px">' +
+          '<img src="' + ASSET_URL + asset('feed-yoga-800.webp') + '" alt="">' +
+          '</picture>'
+        );
+        await page.locator('img').evaluate((img) => img.decode());
+        const feed = requested.filter((file) => FEED_RE.test(file));
+        assertImageRequests(caseKey, 'Feed banner', expected, feed);
+        if (!failedCases.has(caseKey)) console.log(`  ok  ${caseKey} — ${receivedList(feed)}`);
+        await context.close();
+      }
+    }
+  } finally {
+    await browser.close();
+  }
 }
 
 async function verifyAuthImageMatrix() {
@@ -444,15 +517,17 @@ function reportBoundaryFailures() {
   await verifyServedFiles();
   await verifyLeaderboardImageContract();
   await verifyAuthImageContract();
+  await verifyFeedImageContract();
   await verifyBrowserMatrix();
   await verifyForClubsMatrix();
   await verifyAuthImageMatrix();
+  await verifyFeedImageMatrix();
   reportBoundaryFailures();
   if (failures) {
     console.log(`\nverify-landing-images FAILED (${failures} failures, ${passes} passes)`);
     process.exit(1);
   }
-  console.log(`\nverify-landing-images OK (${passes} assertions; ${EXPECTATIONS.length * 3 + 28} browser cases; ${expectedAssetFiles().length} served files)`);
+  console.log(`\nverify-landing-images OK (${passes} assertions; ${EXPECTATIONS.length * 3 + 38} browser cases; ${expectedAssetFiles().length} served files)`);
 })().catch((error) => {
   console.error('verify-landing-images FATAL:', error && error.stack ? error.stack : error);
   process.exit(1);

@@ -30,6 +30,7 @@ const {
   computeStreaks
 } = require('./tzdate');
 const { buildFourWeekActivityGrid } = require('./activity-grid');
+const { dedupeUsersById, mostLoggedSportByUser } = require('./feed-sidebar-data');
 const {
   FALLBACK_COPY: AI_INSIGHTS_FALLBACK,
   MODEL: AI_INSIGHTS_MODEL,
@@ -6335,21 +6336,28 @@ async function buildFeedSidebar(userId, tz) {
         .from('memberships').select('user_id').in('club_id', myClubIds);
       clubMateIds = new Set((mates || []).map(m => m.user_id).filter(Boolean));
     }
-    const allUsers = await listAllAuthUsers();
+    const allUsers = dedupeUsersById(await listAllAuthUsers());
     const candidates = allUsers
       .filter(u => u.id !== userId && !followingIds.has(u.id))
       .sort((a, b) => (clubMateIds.has(a.id) ? 0 : 1) - (clubMateIds.has(b.id) ? 0 : 1));
-    sidebar.followSuggestions = candidates.slice(0, 3).map(u => {
+    const suggestedUsers = candidates.slice(0, 3);
+    const suggestedIds = suggestedUsers.map(u => u.id);
+    let suggestionActivities = [];
+    if (suggestedIds.length) {
+      const { data, error } = await supabaseAdmin
+        .from('activities')
+        .select('user_id, sport')
+        .in('user_id', suggestedIds);
+      if (error) throw error;
+      suggestionActivities = data || [];
+    }
+    const mostLoggedSports = mostLoggedSportByUser(suggestionActivities, SPORTS);
+    sidebar.followSuggestions = suggestedUsers.map(u => {
       const meta = u.user_metadata || {};
       const disp = displayFromUser(u);
       const initials = (disp.name || 'A').split(/\s+/).map(n => n[0]).join('').slice(0, 2).toUpperCase();
-      const metaBits = [];
-      if (Array.isArray(meta.sports) && meta.sports.length) {
-        const sport = meta.sports[0];
-        metaBits.push(sport.charAt(0).toUpperCase() + sport.slice(1));
-      }
+      const metaBits = [mostLoggedSports[u.id]].filter(Boolean);
       if (meta.location) metaBits.push(meta.location);
-      if (clubMateIds.has(u.id)) metaBits.push('Club-mate');
       return { id: u.id, name: disp.name, initials, avatar_url: disp.avatar_url || null, meta: metaBits.join(' · ') };
     });
   } catch (err) {

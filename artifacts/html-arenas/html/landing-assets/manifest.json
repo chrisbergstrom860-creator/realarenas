@@ -146,6 +146,30 @@
       "width": 800,
       "height": 533
     },
+    "feed-yoga-1600.avif": {
+      "file": "feed-yoga-1600.975fb889ad6c.avif",
+      "sha256": "975fb889ad6c84c2d237daa9bf1e2a24c68df3875653725d553de7b8cd6681d2",
+      "width": 1600,
+      "height": 600
+    },
+    "feed-yoga-1600.webp": {
+      "file": "feed-yoga-1600.dc6c5c4b6261.webp",
+      "sha256": "dc6c5c4b626112df0e62070456c5d2c55dad3fff59c8df2222d5121c0eb98ba0",
+      "width": 1600,
+      "height": 600
+    },
+    "feed-yoga-800.avif": {
+      "file": "feed-yoga-800.dba609fb5084.avif",
+      "sha256": "dba609fb5084b93f52b51e10b6b013c7a91e746b89122b242ee9a75294a5145b",
+      "width": 800,
+      "height": 300
+    },
+    "feed-yoga-800.webp": {
+      "file": "feed-yoga-800.78a0632adc73.webp",
+      "sha256": "78a0632adc737a6bce92b6824828ae5896563b14d80457e6dea7d26ffe7ada49",
+      "width": 800,
+      "height": 300
+    },
     "for-clubs-collage-1600.avif": {
       "file": "for-clubs-collage-1600.9f91c088b62f.avif",
       "sha256": "9f91c088b62f09f5f44d826e85830ddc60e5cb7bfb635a747e0d55438cdf5042",
