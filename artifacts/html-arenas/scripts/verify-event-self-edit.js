@@ -211,7 +211,8 @@ try {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.goto(BASE + '/events', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#events-grid > *');
+  await page.waitForFunction(() =>
+    [...document.querySelectorAll('#events-grid button')].some((b) => b.textContent.trim() === 'Edit'));
   const cardEdit = await page.evaluate(() => {
     const btns = [...document.querySelectorAll('#events-grid button')].map((b) => b.textContent.trim());
     return { hasEdit: btns.includes('Edit'), btns: btns.slice(0, 12) };

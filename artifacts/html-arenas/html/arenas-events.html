@@ -39,91 +39,235 @@ button,select,input,textarea{font-family:var(--font)}
 .icon-btn{width:44px;height:44px;border-radius:8px;border:var(--border);background:white;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:19px;position:relative;transition:background .1s}
 .icon-btn:hover{background:var(--gray-50)}/* ── SIDEBAR ── */
 
-/* ── MAIN CONTENT ── */
-/* Events' own content cap (last deferred piece of the shell-centering work):
-   the banner-driven cards + 300px rail want a narrower column than the full
-   956px shell cell, so cap .main at 940px and center it inside the cell with
-   auto margins — the same sanctioned per-page-width-on-.main pattern as
-   /log and /billing (one centering mechanism: margins, no justify-content).
-   Below 1216px the cell itself is <940px, so this is a no-op there and on
-   mobile (the ≤768px collapse resets .main to the single column anyway). */
-.main{display:flex;flex-direction:column;overflow:hidden;width:100%;max-width:940px;margin:0 auto}
+
+/* Events' own content cap: */
+.main {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  height: calc(100vh - var(--topbar-h));
+  width: 100%;
+  max-width: 940px;
+  margin: 0 auto;
+}
+.main::-webkit-scrollbar { width: 4px; }
+.main::-webkit-scrollbar-thumb { background: var(--gray-200); border-radius: 2px; }
 
 /* ── BODY LAYOUT ── */
-.body-grid{display:grid;grid-template-columns:1fr 300px;flex:1;overflow:hidden}
-.events-col{overflow-y:auto}
-.events-col::-webkit-scrollbar{width:4px}
-.events-col::-webkit-scrollbar-thumb{background:var(--gray-200);border-radius:2px}
-.sidebar-col{overflow-y:auto;padding:20px 16px;display:flex;flex-direction:column;gap:14px}
-.sidebar-col::-webkit-scrollbar{display:none}
-
-/* ── SECTION HEADER ── */
-.section-header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px 8px;border-bottom:var(--border);background:white;position:sticky;top:0;z-index:10}
-.section-title{font-size:13px;font-weight:600;color:var(--gray-900)}
-.section-meta{font-size:12px;color:var(--gray-500)}
+.body-grid {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  flex: 0 0 auto;
+  align-items: start;
+}
+.events-col { overflow: visible; }
+.sidebar-col {
+  overflow: visible;
+  padding: 24px 0 40px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+}
+.sidebar-col::-webkit-scrollbar { display: none; }
 
 /* ── EVENTS GRID ── */
-/* Same content gutter as /clubs and /athletes (.ccd-grid / #athlete-grid):
-   16px 20px desktop, 12px 14px mobile, 12px card rhythm via grid gap. */
-.events-grid{display:grid;grid-template-columns:1fr;gap:12px;padding:16px 20px}
-@media (max-width:768px){
-  body:has(.bottom-nav) .main{overflow-y:auto;-webkit-overflow-scrolling:touch}
-  /* Mobile rail restructure (same pattern as the feed's Activity streak):
-     the rail would otherwise stack BELOW the whole events list. The desktop
-     grid collapses to display:block here, where `order` is inert — so use a
-     flex column instead and lift the rail with order:-1. Same single render,
-     no duplicated markup; the rail's only card is "Your RSVPs". Geometry
-     guard pins the mobile rail to exactly 1 visible card. */
-  body:has(.bottom-nav) .body-grid{display:flex;flex-direction:column;overflow:visible}
-  body:has(.bottom-nav) .events-col{overflow:visible}
-  body:has(.bottom-nav) .sidebar-col{overflow:visible;order:-1;padding:14px 14px 0}
-  body:has(.bottom-nav) .events-grid{padding:12px 14px}
-  body:has(.bottom-nav) .evx-banner{display:none}
-  body:has(.bottom-nav) .evx-card{flex-wrap:wrap}
-  body:has(.bottom-nav) .evx-banner-m{display:block;width:calc(100% + 32px);height:120px;object-fit:cover;object-position:center;margin:-16px -16px 0;border-radius:var(--radius-lg) var(--radius-lg) 0 0}
+.events-grid { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 16px 20px; }
+
+/* Top Banner */
+.ev-hero {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin: 20px 20px 0;
+  background: var(--gray-900);
+  min-height: 220px;
+  flex-shrink: 0;
+}
+.ev-hero-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.85;
+}
+.ev-hero-bg-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(90deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.7) 45%, transparent 100%);
+}
+.ev-hero-content {
+  position: relative;
+  z-index: 2;
+  padding: 40px 48px;
+  max-width: 500px;
+}
+.ev-hero-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #0369a1; /* Tailwind sky-700 */
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.ev-hero-title {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--gray-900);
+  line-height: 1.1;
+  margin-bottom: 12px;
+  letter-spacing: -0.02em;
+}
+.ev-hero-sub {
+  font-size: 14px;
+  color: var(--gray-800);
+  margin-bottom: 24px;
+  line-height: 1.5;
+  font-weight: 500;
 }
 
-.ev-date-box{border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;width:44px;height:44px;flex-shrink:0}
-.edb-day{font-size:16px;font-weight:700;line-height:1;font-family:var(--mono)}
-.edb-mon{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-top:1px}
-.ev-title{font-size:13px;font-weight:600;color:var(--gray-900);line-height:1.35;margin-bottom:2px}
-.ev-loc{font-size:11px;color:var(--gray-400)}
-.ev-tags{display:flex;gap:4px;flex-wrap:wrap}
-.tag{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid transparent;white-space:nowrap;display:inline-block}
-.t-free{background:var(--green-light);color:#166534;border-color:#86EFAC}
-.ev-social-text{font-size:11px;color:var(--gray-500)}
-.going-dot{width:6px;height:6px;border-radius:50%;background:var(--yellow);flex-shrink:0}
-.pend-dot{width:6px;height:6px;border-radius:50%;background:transparent;border:1.5px solid var(--yellow-dark);flex-shrink:0}
+/* Toolbar */
+.ev-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 0;
+  border-bottom: var(--border);
+  gap: 16px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.ev-tabs-scroll {
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.ev-tabs-scroll::-webkit-scrollbar { display: none; }
+.ev-tabs { display: flex; align-items: center; gap: 24px; }
+.ev-tab {
+  background: none;
+  border: none;
+  padding: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-500);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ev-tab:hover { color: var(--gray-900); }
+.ev-tab.active { color: var(--gray-900); border-bottom-color: var(--gray-900); }
+.ev-tab-badge {
+  background: var(--gray-100);
+  color: var(--gray-600);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-family: var(--mono);
+}
+.ev-filters { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.ev-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: white;
+  border: var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  width: 260px;
+}
+.ev-search-icon { color: var(--gray-400); flex-shrink: 0; }
+.ev-search-box input {
+  border: none; background: none; outline: none; font-size: 13px; width: 100%; color: var(--gray-900);
+}
+.ev-search-box input::placeholder { color: var(--gray-400); }
+.ev-filter-btn {
+  display: flex; align-items: center; gap: 6px; background: white; border: var(--border); border-radius: 8px; padding: 8px 12px; font-size: 13px; font-weight: 600; color: var(--gray-700); cursor: pointer; position: relative;
+}
+.ev-filter-btn:hover { background: var(--gray-50); }
 
-/* ── SIDEBAR CARDS ── */
-.side-card{background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden}
-.sc-header{padding:12px 16px 9px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between}
-.sc-title{font-size:13px;font-weight:600;color:var(--gray-900);display:flex;align-items:center;gap:5px}
+/* Card overrides */
+.evx-card { scroll-margin-top: 140px; }
 
-/* RSVP list items */
-.rsvp-item{display:flex;align-items:center;gap:9px;padding:9px 16px;border-bottom:var(--border);cursor:pointer;transition:background .1s}
-.rsvp-item:hover{background:var(--gray-50)}
-.rsvp-item:last-child{border-bottom:none}
-.ri-date-box{width:34px;height:34px;border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0}
-.ri-day{font-size:13px;font-weight:700;font-family:var(--mono);line-height:1}
-.ri-mon{font-size:7px;font-weight:600;text-transform:uppercase}
-.ri-name{flex:1;font-size:12px;font-weight:600;color:var(--gray-900)}
-.ri-sport{font-size:10px;color:var(--gray-400)}
-.ri-status{font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px}
-.ris-going{background:var(--yellow);color:#111827}
-.ris-pend{background:var(--yellow-light);color:#7a5c00}
+/* Right rail custom blocks */
+.side-card { background: white; border: var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.sc-header { padding: 12px 16px 9px; border-bottom: var(--border); display: flex; align-items: center; justify-content: space-between; }
+.sc-title { font-size: 13px; font-weight: 600; color: var(--gray-900); display: flex; align-items: center; gap: 5px; }
 
-/* Stats strip */
-.stats-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:0}
-.stat-block{padding:10px 14px;text-align:center;border-right:var(--border)}
-.stat-block:last-child{border-right:none}
-.sb-val{font-size:18px;font-weight:700;font-family:var(--mono);color:var(--gray-900);line-height:1}
-.sb-label{font-size:10px;color:var(--gray-500);margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
+.stats-strip { display: flex; text-align: center; }
+.stat-block { flex: 1; padding: 14px 10px; border-right: var(--border); }
+.stat-block:last-child { border-right: none; }
+.sb-val { font-size: 20px; font-weight: 700; font-family: var(--mono); color: var(--gray-900); line-height: 1; }
+.sb-val.going { color: #166534; }
+.sb-label { font-size: 10px; color: var(--gray-500); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+.rsvp-past-head { padding: 9px 16px 5px; border-top: var(--border); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--gray-400); }
+.rsvp-item { display: flex; align-items: center; gap: 9px; padding: 9px 16px; border-top: var(--border); }
+.ri-date-box { width: 34px; height: 34px; border-radius: 7px; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; background: var(--gray-50); }
+.ri-day { font-size: 13px; font-weight: 700; font-family: var(--mono); line-height: 1; color: var(--gray-400); }
+.ri-mon { font-size: 7px; font-weight: 600; text-transform: uppercase; color: var(--gray-400); }
+.ri-name { flex: 1; min-width: 0; font-size: 12px; font-weight: 500; color: var(--gray-500); }
+.ri-sport { font-size: 10px; color: var(--gray-400); }
 
-.btn{padding:9px 18px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;border:var(--border);transition:all .13s;display:inline-flex;align-items:center;gap:6px;background:transparent;color:var(--gray-700)}
-.btn:hover{background:var(--gray-100)}
-.btn-yellow{background:var(--yellow);color:var(--gray-900);border-color:var(--yellow-dark);font-weight:600}.btn-yellow:hover{background:var(--yellow-dark)}
+.cun-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-bottom: var(--border); cursor: pointer; transition: background 0.1s; text-decoration: none; color: inherit; }
+.cun-item:hover { background: var(--gray-50); }
+.cun-item:last-child { border-bottom: none; }
+.cun-date { width: 38px; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; }
+.cun-day { font-size: 15px; font-weight: 700; font-family: var(--mono); color: var(--gray-900); line-height: 1; }
+.cun-mon { font-size: 9px; font-weight: 700; color: var(--gray-500); text-transform: uppercase; margin-top: 2px; }
+.cun-info { flex: 1; min-width: 0; }
+.cun-title { font-size: 13px; font-weight: 600; color: var(--gray-900); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
+.cun-meta { font-size: 11px; color: var(--gray-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; }
+.cun-icon { width: 14px; height: 14px; flex-shrink: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--gray-100); color: var(--gray-600); font-size: 8px; }
 
+.host-card { background: var(--yellow-light); border-radius: var(--radius-lg); padding: 16px; border: 1px solid #fde68a; }
+.host-icon { width: 32px; height: 32px; background: var(--yellow); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--gray-900); }
+
+/* Mini Calendar */
+.cal-mini-nav { background:none; border:none; width:24px; height:24px; border-radius:6px; cursor:pointer; font-size:16px; display:flex; align-items:center; justify-content:center; color:var(--gray-500); }
+.cal-mini-nav:hover { background:var(--gray-100); color:var(--gray-900); }
+.mini-cal-grid { padding: 12px 16px; }
+.mc-labels { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 6px; text-align: center; font-size: 10px; color: var(--gray-400); font-weight: 600; }
+.mc-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.mc-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 12px; font-family: var(--mono); color: var(--gray-700); border-radius: 50%; cursor: pointer; position: relative; }
+.mc-day:hover { background: var(--gray-100); }
+.mc-day.mc-empty { cursor: default; }
+.mc-day.mc-empty:hover { background: none; }
+.mc-day.has-event::after { content: ''; position: absolute; bottom: 4px; width: 4px; height: 4px; border-radius: 50%; background: var(--yellow-dark); }
+.mc-day.selected { background: var(--gray-900); color: white; font-weight: 600; }
+.mc-day.selected::after { background: var(--yellow); }
+
+@media (max-width: 768px) {
+  body:has(.bottom-nav) .main { height: auto; overflow: visible; padding-bottom: 80px; }
+  body:has(.bottom-nav) .body-grid { display: flex; flex-direction: column; overflow: visible; }
+  body:has(.bottom-nav) .events-col { min-width: 0; overflow: visible; }
+  body:has(.bottom-nav) .sidebar-col { width: 100%; max-width: 100%; min-width: 0; overflow: visible; padding: 14px; gap: 14px; position: static; }
+  body:has(.bottom-nav) .sidebar-col > * { min-width: 0; max-width: 100%; }
+  body:has(.bottom-nav) .events-grid { padding: 12px 14px; }
+  body:has(.bottom-nav) .evx-banner { display: none; }
+  body:has(.bottom-nav) .evx-card { flex-wrap: wrap; }
+  body:has(.bottom-nav) .evx-banner-m { display: block; width: calc(100% + 32px); height: 120px; object-fit: cover; object-position: center; margin: -16px -16px 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+
+  .ev-hero { margin: 0; border-radius: 0; min-height: 260px; }
+  .ev-hero-bg-mask {
+    background: linear-gradient(90deg,
+      rgba(255,255,255,.98) 0%,
+      rgba(255,255,255,.95) 60%,
+      rgba(255,255,255,.76) 78%,
+      rgba(255,255,255,.08) 100%);
+  }
+  .ev-hero-content { max-width: 300px; padding: 24px 16px; }
+  .ev-toolbar { padding: 12px 14px 0; }
+  .ev-tabs-scroll { margin: 0 -14px; padding: 0 14px; }
+  .ev-filters { width: 100%; }
+  .ev-search-box { flex: 1; width: auto; }
+}
 /* ── TOAST ── */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--gray-900);color:white;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:500;z-index:999;transition:transform .3s ease;white-space:nowrap;box-shadow:var(--shadow-md)}
 </style>
@@ -180,29 +324,62 @@ button,select,input,textarea{font-family:var(--font)}
 </aside>
 
 <!-- MAIN -->
-<div class="main">
+<div class="main" id="main-scroll">
+
+  <!-- BANNER -->
+  <div class="ev-hero">
+    <div class="ev-hero-bg-mask"></div>
+    <picture>
+      <source type="image/avif" srcset="/html/landing-assets/events-hikers-800.b24abf7afef5.avif 800w, /html/landing-assets/events-hikers-1600.d06b83f0ceef.avif 1600w" sizes="(max-width: 768px) 100vw, 900px">
+      <source type="image/webp" srcset="/html/landing-assets/events-hikers-800.233fb31fa20a.webp 800w, /html/landing-assets/events-hikers-1600.427dbd2ed61e.webp 1600w" sizes="(max-width: 768px) 100vw, 900px">
+      <img class="ev-hero-bg" src="/html/landing-assets/events-hikers-800.233fb31fa20a.webp" alt="Four hikers overlooking a coastal town at sunset" loading="eager">
+    </picture>
+    <div class="ev-hero-content">
+      <div class="ev-hero-label">EVENTS</div>
+      <h1 class="ev-hero-title">Find your next adventure</h1>
+      <p class="ev-hero-sub">Join events, meet like-minded people, and turn activity into community.</p>
+      <button class="btn btn-yellow" id="create-event-btn" onclick="openCreateEvent()" style="padding:10px 20px;font-size:14px;">
+        <span style="font-size:16px;line-height:1;margin-right:4px;font-weight:700">+</span> Create event
+      </button>
+    </div>
+  </div>
+
+  <!-- TOOLBAR -->
+  <div class="ev-toolbar">
+    <div class="ev-tabs-scroll">
+      <div class="ev-tabs">
+        <button class="ev-tab active" data-tab="upcoming">Upcoming</button>
+        <button class="ev-tab" data-tab="my_events">My events</button>
+        <button class="ev-tab" data-tab="invites">Invites <span class="ev-tab-badge" id="invites-badge" style="display:none">0</span></button>
+        <button class="ev-tab" data-tab="past">Past events</button>
+      </div>
+    </div>
+    <div class="ev-filters">
+      <div class="ev-search-box">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ev-search-icon"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input type="text" id="ev-search" placeholder="Search events, locations or sports...">
+      </div>
+      <div class="ev-filter-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+        <span id="ev-sport-label">All sports</span>
+        <select id="ev-sport-select" aria-label="Filter loaded events by sport" style="position:absolute;opacity:0;inset:0;cursor:pointer;width:100%;height:100%">
+          <option value="">All sports</option>
+        </select>
+      </div>
+    </div>
+  </div>
 
   <!-- BODY -->
   <div class="body-grid">
 
     <!-- EVENTS COLUMN -->
     <div class="events-col" id="events-col">
-
-      <!-- SECTION HEADER -->
-      <div class="section-header" style="display:flex;align-items:center;gap:12px">
-        <div>
-          <div class="section-title">Upcoming events near you</div>
-          <div class="section-meta" id="section-meta">Loading events…</div>
-        </div>
-        <button id="create-event-btn" onclick="openCreateEvent()" style="margin-left:auto;padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;background:var(--gray-900);color:#fff;cursor:pointer;white-space:nowrap">+ Create event</button>
-      </div>
-
-      <!-- EVENTS GRID -->
       <div id="events-container">
         <div class="events-grid" id="events-grid">
+           <!-- Loaded state -->
+           <div style="padding:40px 16px;text-align:center;color:var(--gray-400);font-size:14px">Loading events...</div>
         </div>
       </div>
-
     </div>
 
     <!-- SIDEBAR COLUMN -->
@@ -211,9 +388,55 @@ button,select,input,textarea{font-family:var(--font)}
       <!-- Your RSVPs -->
       <div class="side-card">
         <div class="sc-header">
-          <span class="sc-title">📋 Your RSVPs</span>
+          <span class="sc-title">Your RSVPs</span>
+        </div>
+        <div class="stats-strip" id="rsvp-stats-strip">
+          <div class="stat-block"><div class="sb-val going">0</div><div class="sb-label">Going</div></div>
+          <div class="stat-block"><div class="sb-val">0</div><div class="sb-label">Interested</div></div>
+        </div>
+        <div id="rsvp-history"></div>
+      </div>
+
+      <!-- Coming up -->
+      <div class="side-card">
+        <div class="sc-header">
+          <span class="sc-title">Coming up</span>
+        </div>
+        <div id="coming-up-list" style="display:flex;flex-direction:column;">
+          <div style="padding:16px;text-align:center;font-size:12px;color:var(--gray-400)">Loading...</div>
         </div>
       </div>
+
+      <!-- Calendar -->
+      <div class="side-card">
+        <div class="sc-header">
+          <span class="sc-title" id="mini-cal-title">Month</span>
+          <div style="display:flex;gap:4px">
+            <button class="cal-mini-nav" id="mini-cal-prev" aria-label="Previous month">‹</button>
+            <button class="cal-mini-nav" id="mini-cal-next" aria-label="Next month">›</button>
+          </div>
+        </div>
+        <div class="mini-cal-grid" id="mini-cal-grid">
+           <div style="padding:16px;text-align:center;font-size:12px;color:var(--gray-400)">Loading...</div>
+        </div>
+      </div>
+
+      <!-- Host Card -->
+      <div class="host-card">
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div class="host-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          </div>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--gray-900)">Host an event. Build your community.</div>
+            <div style="font-size:12px;color:var(--gray-700);margin-top:2px">From casual meetups to big adventures.</div>
+          </div>
+        </div>
+        <button class="btn btn-yellow" onclick="openCreateEvent()" style="width:100%;justify-content:center;margin-top:12px">
+          <span style="font-size:14px;margin-right:4px;font-weight:700">+</span> Create event
+        </button>
+      </div>
+
     </div>
   </div>
 </div>
@@ -372,155 +595,340 @@ function showToast(msg){
       '</div>';
   }
 
-  function renderEvents(payload) {
-    // Merge the three lists, dedupe by id, sort by date ascending.
-    var byId = {};
-    ['upcomingEvents','clubEvents','myCreatedEvents','invitedEvents'].forEach(function (k) {
-      (payload[k] || []).forEach(function (ev) { byId[ev.id] = ev; });
+
+  var evState = {
+    events: [],
+    tab: 'upcoming',
+    search: '',
+    sport: '',
+    rsvps: [],
+    calYear: new Date().getFullYear(),
+    calMonth: new Date().getMonth() + 1,
+    calData: null,
+    selectedDate: null
+  };
+
+  function initTabs() {
+    document.querySelectorAll('.ev-tab').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.ev-tab').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        evState.tab = btn.getAttribute('data-tab');
+        evState.selectedDate = null;
+        updateFilteredEvents();
+        renderMiniCalendar();
+      });
     });
-    var events = Object.keys(byId).map(function (k) { return byId[k]; })
-      .sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
-    evById = byId;
+
+    var searchInput = document.getElementById('ev-search');
+    if (searchInput) {
+      searchInput.addEventListener('input', function(e) {
+        evState.search = e.target.value;
+        updateFilteredEvents();
+      });
+    }
+
+    var sportSelect = document.getElementById('ev-sport-select');
+    if (sportSelect) {
+      sportSelect.addEventListener('change', function(e) {
+        evState.sport = e.target.value;
+        var label = document.getElementById('ev-sport-label');
+        if (label) label.textContent = e.target.options[e.target.selectedIndex].textContent;
+        updateFilteredEvents();
+      });
+    }
+
+    var p = document.getElementById('mini-cal-prev');
+    var n = document.getElementById('mini-cal-next');
+    if (p) p.addEventListener('click', function() {
+      evState.calMonth--;
+      if (evState.calMonth < 1) { evState.calMonth = 12; evState.calYear--; }
+      fetchMiniCalendar();
+    });
+    if (n) n.addEventListener('click', function() {
+      evState.calMonth++;
+      if (evState.calMonth > 12) { evState.calMonth = 1; evState.calYear++; }
+      fetchMiniCalendar();
+    });
+  }
+
+  function updateFilteredEvents() {
+    var now = Date.now();
+    var filtered = evState.events.filter(function(ev) {
+      var t = ev.date ? new Date(ev.date).getTime() : NaN;
+      var isPast = !isNaN(t) && t < now;
+      var isUpcoming = isNaN(t) || t >= now;
+
+      if (evState.tab === 'upcoming' && !isUpcoming) return false;
+      if (evState.tab === 'past' && !isPast) return false;
+      if (evState.tab === 'my_events' && !ev.isOwner) return false;
+      if (evState.tab === 'invites' && !(ev._source && ev._source.invitedEvents)) return false;
+
+      if (evState.search) {
+        var q = evState.search.toLowerCase();
+        var match = (ev.title && ev.title.toLowerCase().includes(q)) ||
+                    (ev.location && ev.location.toLowerCase().includes(q)) ||
+                    (sportLabel(ev.sport) && sportLabel(ev.sport).toLowerCase().includes(q));
+        if (!match) return false;
+      }
+
+      if (evState.sport && ev.sport !== evState.sport) return false;
+
+      if (evState.selectedDate) {
+        if (!ev.date) return false;
+        var d = new Date(ev.date);
+        var ymd = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+        if (ymd !== evState.selectedDate) return false;
+      }
+
+      return true;
+    });
 
     var grid = document.getElementById('events-grid');
     if (grid) {
-      grid.style.gridTemplateColumns = '1fr';
-      if (!events.length) {
-        grid.innerHTML = '<div style="padding:40px 16px;text-align:center;color:var(--gray-400);font-size:14px">No upcoming events yet. Be the first to create one!</div>';
+      if (!filtered.length) {
+        grid.innerHTML = '<div style="padding:40px 16px;text-align:center;color:var(--gray-400);font-size:14px">No events found.</div>';
       } else {
-        grid.innerHTML = events.map(buildEventCard).join('');
+        grid.innerHTML = filtered.map(function(ev) {
+            return '<div id="event-card-' + ev.id + '" style="scroll-margin-top:140px">' + buildEventCard(ev) + '</div>';
+        }).join('');
       }
     }
-    var loadMore = document.getElementById('load-more-section');
-    if (loadMore) loadMore.style.display = 'none';
-    var meta = document.getElementById('section-meta');
-    if (meta) meta.textContent = events.length + (events.length === 1 ? ' event' : ' events') + ' · sorted by date';
-    var fc = document.getElementById('filter-count');
-    if (fc) fc.textContent = events.length + ' events';
-
-    renderMyRsvps(payload.myRsvps || []);
   }
 
-  function renderMyRsvps(rsvps) {
-    // Target the existing "Your RSVPs" side-card (find by its title text).
-    var card = null;
-    document.querySelectorAll('.side-card').forEach(function (c) {
-      var t = c.querySelector('.sc-title');
-      if (t && /your rsvps/i.test(t.textContent)) card = c;
-    });
-    if (!card) return;
-    // Clear any previously rendered body (and legacy mock rows) so re-renders stay clean.
-    card.querySelectorAll('.rsvp-body, .stats-strip, .rsvp-item, .rsvp-empty').forEach(function (n) { n.remove(); });
-
-    // Split by event date relative to now: future (or undated) = Upcoming, past = history.
+  function renderRightRail() {
     var now = Date.now();
-    var upcoming = [], past = [];
-    (rsvps || []).forEach(function (r) {
-      var ev = r.events || {};
-      var t = ev.date ? new Date(ev.date).getTime() : NaN;
-      if (isNaN(t) || t >= now) upcoming.push(r);   // undated rows stay actionable
-      else past.push(r);
+    var going = 0, interested = 0;
+    evState.rsvps.forEach(function(r) {
+      var eventTime = new Date((r.events || {}).date).getTime();
+      if (!isNaN(eventTime) && eventTime < now) return;
+      if (r.status === 'going') going++;
+      if (r.status === 'interested') interested++;
     });
-    upcoming.sort(function (a, b) {  // soonest first; undated rows fall to the end
-      var ta = new Date((a.events || {}).date).getTime();
-      var tb = new Date((b.events || {}).date).getTime();
-      return (isNaN(ta) ? Infinity : ta) - (isNaN(tb) ? Infinity : tb);
-    });
-    past.sort(function (a, b) { return new Date((b.events || {}).date) - new Date((a.events || {}).date); });     // most recent first
 
-    var body = document.createElement('div');
-    body.className = 'rsvp-body';
-    card.appendChild(body);
-
-    // Stat strip — UPCOMING counts only, so the numbers track the forward-looking list.
-    var upGoing = upcoming.filter(function (r) { return r.status === 'going'; }).length;
-    var upInterested = upcoming.filter(function (r) { return r.status === 'interested'; }).length;
-    var stats = document.createElement('div');
-    stats.className = 'stats-strip';
-    stats.style.borderBottom = 'var(--border)';
-    stats.innerHTML =
-      '<div class="stat-block"><div class="sb-val" style="color:#7a5c00">' + upGoing + '</div><div class="sb-label">Going</div></div>' +
-      '<div class="stat-block"><div class="sb-val">' + upInterested + '</div><div class="sb-label">Interested</div></div>' +
-      '<div class="stat-block"><div class="sb-val">' + upcoming.length + '</div><div class="sb-label">Total</div></div>';
-    body.appendChild(stats);
-
-    // Upcoming section — full-colour actionable rows; honest empty state if none.
-    if (!upcoming.length) {
-      var empty = document.createElement('div');
-      empty.className = 'rsvp-empty';
-      empty.style.cssText = 'padding:14px;font-size:12px;color:var(--gray-400);text-align:center';
-      empty.textContent = 'No upcoming RSVPs';
-      body.appendChild(empty);
-    } else {
-      upcoming.forEach(function (r) { body.appendChild(buildRsvpRow(r, false)); });
+    var statsStrip = document.getElementById('rsvp-stats-strip');
+    if (statsStrip) {
+      statsStrip.innerHTML =
+        '<div class="stat-block"><div class="sb-val going">' + going + '</div><div class="sb-label">Going</div></div>' +
+        '<div class="stat-block"><div class="sb-val">' + interested + '</div><div class="sb-label">Interested</div></div>';
     }
 
-    // Past section — de-emphasised history; hidden when empty; collapsed past the first 3.
-    if (past.length) {
-      var head = document.createElement('div');
-      head.className = 'rsvp-past-head';
-      head.style.cssText = 'padding:9px 16px 5px;border-top:var(--border);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--gray-400)';
-      head.textContent = 'Past · ' + past.length;
-      body.appendChild(head);
+    renderPastRsvps();
 
-      past.forEach(function (r, i) {
-        var row = buildRsvpRow(r, true);
-        if (i >= 3) { row.classList.add('rsvp-past-extra'); row.style.display = 'none'; }
-        body.appendChild(row);
-      });
+    var nextEvents = evState.events.filter(function(ev) {
+      var t = ev.date ? new Date(ev.date).getTime() : NaN;
+      if (isNaN(t) || t < now) return false;
+      return ev.myRsvpStatus === 'going' || ev.myRsvpStatus === 'interested' || ev.isOwner;
+    }).slice(0, 3);
 
-      if (past.length > 3) {
-        var more = document.createElement('button');
-        more.className = 'rsvp-show-past';
-        more.type = 'button';
-        more.style.cssText = 'width:100%;padding:9px 16px;border:none;border-top:var(--border);background:none;cursor:pointer;font-size:11px;font-weight:600;color:var(--gray-500);text-align:center';
-        more.textContent = 'Show all ' + past.length + ' past →';
-        more.addEventListener('click', function () {
-          body.querySelectorAll('.rsvp-past-extra').forEach(function (n) { n.style.display = ''; });
-          more.remove();
-        });
-        body.appendChild(more);
+    var cunList = document.getElementById('coming-up-list');
+    if (cunList) {
+      if (!nextEvents.length) {
+        cunList.innerHTML = '<div style="padding:16px;text-align:center;font-size:12px;color:var(--gray-400)">No upcoming events in your plans</div>';
+      } else {
+        cunList.innerHTML = nextEvents.map(function(ev) {
+          var p = dParts(ev.date);
+          var meta = sportLabel(ev.sport) + (ev.location ? ' · ' + ev.location : '') + (ev.date ? ' · ' + dateLine(ev.date) : '');
+          return '<a href="#" class="cun-item" onclick="scrollToEv(\'' + esc(ev.id) + '\'); return false;">' +
+                   '<div class="cun-date">' +
+                     '<div class="cun-day">' + esc(p.day) + '</div>' +
+                     '<div class="cun-mon">' + esc(p.mon) + '</div>' +
+                   '</div>' +
+                   '<div class="cun-info">' +
+                     '<div class="cun-title">' + esc(ev.title) + '</div>' +
+                     '<div class="cun-meta">' +
+                        '<span class="cun-icon">' + (SPORT_ICON[ev.sport] || '✦') + '</span>' + esc(meta) +
+                     '</div>' +
+                   '</div>' +
+                   '<div style="color:var(--gray-300);font-size:16px">›</div>' +
+                 '</a>';
+        }).join('');
       }
     }
   }
 
-  // Build a single RSVP row. past=true renders the muted "history" variant (grey date + ✓).
-  function buildRsvpRow(r, isPast) {
-    var ev = r.events || {};
-    var p = dParts(ev.date);
-    var meta = esc(sportLabel(ev.sport)) + (ev.location ? ' · ' + esc(ev.location) : '');
-    var item = document.createElement('div');
-    item.className = 'rsvp-item';
-    if (isPast) {
-      item.innerHTML =
-        '<div style="width:6px;height:6px;border-radius:50%;background:var(--gray-200);flex-shrink:0"></div>' +
-        '<div class="ri-date-box" style="background:var(--gray-50)">' +
-          '<div class="ri-day" style="color:var(--gray-400)">' + esc(p.day) + '</div>' +
-          '<div class="ri-mon" style="color:var(--gray-400)">' + esc(p.mon) + '</div>' +
-        '</div>' +
-        '<div style="flex:1;min-width:0">' +
-          '<div class="ri-name" style="color:var(--gray-500);font-weight:500">' + esc(ev.title || 'Event') + '</div>' +
-          '<div class="ri-sport">' + meta + '</div>' +
-        '</div>' +
-        '<span title="Attended" style="font-size:12px;font-weight:700;color:var(--gray-400)">✓</span>';
-    } else {
-      var statusCls = r.status === 'going' ? 'ris-going' : 'ris-pend';
-      var statusTxt = r.status === 'going' ? '✓ Going' : '★ Interested';
-      item.innerHTML =
-        '<div class="' + (r.status === 'going' ? 'going-dot' : 'pend-dot') + '"></div>' +
-        '<div class="ri-date-box" style="background:var(--gray-100)">' +
-          '<div class="ri-day" style="color:var(--gray-700)">' + esc(p.day) + '</div>' +
-          '<div class="ri-mon" style="color:var(--gray-500)">' + esc(p.mon) + '</div>' +
-        '</div>' +
-        '<div style="flex:1;min-width:0">' +
-          '<div class="ri-name">' + esc(ev.title || 'Event') + '</div>' +
-          '<div class="ri-sport">' + meta + '</div>' +
-        '</div>' +
-        '<span class="ri-status ' + statusCls + '">' + statusTxt + '</span>';
+  function renderPastRsvps() {
+    var host = document.getElementById('rsvp-history');
+    if (!host) return;
+    var now = Date.now();
+    var past = evState.rsvps.filter(function(r) {
+      var t = new Date((r.events || {}).date).getTime();
+      return !isNaN(t) && t < now && (r.status === 'going' || r.status === 'interested');
+    }).sort(function(a, b) {
+      return new Date((b.events || {}).date) - new Date((a.events || {}).date);
+    });
+    if (!past.length) {
+      host.innerHTML = '';
+      return;
     }
-    return item;
+    host.innerHTML = '<div class="rsvp-past-head">Past · ' + past.length + '</div>' +
+      past.slice(0, 3).map(function(r) {
+        var ev = r.events || {};
+        var p = dParts(ev.date);
+        return '<div class="rsvp-item">' +
+          '<div class="ri-date-box"><div class="ri-day">' + esc(p.day) + '</div><div class="ri-mon">' + esc(p.mon) + '</div></div>' +
+          '<div class="ri-name"><div>' + esc(ev.title || 'Event') + '</div><div class="ri-sport">' + esc(sportLabel(ev.sport)) + (ev.location ? ' · ' + esc(ev.location) : '') + '</div></div>' +
+          '<span aria-label="Past RSVP" style="font-size:12px;font-weight:700;color:var(--gray-400)">✓</span>' +
+        '</div>';
+      }).join('');
   }
 
+  window.scrollToEv = function(id) {
+    var ev = evById[id];
+    if (!ev) return;
+
+    var now = Date.now();
+    var t = ev.date ? new Date(ev.date).getTime() : NaN;
+    var isPast = !isNaN(t) && t < now;
+
+    var targetTab = 'upcoming';
+    if (isPast) targetTab = 'past';
+
+    if (evState.selectedDate) {
+      evState.selectedDate = null;
+      renderMiniCalendar();
+    }
+    if (evState.tab !== targetTab) {
+      var btn = document.querySelector('.ev-tab[data-tab="' + targetTab + '"]');
+      if (btn) btn.click();
+    } else {
+      // Re-render to ensure it's not hidden by selectedDate if tab didn't change
+      updateFilteredEvents();
+    }
+
+    setTimeout(function() {
+      var el = document.getElementById('event-card-' + id);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+        var inner = el.firstElementChild;
+        if (inner) {
+          inner.style.transition = 'box-shadow 0.3s';
+          inner.style.boxShadow = '0 0 0 2px var(--yellow)';
+          setTimeout(function() { inner.style.boxShadow = 'none'; }, 2000);
+        }
+      }
+    }, 50);
+  };
+
+  function fetchMiniCalendar() {
+    var ym = evState.calYear + '-' + String(evState.calMonth).padStart(2, '0');
+    fetch(B + '/api/calendar/month?month=' + encodeURIComponent(ym), { credentials:'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        evState.calData = data || {};
+        renderMiniCalendar();
+      })
+      .catch(function(e) { console.log('Cal fetch err', e); });
+  }
+
+  function renderMiniCalendar() {
+    var title = document.getElementById('mini-cal-title');
+    if (!title) return;
+
+    var dateObj = new Date(evState.calYear, evState.calMonth - 1, 1);
+    title.textContent = dateObj.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+
+    var grid = document.getElementById('mini-cal-grid');
+    if (!grid) return;
+
+    var daysInMonth = new Date(evState.calYear, evState.calMonth, 0).getDate();
+    var firstDay = new Date(evState.calYear, evState.calMonth - 1, 1).getDay();
+    var startOffset = (firstDay + 6) % 7;
+
+    var html = '<div class="mc-labels"><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span></div><div class="mc-days">';
+
+    for (var i = 0; i < startOffset; i++) {
+      html += '<div class="mc-day mc-empty"></div>';
+    }
+
+    var evDates = {};
+    if (evState.calData && evState.calData.events) {
+      evState.calData.events.forEach(function(e) {
+        if (e.date) {
+          var local = String(e.date).split('T')[0];
+          evDates[local] = true;
+        }
+      });
+    }
+    evState.events.forEach(function(e) {
+       if (e.date) {
+          var ymd = new Date(e.date).getFullYear() + '-' + String(new Date(e.date).getMonth()+1).padStart(2,'0') + '-' + String(new Date(e.date).getDate()).padStart(2,'0');
+          evDates[ymd] = true;
+       }
+    });
+
+    for (var d = 1; d <= daysInMonth; d++) {
+      var ymd = evState.calYear + '-' + String(evState.calMonth).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+      var hasEv = evDates[ymd] ? 'has-event' : '';
+      var isSel = (evState.selectedDate === ymd) ? 'selected' : '';
+      html += '<div class="mc-day ' + hasEv + ' ' + isSel + '" onclick="toggleCalDate(\'' + ymd + '\')">' + d + '</div>';
+    }
+    html += '</div>';
+    grid.innerHTML = html;
+  }
+
+  window.toggleCalDate = function(ymd) {
+    if (evState.selectedDate === ymd) {
+      evState.selectedDate = null;
+    } else {
+      evState.selectedDate = ymd;
+      var selD = new Date(ymd);
+      var isPast = selD.getTime() < new Date(new Date().toDateString()).getTime();
+      evState.tab = isPast ? 'past' : 'upcoming';
+      document.querySelectorAll('.ev-tab').forEach(function(b) { b.classList.remove('active'); });
+      var btn = document.querySelector('.ev-tab[data-tab="' + evState.tab + '"]');
+      if(btn) btn.classList.add('active');
+    }
+    renderMiniCalendar();
+    updateFilteredEvents();
+  };
+
+  function renderEvents(payload) {
+    var byId = {};
+    ['upcomingEvents','clubEvents','myCreatedEvents','invitedEvents'].forEach(function (k) {
+      (payload[k] || []).forEach(function (ev) {
+        if (!byId[ev.id]) {
+          byId[ev.id] = ev;
+          byId[ev.id]._source = {};
+        }
+        byId[ev.id]._source[k] = true;
+      });
+    });
+    var events = Object.keys(byId).map(function (k) { return byId[k]; })
+      .sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
+    events.forEach(function (ev) {
+      ev.isOwner = !!(ev._source && ev._source.myCreatedEvents);
+      ev.isInvited = !!(ev._source && ev._source.invitedEvents);
+    });
+    evById = byId;
+    evState.events = events;
+    evState.rsvps = payload.myRsvps || [];
+
+    var sportSelect = document.getElementById('ev-sport-select');
+    if (sportSelect && sportSelect.options.length === 1) {
+      var sports = {};
+      events.forEach(function(ev) { if (ev.sport) sports[ev.sport] = true; });
+      Object.keys(sports).sort().forEach(function(s) {
+        var opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = sportLabel(s);
+        sportSelect.appendChild(opt);
+      });
+    }
+
+    var inviteCount = events.filter(function(ev) { return ev._source && ev._source.invitedEvents; }).length;
+    var badge = document.getElementById('invites-badge');
+    if (badge) {
+      if (inviteCount > 0) { badge.textContent = inviteCount; badge.style.display = 'inline-block'; }
+      else { badge.style.display = 'none'; }
+    }
+
+    updateFilteredEvents();
+    renderRightRail();
+    fetchMiniCalendar();
+  }
+
+  initTabs();
   function loadEvents() {
     return fetch(B + '/api/events', { credentials:'same-origin' })
       .then(function (r) { return r.json(); })

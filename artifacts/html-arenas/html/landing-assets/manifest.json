@@ -146,6 +146,30 @@
       "width": 800,
       "height": 533
     },
+    "events-hikers-1600.avif": {
+      "file": "events-hikers-1600.d06b83f0ceef.avif",
+      "sha256": "d06b83f0ceefb5540e8cd074b221142a696cf28f3ba674b93e2734656ece7899",
+      "width": 1600,
+      "height": 600
+    },
+    "events-hikers-1600.webp": {
+      "file": "events-hikers-1600.427dbd2ed61e.webp",
+      "sha256": "427dbd2ed61e50fd1e092b02fd72f31823ba13f91be7da78ded7d7b6bb69dafb",
+      "width": 1600,
+      "height": 600
+    },
+    "events-hikers-800.avif": {
+      "file": "events-hikers-800.b24abf7afef5.avif",
+      "sha256": "b24abf7afef52982eef6e0637829206dec6fd838d05e394017f3bb90a213da01",
+      "width": 800,
+      "height": 300
+    },
+    "events-hikers-800.webp": {
+      "file": "events-hikers-800.233fb31fa20a.webp",
+      "sha256": "233fb31fa20ab65ee2796936c6e48dbc7e1614d4a5565e8ae5f15009286dd076",
+      "width": 800,
+      "height": 300
+    },
     "feed-yoga-1600.avif": {
       "file": "feed-yoga-1600.975fb889ad6c.avif",
       "sha256": "975fb889ad6c84c2d237daa9bf1e2a24c68df3875653725d553de7b8cd6681d2",
