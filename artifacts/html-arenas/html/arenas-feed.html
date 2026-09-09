@@ -292,7 +292,7 @@ button,select,input,textarea{font-family:var(--font)}
   position: relative;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  padding: 32px 32px 54px;
+  padding: 32px 20px 20px;
   background: var(--gray-900);
 }
 .feed-banner-bg {
@@ -313,6 +313,7 @@ button,select,input,textarea{font-family:var(--font)}
   position: relative;
   z-index: 2;
   color: white;
+  margin: 0 12px;
 }
 .feed-banner-title {
   font-size: 26px;
@@ -335,7 +336,7 @@ button,select,input,textarea{font-family:var(--font)}
   background: white;
   border-radius: var(--radius-lg);
   box-shadow: 0 4px 12px rgba(0,0,0,0.06);
-  margin: -34px 20px 0;
+  margin: 20px 0 0;
   padding: 10px 12px;
   border: 1px solid var(--gray-200);
 }
@@ -430,14 +431,26 @@ button,select,input,textarea{font-family:var(--font)}
   }
   .feed-banner-visual {
     border-radius: 0;
+    min-height: 0;
+    padding: 0;
+    overflow: visible;
+    background: transparent;
+  }
+  .feed-banner-bg {
+    bottom: auto;
     height: 120px;
-    min-height: 120px;
+    overflow: hidden;
+  }
+  .feed-banner-content {
+    height: 120px;
+    margin: 0;
     padding: 10px 20px;
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    justify-content: center;
   }
   .feed-banner-bg::after {
-    background: linear-gradient(90deg, rgba(3,10,22,.88) 0%, rgba(3,10,22,.66) 100%);
+    background: linear-gradient(90deg, rgba(3,10,22,.76) 0%, rgba(3,10,22,.52) 100%);
   }
   .feed-banner-title {
     font-size: 22px;
@@ -534,7 +547,6 @@ button,select,input,textarea{font-family:var(--font)}
           <h1 class="feed-banner-title">A more active you, together</h1>
           <p class="feed-banner-sub">Share your journey. Inspire others. Build your community.</p>
         </div>
-      </div>
 
       <!-- POST COMPOSER -->
       <div class="post-composer" id="post-composer">
@@ -601,6 +613,7 @@ button,select,input,textarea{font-family:var(--font)}
             <button class="composer-cancel" onclick="cancelPost()">Cancel</button>
           </div>
         </div>
+      </div>
       </div>
     </div>
 
