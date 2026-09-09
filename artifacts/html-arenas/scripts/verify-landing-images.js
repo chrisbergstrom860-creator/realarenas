@@ -333,10 +333,10 @@ async function verifyEventsImageMatrix() {
           } catch {}
         });
         await page.setContent(
-          '<style>body{margin:0}.band{display:block;width:' + (width <= 768 ? '100vw' : '900px') + ';height:220px}.band img{width:100%;height:100%;object-fit:cover}</style>' +
+          '<style>body{margin:0}.band{display:block;width:' + (width < 1024 ? '100vw' : 'calc(100vw - 216px)') + ';height:232px}.band img{width:100%;height:100%;object-fit:cover}</style>' +
           '<picture class="band">' +
-          '<source type="image/avif" srcset="' + ASSET_URL + asset('events-hikers-800.avif') + ' 800w, ' + ASSET_URL + asset('events-hikers-1600.avif') + ' 1600w" sizes="(max-width: 768px) 100vw, 900px">' +
-          '<source type="image/webp" srcset="' + ASSET_URL + asset('events-hikers-800.webp') + ' 800w, ' + ASSET_URL + asset('events-hikers-1600.webp') + ' 1600w" sizes="(max-width: 768px) 100vw, 900px">' +
+          '<source type="image/avif" srcset="' + ASSET_URL + asset('events-hikers-800.avif') + ' 800w, ' + ASSET_URL + asset('events-hikers-1600.avif') + ' 1600w" sizes="(min-width:1024px) calc(100vw - 216px), 100vw">' +
+          '<source type="image/webp" srcset="' + ASSET_URL + asset('events-hikers-800.webp') + ' 800w, ' + ASSET_URL + asset('events-hikers-1600.webp') + ' 1600w" sizes="(min-width:1024px) calc(100vw - 216px), 100vw">' +
           '<img src="' + ASSET_URL + asset('events-hikers-800.webp') + '" alt="">' +
           '</picture>'
         );

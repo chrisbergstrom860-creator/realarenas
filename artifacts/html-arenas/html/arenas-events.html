@@ -40,18 +40,15 @@ button,select,input,textarea{font-family:var(--font)}
 .icon-btn:hover{background:var(--gray-50)}/* ── SIDEBAR ── */
 
 
-/* Events' own content cap: */
+/* Match the Leaderboards page shell; Events' body keeps its own cap below. */
 .main {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  height: calc(100vh - var(--topbar-h));
-  width: 100%;
-  max-width: 940px;
-  margin: 0 auto;
 }
-.main::-webkit-scrollbar { width: 4px; }
-.main::-webkit-scrollbar-thumb { background: var(--gray-200); border-radius: 2px; }
 
 /* ── BODY LAYOUT ── */
 .body-grid {
@@ -59,6 +56,9 @@ button,select,input,textarea{font-family:var(--font)}
   grid-template-columns: 1fr 300px;
   flex: 0 0 auto;
   align-items: start;
+  width: 100%;
+  max-width: 940px;
+  margin: 0 auto;
 }
 .events-col { overflow: visible; }
 .sidebar-col {
@@ -77,12 +77,13 @@ button,select,input,textarea{font-family:var(--font)}
 
 /* Top Banner */
 .ev-hero {
+  grid-column: 1 / -1;
   position: relative;
-  border-radius: var(--radius-lg);
   overflow: hidden;
-  margin: 20px 20px 0;
+  margin: -24px -24px 0;
+  padding: 0;
   background: var(--gray-900);
-  min-height: 220px;
+  border-bottom: var(--border);
   flex-shrink: 0;
 }
 .ev-hero-bg {
@@ -102,9 +103,17 @@ button,select,input,textarea{font-family:var(--font)}
 .ev-hero-content {
   position: relative;
   z-index: 2;
-  padding: 40px 48px;
-  max-width: 500px;
+  min-height: 232px;
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 40px 24px 32px;
 }
+.ev-hero-left { min-width: 0; }
+.ev-hero-actions { display: flex; align-items: center; flex-shrink: 0; }
 .ev-hero-label {
   font-size: 11px;
   font-weight: 700;
@@ -139,6 +148,10 @@ button,select,input,textarea{font-family:var(--font)}
   gap: 16px;
   flex-wrap: wrap;
   flex-shrink: 0;
+  width: 100%;
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
 }
 .ev-tabs-scroll {
   flex: 1;
@@ -244,7 +257,6 @@ button,select,input,textarea{font-family:var(--font)}
 .mc-day.selected::after { background: var(--yellow); }
 
 @media (max-width: 768px) {
-  body:has(.bottom-nav) .main { height: auto; overflow: visible; padding-bottom: 80px; }
   body:has(.bottom-nav) .body-grid { display: flex; flex-direction: column; overflow: visible; }
   body:has(.bottom-nav) .events-col { min-width: 0; overflow: visible; }
   body:has(.bottom-nav) .sidebar-col { width: 100%; max-width: 100%; min-width: 0; overflow: visible; padding: 14px; gap: 14px; position: static; }
@@ -254,7 +266,6 @@ button,select,input,textarea{font-family:var(--font)}
   body:has(.bottom-nav) .evx-card { flex-wrap: wrap; }
   body:has(.bottom-nav) .evx-banner-m { display: block; width: calc(100% + 32px); height: 120px; object-fit: cover; object-position: center; margin: -16px -16px 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
 
-  .ev-hero { margin: 0; border-radius: 0; min-height: 260px; }
   .ev-hero-bg-mask {
     background: linear-gradient(90deg,
       rgba(255,255,255,.98) 0%,
@@ -262,11 +273,26 @@ button,select,input,textarea{font-family:var(--font)}
       rgba(255,255,255,.76) 78%,
       rgba(255,255,255,.08) 100%);
   }
-  .ev-hero-content { max-width: 300px; padding: 24px 16px; }
+  .ev-hero-content { max-width: none; }
   .ev-toolbar { padding: 12px 14px 0; }
   .ev-tabs-scroll { margin: 0 -14px; padding: 0 14px; }
   .ev-filters { width: 100%; }
   .ev-search-box { flex: 1; width: auto; }
+}
+@media (max-width: 480px) {
+  .main { gap: 12px; padding: 16px; }
+  .ev-hero { width: calc(100% + 32px); margin: -16px -16px 0; padding: 0; }
+  .ev-hero-content {
+    min-height: 270px;
+    align-items: flex-start;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 18px;
+    padding: 28px 16px 22px;
+  }
+  .ev-hero-left { max-width: 284px; }
+  .ev-hero-sub { margin-bottom: 0; }
+  .ev-hero-actions { width: 100%; }
 }
 /* ── TOAST ── */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--gray-900);color:white;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:500;z-index:999;transition:transform .3s ease;white-space:nowrap;box-shadow:var(--shadow-md)}
@@ -330,17 +356,21 @@ button,select,input,textarea{font-family:var(--font)}
   <div class="ev-hero">
     <div class="ev-hero-bg-mask"></div>
     <picture>
-      <source type="image/avif" srcset="/html/landing-assets/events-hikers-800.b24abf7afef5.avif 800w, /html/landing-assets/events-hikers-1600.d06b83f0ceef.avif 1600w" sizes="(max-width: 768px) 100vw, 900px">
-      <source type="image/webp" srcset="/html/landing-assets/events-hikers-800.233fb31fa20a.webp 800w, /html/landing-assets/events-hikers-1600.427dbd2ed61e.webp 1600w" sizes="(max-width: 768px) 100vw, 900px">
+      <source type="image/avif" srcset="/html/landing-assets/events-hikers-800.b24abf7afef5.avif 800w, /html/landing-assets/events-hikers-1600.d06b83f0ceef.avif 1600w" sizes="(min-width:1024px) calc(100vw - 216px), 100vw">
+      <source type="image/webp" srcset="/html/landing-assets/events-hikers-800.233fb31fa20a.webp 800w, /html/landing-assets/events-hikers-1600.427dbd2ed61e.webp 1600w" sizes="(min-width:1024px) calc(100vw - 216px), 100vw">
       <img class="ev-hero-bg" src="/html/landing-assets/events-hikers-800.233fb31fa20a.webp" alt="Four hikers overlooking a coastal town at sunset" loading="eager">
     </picture>
     <div class="ev-hero-content">
-      <div class="ev-hero-label">EVENTS</div>
-      <h1 class="ev-hero-title">Find your next adventure</h1>
-      <p class="ev-hero-sub">Join events, meet like-minded people, and turn activity into community.</p>
-      <button class="btn btn-yellow" id="create-event-btn" onclick="openCreateEvent()" style="padding:10px 20px;font-size:14px;">
-        <span style="font-size:16px;line-height:1;margin-right:4px;font-weight:700">+</span> Create event
-      </button>
+      <div class="ev-hero-left">
+        <div class="ev-hero-label">EVENTS</div>
+        <h1 class="ev-hero-title">Find your next adventure</h1>
+        <p class="ev-hero-sub">Join events, meet like-minded people, and turn activity into community.</p>
+      </div>
+      <div class="ev-hero-actions">
+        <button class="btn btn-yellow" id="create-event-btn" onclick="openCreateEvent()" style="padding:10px 20px;font-size:14px;">
+          <span style="font-size:16px;line-height:1;margin-right:4px;font-weight:700">+</span> Create event
+        </button>
+      </div>
     </div>
   </div>
 
