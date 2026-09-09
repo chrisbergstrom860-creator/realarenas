@@ -7506,7 +7506,8 @@ app.get(BASE + '/api/events', requireAuth, async (req, res) => {
 
     function enrichEvent(event) {
       const eventRsvps = allRsvps.filter(r => r.event_id === event.id);
-      const goingCount = eventRsvps.filter(r => r.status === 'going').length;
+      const goingRsvps = eventRsvps.filter(r => r.status === 'going');
+      const goingCount = goingRsvps.length;
       const interestedCount = eventRsvps.filter(r => r.status === 'interested').length;
       const myRsvp = eventRsvps.find(r => r.user_id === userId);
       const followersGoing = eventRsvps
@@ -7516,6 +7517,10 @@ app.get(BASE + '/api/events', requireAuth, async (req, res) => {
           handle: (nameMap[r.user_id] || {}).handle || 'athlete'
         }));
       const creator = nameMap[event.created_by] || {};
+      const goingAttendees = goingRsvps.slice(0, 4).map(r => ({
+        name: (nameMap[r.user_id] || {}).name || 'Athlete',
+        avatar_url: (nameMap[r.user_id] || {}).avatar_url || null
+      }));
       // The storage object path is server-side only: payloads carry the
       // version token (the timestamp segment), never the path or any URL.
       const { image_path, ...eventPublic } = event;
@@ -7524,8 +7529,10 @@ app.get(BASE + '/api/events', requireAuth, async (req, res) => {
         image: eventImageVersion(image_path),
         creatorName: creator.name || 'Athlete',
         creatorHandle: creator.handle || 'athlete',
+        creatorAvatarUrl: creator.avatar_url || null,
         clubs: (event.club_id && clubMap[event.club_id]) ? { name: clubMap[event.club_id].name } : null,
         goingCount,
+        goingAttendees,
         interestedCount,
         myRsvpStatus: myRsvp ? myRsvp.status : null,
         followersGoing,

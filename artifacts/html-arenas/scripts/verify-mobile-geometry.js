@@ -251,12 +251,14 @@ const PAGES = [
     steps: [{ name: 'discover', js: `document.getElementById('tab-btn-discover').click()`, waitFor: '#discover-grid .challenge-card',
       surfaces: [{ name: 'discover cards (member)', sel: '#discover-grid', min: 1 }] }] },
   { user: 'creator', name: 'events', path: '/events', waitFor: '#events-grid > *', root: 'body',
+    // Going-attendee avatars overlap by design; fallback initials inherit the
+    // same overlap, so exempt only that stack from the generic text-box rule.
+    ignoreOverlap: ['.evx-avatar-stack'],
     surfaces: [
       { name: 'events grid', sel: '#events-grid', min: 2 },
-      // Owner's PRIVATE event card action row: pill + Edit + Invites + Image +
-      // Delete (5 children) — the widest manage row anywhere. Measured at all
-      // VIEWPORTS (360/380/414); clip/offscreen checks catch a squeezed button.
-      { name: 'owner private card actions', sel: '#events-grid div:has(> [onclick*="manageInvites"])', min: 5 },
+      // Owner footer keeps Edit + Image + overflow reachable. Invites/Delete
+      // live behind overflow and are exercised by the modal step below.
+      { name: 'owner private card actions', sel: '#events-grid .evx-actions:has(> [aria-label="More event actions"])', min: 3 },
       // The redesigned mobile rail follows the event list and keeps all four
       // useful blocks: RSVP counts/history, Coming up, month calendar, and
       // the host card. Exactly four prevents accidental hiding or duplication.
@@ -270,14 +272,20 @@ const PAGES = [
       { name: 'modal-event-invites',
         // Batch C1: #evx-modal rides arenasOverlay — close via the primitive
         // (raw .remove() would leave a stale stack entry + locked scroll).
-        js: `window.arenasOverlay.close('evx-modal'); window.arenasOverlay.close('evx-inv-modal'); document.querySelector('[onclick*="manageInvites"]').click()`,
+        js: `window.arenasOverlay.close('evx-modal'); window.arenasOverlay.close('evx-inv-modal');
+             for (const more of document.querySelectorAll('[aria-label="More event actions"]')) {
+               more.click();
+               const invite = document.querySelector('#evx-owner-menu [onclick*="manageInvites"]');
+               if (invite) { invite.click(); break; }
+               window.arenasOverlay.close('evx-owner-menu');
+             }`,
         waitFor: '#evx-inv-pick', root: '#evx-inv-modal',
         surfaces: [{ name: 'event invite manager', sel: '#evx-inv-modal > div', min: 2 }] },
       // Shared 3:1 crop overlay (arenas-crop.js on arenasOverlay). Driven via
       // the image hook — file pickers can't be automated here. Non-black test
       // image so the blank-export guard never trips on the seed.
       { name: 'modal-crop',
-        js: `['evx-modal','evx-inv-modal'].forEach((id) => window.arenasOverlay.close(id));
+        js: `['evx-modal','evx-inv-modal','evx-owner-menu'].forEach((id) => window.arenasOverlay.close(id));
              document.querySelectorAll('#evx-img-modal').forEach((m) => m.remove());
              (() => { const c = document.createElement('canvas'); c.width = 300; c.height = 900;
                const x = c.getContext('2d'); x.fillStyle = '#B33A3A'; x.fillRect(0, 0, 300, 900);

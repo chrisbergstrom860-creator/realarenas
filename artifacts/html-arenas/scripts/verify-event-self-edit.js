@@ -215,9 +215,38 @@ try {
     [...document.querySelectorAll('#events-grid button')].some((b) => b.textContent.trim() === 'Edit'));
   const cardEdit = await page.evaluate(() => {
     const btns = [...document.querySelectorAll('#events-grid button')].map((b) => b.textContent.trim());
-    return { hasEdit: btns.includes('Edit'), btns: btns.slice(0, 12) };
+    const card = document.querySelector('#events-grid .evx-card');
+    const tile = card && card.querySelector('.evx-date-tile');
+    const tags = card && card.querySelector('.evx-tags');
+    const tagEls = tags ? [...tags.querySelectorAll('.tag')] : [];
+    const footer = card && card.querySelector('.evx-footer');
+    const tileCss = tile && getComputedStyle(tile);
+    const tagsCss = tags && getComputedStyle(tags);
+    return {
+      hasEdit: btns.includes('Edit'),
+      hasMore: !!(card && card.querySelector('[aria-label="More event actions"]')),
+      hasOwnerChip: !!(card && card.querySelector('.evx-owner-chip')),
+      hasOrganiserAvatar: !!(card && card.querySelector('.evx-organiser-avatar')),
+      cardDisplay: card && getComputedStyle(card).display,
+      tileDisplay: tileCss && tileCss.display,
+      tileWidth: tile && tile.getBoundingClientRect().width,
+      tileHeight: tile && tile.getBoundingClientRect().height,
+      tagsDisplay: tagsCss && tagsCss.display,
+      tagsGap: tagsCss && parseFloat(tagsCss.columnGap),
+      separatedTags: tagEls.length > 1 && tagEls[1].getBoundingClientRect().left > tagEls[0].getBoundingClientRect().right,
+      footerDisplay: footer && getComputedStyle(footer).display,
+      btns: btns.slice(0, 12)
+    };
   });
   check('owner card shows an Edit button', cardEdit.hasEdit, JSON.stringify(cardEdit.btns));
+  check('event card uses the structured grid layout', cardEdit.cardDisplay === 'grid', JSON.stringify(cardEdit));
+  check('event date tile keeps its flex layout and dimensions',
+    cardEdit.tileDisplay === 'flex' && cardEdit.tileWidth >= 63 && cardEdit.tileHeight >= 81, JSON.stringify(cardEdit));
+  check('event chips are flex-wrapped with visible separation',
+    cardEdit.tagsDisplay === 'flex' && cardEdit.tagsGap >= 5 && cardEdit.separatedTags, JSON.stringify(cardEdit));
+  check('owner indicator, organiser avatar and overflow action remain visible',
+    cardEdit.hasOwnerChip && cardEdit.hasOrganiserAvatar && cardEdit.hasMore, JSON.stringify(cardEdit));
+  check('event footer keeps organiser and actions in a flex row', cardEdit.footerDisplay === 'flex', JSON.stringify(cardEdit));
 
   // Cancel path: prefill + no visibility field + nothing saved on ✕.
   await page.evaluate(`ARENAS_EVENTS.edit(${JSON.stringify(evPub.id)})`);
