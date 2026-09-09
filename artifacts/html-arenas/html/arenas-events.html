@@ -253,8 +253,11 @@ button,select,input,textarea{font-family:var(--font)}
 .mc-day.mc-empty { cursor: default; }
 .mc-day.mc-empty:hover { background: none; }
 .mc-day.has-event::after { content: ''; position: absolute; bottom: 4px; width: 4px; height: 4px; border-radius: 50%; background: var(--yellow-dark); }
+.mc-day.today { box-shadow: inset 0 0 0 1px var(--gray-300); }
 .mc-day.selected { background: var(--gray-900); color: white; font-weight: 600; }
 .mc-day.selected::after { background: var(--yellow); }
+.mini-cal-legend { display:flex; align-items:center; gap:6px; padding:0 16px 12px; color:var(--gray-500); font-size:11px; }
+.mini-cal-legend-dot { color:var(--yellow-dark); font-size:13px; line-height:1; }
 
 @media (max-width: 768px) {
   body:has(.bottom-nav) .body-grid { display: flex; flex-direction: column; overflow: visible; }
@@ -449,6 +452,7 @@ button,select,input,textarea{font-family:var(--font)}
         <div class="mini-cal-grid" id="mini-cal-grid">
            <div style="padding:16px;text-align:center;font-size:12px;color:var(--gray-400)">Loading...</div>
         </div>
+        <div class="mini-cal-legend"><span class="mini-cal-legend-dot" aria-hidden="true">●</span> <span>Event day</span></div>
       </div>
 
       <!-- Host Card -->
@@ -677,7 +681,6 @@ function showToast(msg){
     rsvps: [],
     calYear: new Date().getFullYear(),
     calMonth: new Date().getMonth() + 1,
-    calData: null,
     selectedDate: null
   };
 
@@ -716,12 +719,12 @@ function showToast(msg){
     if (p) p.addEventListener('click', function() {
       evState.calMonth--;
       if (evState.calMonth < 1) { evState.calMonth = 12; evState.calYear--; }
-      fetchMiniCalendar();
+      renderMiniCalendar();
     });
     if (n) n.addEventListener('click', function() {
       evState.calMonth++;
       if (evState.calMonth > 12) { evState.calMonth = 1; evState.calYear++; }
-      fetchMiniCalendar();
+      renderMiniCalendar();
     });
   }
 
@@ -883,17 +886,6 @@ function showToast(msg){
     }, 50);
   };
 
-  function fetchMiniCalendar() {
-    var ym = evState.calYear + '-' + String(evState.calMonth).padStart(2, '0');
-    fetch(B + '/api/calendar/month?month=' + encodeURIComponent(ym), { credentials:'same-origin' })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        evState.calData = data || {};
-        renderMiniCalendar();
-      })
-      .catch(function(e) { console.log('Cal fetch err', e); });
-  }
-
   function renderMiniCalendar() {
     var title = document.getElementById('mini-cal-title');
     if (!title) return;
@@ -915,26 +907,22 @@ function showToast(msg){
     }
 
     var evDates = {};
-    if (evState.calData && evState.calData.events) {
-      evState.calData.events.forEach(function(e) {
-        if (e.date) {
-          var local = String(e.date).split('T')[0];
-          evDates[local] = true;
-        }
-      });
-    }
     evState.events.forEach(function(e) {
        if (e.date) {
-          var ymd = new Date(e.date).getFullYear() + '-' + String(new Date(e.date).getMonth()+1).padStart(2,'0') + '-' + String(new Date(e.date).getDate()).padStart(2,'0');
+          var eventDate = new Date(e.date);
+          var ymd = eventDate.getFullYear() + '-' + String(eventDate.getMonth()+1).padStart(2,'0') + '-' + String(eventDate.getDate()).padStart(2,'0');
           evDates[ymd] = true;
        }
     });
 
+    var now = new Date();
+    var todayYmd = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
     for (var d = 1; d <= daysInMonth; d++) {
       var ymd = evState.calYear + '-' + String(evState.calMonth).padStart(2, '0') + '-' + String(d).padStart(2, '0');
       var hasEv = evDates[ymd] ? 'has-event' : '';
       var isSel = (evState.selectedDate === ymd) ? 'selected' : '';
-      html += '<div class="mc-day ' + hasEv + ' ' + isSel + '" onclick="toggleCalDate(\'' + ymd + '\')">' + d + '</div>';
+      var isToday = (todayYmd === ymd) ? 'today' : '';
+      html += '<div class="mc-day ' + hasEv + ' ' + isSel + ' ' + isToday + '" data-date="' + ymd + '" onclick="toggleCalDate(\'' + ymd + '\')">' + d + '</div>';
     }
     html += '</div>';
     grid.innerHTML = html;
@@ -945,7 +933,8 @@ function showToast(msg){
       evState.selectedDate = null;
     } else {
       evState.selectedDate = ymd;
-      var selD = new Date(ymd);
+      var dateParts = ymd.split('-').map(Number);
+      var selD = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
       var isPast = selD.getTime() < new Date(new Date().toDateString()).getTime();
       evState.tab = isPast ? 'past' : 'upcoming';
       document.querySelectorAll('.ev-tab').forEach(function(b) { b.classList.remove('active'); });
@@ -998,7 +987,7 @@ function showToast(msg){
 
     updateFilteredEvents();
     renderRightRail();
-    fetchMiniCalendar();
+    renderMiniCalendar();
   }
 
   initTabs();

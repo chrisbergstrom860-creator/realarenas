@@ -209,7 +209,11 @@ try {
   await context.addCookies(setC);
   const page = await context.newPage();
   const errors = [];
+  let calendarMonthRequests = 0;
   page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('request', (req) => {
+    if (req.url().includes('/api/calendar/month')) calendarMonthRequests++;
+  });
   await page.goto(BASE + '/events', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() =>
     [...document.querySelectorAll('#events-grid button')].some((b) => b.textContent.trim() === 'Edit'));
@@ -247,6 +251,42 @@ try {
   check('owner indicator, organiser avatar and overflow action remain visible',
     cardEdit.hasOwnerChip && cardEdit.hasOrganiserAvatar && cardEdit.hasMore, JSON.stringify(cardEdit));
   check('event footer keeps organiser and actions in a flex row', cardEdit.footerDisplay === 'flex', JSON.stringify(cardEdit));
+
+  const miniCalendar = await page.evaluate(({ publicDate, privateDate }) => {
+    const localYmd = (iso) => {
+      const d = new Date(iso);
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    };
+    const expected = [...new Set([localYmd(publicDate), localYmd(privateDate)])].sort();
+    const dots = [...document.querySelectorAll('.mc-day.has-event')].map((el) => el.dataset.date).sort();
+    const today = document.querySelector('.mc-day.today');
+    const legend = document.querySelector('.mini-cal-legend');
+    return {
+      expected,
+      dots,
+      todayCount: document.querySelectorAll('.mc-day.today').length,
+      todayOutline: today ? getComputedStyle(today).boxShadow : '',
+      legend: legend ? legend.textContent.replace(/\s+/g, ' ').trim() : ''
+    };
+  }, { publicDate: newDate.toISOString(), privateDate: origDate.toISOString() });
+  check('mini calendar does not fetch the shared activities/plans month API', calendarMonthRequests === 0, calendarMonthRequests);
+  check('mini calendar dots exactly match Events-page event days',
+    JSON.stringify(miniCalendar.dots) === JSON.stringify(miniCalendar.expected), JSON.stringify(miniCalendar));
+  check('mini calendar gives today one subtle outline',
+    miniCalendar.todayCount === 1 && miniCalendar.todayOutline && miniCalendar.todayOutline !== 'none', JSON.stringify(miniCalendar));
+  check('mini calendar explains its marker', miniCalendar.legend === '● Event day', miniCalendar.legend);
+  const selectedDay = miniCalendar.expected[0];
+  await page.evaluate((ymd) => window.toggleCalDate(ymd), selectedDay);
+  const selectedFilter = await page.evaluate((ymd) => ({
+    selected: document.querySelectorAll('.mc-day.selected').length,
+    selectedDate: document.querySelector('.mc-day.selected')?.dataset.date || null,
+    cards: document.querySelectorAll('#events-grid .evx-card').length,
+    empty: /No events found/.test(document.getElementById('events-grid').textContent)
+  }), selectedDay);
+  check('clicking a dotted day selects it and filters to matching event cards',
+    selectedFilter.selected === 1 && selectedFilter.selectedDate === selectedDay &&
+      selectedFilter.cards >= 1 && !selectedFilter.empty, JSON.stringify(selectedFilter));
+  await page.evaluate((ymd) => window.toggleCalDate(ymd), selectedDay);
 
   // Cancel path: prefill + no visibility field + nothing saved on ✕.
   await page.evaluate(`ARENAS_EVENTS.edit(${JSON.stringify(evPub.id)})`);
