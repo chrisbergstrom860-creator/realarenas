@@ -112,7 +112,7 @@
     parts.push('<div id="' + id('error') + '" class="evx-error" style="display:none"></div>');
     fields.forEach(function (f) {
       if (f === 'title') {
-        parts.push(limitedField('Title *', 'title', ev.title || '', '<input class="evx-input" id="' + id('title') + '" name="title" required maxlength="80" value="' + esc(ev.title || '') + '" placeholder="e.g. Saturday long run"></input>'.replace('></input>', '>')));
+        parts.push(limitedField('Title *', 'title', ev.title || '', '<input class="evx-input" id="' + id('title') + '" name="title" required maxlength="' + TEXT_LIMITS.title + '" value="' + esc(ev.title || '') + '" placeholder="e.g. Saturday long run"></input>'.replace('></input>', '>')));
       } else if (f === 'sport') {
         if (onDashboard) {
           // Chip renderer (dashboard convention) from the sports registry,
@@ -146,7 +146,7 @@
           field('Start time *', '<input class="evx-input" type="time" id="' + id('time') + '" name="time" required value="' + esc(timeVal) + '">') +
           '</div>');
       } else if (f === 'location') {
-        parts.push(limitedField('Location *', 'location', ev.location || '', '<input class="evx-input" id="' + id('location') + '" name="location" required maxlength="120" value="' + esc(ev.location || '') + '" placeholder="e.g. Victoria Park, London">'));
+        parts.push(limitedField('Location *', 'location', ev.location || '', '<input class="evx-input" id="' + id('location') + '" name="location" required maxlength="' + TEXT_LIMITS.location + '" value="' + esc(ev.location || '') + '" placeholder="e.g. Victoria Park, London">'));
       } else if (f === 'distance_level_row') {
         var levelInner = onDashboard
           ? '<select class="evx-select" id="' + id('level') + '" name="level">' + optHtml(LEVEL_OPTIONS, ev.level) + '</select>'
@@ -161,7 +161,7 @@
           field('Max participants', '<input class="evx-input" type="number" min="1" id="' + id('max') + '" name="max_participants" value="' + esc(ev.max_participants || '') + '" placeholder="Optional">') +
           '</div>');
       } else if (f === 'description') {
-        parts.push(limitedField('Description', 'description', ev.description || '', '<textarea class="evx-textarea" id="' + id('desc') + '" name="description" maxlength="500" placeholder="Tell people what to expect…">' + esc(ev.description || '') + '</textarea>'));
+        parts.push(limitedField('Description', 'description', ev.description || '', '<textarea class="evx-textarea" id="' + id('desc') + '" name="description" maxlength="' + TEXT_LIMITS.description + '" placeholder="Tell people what to expect…">' + esc(ev.description || '') + '</textarea>'));
       } else if (f === 'image') {
         parts.push(field('Cover image (optional)',
           '<input type="file" id="' + id('image') + '" accept="image/jpeg,image/png,image/webp" style="font-size:12px;width:100%">' +
@@ -201,7 +201,20 @@
       var input = g(counter.input), output = g(counter.count);
       if (!input || !output) return;
       var sync = function () { output.textContent = input.value.length + '/' + counter.limit; };
-      input.addEventListener('input', sync);
+      var enforceLimit = function () {
+        // Match the server's String(value).length: UTF-16 code units, including during IME input.
+        if (input.value.length > counter.limit) {
+          var end = counter.limit;
+          // Do not leave an invalid half-emoji when the cutoff splits a surrogate pair.
+          var before = input.value.charCodeAt(end - 1), after = input.value.charCodeAt(end);
+          if (before >= 0xD800 && before <= 0xDBFF && after >= 0xDC00 && after <= 0xDFFF) end--;
+          input.value = input.value.slice(0, end);
+          input.setSelectionRange(input.value.length, input.value.length);
+        }
+        sync();
+      };
+      input.addEventListener('input', enforceLimit);
+      input.addEventListener('compositionend', enforceLimit);
       sync();
     });
 

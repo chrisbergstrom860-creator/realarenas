@@ -33,6 +33,10 @@ class FakeElement {
     event.target = this;
     (this.listeners[event.type] || []).forEach((fn) => fn(event));
   }
+  setSelectionRange(start, end) {
+    this.selectionStart = start;
+    this.selectionEnd = end;
+  }
   getAttribute(name) {
     return Object.prototype.hasOwnProperty.call(this.attrs, name) ? this.attrs[name] : null;
   }
@@ -137,6 +141,76 @@ const contexts = [
   ['club-dashboard', 'create'],
   ['club-dashboard', 'edit']
 ];
+
+// Use the real server's rules and validator to guard client/server counting parity.
+const serverSource = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
+const serverRules = vm.runInNewContext(
+  serverSource.match(/const EVENT_TEXT_LIMITS = Object\.freeze\([\s\S]*?\n\}\);/)[0] + '\n' +
+  serverSource.match(/function eventTextLimitError\(body\) \{[\s\S]*?\n\}/)[0] +
+  '\n({ limits: EVENT_TEXT_LIMITS, validate: eventTextLimitError })'
+);
+
+for (const type of ['input', 'compositionend']) {
+  test(type + ' truncates all event fields immediately and synchronizes counters and caret', () => {
+    for (const [context, mode] of contexts) {
+      const { api } = loadModule();
+      const form = build(api, context, mode).el;
+      const prefix = context + '-' + mode;
+      for (const [field, rule] of Object.entries(serverRules.limits)) {
+        const input = form.querySelector('#' + prefix + '-' + (field === 'description' ? 'desc' : field));
+        const counter = form.querySelector('#' + prefix + '-' + field + '-count');
+        assert.equal(Number(input.getAttribute('maxlength')), rule.max);
+        input.value = 'x'.repeat(rule.max + 9);
+        input.setSelectionRange(2, 4);
+        input.dispatchEvent({ type, isComposing: type === 'input' });
+        assert.equal(input.value, 'x'.repeat(rule.max), prefix + ' ' + field);
+        assert.equal(counter.textContent, rule.max + '/' + rule.max);
+        assert.equal(input.selectionStart, rule.max);
+        assert.equal(input.selectionEnd, rule.max);
+        assert.equal(serverRules.validate({ [field]: input.value }), null);
+
+        input.value = 'short';
+        input.setSelectionRange(2, 2);
+        input.dispatchEvent({ type });
+        assert.equal(input.value, 'short');
+        assert.equal(counter.textContent, '5/' + rule.max);
+        assert.equal(input.selectionStart, 2, 'in-limit editing must not move the caret');
+        assert.equal(input.selectionEnd, 2);
+      }
+    }
+  });
+}
+
+test('emoji counters and truncation use the same UTF-16 string length as the server', () => {
+  for (const [context, mode] of contexts) {
+    const { api } = loadModule();
+    const form = build(api, context, mode).el;
+    const prefix = context + '-' + mode;
+    for (const [field, rule] of Object.entries(serverRules.limits)) {
+      const input = form.querySelector('#' + prefix + '-' + (field === 'description' ? 'desc' : field));
+      const counter = form.querySelector('#' + prefix + '-' + field + '-count');
+      for (const type of ['input', 'compositionend']) {
+        input.value = '😀'.repeat(rule.max);
+        assert.equal(input.value.length, rule.max * 2);
+        assert.notEqual(serverRules.validate({ [field]: input.value }), null);
+        input.dispatchEvent({ type, isComposing: type === 'input' });
+        assert.equal(input.value, '😀'.repeat(rule.max / 2));
+        assert.equal(counter.textContent, rule.max + '/' + rule.max);
+        assert.equal(input.selectionStart, rule.max);
+        assert.equal(input.selectionEnd, rule.max);
+        assert.equal(serverRules.validate({ [field]: input.value }), null);
+
+        input.value = 'x'.repeat(rule.max - 1) + '😀';
+        input.dispatchEvent({ type, isComposing: type === 'input' });
+        assert.equal(input.value, 'x'.repeat(rule.max - 1), 'never leave a dangling surrogate');
+        assert.equal(counter.textContent, (rule.max - 1) + '/' + rule.max);
+        assert.equal(input.selectionStart, rule.max - 1);
+        assert.equal(input.selectionEnd, rule.max - 1);
+        assert.equal(serverRules.validate({ [field]: input.value }), null);
+      }
+    }
+  }
+});
 
 test('shared create/edit forms expose limits and live counters', () => {
   const { api } = loadModule();
