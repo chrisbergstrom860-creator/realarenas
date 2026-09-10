@@ -396,7 +396,8 @@ function showToast(msg) {
   // (icon tile, escaped title, time-ago, registry sport pill), body via the
   // ONE shared builder (title off — it lives in this header). Feeling is
   // shown to visitors who can see the activity, gated by activity sharing;
-  // it is never shown in club-coach views or sent in their payloads.
+  // this includes coaches viewing as peers, but excludes club manager/coach
+  // dashboards, analytics, reports, and their data payloads.
   function activityCard(act){
     var reg = byId[act.sport];
     var icon = reg ? reg.emoji : '🏃';
