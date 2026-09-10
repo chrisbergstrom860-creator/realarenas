@@ -73,12 +73,13 @@
     list.innerHTML = visible.map(function (n) {
       var id = esc(n.id);
       var bg = n.read ? 'white' : '#FFFDF0';
+      var bodyClass = n.type === 'event' ? ' class="event-text"' : '';
       return '<div data-nid="' + id + '" onclick="openNotification(\'' + id + '\')"' +
         ' style="display:flex;align-items:flex-start;gap:10px;padding:11px 16px;border-bottom:var(--border);cursor:pointer;background:' + bg + '"' +
         ' onmouseenter="this.style.background=\'var(--gray-50)\'" onmouseleave="this.style.background=\'' + bg + '\'">' +
           '<div style="width:32px;height:32px;border-radius:50%;background:var(--yellow-light);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;margin-top:1px">' + (typeIcons[n.type] || '✦') + '</div>' +
           '<div style="flex:1;min-width:0">' +
-            '<div style="font-size:12px;color:var(--gray-900);line-height:1.5;margin-bottom:2px">' + esc(n.body) + '</div>' +
+            '<div' + bodyClass + ' style="font-size:12px;color:var(--gray-900);line-height:1.5;margin-bottom:2px">' + esc(n.body) + '</div>' +
             '<div style="font-size:10px;color:var(--gray-400)">' + esc(timeAgo(n.created_at)) + '</div>' +
           '</div>' +
           inviteActionHtml(n) + challengeInviteActionHtml(n) +

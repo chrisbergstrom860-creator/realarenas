@@ -2641,9 +2641,9 @@ if (logHashMatch) {
                     '<div style="font-size:8px;font-weight:600;text-transform:uppercase;color:#9A3412">' + month + '</div>' +
                     '<div style="font-size:15px;font-weight:700;font-family:var(--mono);line-height:1;color:#9A3412">' + dayN + '</div>' +
                   '</div>' +
-                  '<div style="flex:1;min-width:0">' +
-                    '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escOv(ev.title) + '</div>' +
-                    '<div style="font-size:10px;color:var(--gray-400)">' + when + ' ' + time + ' · ' + escOv(ev.location) + ' · ' + ev.goingCount + ' going</div>' +
+                  '<div class="event-text" style="flex:1;min-width:0">' +
+                    '<div class="event-text" style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + escOv(ev.title) + '</div>' +
+                    '<div class="event-text" style="font-size:10px;color:var(--gray-400)">' + when + ' ' + time + ' · ' + escOv(ev.location) + ' · ' + ev.goingCount + ' going</div>' +
                   '</div>' +
                   statusBadge +
                 '</div>';

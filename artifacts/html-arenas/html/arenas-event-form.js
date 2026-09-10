@@ -39,6 +39,7 @@
   var TYPE_OPTIONS = ['Group training', 'Track session', 'Long run / ride', 'Race',
     'Social run / ride', 'Open water swim', 'Climbing session', 'Other'];
   var LEVEL_OPTIONS = ['All abilities', 'Beginner friendly', 'Intermediate', 'Advanced', 'Elite / competitive'];
+  var TEXT_LIMITS = { title: 80, location: 120, description: 500 };
 
   // The image URL is the authenticated proxy — never a storage URL. ?v= is
   // the version token from the payload; replacing the image changes it.
@@ -87,6 +88,15 @@
     function field(labelHtml, inner) {
       return '<div class="evx-field"><label class="evx-label">' + labelHtml + '</label>' + inner + '</div>';
     }
+    function limitedField(labelHtml, suffix, current, inner) {
+      return '<div class="evx-field">' +
+        '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">' +
+          '<label class="evx-label" style="margin-bottom:0">' + labelHtml + '</label>' +
+          '<div id="' + id(suffix + '-count') + '" style="font-size:11px;color:var(--gray-400)">' +
+            String(current == null ? '' : current).length + '/' + TEXT_LIMITS[suffix] +
+          '</div>' +
+        '</div>' + inner + '</div>';
+    }
     function optHtml(list, current) {
       // A stored value outside the fixed list (free-text-created event, data
       // migration) must be PRESERVED as a selected option — otherwise the
@@ -102,7 +112,7 @@
     parts.push('<div id="' + id('error') + '" class="evx-error" style="display:none"></div>');
     fields.forEach(function (f) {
       if (f === 'title') {
-        parts.push(field('Title *', '<input class="evx-input" id="' + id('title') + '" name="title" required value="' + esc(ev.title || '') + '" placeholder="e.g. Saturday long run"></input>'.replace('></input>', '>')));
+        parts.push(limitedField('Title *', 'title', ev.title || '', '<input class="evx-input" id="' + id('title') + '" name="title" required maxlength="80" value="' + esc(ev.title || '') + '" placeholder="e.g. Saturday long run"></input>'.replace('></input>', '>')));
       } else if (f === 'sport') {
         if (onDashboard) {
           // Chip renderer (dashboard convention) from the sports registry,
@@ -136,7 +146,7 @@
           field('Start time *', '<input class="evx-input" type="time" id="' + id('time') + '" name="time" required value="' + esc(timeVal) + '">') +
           '</div>');
       } else if (f === 'location') {
-        parts.push(field('Location *', '<input class="evx-input" id="' + id('location') + '" name="location" required value="' + esc(ev.location || '') + '" placeholder="e.g. Victoria Park, London">'));
+        parts.push(limitedField('Location *', 'location', ev.location || '', '<input class="evx-input" id="' + id('location') + '" name="location" required maxlength="120" value="' + esc(ev.location || '') + '" placeholder="e.g. Victoria Park, London">'));
       } else if (f === 'distance_level_row') {
         var levelInner = onDashboard
           ? '<select class="evx-select" id="' + id('level') + '" name="level">' + optHtml(LEVEL_OPTIONS, ev.level) + '</select>'
@@ -151,7 +161,7 @@
           field('Max participants', '<input class="evx-input" type="number" min="1" id="' + id('max') + '" name="max_participants" value="' + esc(ev.max_participants || '') + '" placeholder="Optional">') +
           '</div>');
       } else if (f === 'description') {
-        parts.push(field('Description', '<textarea class="evx-textarea" id="' + id('desc') + '" name="description" placeholder="Tell people what to expect…">' + esc(ev.description || '') + '</textarea>'));
+        parts.push(limitedField('Description', 'description', ev.description || '', '<textarea class="evx-textarea" id="' + id('desc') + '" name="description" maxlength="500" placeholder="Tell people what to expect…">' + esc(ev.description || '') + '</textarea>'));
       } else if (f === 'image') {
         parts.push(field('Cover image (optional)',
           '<input type="file" id="' + id('image') + '" accept="image/jpeg,image/png,image/webp" style="font-size:12px;width:100%">' +
@@ -182,6 +192,18 @@
     form.id = id('form');
     form.innerHTML = parts.join('');
     var g = function (suffix) { return form.querySelector('#' + id(suffix)); };
+
+    [
+      { input: 'title', count: 'title-count', limit: TEXT_LIMITS.title },
+      { input: 'location', count: 'location-count', limit: TEXT_LIMITS.location },
+      { input: 'desc', count: 'description-count', limit: TEXT_LIMITS.description }
+    ].forEach(function (counter) {
+      var input = g(counter.input), output = g(counter.count);
+      if (!input || !output) return;
+      var sync = function () { output.textContent = input.value.length + '/' + counter.limit; };
+      input.addEventListener('input', sync);
+      sync();
+    });
 
     // Chip selection (dashboard sport picker) — delegated, no globals.
     if (onDashboard && mode === 'create') {
@@ -307,6 +329,13 @@
       // creating now would have to drop or center-crop an image the user
       // never saw. Block honestly instead. (Validation-stage in every host.)
       if (cropState === 'pending') return 'Still preparing the image crop — one moment.';
+      // maxlength is a typing aid, not a validation boundary: scripts can set
+      // longer values, and legacy edit rows may already exceed the new caps.
+      // Preserve those prefills verbatim, but require an in-limit value before
+      // either create or edit is sent.
+      if (g('title').value.length > TEXT_LIMITS.title) return 'Title must be 80 characters or less.';
+      if (g('location').value.length > TEXT_LIMITS.location) return 'Location must be 120 characters or less.';
+      if (g('desc').value.length > TEXT_LIMITS.description) return 'Description must be 500 characters or less.';
       if (ctx === 'events-page') {
         // Sport only exists (and is only required) in create mode — edit mode
         // has no sport field (immutable after creation).

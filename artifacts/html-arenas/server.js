@@ -7558,6 +7558,22 @@ app.get(BASE + '/api/events', requireAuth, async (req, res) => {
   }
 });
 
+const EVENT_TEXT_LIMITS = Object.freeze({
+  title: { max: 80, label: 'Title' },
+  location: { max: 120, label: 'Location' },
+  description: { max: 500, label: 'Description' }
+});
+
+function eventTextLimitError(body) {
+  for (const [field, rule] of Object.entries(EVENT_TEXT_LIMITS)) {
+    if (body[field] !== undefined && body[field] !== null &&
+        String(body[field]).length > rule.max) {
+      return `${rule.label} must be ${rule.max} characters or less.`;
+    }
+  }
+  return null;
+}
+
 // Create an event, auto-RSVP the creator as going, and notify invited followers
 // (restricted to people the caller follows) plus club members if club-posted.
 app.post(BASE + '/api/events/create', requireAuth, async (req, res) => {
@@ -7586,6 +7602,8 @@ app.post(BASE + '/api/events/create', requireAuth, async (req, res) => {
       .eq('club_id', club_id).eq('user_id', req.user.id).maybeSingle();
     if (!membership) return res.json({ error: 'You are not a member of that club' });
   }
+  const textLimitError = eventTextLimitError(b);
+  if (textLimitError) return res.status(400).json({ error: textLimitError });
   const { data: event, error } = await supabaseAdmin
     .from('events').insert({
       created_by: req.user.id,
@@ -8044,6 +8062,8 @@ app.patch(BASE + '/api/events/:id', requireAuth, async (req, res) => {
   if (!event) return res.json({ error: 'Event not found' });
   if (!(await canManageEvent(event, req.user.id))) return res.json({ error: 'You do not have permission to edit this event' });
 
+  const textLimitError = eventTextLimitError(req.body || {});
+  if (textLimitError) return res.status(400).json({ error: textLimitError });
   const { title, event_type, date, location, distance, level, description, entry_fee, max_participants } = req.body;
   if (date !== undefined && isNaN(new Date(date).getTime())) {
     return res.json({ error: 'Invalid date' });

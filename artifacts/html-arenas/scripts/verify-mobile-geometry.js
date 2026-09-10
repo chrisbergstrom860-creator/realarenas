@@ -172,12 +172,26 @@ for (const [u, txt] of [[C, ACT_TITLE + ' — felt strong through every rep, wea
 }
 // events with RSVPs (long titles + location)
 const EVENTS = [];
+const OVERFLOW_EVENT_TITLE = 'GeometryGuardTitleTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT';
+const OVERFLOW_EVENT_LOCATION = 'GeometryGuardLocationLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL';
+const OVERFLOW_DESCRIPTION_TOKEN = 'GeometryGuardDescriptionTokenDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD';
+const OVERFLOW_EVENT_DESCRIPTION = 'Permanent event overflow geometry fixture containing ' + OVERFLOW_DESCRIPTION_TOKEN;
+if (OVERFLOW_EVENT_TITLE.length !== 80 || OVERFLOW_EVENT_LOCATION.length !== 120 || OVERFLOW_DESCRIPTION_TOKEN.length !== 60) {
+  throw new Error('event overflow fixture lengths changed');
+}
 for (const [i, t] of ['Midnight-Sun Coastal Half-Marathon Preparation Long Run and Post-Run Waffle Social', 'Track Tuesday'].entries()) {
   const ev = await ins('events', { created_by: C, club_id: club.id, title: t, sport: 'running',
     event_type: 'training', date: iso(3 + i * 4), location: 'Ytre Snillfjordsbotn Community Athletics Track, North Entrance', visibility: 'club' });
   EVENTS.push(ev.id);
   for (const u of [M, ...F.slice(0, 4)]) await ins('event_rsvps', { event_id: ev.id, user_id: u, status: 'going' });
 }
+const evOverflow = await ins('events', {
+  created_by: C, title: OVERFLOW_EVENT_TITLE, sport: 'running', event_type: 'training',
+  date: iso(5), location: OVERFLOW_EVENT_LOCATION, description: OVERFLOW_EVENT_DESCRIPTION,
+  visibility: 'public'
+});
+EVENTS.push(evOverflow.id);
+await ins('event_rsvps', { event_id: evOverflow.id, user_id: M, status: 'going' });
 // private invite-only event by creator → owner card shows the Invites button;
 // invitees (M pending, f0 going) populate the manage overlay's list AND leave
 // eligible followees (f1..f4) so the invite-more picker renders too.
@@ -263,6 +277,38 @@ const PAGES = [
       // useful blocks: RSVP counts/history, Coming up, month calendar, and
       // the host card. Exactly four prevents accidental hiding or duplication.
       { name: 'right rail (sidebar-col)', sel: '.sidebar-col', min: 4, max: 4, mobileOnly: true }
+    ],
+    checks: [
+      { name: 'public max-length overflow fixture renders all text fields', js: `(() => {
+        const cards = [...document.querySelectorAll('#events-grid .evx-card')];
+        const card = cards.find((el) => el.querySelector('.evx-title')?.textContent.trim() === ${JSON.stringify(OVERFLOW_EVENT_TITLE)});
+        if (!card) return { ok: false, missing: 'fixture card', renderedTitles: cards.map((el) => el.querySelector('.evx-title')?.textContent.trim()) };
+        const main = card.querySelector('.evx-main');
+        const title = card.querySelector('.evx-title');
+        const location = [...card.querySelectorAll('.evx-meta span')].find((el) => el.textContent.trim() === ${JSON.stringify(OVERFLOW_EVENT_LOCATION)});
+        const description = card.querySelector('.evx-description');
+        const fitting = (el) => {
+          if (!main || !el) return { ok: false, missing: !main ? 'main' : 'field' };
+          const bounds = main.getBoundingClientRect();
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          const lines = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+          const painted = lines.map((r) => ({
+            left: Math.round(r.left * 10) / 10, right: Math.round(r.right * 10) / 10,
+            leftOverflow: Math.max(0, Math.round((bounds.left - r.left) * 10) / 10),
+            rightOverflow: Math.max(0, Math.round((r.right - bounds.right) * 10) / 10)
+          }));
+          return { ok: lines.length > 0 && lines.every((r) => r.left >= bounds.left - 1 && r.right <= bounds.right + 1),
+            main: { left: Math.round(bounds.left * 10) / 10, right: Math.round(bounds.right * 10) / 10 },
+            lines: painted };
+        };
+        const fields = {
+          title: fitting(title),
+          location: fitting(location),
+          description: fitting(description?.textContent.trim() === ${JSON.stringify(OVERFLOW_EVENT_DESCRIPTION)} ? description : null)
+        };
+        return { ok: Object.values(fields).every((field) => field.ok), fields };
+      })()` }
     ],
     steps: [
       { name: 'modal-create-event', js: `document.getElementById('create-event-btn').click()`,

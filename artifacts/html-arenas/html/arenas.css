@@ -64,6 +64,13 @@ body {
   min-height: 100vh;
 }
 
+/* Shared hard-wrap contract for dynamic event titles, locations and
+   descriptions. min-width:0 lets these nodes shrink inside flex/grid cards. */
+.event-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* Four-column shell: fr gutters center the sidebar+main pair at --shell-max
    while the topbar (grid-column:1/-1) still spans the full viewport — the
    body row centers with NO markup change and no 100vw hacks. Below

@@ -225,8 +225,8 @@ button,select,input,textarea{font-family:var(--font)}
 .ri-date-box { width: 34px; height: 34px; border-radius: 7px; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; background: var(--gray-50); }
 .ri-day { font-size: 13px; font-weight: 700; font-family: var(--mono); line-height: 1; color: var(--gray-400); }
 .ri-mon { font-size: 7px; font-weight: 600; text-transform: uppercase; color: var(--gray-400); }
-.ri-name { flex: 1; min-width: 0; font-size: 12px; font-weight: 500; color: var(--gray-500); }
-.ri-sport { font-size: 10px; color: var(--gray-400); }
+.ri-name { flex: 1; min-width: 0; font-size: 12px; font-weight: 500; color: var(--gray-500); overflow-wrap: anywhere; }
+.ri-sport { min-width: 0; font-size: 10px; color: var(--gray-400); overflow-wrap: anywhere; }
 
 .cun-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-bottom: var(--border); cursor: pointer; transition: background 0.1s; text-decoration: none; color: inherit; }
 .cun-item:hover { background: var(--gray-50); }
@@ -510,15 +510,16 @@ function showToast(msg){
 .evx-main{min-width:0}
 .evx-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
 .evx-title-wrap{min-width:0}
-.evx-title{font-size:16px;font-weight:700;color:var(--gray-900);line-height:1.25}
+.evx-title{min-width:0;font-size:16px;font-weight:700;color:var(--gray-900);line-height:1.25;overflow-wrap:anywhere}
 .evx-owner-chip{display:inline-flex;margin-top:6px;font-size:10px;font-weight:700;color:#166534;background:var(--green-light);padding:3px 8px;border-radius:20px}
 .evx-attendance{display:flex;align-items:center;gap:8px;flex:0 0 auto}
 .evx-avatar-stack{display:flex;padding-left:8px}
 .evx-attendee-avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--gray-200);color:var(--gray-700);font-size:9px;font-weight:700;border:2px solid #fff;margin-left:-8px}
 .evx-going-count{font-size:11px;font-weight:600;color:var(--gray-600);white-space:nowrap}
-.evx-meta{display:flex;align-items:flex-start;gap:7px;font-size:12px;color:var(--gray-600);line-height:1.4;margin-top:8px}
+.evx-meta{min-width:0;display:flex;align-items:flex-start;gap:7px;font-size:12px;color:var(--gray-600);line-height:1.4;margin-top:8px;overflow-wrap:anywhere}
 .evx-meta-icon{width:15px;flex:0 0 15px;text-align:center}
-.evx-description{font-size:12px;color:var(--gray-600);line-height:1.5;margin-top:10px}
+.evx-meta>span:last-child{min-width:0;overflow-wrap:anywhere}
+.evx-description{min-width:0;font-size:12px;color:var(--gray-600);line-height:1.5;margin-top:10px;overflow-wrap:anywhere}
 .evx-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
 .evx-tags .tag{display:inline-flex;align-items:center;padding:3px 9px;border:1px solid transparent;border-radius:20px;font-size:11px;font-weight:500;line-height:1.3;white-space:normal;overflow-wrap:anywhere;max-width:100%}
 .evx-media{display:block;width:184px;height:132px;object-fit:cover;object-position:center;border-radius:10px}
@@ -653,14 +654,14 @@ function showToast(msg){
         '</div>' +
         '<div class="evx-main">' +
           '<div class="evx-head">' +
-            '<div class="evx-title-wrap"><div class="evx-title">' + esc(ev.title) + '</div>' +
+            '<div class="evx-title-wrap event-text"><div class="evx-title event-text">' + esc(ev.title) + '</div>' +
               (ev.isOwner ? '<span class="evx-owner-chip">Your event</span>' : '') +
             '</div>' +
             attendance +
           '</div>' +
-          '<div class="evx-meta"><span class="evx-meta-icon">📍</span><span>' + esc(ev.location || 'Location to be confirmed') + '</span></div>' +
-          (ev.date ? '<div class="evx-meta"><span class="evx-meta-icon">🗓</span><span>' + esc(dateLine(ev.date)) + '</span></div>' : '') +
-          (ev.description ? '<div class="evx-description">' + esc(ev.description) + '</div>' : '') +
+          '<div class="evx-meta event-text"><span class="evx-meta-icon">📍</span><span class="event-text">' + esc(ev.location || 'Location to be confirmed') + '</span></div>' +
+          (ev.date ? '<div class="evx-meta event-text"><span class="evx-meta-icon">🗓</span><span class="event-text">' + esc(dateLine(ev.date)) + '</span></div>' : '') +
+          (ev.description ? '<div class="evx-description event-text">' + esc(ev.description) + '</div>' : '') +
           '<div class="evx-tags">' + tags + '</div>' +
         '</div>' +
         (banner ? '<img class="evx-media" src="' + banner + '" alt="">' : '') +
@@ -843,7 +844,7 @@ function showToast(msg){
         var p = dParts(ev.date);
         return '<div class="rsvp-item">' +
           '<div class="ri-date-box"><div class="ri-day">' + esc(p.day) + '</div><div class="ri-mon">' + esc(p.mon) + '</div></div>' +
-          '<div class="ri-name"><div>' + esc(ev.title || 'Event') + '</div><div class="ri-sport">' + esc(sportLabel(ev.sport)) + (ev.location ? ' · ' + esc(ev.location) : '') + '</div></div>' +
+          '<div class="ri-name event-text"><div class="event-text">' + esc(ev.title || 'Event') + '</div><div class="ri-sport event-text">' + esc(sportLabel(ev.sport)) + (ev.location ? ' · ' + esc(ev.location) : '') + '</div></div>' +
           '<span aria-label="Past RSVP" style="font-size:12px;font-weight:700;color:var(--gray-400)">✓</span>' +
         '</div>';
       }).join('');

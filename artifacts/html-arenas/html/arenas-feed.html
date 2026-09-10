@@ -1149,11 +1149,11 @@ function collectRsvpItems() {
           '</div>' +
           '<span style="font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;border:1px solid #E6B800;background:#FFD21E;color:#111827">✓ Going</span>' +
         '</div>' +
-        '<div onclick="window.location.href=\'' + B + '/events\'" style="cursor:pointer;border:var(--border);border-radius:8px;padding:10px 12px;display:flex;align-items:center;gap:10px">' +
+        '<div class="event-text" onclick="window.location.href=\'' + B + '/events\'" style="cursor:pointer;border:var(--border);border-radius:8px;padding:10px 12px;display:flex;align-items:center;gap:10px">' +
           '<div style="font-size:18px">' + icon + '</div>' +
-          '<div style="flex:1;min-width:0">' +
-            '<div style="font-size:13px;font-weight:600;color:var(--gray-900)">' + escFeedAct(ev.title || 'Event') + '</div>' +
-            '<div style="font-size:11px;color:var(--gray-500)">' + (when ? escFeedAct(when) : '') + (ev.location ? ' · ' + escFeedAct(ev.location) : '') + '</div>' +
+          '<div class="event-text" style="flex:1;min-width:0">' +
+            '<div class="event-text" style="font-size:13px;font-weight:600;color:var(--gray-900)">' + escFeedAct(ev.title || 'Event') + '</div>' +
+            '<div class="event-text" style="font-size:11px;color:var(--gray-500)">' + (when ? escFeedAct(when) : '') + (ev.location ? ' · ' + escFeedAct(ev.location) : '') + '</div>' +
           '</div>' +
           // 56px thumbnail on the card's right edge — same crop source (the
           // authenticated proxy), never the full banner; nothing when imageless.

@@ -681,8 +681,8 @@ button{font-family:var(--font)}
       : '';
     return '<div class="' + cls + (ev.myStatus === 'none' ? ' nr' : '') + '">' +
       '<span class="ag-ic">' + sportIcon(ev.sport) + '</span>' + thumb +
-      '<div class="ag-body"><div class="ag-title">' + esc(ev.title || 'Event') + '</div>' +
-      (meta ? '<div class="ag-meta">' + meta + '</div>' : '') +
+      '<div class="ag-body event-text"><div class="ag-title event-text">' + esc(ev.title || 'Event') + '</div>' +
+      (meta ? '<div class="ag-meta event-text">' + meta + '</div>' : '') +
       (withActions ? eventActionsHtml(ev) : '') + '</div>' +
       eventChip(ev) + '</div>';
   }

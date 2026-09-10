@@ -1515,9 +1515,9 @@ document.addEventListener('DOMContentLoaded', function () {
               '<div style="font-size:9px;font-weight:600;text-transform:uppercase;color:var(--gray-400)">' + esc(d.month) + '</div>' +
               '<div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1;color:var(--gray-600)">' + d.day + '</div>' +
             '</div>' +
-            '<div style="flex:1;min-width:0">' +
-              '<div style="font-size:14px;font-weight:600;color:var(--gray-600);margin-bottom:4px">' + esc(event.title) + '</div>' +
-              '<div style="font-size:11px;color:var(--gray-400);margin-bottom:6px">📍 ' + esc(event.location) + ' · ' + esc(d.time) + '</div>' +
+            '<div class="event-text" style="flex:1;min-width:0">' +
+              '<div class="event-text" style="font-size:14px;font-weight:600;color:var(--gray-600);margin-bottom:4px">' + esc(event.title) + '</div>' +
+              '<div class="event-text" style="font-size:11px;color:var(--gray-400);margin-bottom:6px">📍 ' + esc(event.location) + ' · ' + esc(d.time) + '</div>' +
               '<div style="display:flex;gap:5px;flex-wrap:wrap">' +
                 '<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:var(--gray-100);color:var(--gray-500);border:var(--border)">Completed</span>' +
                 '<span style="font-size:10px;color:#10B981;font-weight:500">✓ ' + event.goingCount + ' attended</span>' +
@@ -1539,9 +1539,9 @@ document.addEventListener('DOMContentLoaded', function () {
             '<div style="font-size:9px;font-weight:600;text-transform:uppercase;color:' + sc.color + '">' + esc(d.month) + '</div>' +
             '<div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1;color:' + sc.color + '">' + d.day + '</div>' +
           '</div>' +
-          '<div style="flex:1;min-width:0">' +
-            '<div style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:4px">' + esc(event.title) + '</div>' +
-            '<div style="font-size:11px;color:var(--gray-500);margin-bottom:6px">📍 ' + esc(event.location) + ' · ' + esc(d.time) + '</div>' +
+          '<div class="event-text" style="flex:1;min-width:0">' +
+            '<div class="event-text" style="font-size:14px;font-weight:600;color:var(--gray-900);margin-bottom:4px">' + esc(event.title) + '</div>' +
+            '<div class="event-text" style="font-size:11px;color:var(--gray-500);margin-bottom:6px">📍 ' + esc(event.location) + ' · ' + esc(d.time) + '</div>' +
             '<div style="display:flex;gap:5px;flex-wrap:wrap">' +
               '<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:' + sc.bg + ';color:' + sc.color + ';border:0.5px solid ' + sc.border + '">' + sc.icon + ' ' + esc(cap(event.sport)) + '</span>' +
               (event.event_type ? '<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:var(--gray-100);color:var(--gray-600);border:var(--border)">' + esc(event.event_type) + '</span>' : '') +
@@ -1697,9 +1697,9 @@ document.addEventListener('DOMContentLoaded', function () {
       window.arenasOverlay.open({ id: 'rsvp-modal-overlay', label: 'Event RSVPs', html:
         '<div style="background:white;border-radius:var(--radius-lg);width:100%;max-width:480px;max-height:80vh;overflow:hidden;display:flex;flex-direction:column">' +
           '<div style="padding:14px 18px;border-bottom:var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">' +
-            '<div>' +
-              '<div style="font-size:15px;font-weight:700;color:var(--gray-900)">' + esc(event.title || 'Event RSVPs') + '</div>' +
-              '<div style="font-size:12px;color:var(--gray-400);margin-top:2px">' + going.length + ' going · ' + interested.length + ' interested</div>' +
+            '<div class="event-text">' +
+              '<div class="event-text" style="font-size:15px;font-weight:700;color:var(--gray-900)">' + esc(event.title || 'Event RSVPs') + '</div>' +
+              '<div class="event-text" style="font-size:12px;color:var(--gray-400);margin-top:2px">' + going.length + ' going · ' + interested.length + ' interested</div>' +
             '</div>' +
             '<button onclick="window.arenasOverlay.close(\'rsvp-modal-overlay\')" style="width:28px;height:28px;border-radius:50%;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-500)">✕</button>' +
           '</div>' +
@@ -2959,9 +2959,9 @@ document.addEventListener('DOMContentLoaded', function () {
               '<div style="width:34px;height:38px;border-radius:6px;background:#FFF7ED;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0">' +
               '<div style="font-size:8px;font-weight:600;text-transform:uppercase;color:#9A3412">' + esc(month) + '</div>' +
               '<div style="font-size:15px;font-weight:700;font-family:var(--mono);line-height:1;color:#9A3412">' + day + '</div></div>' +
-              '<div style="flex:1;min-width:0">' +
-              '<div style="font-size:12px;font-weight:600;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(e.title) + '</div>' +
-              '<div style="font-size:10px;color:var(--gray-400)">' + esc(when) + ' ' + esc(time) + (e.location ? ' · ' + esc(e.location) : '') + '</div></div>' +
+              '<div class="event-text" style="flex:1;min-width:0">' +
+              '<div class="event-text" style="font-size:12px;font-weight:600;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(e.title) + '</div>' +
+              '<div class="event-text" style="font-size:10px;color:var(--gray-400)">' + esc(when) + ' ' + esc(time) + (e.location ? ' · ' + esc(e.location) : '') + '</div></div>' +
               '<div style="text-align:right;flex-shrink:0">' +
               '<div style="font-size:11px;font-family:var(--mono);color:var(--gray-600)">' + (e.goingCount || 0) + ' going</div>' +
               (e.notRespondedCount > 0 ? '<div style="font-size:9px;color:#E6B800">' + e.notRespondedCount + ' pending</div>' : '') +
@@ -3335,9 +3335,9 @@ document.addEventListener('DOMContentLoaded', function () {
           var d = new Date(item.eventDate);
           var dateStr = isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
           var timeStr = isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-          body = '<div style="margin:0 14px 10px;background:var(--gray-50);border:var(--border);border-radius:8px;padding:10px 12px">'
-            + '<div style="font-size:12px;font-weight:600;color:var(--gray-900);margin-bottom:2px">' + esc(item.eventTitle) + '</div>'
-            + '<div style="font-size:11px;color:var(--gray-500)">📍 ' + esc(item.eventLocation) + ' · ' + esc(dateStr) + ' ' + esc(timeStr) + ' · ' + (parseInt(item.goingCount, 10) || 1) + ' going</div>'
+          body = '<div class="event-text" style="margin:0 14px 10px;background:var(--gray-50);border:var(--border);border-radius:8px;padding:10px 12px">'
+            + '<div class="event-text" style="font-size:12px;font-weight:600;color:var(--gray-900);margin-bottom:2px">' + esc(item.eventTitle) + '</div>'
+            + '<div class="event-text" style="font-size:11px;color:var(--gray-500)">📍 ' + esc(item.eventLocation) + ' · ' + esc(dateStr) + ' ' + esc(timeStr) + ' · ' + (parseInt(item.goingCount, 10) || 1) + ' going</div>'
             + '</div>';
         } else if (item.type === 'milestone') {
           badge = '<span style="margin-left:auto;font-size:10px;font-weight:600;padding:2px 9px;border-radius:20px;background:#ECFDF5;color:#166534;border:0.5px solid #86EFAC;flex-shrink:0">🏆 Milestone</span>';
