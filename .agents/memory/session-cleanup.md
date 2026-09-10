@@ -21,3 +21,19 @@ The danger-zone session (2026-07-18) reported "all seeded data deleted, counts m
 6. **"Verified clean" means verified against the world, not the manifest:** final check must compare the full auth user list, subscriptions table, and storage listing — not just the tables the session touched.
 
 **How to apply:** before ending any session that seeded users/clubs/subs/storage, run the sweep script dry-run and paste its CLEAN line into the report. Keep its USER_REFS list in sync when adding tables.
+
+## Full-suite scheduling
+
+Run the full `node --test` suite only after all fixture-using guards have finished and cleaned up.
+
+**Why:** Node's test discovery also executes the standalone test-data sweep. A concurrent geometry or AI verifier run makes that sweep correctly flag active fixtures as residue, falsely suggesting a code regression.
+
+**How to apply:** parallelize pure unit checks with seeded guards if useful, but reserve the full-suite run for after cleanup. Do not delete another running guard's fixtures to make the suite pass. Serialize separate seeded harnesses too: distinct test-user IDs do not isolate public listings. The Events geometry guard failed during concurrent AI fixture seeding and passed unchanged after those fixtures were removed.
+
+## Isolation does not establish that a failure is harmless
+
+A passing isolated rerun establishes fixture interaction, not that the original failure was a false alarm.
+
+**Why:** public-event sentinel text reproduced real overflow that ordinary users could also enter. Element-box geometry checks additionally missed painted text extending outside its own box on desktop.
+
+**How to apply:** investigate the triggering field/value before dismissing cross-fixture failures. For unbroken-text regressions, measure rendered text-line bounds as well as element boxes.

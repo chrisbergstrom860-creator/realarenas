@@ -19,6 +19,9 @@ description: Goals Pro feature (API + my-profile Goals tab + Overview mini-card 
 - **Overview mini-card:** the profile Overview renders "🎯 My goals · N in progress" (top 2 by daysRemaining asc then pct desc, state==='active' only), hidden entirely at zero; goals fetch is `.catch`-guarded so a goals failure can never break the Overview; formatting shared from the Goals IIFE via `window.__goalFmt` (safe because inline scripts run before fetch microtasks resolve).
 
 ## Goals tab decisions
+- **Pace granularity is a product-wide contract, not an AI-cache optimization:** Goals and AI Insights must use the same local-calendar-day pace by default.
+  **Why:** the user explicitly requires agreement by construction; an AI-only rounding mode allowed contradictory “On pace” labels for the same goal mid-day.
+  **How to apply:** preserve parity across list/create/edit responses and AI context; do not introduce surface-specific pace formulas.
 - All Goals UI lives in one IIFE in arenas-my-profile.html; the client NEVER recomputes numbers — progress/pct/onTrack/daysRemaining/state all render from API enrichment, and server 400 `message` strings surface directly in the form.
 - **PATCH bodies omit date keys unless period=custom** — `start_date` is NOT NULL in the DB, so sending `start_date: null` would 500. Server clears end_date itself when period moves off custom.
 - Locked-panel precedence: unavailable/error → locked panel ONLY when proLocked AND zero goals → lapsed read-only banner (proLocked + goals exist) → pro cards/empty state.

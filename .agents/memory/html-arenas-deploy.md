@@ -5,6 +5,14 @@ description: How the html-arenas Express prototype serves dual base paths and de
 
 # html-arenas: dual base path + Railway deploy
 
+## Unpublished automatic checkpoints
+
+Automatic checkpoints can add a memory-only commit between conversation turns even when the agent excluded memory from its explicit commit.
+
+**Why:** a clean working tree and correctly scoped latest commit do not prove the full outgoing history excludes memory.
+
+**How to apply:** inspect every unpublished commit before an authorized push. Preserve user-protected commits and exclude unpublished memory-only checkpoints from outgoing history.
+
 ## Base path
 - `server.js`: `const BASE = (process.env.BASE_PATH || '').replace(/\/$/, '')`.
 - On **Replit**, `artifact.toml` `[services.env]` sets `BASE_PATH=/html`, so routes serve under `/html` (proxy routes `/html`). On **Railway**, `BASE_PATH` is unset → routes serve at root `/`.
