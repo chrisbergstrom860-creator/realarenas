@@ -6,6 +6,12 @@ const ACTIVITY_FEELING_KEY_PATTERN = ACTIVITY_FEELING_KEYS.join('|');
 const FALLBACK_COPY = "I couldn’t produce an answer supported by your recorded data. Try asking about your activity count, volume, sports, streaks, personal records, standings, upcoming schedule, events, or active goals.";
 const REFUSAL_COPY = "I can describe your recorded training, but I can’t prescribe workouts or comment on diet, weight, body composition, or whether you are under-training. Try asking what changed in your volume, consistency, sports, personal records, or standings.";
 const MODEL = 'claude-haiku-4-5';
+// Anthropic Haiku 4.5 list prices as of September 2026, USD per million
+// tokens. Update manually when list prices change; only 5-minute writes apply.
+const INPUT_PER_MTOK = 1.00;
+const OUTPUT_PER_MTOK = 5.00;
+const CACHE_WRITE_5M_PER_MTOK = 1.25;
+const CACHE_READ_PER_MTOK = 0.10;
 const MAX_HISTORY_TURNS = 3;
 const MAX_CALENDAR_LIST_ITEMS = 10;
 const HISTORY_TTL_MS = 12 * 60 * 60 * 1000;
@@ -1076,7 +1082,7 @@ function validateInsightResponse(raw, context) {
 function buildSystemPrompt() {
   return [
     'You are Arenas AI Insights, a descriptive training-data analyst.',
-    'DATA_JSON is the sole factual authority. HISTORY_JSON is conversational context only and is never evidence.',
+    'The first user text block contains the context object itself as DATA_JSON. The second user text block contains a JSON object with question and history; history is HISTORY_JSON. DATA_JSON is the sole factual authority. HISTORY_JSON is conversational context only and is never evidence.',
     'Never write answer prose. Select only typed findings whose referenced paths and copied values exist exactly in DATA_JSON.',
     'Allowed finding forms:',
     '{"type":"metric","path":"last12Months.10.durationHours","value":16.4}',
@@ -1117,6 +1123,45 @@ function buildSystemPrompt() {
   ].join('\n');
 }
 
+function buildAiInsightsRequest(context, question, history) {
+  return {
+    model: MODEL,
+    max_tokens: 1200,
+    system: [{ type: 'text', text: buildSystemPrompt() }],
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'text', text: JSON.stringify(context), cache_control: { type: 'ephemeral' } },
+        { type: 'text', text: JSON.stringify({ question, history }) }
+      ]
+    }]
+  };
+}
+
+function buildAiInsightsUsageLog(userId, questionLength, usage) {
+  const count = (key) => {
+    const value = usage && usage[key];
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+  };
+  const input_tokens = count('input_tokens');
+  const cache_creation_input_tokens = count('cache_creation_input_tokens');
+  const cache_read_input_tokens = count('cache_read_input_tokens');
+  const output_tokens = count('output_tokens');
+  return {
+    event: 'ai_insights_usage',
+    user_id: userId,
+    question_length: questionLength,
+    input_tokens,
+    cache_creation_input_tokens,
+    cache_read_input_tokens,
+    output_tokens,
+    estimated_cost_usd: Number(((input_tokens * INPUT_PER_MTOK +
+      cache_creation_input_tokens * CACHE_WRITE_5M_PER_MTOK +
+      cache_read_input_tokens * CACHE_READ_PER_MTOK +
+      output_tokens * OUTPUT_PER_MTOK) / 1_000_000).toFixed(12))
+  };
+}
+
 module.exports = {
   FALLBACK_COPY,
   REFUSAL_COPY,
@@ -1132,5 +1177,7 @@ module.exports = {
   validateInsightResponse,
   safeFindingDiagnostics,
   buildSystemPrompt,
+  buildAiInsightsRequest,
+  buildAiInsightsUsageLog,
   valueAtPath
 };

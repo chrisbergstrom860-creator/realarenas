@@ -10,8 +10,80 @@ const {
   validateInsightResponse,
   safeFindingDiagnostics,
   resolveAnthropicProvider,
-  buildSystemPrompt
+  buildSystemPrompt,
+  buildAiInsightsRequest,
+  buildAiInsightsUsageLog
 } = require('./ai-insights');
+
+test('cacheable request preserves data bytes and separates changing question/history', () => {
+  const data = { schemaVersion: 7, z: [{ sport: 'running', sessions: 3 }], a: 1 };
+  const history = [{ question: 'Earlier?', answer: 'Earlier answer.', createdAt: '2026-09-10T10:00:00Z' }];
+  const request = buildAiInsightsRequest(data, 'How far?', history);
+  assert.deepEqual(request.system, [{ type: 'text', text: buildSystemPrompt() }]);
+  assert.equal(request.model, 'claude-haiku-4-5');
+  assert.equal(request.max_tokens, 1200);
+  assert.equal(request.messages.length, 1);
+  assert.equal(request.messages[0].role, 'user');
+  const [prefix, suffix] = request.messages[0].content;
+  assert.equal(request.messages[0].content.length, 2);
+  assert.deepEqual(prefix, {
+    type: 'text', text: JSON.stringify(data), cache_control: { type: 'ephemeral' }
+  });
+  assert.deepEqual(suffix, { type: 'text', text: JSON.stringify({ question: 'How far?', history }) });
+  assert.equal((JSON.stringify(request).match(/"cache_control":/g) || []).length, 1);
+  const changed = buildAiInsightsRequest(data, 'How often?', []);
+  assert.deepEqual(changed.system, request.system);
+  assert.equal(changed.messages[0].content[0].text, prefix.text);
+  assert.notEqual(changed.messages[0].content[1].text, suffix.text);
+});
+
+test('SDK 0.123.0 forwards array-form caching through a custom integration base URL', async () => {
+  const Anthropic = require('@anthropic-ai/sdk');
+  let captured;
+  const client = new Anthropic({
+    apiKey: 'test-only-key',
+    baseURL: 'https://integration.invalid/anthropic',
+    maxRetries: 0,
+    fetch: async (url, init) => {
+      captured = { url: String(url), body: JSON.parse(init.body) };
+      return new Response(JSON.stringify({
+        id: 'msg_test', type: 'message', role: 'assistant', model: 'claude-haiku-4-5',
+        content: [{ type: 'text', text: '{}' }], stop_reason: 'end_turn',
+        stop_sequence: null, usage: { input_tokens: 1, output_tokens: 1 }
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+  });
+  const request = buildAiInsightsRequest({ schemaVersion: 7 }, 'Question?', []);
+  await client.messages.create(request);
+  assert.equal(captured.url, 'https://integration.invalid/anthropic/v1/messages');
+  assert.deepEqual(captured.body, request);
+});
+
+test('usage logging uses separate input/write/read/output prices without content', () => {
+  assert.deepEqual(buildAiInsightsUsageLog('user-test', 17, {
+    input_tokens: 100, cache_creation_input_tokens: 2000,
+    cache_read_input_tokens: 3000, output_tokens: 40,
+    question: 'must not be logged', answer: 'must not be logged'
+  }), {
+    event: 'ai_insights_usage', user_id: 'user-test', question_length: 17,
+    input_tokens: 100, cache_creation_input_tokens: 2000,
+    cache_read_input_tokens: 3000, output_tokens: 40, estimated_cost_usd: 0.0031
+  });
+});
+
+test('usage logging defaults missing and invalid provider counters to zero', () => {
+  for (const usage of [undefined, null, {}, {
+    input_tokens: NaN, cache_creation_input_tokens: -1,
+    cache_read_input_tokens: '100', output_tokens: Infinity
+  }]) {
+    const log = buildAiInsightsUsageLog('user-test', 12, usage);
+    assert.equal(log.input_tokens, 0);
+    assert.equal(log.cache_creation_input_tokens, 0);
+    assert.equal(log.cache_read_input_tokens, 0);
+    assert.equal(log.output_tokens, 0);
+    assert.equal(log.estimated_cost_usd, 0);
+  }
+});
 
 const context = {
   schemaVersion: 7,

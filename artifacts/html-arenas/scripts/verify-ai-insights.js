@@ -15,11 +15,12 @@ const nonce = Date.now().toString(36);
 const users = {};
 let clubId = null;
 let foreignClubId = null;
-let subscriptionId = null;
+const subscriptionIds = [];
 let failures = 0;
 let checksRun = 0;
 let checksPassed = 0;
 const captured = [];
+const cachePrefixes = new Set();
 const REFUSAL_COPY = "I can describe your recorded training, but I can’t prescribe workouts or comment on diet, weight, body composition, or whether you are under-training. Try asking what changed in your volume, consistency, sports, personal records, or standings.";
 const GROUNDED_METRIC_COPY = 'Your all-time activity count was 11.';
 const TEST_TIMEZONE = 'America/Los_Angeles';
@@ -202,7 +203,7 @@ function writeManifest() {
     users: Object.fromEntries(Object.entries(users).map(([key, value]) => [key, value.id])),
     clubId,
     foreignClubId,
-    subscriptionId
+    subscriptionIds
   }, null, 2));
 }
 
@@ -562,20 +563,50 @@ function legacyContextProjection(data) {
 
 function providerRequestWithoutFeelings(body) {
   const baseline = JSON.parse(JSON.stringify(body));
-  baseline.system = baseline.system.split('\n')
-    .filter((line) => !line.startsWith('FEELINGS:'))
-    .join('\n');
+  baseline.system = baseline.system.map((block) => ({
+    ...block,
+    text: block.text.split('\n')
+      .filter((line) => !line.startsWith('FEELINGS:'))
+      .join('\n')
+  }));
   baseline.messages = baseline.messages.map((message) => {
-    if (typeof message.content !== 'string') return message;
-    const envelope = JSON.parse(message.content);
-    if (envelope.data && envelope.data.last12Weeks) {
-      envelope.data.schemaVersion = 6;
-      delete envelope.data.last12Weeks.feelings;
-      delete envelope.data.last12Weeks.feelingsTotal;
+    if (!Array.isArray(message.content) || !message.content[0]) return message;
+    const data = JSON.parse(message.content[0].text);
+    if (data && data.last12Weeks) {
+      data.schemaVersion = 6;
+      delete data.last12Weeks.feelings;
+      delete data.last12Weeks.feelingsTotal;
     }
-    return { ...message, content: JSON.stringify(envelope) };
+    message.content[0].text = JSON.stringify(data);
+    return message;
   });
   return baseline;
+}
+
+function parseProviderRequest(body) {
+  const content = body.messages && body.messages[0] && body.messages[0].content;
+  if (!Array.isArray(content) || content.length !== 2) {
+    throw new Error('Expected one user message containing context and question/history text blocks');
+  }
+  const contextBlock = content[0];
+  const questionBlock = content[1];
+  if (contextBlock.type !== 'text' || questionBlock.type !== 'text') {
+    throw new Error('Expected text content blocks');
+  }
+  const data = JSON.parse(contextBlock.text);
+  const questionAndHistory = JSON.parse(questionBlock.text);
+  return {
+    content,
+    contextText: contextBlock.text,
+    prefixBytes: JSON.stringify(body.system) + contextBlock.text,
+    envelope: { ...questionAndHistory, data }
+  };
+}
+
+function countCacheControls(value) {
+  if (!value || typeof value !== 'object') return 0;
+  return (Object.prototype.hasOwnProperty.call(value, 'cache_control') ? 1 : 0) +
+    Object.values(value).reduce((sum, child) => sum + countCacheControls(child), 0);
 }
 
 function startStub() {
@@ -586,9 +617,17 @@ function startStub() {
       req.on('end', () => {
         try {
           const body = JSON.parse(raw || '{}');
-          const content = body.messages && body.messages[0] && body.messages[0].content;
-          const envelope = JSON.parse(typeof content === 'string' ? content : '{}');
-          const record = { path: req.url, headers: req.headers, body, envelope, output: null };
+          const parsed = parseProviderRequest(body);
+          const envelope = parsed.envelope;
+          const record = {
+            path: req.url,
+            headers: req.headers,
+            body,
+            envelope,
+            contextText: parsed.contextText,
+            prefixBytes: parsed.prefixBytes,
+            output: null
+          };
           captured.push(record);
           if (/force provider failure/i.test(envelope.question || '')) {
             res.writeHead(503, { 'Content-Type': 'application/json' });
@@ -599,6 +638,17 @@ function startStub() {
             return;
           }
           const providerResponse = responseFor(envelope);
+          const prefixSize = Buffer.byteLength(parsed.prefixBytes);
+          const cacheHit = cachePrefixes.has(parsed.prefixBytes);
+          if (cacheHit) {
+            providerResponse.usage.cache_creation_input_tokens = 0;
+            providerResponse.usage.cache_read_input_tokens = Math.max(1, Math.ceil(prefixSize / 4));
+          } else {
+            cachePrefixes.add(parsed.prefixBytes);
+            providerResponse.usage.cache_creation_input_tokens = Math.max(1, Math.ceil(prefixSize / 4));
+            providerResponse.usage.cache_read_input_tokens = 0;
+          }
+          record.usage = providerResponse.usage;
           record.output = JSON.parse(providerResponse.content[0].text);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(providerResponse));
@@ -657,27 +707,60 @@ function startApp() {
   };
 }
 
-async function cleanup() {
-  const ids = Object.values(users).map((user) => user.id);
+async function cleanupFixtureRoots(ids, clubIds) {
   if (ids.length) {
     await must('cleanup activities', admin.from('activities').delete().in('user_id', ids));
     await must('cleanup plans', admin.from('planned_sessions').delete().in('user_id', ids));
     await must('cleanup goals', admin.from('goals').delete().in('user_id', ids));
     await must('cleanup rsvps', admin.from('event_rsvps').delete().in('user_id', ids));
     await must('cleanup events', admin.from('events').delete().in('created_by', ids));
+    await must('cleanup achievements', admin.from('achievements').delete().in('user_id', ids));
     await must('cleanup notifications', admin.from('notifications').delete().in('user_id', ids));
+    await must('cleanup user memberships', admin.from('memberships').delete().in('user_id', ids));
+    await must('cleanup subscriptions', admin.from('subscriptions').delete().in('owner_id', ids));
   }
-  if (ids.length) await must('cleanup subscriptions', admin.from('subscriptions').delete().in('owner_id', ids));
-  if (clubId) {
-    await must('cleanup memberships', admin.from('memberships').delete().eq('club_id', clubId));
-    await must('cleanup club', admin.from('clubs').delete().eq('id', clubId));
+  if (clubIds.length) {
+    await must('cleanup club memberships', admin.from('memberships').delete().in('club_id', clubIds));
+    await must('cleanup clubs', admin.from('clubs').delete().in('id', clubIds));
   }
-  if (foreignClubId) {
-    await must('cleanup foreign memberships', admin.from('memberships').delete().eq('club_id', foreignClubId));
-    await must('cleanup foreign club', admin.from('clubs').delete().eq('id', foreignClubId));
-  }
-  for (const user of Object.values(users)) await must('cleanup user ' + user.id, admin.auth.admin.deleteUser(user.id));
+  for (const id of ids) await must('cleanup user ' + id, admin.auth.admin.deleteUser(id));
+}
+
+async function cleanup() {
+  if (!fs.existsSync(MANIFEST)) return;
+  const manifest = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
+  const ids = Object.values(manifest.users || {});
+  const clubIds = [manifest.clubId, manifest.foreignClubId].filter(Boolean);
+  await cleanupFixtureRoots(ids, clubIds);
   if (fs.existsSync(MANIFEST)) fs.unlinkSync(MANIFEST);
+}
+
+async function verifyNoFixtureResidue(ids, clubIds) {
+  const checks = [];
+  for (const [table, column] of [
+    ['activities', 'user_id'],
+    ['planned_sessions', 'user_id'],
+    ['goals', 'user_id'],
+    ['event_rsvps', 'user_id'],
+    ['events', 'created_by'],
+    ['achievements', 'user_id'],
+    ['notifications', 'user_id'],
+    ['memberships', 'user_id'],
+    ['profiles', 'id'],
+    ['subscriptions', 'owner_id']
+  ]) {
+    if (!ids.length) continue;
+    checks.push(admin.from(table).select('*', { count: 'exact', head: true }).in(column, ids)
+      .then(({ count, error }) => ({ table, count, error })));
+  }
+  if (clubIds.length) {
+    checks.push(admin.from('memberships').select('*', { count: 'exact', head: true }).in('club_id', clubIds)
+      .then(({ count, error }) => ({ table: 'memberships by club', count, error })));
+    checks.push(admin.from('clubs').select('*', { count: 'exact', head: true }).in('id', clubIds)
+      .then(({ count, error }) => ({ table: 'clubs', count, error })));
+  }
+  const results = await Promise.all(checks);
+  return results.filter((result) => result.error || result.count !== 0);
 }
 
 (async () => {
@@ -685,6 +768,9 @@ async function cleanup() {
   let app;
   let browser;
   try {
+    if (fs.existsSync(MANIFEST)) {
+      await cleanup();
+    }
     writeManifest();
     check('verification matrix contains exactly 39 preserved-and-extended questions',
       ANSWERABLE_QUESTIONS.length + NOT_ANSWERABLE_CASES.length + POLICY_REFUSAL_CASES.length === 39,
@@ -741,8 +827,9 @@ async function cleanup() {
       last_paid_subscription_id: 'sub_ai_' + nonce,
       cancel_at_period_end: false
     }).select('id').single());
-    subscriptionId = subscription.id;
-    await must('create no-goals Pro subscription', admin.from('subscriptions').insert({
+    subscriptionIds.push(subscription.id);
+    writeManifest();
+    const noGoalsSubscription = await must('create no-goals Pro subscription', admin.from('subscriptions').insert({
       owner_type: 'user',
       owner_id: users.noGoals.id,
       plan: 'pro',
@@ -752,7 +839,8 @@ async function cleanup() {
       ever_paid: true,
       last_paid_subscription_id: 'sub_ai_nogoals_' + nonce,
       cancel_at_period_end: false
-    }));
+    }).select('id').single());
+    subscriptionIds.push(noGoalsSubscription.id);
     writeManifest();
 
     const today = new Date();
@@ -940,14 +1028,93 @@ async function cleanup() {
       addedContextChars > 0 && addedContextChars < 12000,
       JSON.stringify({ hybridContextChars, legacyContextChars, addedContextChars }));
     check('actual provider request selects Claude Haiku 4.5', privacyCapture.body.model === 'claude-haiku-4-5', JSON.stringify(privacyCapture.body));
+    const privacyContent = privacyCapture.body.messages[0].content;
+    check('provider request has one default-5m cache marker on only the context block',
+      countCacheControls(privacyCapture.body) === 1 &&
+      JSON.stringify(privacyContent[0].cache_control) === JSON.stringify({ type: 'ephemeral' }) &&
+      !Object.prototype.hasOwnProperty.call(privacyContent[1], 'cache_control'),
+      JSON.stringify(privacyCapture.body));
+    check('provider request has one text-only system block',
+      Array.isArray(privacyCapture.body.system) &&
+      privacyCapture.body.system.length === 1 &&
+      privacyCapture.body.system[0].type === 'text' &&
+      typeof privacyCapture.body.system[0].text === 'string',
+      JSON.stringify(privacyCapture.body.system));
+    check('provider request separates context from question and history',
+      privacyContent.length === 2 &&
+      JSON.stringify(JSON.parse(privacyContent[0].text)) === JSON.stringify(privacyCapture.envelope.data) &&
+      JSON.stringify(JSON.parse(privacyContent[1].text)) === JSON.stringify({
+        question: 'Compare my month with other athletes in my club.',
+        history: []
+      }) &&
+      !Object.prototype.hasOwnProperty.call(JSON.parse(privacyContent[0].text), 'question') &&
+      !Object.prototype.hasOwnProperty.call(JSON.parse(privacyContent[0].text), 'history'),
+      JSON.stringify(privacyContent));
     check('system prompt demonstrates canonical dot notation with an unquoted numeric value',
-      privacyCapture.body.system.includes('{"type":"metric","path":"last12Months.10.durationHours","value":16.4}') &&
-      !privacyCapture.body.system.includes('"value":"exact copied value"'),
-      privacyCapture.body.system);
+      privacyCapture.body.system[0].text.includes('{"type":"metric","path":"last12Months.10.durationHours","value":16.4}') &&
+      !privacyCapture.body.system[0].text.includes('"value":"exact copied value"'),
+      privacyCapture.body.system[0].text);
     check('system prompt requires server-owned relative labels instead of date or position inference',
-      privacyCapture.body.system.includes('relative label exactly matches this_week, last_week, this_month, or last_month') &&
-      privacyCapture.body.system.includes('Never derive a relative period from array position, weekStart, month, or any date arithmetic.'),
-      privacyCapture.body.system);
+      privacyCapture.body.system[0].text.includes('relative label exactly matches this_week, last_week, this_month, or last_month') &&
+      privacyCapture.body.system[0].text.includes('Never derive a relative period from array position, weekStart, month, or any date arithmetic.'),
+      privacyCapture.body.system[0].text);
+    const usageLogsAfterPrivacy = app.output().split('\n')
+      .filter((line) => line.includes('"event":"ai_insights_usage"'));
+    const privacyUsageLog = usageLogsAfterPrivacy.at(-1) || '';
+    check('successful request emits the complete structured provider usage log',
+      usageLogsAfterPrivacy.length === 1 &&
+      [
+        '"event":"ai_insights_usage"', '"user_id":', '"question_length":',
+        '"input_tokens":', '"cache_creation_input_tokens":',
+        '"cache_read_input_tokens":', '"output_tokens":', '"estimated_cost_usd":'
+      ].every((field) => privacyUsageLog.includes(field)) &&
+      privacyUsageLog.includes('"cache_creation_input_tokens":') &&
+      privacyCapture.usage.cache_creation_input_tokens > 0 &&
+      privacyCapture.usage.cache_read_input_tokens === 0,
+      privacyUsageLog);
+    check('structured provider usage logs contain no question or answer text',
+      usageLogsAfterPrivacy.every((line) =>
+        !line.includes('Compare my month with other athletes in my club.') &&
+        !line.includes(GROUNDED_METRIC_COPY) &&
+        !line.includes('"question"') &&
+        !line.includes('"answer"')),
+      usageLogsAfterPrivacy.join(' | '));
+
+    const cacheProbeQuestion = 'Return a fabricated cache probe for stable context.';
+    const logsBeforeCacheProbes = usageLogsAfterPrivacy.length;
+    await api(proLogin, 'POST', '/api/profile/ai-insights', { question: cacheProbeQuestion, history: [] });
+    const firstCacheProbe = captured[captured.length - 1];
+    await api(proLogin, 'POST', '/api/profile/ai-insights', { question: cacheProbeQuestion, history: [] });
+    const repeatedCacheProbe = captured[captured.length - 1];
+    await api(proLogin, 'POST', '/api/profile/ai-insights', {
+      question: 'Return a fabricated changed-question cache probe for stable context.',
+      history: []
+    });
+    const changedQuestionCacheProbe = captured[captured.length - 1];
+    check('consecutive identical requests have byte-identical context and cache reads',
+      firstCacheProbe.contextText === repeatedCacheProbe.contextText &&
+      firstCacheProbe.prefixBytes === repeatedCacheProbe.prefixBytes &&
+      repeatedCacheProbe.usage.cache_creation_input_tokens === 0 &&
+      repeatedCacheProbe.usage.cache_read_input_tokens > 0,
+      JSON.stringify({
+        firstUsage: firstCacheProbe.usage,
+        repeatedUsage: repeatedCacheProbe.usage
+      }));
+    check('changing only the question leaves context bytes and cache key unchanged',
+      repeatedCacheProbe.envelope.question !== changedQuestionCacheProbe.envelope.question &&
+      repeatedCacheProbe.contextText === changedQuestionCacheProbe.contextText &&
+      repeatedCacheProbe.prefixBytes === changedQuestionCacheProbe.prefixBytes &&
+      changedQuestionCacheProbe.usage.cache_creation_input_tokens === 0 &&
+      changedQuestionCacheProbe.usage.cache_read_input_tokens > 0,
+      JSON.stringify({
+        repeatedUsage: repeatedCacheProbe.usage,
+        changedQuestionUsage: changedQuestionCacheProbe.usage
+      }));
+    const usageLogsAfterCacheProbes = app.output().split('\n')
+      .filter((line) => line.includes('"event":"ai_insights_usage"'));
+    check('usage is logged after SDK success even when response validation refunds quota',
+      usageLogsAfterCacheProbes.length === logsBeforeCacheProbes + 3,
+      usageLogsAfterCacheProbes.join(' | '));
     check('actual model payload contains the allowlisted data object', !!privacyCapture.envelope.data && privacyCapture.envelope.data.allTime.activityCount === 11, serializedPayload);
     check('actual model payload has 12 timezone-calendar month buckets including zero months',
       privacyCapture.envelope.data.schemaVersion === 7 &&
@@ -1259,6 +1426,8 @@ async function cleanup() {
       JSON.stringify(historyCapture.envelope));
 
     const usageBeforeFailure = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+    const usageLogCountBeforeFailure = app.output().split('\n')
+      .filter((line) => line.includes('"event":"ai_insights_usage"')).length;
     const forcedFailure = await api(proLogin, 'POST', '/api/profile/ai-insights', {
       question: 'Force provider failure for the quota refund proof.',
       history: []
@@ -1275,6 +1444,15 @@ async function cleanup() {
       usageAfterFailure.body.used === usageBeforeFailure.body.used &&
       usageAfterFailure.body.remaining === usageBeforeFailure.body.remaining,
       JSON.stringify({ before: usageBeforeFailure.body, after: usageAfterFailure.body }));
+    const usageLogsAfterFailure = app.output().split('\n')
+      .filter((line) => line.includes('"event":"ai_insights_usage"'));
+    const failureUsageLog = usageLogsAfterFailure.at(-1) || '';
+    check('provider failure emits exactly one zero-counter structured usage log',
+      usageLogsAfterFailure.length === usageLogCountBeforeFailure + 1 &&
+      ['input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens', 'output_tokens']
+        .every((field) => failureUsageLog.includes(`"${field}":0`)) &&
+      failureUsageLog.includes('"estimated_cost_usd":0'),
+      failureUsageLog);
 
     const usageBeforeMalformed = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
     const fabricated = await api(proLogin, 'POST', '/api/profile/ai-insights', {
@@ -1882,14 +2060,16 @@ async function cleanup() {
     }
     if (stub) await new Promise((resolve) => stub.close(resolve));
     try {
+      const cleanupUserIds = Object.values(users).map((user) => user.id);
+      const cleanupClubIds = [clubId, foreignClubId].filter(Boolean);
       await cleanup();
       check('manifest removed after cleanup', !fs.existsSync(MANIFEST));
       const remainingUsers = await Promise.all(Object.values(users).map((user) => admin.auth.admin.getUserById(user.id)));
       check('all fixture auth users are gone', remainingUsers.every((result) => !result.data || !result.data.user));
-      if (clubId) {
-        const { count } = await admin.from('clubs').select('id', { count: 'exact', head: true }).eq('id', clubId);
-        check('fixture club is gone', count === 0);
-      }
+      const residue = await verifyNoFixtureResidue(cleanupUserIds, cleanupClubIds);
+      check('all fixture rows and automatic user side effects are gone',
+        residue.length === 0,
+        JSON.stringify(residue));
     } catch (cleanupError) {
       failures++;
       console.error('CLEANUP FAILED', cleanupError && cleanupError.stack ? cleanupError.stack : cleanupError);

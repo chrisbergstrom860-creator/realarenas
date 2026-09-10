@@ -39,7 +39,8 @@ const {
   validateInsightResponse,
   safeFindingDiagnostics,
   resolveAnthropicProvider,
-  buildSystemPrompt: buildAiInsightsSystemPrompt
+  buildAiInsightsRequest,
+  buildAiInsightsUsageLog
 } = require('./ai-insights');
 
 // Exact club-sport contract shared by BOTH creation paths and the settings
@@ -3051,9 +3052,8 @@ function summarizePoints(activities) {
 // the at-risk 5-day check, which must never clip at a Monday boundary.
 // 'all' returns a null start (no lower bound) — callers must branch on it
 // and skip the `.gte` filter.
-function getDateRange(period, tz) {
+function getDateRange(period, tz, now = new Date()) {
   const zone = isValidTimezone(tz) ? tz : 'UTC';
-  const now = new Date();
   if (period === 'week') {
     return { start: zoneMidnightUtc(weekStartKey(now, zone), zone).toISOString(), end: now.toISOString() };
   }
@@ -3072,7 +3072,7 @@ function getDateRange(period, tz) {
 // timezone boundary policy).
 async function fetchActivitiesForUsers(userIds, period, sport, tz, options) {
   if (!supabaseAdmin || !userIds.length) return [];
-  const { start, end } = getDateRange(period, tz);
+  const { start, end } = getDateRange(period, tz, options?.now);
   let q = supabaseAdmin
     .from('activities')
     .select('user_id, sport, distance, date')
@@ -3157,7 +3157,7 @@ function getClubTrainingVisibility(clubId, memberIds, profileMap) {
 // stay at the route boundary. Ranking visibility is intentionally narrower than
 // membership: opted-out members keep their membership and management analytics,
 // but hold no public/member-facing rank (including their own self row).
-async function buildClubPointsLeaderboard(memberRows, profileMap, period, viewer) {
+async function buildClubPointsLeaderboard(memberRows, profileMap, period, viewer, options = {}) {
   const orderedMemberIds = [...new Set((memberRows || []).map((m) => m.user_id).filter(Boolean))];
   const orderIndex = new Map(orderedMemberIds.map((id, index) => [id, index]));
   const rankedMemberIds = orderedMemberIds.filter((id) => (
@@ -3168,7 +3168,7 @@ async function buildClubPointsLeaderboard(memberRows, profileMap, period, viewer
     period,
     'all',
     getUserTimezone(viewer),
-    { capAtNow: true }
+    { capAtNow: true, now: options.now }
   ));
   const leaderboard = rankedMemberIds.map((id) => {
     const p = profileMap[id] || { name: 'Member', handle: 'member', sports: [], location: null };
@@ -8664,16 +8664,25 @@ async function releaseAiUsageClaim(userId, sourceKey) {
 function buildAiPersonalRecords(acts, tz) {
   const km = (a) => parseDistanceKmUnitAware(a.distance);
   const records = [];
+  // Equal records prefer the earlier date, then sport id, so database return
+  // order can never change which tied activity supplies the record.
+  const preferRecord = (winner, row, value) => {
+    const difference = value(row) - value(winner);
+    if (difference !== 0) return difference > 0 ? row : winner;
+    const dateOrder = String(row.date).localeCompare(String(winner.date));
+    if (dateOrder !== 0) return dateOrder < 0 ? row : winner;
+    return String(row.sport || 'other').localeCompare(String(winner.sport || 'other')) < 0 ? row : winner;
+  };
   const addDistanceRecord = (type, sport, rows) => {
     if (!rows.length) return;
-    const best = rows.reduce((winner, row) => km(row) > km(winner) ? row : winner);
+    const best = rows.reduce((winner, row) => preferRecord(winner, row, km));
     records.push({ type, sport, value: round1(km(best)), unit: 'km', date: dayKey(best.date, tz) });
   };
   addDistanceRecord('longest_run', 'running', acts.filter((a) => a.sport === 'running' && km(a) > 0));
   addDistanceRecord('longest_ride', 'cycling', acts.filter((a) => a.sport === 'cycling' && km(a) > 0));
   const timed = acts.filter((a) => parseDurationHours(a.duration) > 0);
   if (timed.length) {
-    const best = timed.reduce((winner, row) => parseDurationHours(row.duration) > parseDurationHours(winner.duration) ? row : winner);
+    const best = timed.reduce((winner, row) => preferRecord(winner, row, (activity) => parseDurationHours(activity.duration)));
     records.push({
       type: 'longest_activity',
       sport: best.sport || 'other',
@@ -8695,9 +8704,10 @@ async function buildAiInsightsContext(user) {
   const windowEnd = addDaysToKey(today, 1);
   const { data: activityRows, error: activityError } = await supabaseAdmin
     .from('activities')
-    .select('sport, distance, duration, date, feeling')
+    .select('id, sport, distance, duration, date, feeling')
     .eq('user_id', user.id)
-    .order('date', { ascending: true });
+    .order('date', { ascending: true })
+    .order('id', { ascending: true });
   if (activityError) throw activityError;
   // Future-dated rows are never part of a current fact. Cap every aggregate,
   // not just the detailed window, at the athlete's current local day.
@@ -8800,7 +8810,7 @@ async function buildAiInsightsContext(user) {
       weekStart: start,
       relative,
       ...summarize(rows),
-      sports: Object.values(bySportMap).map((item) => ({
+      sports: Object.values(bySportMap).sort((a, b) => a.sport.localeCompare(b.sport)).map((item) => ({
         sport: item.sport,
         sessions: item.sessions,
         durationHours: round1(item.durationHours),
@@ -8814,7 +8824,7 @@ async function buildAiInsightsContext(user) {
     });
   }
   const activeWeeks = weekly.filter((week) => week.activityCount > 0).length;
-  const { currentStreak, longestStreak } = computeStreaks(acts, tz);
+  const { currentStreak, longestStreak } = computeStreaks(acts, tz, now.getTime());
   const shiftMonthKey = (key, offset) => {
     const [year, month] = key.split('-').map(Number);
     const shifted = new Date(Date.UTC(year, month - 1 + offset, 1));
@@ -8903,7 +8913,7 @@ async function buildAiInsightsContext(user) {
       'event_id, status'),
     supabaseAdmin.from('goals').select('*', { count: 'exact' })
       .eq('user_id', user.id).eq('status', 'active')
-      .order('created_at', { ascending: true }).limit(5)
+      .order('created_at', { ascending: true }).order('id', { ascending: true }).limit(5)
   ]);
   for (const result of [activeGoalsRes]) {
     if (result.error) throw result.error;
@@ -9039,7 +9049,9 @@ async function buildAiInsightsContext(user) {
   };
 
   const enrichedGoals = await enrichGoalRows(user.id, activeGoalsRes.data || [], tz, {
-    includeRecentHistory: true
+    includeRecentHistory: true,
+    now,
+    dayStablePace: true
   });
   const goalItems = enrichedGoals.map((goal) => ({
     type: goal.type,
@@ -9080,7 +9092,7 @@ async function buildAiInsightsContext(user) {
     const platformUsers = (await listAllAuthUsers())
       .filter((candidate) => prefsFromMeta(candidate.user_metadata).show_on_leaderboards);
     const platformIds = platformUsers.map((candidate) => candidate.id);
-    const platformByUser = bucketActivities(await fetchActivitiesForUsers(platformIds, 'month', 'all', tz, { capAtNow: true }));
+    const platformByUser = bucketActivities(await fetchActivitiesForUsers(platformIds, 'month', 'all', tz, { capAtNow: true, now }));
     const ranked = platformUsers.map((candidate) => ({
       id: candidate.id,
       points: calculatePoints(platformByUser[candidate.id] || []),
@@ -9106,17 +9118,19 @@ async function buildAiInsightsContext(user) {
     const { data: ownMemberships, error: membershipsError } = await supabaseAdmin
       .from('memberships')
       .select('club_id, role, clubs:club_id (name)')
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .order('club_id', { ascending: true });
     if (membershipsError) throw membershipsError;
     for (const membership of (ownMemberships || [])) {
       const { data: memberRows, error: memberError } = await supabaseAdmin
-        .from('memberships').select('user_id, created_at').eq('club_id', membership.club_id).order('created_at', { ascending: true });
+        .from('memberships').select('user_id, created_at').eq('club_id', membership.club_id)
+        .order('created_at', { ascending: true }).order('user_id', { ascending: true });
       if (memberError) throw memberError;
       const profileMap = await buildUserProfileMap((memberRows || []).map((row) => row.user_id));
       const safeRows = (memberRows || []).filter((row) => (
         profileMap[row.user_id] && profileMap[row.user_id].prefs.show_on_leaderboards
       ));
-      const board = await buildClubPointsLeaderboard(safeRows, profileMap, 'month', user);
+      const board = await buildClubPointsLeaderboard(safeRows, profileMap, 'month', user, { now });
       if (!await getCurrentClubMembership(user.id, membership.club_id)) throw new Error('Club membership changed');
       if (board.viewer) {
         if (!context.standings) context.standings = { clubs: [] };
@@ -9284,20 +9298,12 @@ app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_in
   }
   let response;
   try {
-    response = await getAnthropicClient(providerConfig).messages.create({
-      model: AI_INSIGHTS_MODEL,
-      max_tokens: 1200,
-      system: buildAiInsightsSystemPrompt(),
-      messages: [{
-        role: 'user',
-        content: JSON.stringify({
-          question,
-          history: verifiedHistory,
-          data: context
-        })
-      }]
-    });
+    response = await getAnthropicClient(providerConfig).messages.create(
+      buildAiInsightsRequest(context, question, verifiedHistory)
+    );
+    console.log(JSON.stringify(buildAiInsightsUsageLog(req.user.id, question.length, response.usage)));
   } catch (err) {
+    console.log(JSON.stringify(buildAiInsightsUsageLog(req.user.id, question.length, null)));
     let refunded = false;
     try {
       await releaseAiUsageClaim(req.user.id, usage.sourceKey);
@@ -9411,13 +9417,13 @@ function parseLocalDate(s) {
 // custom goals can expire. Returns both day-key bounds (activity bucketing —
 // [startKey, endKeyExcl) string comparisons) and the exact UTC instants of
 // those local midnights (deadline/pace math + windowStart/windowEnd ISO).
-function goalWindow(goal, tz) {
+function goalWindow(goal, tz, now = new Date()) {
   let startKey, endKeyExcl;
   if (goal.period === 'weekly') {
-    startKey = weekStartKey(new Date(), tz);
+    startKey = weekStartKey(now, tz);
     endKeyExcl = addDaysToKey(startKey, 7);
   } else if (goal.period === 'monthly') {
-    const p = dateParts(new Date(), tz);
+    const p = dateParts(now, tz);
     startKey = `${p.y}-${String(p.m).padStart(2, '0')}-01`;
     endKeyExcl = p.m === 12
       ? `${p.y + 1}-01-01`
@@ -9441,13 +9447,13 @@ function goalNaturalUnit(goal) {
   return goal.unit || 'km';
 }
 
-function goalProgressInWindow(goal, activities, streaks, tz, window) {
+function goalProgressInWindow(goal, activities, streaks, tz, window, nowMs) {
   const target = Number(goal.target_value) || 0;
   const targetCmp = goal.type === 'distance' && goal.unit === 'mi' ? target * MI_TO_KM : target;
   let progressCmp = 0;
   if (goal.type === 'streak') {
     progressCmp = goal.sport
-      ? computeStreaks(activities.filter((a) => a.sport === goal.sport), tz).currentStreak
+      ? computeStreaks(activities.filter((a) => a.sport === goal.sport), tz, nowMs).currentStreak
       : streaks.currentStreak;
   } else {
     const matches = activities.filter((a) => {
@@ -9534,7 +9540,7 @@ function recentGoalHistory(goal, activities, streaks, tz, now = new Date()) {
       previousPeriodUnavailableReason = previousPeriodUnavailableReason || 'goal_changed_after_period';
       continue;
     }
-    const result = goalProgressInWindow(goal, activities, streaks, tz, window);
+    const result = goalProgressInWindow(goal, activities, streaks, tz, window, now.getTime());
     const unit = goalNaturalUnit(goal);
     previousPeriods.push({
       windowStart: window.startKey,
@@ -9559,18 +9565,21 @@ function recentGoalHistory(goal, activities, streaks, tz, now = new Date()) {
 // over those rows (streak goals measure the ALL-TIME current streak — their
 // window is a review deadline only). Null-distance rows contribute 0 via the
 // parser, never crash.
-function enrichGoal(goal, activities, streaks, tz) {
-  const now = new Date();
-  const window = goalWindow(goal, tz);
+function enrichGoal(goal, activities, streaks, tz, { now = new Date(), dayStablePace = false } = {}) {
+  const window = goalWindow(goal, tz, now);
   const { start, end } = window;
-  const result = goalProgressInWindow(goal, activities, streaks, tz, window);
+  const result = goalProgressInWindow(goal, activities, streaks, tz, window, now.getTime());
   const { target, targetCmp, progress, progressCmp, pct, isComplete } = result;
   const expired = !isComplete && now >= end;
   const daysRemaining = Math.max(0, Math.ceil((end - now) / 86400000));
   // Linear pace projection: on track when the completed fraction of the target
   // is at least the elapsed fraction of the window (complete = always on
   // track; expired-incomplete = off track).
-  const elapsedFrac = Math.min(1, Math.max(0, (now - start) / (end - start || 1)));
+  const elapsedFrac = dayStablePace
+    ? Math.min(1, Math.max(0,
+      (keyToEpochDays(dayKey(now, tz)) - keyToEpochDays(window.startKey)) /
+      (keyToEpochDays(window.endKeyExcl) - keyToEpochDays(window.startKey) || 1)))
+    : Math.min(1, Math.max(0, (now - start) / (end - start || 1)));
   const progressFrac = targetCmp > 0 ? progressCmp / targetCmp : 0;
   const onTrack = isComplete || (!expired && progressFrac >= elapsedFrac);
   return {
@@ -9642,14 +9651,23 @@ function validateGoalConfig(g) {
 
 // Fetch the owner's activities once and enrich a set of goal rows (all
 // window/streak math in the owner's zone).
-async function enrichGoalRows(userId, rows, tz, { includeRecentHistory = false } = {}) {
-  const { data: acts } = await supabaseAdmin
-    .from('activities').select('sport, distance, duration, date').eq('user_id', userId);
+async function enrichGoalRows(userId, rows, tz, {
+  includeRecentHistory = false,
+  now = new Date(),
+  dayStablePace = false
+} = {}) {
+  let activityQuery = supabaseAdmin.from('activities')
+    .select(includeRecentHistory ? 'id, sport, distance, duration, date' : 'sport, distance, duration, date')
+    .eq('user_id', userId);
+  if (includeRecentHistory) {
+    activityQuery = activityQuery.order('date', { ascending: true }).order('id', { ascending: true });
+  }
+  const { data: acts } = await activityQuery;
   const activities = acts || [];
-  const streaks = computeStreaks(activities, tz);
+  const streaks = computeStreaks(activities, tz, now.getTime());
   return rows.map((goal) => ({
-    ...enrichGoal(goal, activities, streaks, tz),
-    ...(includeRecentHistory ? recentGoalHistory(goal, activities, streaks, tz) : {})
+    ...enrichGoal(goal, activities, streaks, tz, { now, dayStablePace }),
+    ...(includeRecentHistory ? recentGoalHistory(goal, activities, streaks, tz, now) : {})
   }));
 }
 
