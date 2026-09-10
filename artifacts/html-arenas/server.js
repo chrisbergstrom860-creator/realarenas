@@ -9050,8 +9050,7 @@ async function buildAiInsightsContext(user) {
 
   const enrichedGoals = await enrichGoalRows(user.id, activeGoalsRes.data || [], tz, {
     includeRecentHistory: true,
-    now,
-    dayStablePace: true
+    now
   });
   const goalItems = enrichedGoals.map((goal) => ({
     type: goal.type,
@@ -9565,7 +9564,7 @@ function recentGoalHistory(goal, activities, streaks, tz, now = new Date()) {
 // over those rows (streak goals measure the ALL-TIME current streak — their
 // window is a review deadline only). Null-distance rows contribute 0 via the
 // parser, never crash.
-function enrichGoal(goal, activities, streaks, tz, { now = new Date(), dayStablePace = false } = {}) {
+function enrichGoal(goal, activities, streaks, tz, { now = new Date(), dayStablePace = true } = {}) {
   const window = goalWindow(goal, tz, now);
   const { start, end } = window;
   const result = goalProgressInWindow(goal, activities, streaks, tz, window, now.getTime());
@@ -9654,7 +9653,7 @@ function validateGoalConfig(g) {
 async function enrichGoalRows(userId, rows, tz, {
   includeRecentHistory = false,
   now = new Date(),
-  dayStablePace = false
+  dayStablePace = true
 } = {}) {
   let activityQuery = supabaseAdmin.from('activities')
     .select(includeRecentHistory ? 'id, sport, distance, duration, date' : 'sport, distance, duration, date')
