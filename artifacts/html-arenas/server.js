@@ -3961,8 +3961,9 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
     // 2. Activities from members. Ordered/stamped by `created_at` (logged
     // moment) so "X ago" reflects when it was logged, not the local-noon
     // training-day anchor stored in `date`.
-    // Payload CONVERGED with the main feed's activity shape: the full raw
-    // activity row is spread in (the shared card builder + stat tiles read
+    // Payload shares the main feed's activity shape EXCEPT feeling, which
+    // must never enter club/coach payloads. Other raw columns are spread in
+    // (the shared card builder + stat tiles read
     // the same columns everywhere — a projected subset here is exactly the
     // hidden divergence that produced the old `notes || title` title-loss
     // bug). Header fields (name/avatarUrl/...) stay flattened on top.
@@ -3974,6 +3975,7 @@ app.get(BASE + '/api/clubs/:clubId/feed', requireAuth, async (req, res) => {
       .limit(20);
     (activities || []).forEach((a) => {
       stripLegacyInsight(a);
+      delete a.feeling; // Peer-visible only; strip server-side before any coach payload.
       feed.push({
         type: 'activity',
         ...a,
@@ -8684,6 +8686,8 @@ function buildAiPersonalRecords(acts, tz) {
 }
 
 async function buildAiInsightsContext(user) {
+  const { ACTIVITY_FEELING_LABELS } = require('./html/arenas-activity-card.js');
+  const feelingKeys = Object.keys(ACTIVITY_FEELING_LABELS);
   const tz = getUserTimezone(user);
   const now = new Date();
   const today = dayKey(now, tz);
@@ -8691,7 +8695,7 @@ async function buildAiInsightsContext(user) {
   const windowEnd = addDaysToKey(today, 1);
   const { data: activityRows, error: activityError } = await supabaseAdmin
     .from('activities')
-    .select('sport, distance, duration, date')
+    .select('sport, distance, duration, date, feeling')
     .eq('user_id', user.id)
     .order('date', { ascending: true });
   if (activityError) throw activityError;
@@ -8715,6 +8719,10 @@ async function buildAiInsightsContext(user) {
       points: calculatePoints(rows)
     };
   };
+  const summarizeFeelings = (rows) => Object.fromEntries(feelingKeys.map((key) => [
+    key,
+    rows.reduce((count, row) => count + (row.feeling === key ? 1 : 0), 0)
+  ]));
   const inclusiveDays = (start, end) => Math.max(0, keyToEpochDays(end) - keyToEpochDays(start) + 1);
   const withAverages = (rows, observedDays) => {
     const totals = summarize(rows);
@@ -8770,6 +8778,7 @@ async function buildAiInsightsContext(user) {
     distanceKm: round1(item.distanceKm)
   })).sort((a, b) => a.date.localeCompare(b.date));
   const weekly = [];
+  const feelings = [];
   for (let i = 11; i >= 0; i--) {
     const start = weekStartKey(now, tz, i);
     const end = addDaysToKey(start, 7);
@@ -8786,9 +8795,10 @@ async function buildAiInsightsContext(user) {
       item.distanceKm += parseDistanceKmUnitAware(row.distance);
       bySportMap[sport] = item;
     }
+    const relative = i === 0 ? 'this_week' : i === 1 ? 'last_week' : `${i}_weeks_ago`;
     weekly.push({
       weekStart: start,
-      relative: i === 0 ? 'this_week' : i === 1 ? 'last_week' : `${i}_weeks_ago`,
+      relative,
       ...summarize(rows),
       sports: Object.values(bySportMap).map((item) => ({
         sport: item.sport,
@@ -8796,6 +8806,11 @@ async function buildAiInsightsContext(user) {
         durationHours: round1(item.durationHours),
         distanceKm: round1(item.distanceKm)
       }))
+    });
+    feelings.push({
+      weekStart: start,
+      relative,
+      ...summarizeFeelings(rows)
     });
   }
   const activeWeeks = weekly.filter((week) => week.activityCount > 0).length;
@@ -8835,7 +8850,7 @@ async function buildAiInsightsContext(user) {
     });
   }
   const context = {
-    schemaVersion: 6,
+    schemaVersion: 7,
     asOfDate: today,
     timezone: tz,
     coverage: {
@@ -8855,7 +8870,9 @@ async function buildAiInsightsContext(user) {
       activeWeeks,
       sports: summarizeSports(detailedActs, detailedObservedDays),
       daily,
-      weekly
+      weekly,
+      feelings,
+      feelingsTotal: summarizeFeelings(detailedActs)
     },
     last12Months,
     dataQuality: {

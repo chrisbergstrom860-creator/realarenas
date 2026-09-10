@@ -9,11 +9,12 @@ const {
   verifyHistoryTurns,
   validateInsightResponse,
   safeFindingDiagnostics,
-  resolveAnthropicProvider
+  resolveAnthropicProvider,
+  buildSystemPrompt
 } = require('./ai-insights');
 
 const context = {
-  schemaVersion: 6,
+  schemaVersion: 7,
   asOfDate: '2026-09-10',
   timezone: 'America/Los_Angeles',
   allTime: {
@@ -28,6 +29,11 @@ const context = {
       { weekStart: '2026-08-31', relative: 'last_week', activityCount: 4, durationHours: 3.5, distanceKm: 20, points: 40, sports: [] },
       { weekStart: '2026-09-07', relative: 'this_week', activityCount: 2, durationHours: 1.5, distanceKm: 10, points: 20, sports: [] }
     ],
+    feelings: [
+      { weekStart: '2026-08-31', relative: 'last_week', strong: 1, tired: 2, motivated: 0, struggled: 1, sore: 0, easy: 0 },
+      { weekStart: '2026-09-07', relative: 'this_week', strong: 0, tired: 0, motivated: 1, struggled: 0, sore: 0, easy: 1 }
+    ],
+    feelingsTotal: { strong: 1, tired: 2, motivated: 1, struggled: 1, sore: 0, easy: 1 },
     sports: [{ sport: 'running', sessions: 6, averageDistanceKmPerActivity: 7.1 }]
   },
   last12Months: [{
@@ -111,6 +117,10 @@ const context = {
     }
   }
 };
+
+test('fixture uses AI context schema version 7', () => {
+  assert.equal(context.schemaVersion, 7);
+});
 
 test('evidence validator accepts exact paths and values', () => {
   const result = validateInsightResponse({
@@ -233,6 +243,106 @@ test('Monday weekly labels render current and previous periods without array-pos
     'last12Weeks.weekly.0.activityCount',
     'last12Weeks.weekly.1.activityCount'
   ]);
+});
+
+test('feeling counts render exact evidence with canonical friendly labels', () => {
+  const result = validateInsightResponse({
+    findings: [
+      { type: 'metric', path: 'last12Weeks.feelings.0.tired', value: 2 },
+      { type: 'metric', path: 'last12Weeks.feelingsTotal.easy', value: 1 }
+    ],
+    limitations: []
+  }, context);
+  assert.equal(result.ok, true);
+  assert.equal(
+    result.answer,
+    'Your Tired count last week (Aug 31 – Sep 6) was 2. Your Easy day count in the last 12 weeks was 1.'
+  );
+  assert.doesNotMatch(result.answer, /\btired\b|\beasy\b/);
+  assert.deepEqual(result.evidence, [
+    { path: 'last12Weeks.feelings.0.tired', value: 2 },
+    { path: 'last12Weeks.feelingsTotal.easy', value: 1 }
+  ]);
+});
+
+test('feeling evidence rejects unknown keys and mismatched counts', () => {
+  const unknown = validateInsightResponse({
+    findings: [{ type: 'metric', path: 'last12Weeks.feelingsTotal.private_feeling', value: 1 }],
+    limitations: []
+  }, context);
+  assert.equal(unknown.ok, false);
+  assert.equal(unknown.reason, 'missing_path');
+  assert.equal(unknown.offendingPath, null);
+
+  const mismatched = validateInsightResponse({
+    findings: [{ type: 'metric', path: 'last12Weeks.feelingsTotal.tired', value: 3 }],
+    limitations: []
+  }, context);
+  assert.equal(mismatched.ok, false);
+  assert.equal(mismatched.reason, 'mismatched_value');
+  assert.equal(mismatched.answer, FALLBACK_COPY);
+});
+
+test('all-zero feeling summaries are unavailable, while a zero key is known when its period has observations', () => {
+  const allZeroCounts = {
+    strong: 0,
+    tired: 0,
+    motivated: 0,
+    struggled: 0,
+    sore: 0,
+    easy: 0
+  };
+  const absentContext = {
+    ...context,
+    last12Weeks: {
+      ...context.last12Weeks,
+      feelings: context.last12Weeks.feelings.map((row) => ({ ...row, ...allZeroCounts })),
+      feelingsTotal: { ...allZeroCounts }
+    }
+  };
+  for (const path of ['last12Weeks.feelings.0.tired', 'last12Weeks.feelingsTotal.tired']) {
+    const unavailable = validateInsightResponse({
+      findings: [{ type: 'metric', path, value: 0 }],
+      limitations: []
+    }, absentContext);
+    assert.equal(unavailable.ok, false);
+    assert.equal(unavailable.reason, 'unsupported_path');
+    assert.equal(unavailable.answer, FALLBACK_COPY);
+  }
+
+  const knownWeeklyZero = validateInsightResponse({
+    findings: [{ type: 'metric', path: 'last12Weeks.feelings.0.sore', value: 0 }],
+    limitations: []
+  }, context);
+  assert.equal(knownWeeklyZero.ok, true);
+  assert.equal(knownWeeklyZero.answer, 'Your Sore count last week (Aug 31 – Sep 6) was 0.');
+
+  const knownTotalZero = validateInsightResponse({
+    findings: [{ type: 'metric', path: 'last12Weeks.feelingsTotal.sore', value: 0 }],
+    limitations: []
+  }, context);
+  assert.equal(knownTotalZero.ok, true);
+  assert.equal(knownTotalZero.answer, 'Your Sore count in the last 12 weeks was 0.');
+});
+
+test('absent feeling data remains an exclusive server-owned not-answerable result', () => {
+  const result = validateInsightResponse({
+    findings: [{ type: 'not_answerable', domain: 'recorded_training', reason: 'unsupported_metric' }],
+    limitations: []
+  }, context);
+  assert.equal(result.ok, true);
+  assert.equal(result.notAnswerable, true);
+  assert.equal(result.answer, NOT_ANSWERABLE_COPY.unsupported_metric);
+  assert.deepEqual(result.evidence, []);
+  assert.deepEqual(result.limitations, []);
+});
+
+test('feeling prompt keeps monthly and absent-data answers honest without advice', () => {
+  const prompt = buildSystemPrompt();
+  assert.match(prompt, /weekly feeling buckets cannot answer calendar-month questions exactly/);
+  assert.match(prompt, /no recorded feelings.*unsupported_metric/);
+  assert.match(prompt, /all-zero row or total has no feeling evidence/);
+  assert.match(prompt, /do not infer causes, characterize the athlete, or give advice/);
 });
 
 test('first-of-month labels render previous and current months explicitly', () => {

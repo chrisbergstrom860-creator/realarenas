@@ -394,8 +394,9 @@ function showToast(msg) {
 
   // Activity row/card — header mirrors the my-profile Activities surface
   // (icon tile, escaped title, time-ago, registry sport pill), body via the
-  // ONE shared builder (title off — it lives in this header; no feeling for
-  // visitors).
+  // ONE shared builder (title off — it lives in this header). Feeling is
+  // shown to visitors who can see the activity, gated by activity sharing;
+  // it is never shown in club-coach views or sent in their payloads.
   function activityCard(act){
     var reg = byId[act.sport];
     var icon = reg ? reg.emoji : '🏃';
@@ -409,7 +410,7 @@ function showToast(msg) {
         '</div>' +
         window.sportPillHtml(act.sport, { icon: false, style: 'flex-shrink:0' }) +
       '</div>' +
-      window.activityCardBody(act, { title: false, feeling: false }) +
+      window.activityCardBody(act, { title: false, feeling: true }) +
     '</div>';
   }
 

@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/html/arenas.css">
 <script src="/html/arenas-club-create.js"></script>
+<script src="/html/arenas-activity-card.js"></script>
 <style>
 button{font-family:var(--font)}
 .notif-btn:hover{background:var(--gray-50)}
@@ -165,14 +166,20 @@ button{font-family:var(--font)}
           <!-- Feeling -->
           <div style="margin-bottom:14px">
             <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:8px">How did you feel? <span style="font-weight:400;color:var(--gray-400)">(optional)</span></div>
+            <div style="font-size:11px;color:var(--gray-400);margin-bottom:8px">Shown with this activity to your followers and clubmates. Not shown to club coaches.</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap" id="act-feeling-chips">
-              <button type="button" class="act-feeling-chip" onclick="selectFeeling(this,'strong')">💪 Strong</button>
-              <button type="button" class="act-feeling-chip" onclick="selectFeeling(this,'tired')">😴 Tired</button>
-              <button type="button" class="act-feeling-chip" onclick="selectFeeling(this,'motivated')">🔥 Motivated</button>
-              <button type="button" class="act-feeling-chip" onclick="selectFeeling(this,'struggled')">😤 Struggled</button>
-              <button type="button" class="act-feeling-chip" onclick="selectFeeling(this,'sore')">🤕 Sore</button>
-              <button type="button" class="act-feeling-chip" onclick="selectFeeling(this,'easy')">😊 Easy day</button>
+              <button type="button" class="act-feeling-chip" data-feeling="strong" data-emoji="💪" onclick="selectFeeling(this,'strong')"></button>
+              <button type="button" class="act-feeling-chip" data-feeling="tired" data-emoji="😴" onclick="selectFeeling(this,'tired')"></button>
+              <button type="button" class="act-feeling-chip" data-feeling="motivated" data-emoji="🔥" onclick="selectFeeling(this,'motivated')"></button>
+              <button type="button" class="act-feeling-chip" data-feeling="struggled" data-emoji="😤" onclick="selectFeeling(this,'struggled')"></button>
+              <button type="button" class="act-feeling-chip" data-feeling="sore" data-emoji="🤕" onclick="selectFeeling(this,'sore')"></button>
+              <button type="button" class="act-feeling-chip" data-feeling="easy" data-emoji="😊" onclick="selectFeeling(this,'easy')"></button>
             </div>
+            <script>
+              document.querySelectorAll('#act-feeling-chips [data-feeling]').forEach(function (chip) {
+                chip.textContent = chip.dataset.emoji + ' ' + window.ARENAS_ACTIVITY_FEELING_LABELS[chip.dataset.feeling];
+              });
+            </script>
           </div>
 
           <!-- Visibility note -->

@@ -1101,7 +1101,7 @@ function collectActivityItems() {
           '</div>' +
           window.sportPillHtml(a.sport) +
         '</div>' +
-        window.activityCardBody(a) +
+      window.activityCardBody(a, { feeling: true }) +
         // Kudos footer — same classes, placement and toggle behavior as the
         // post cards' footer above (pn-footer/pn-action, count updates in place).
         '<div class="pn-footer">' +

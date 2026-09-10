@@ -16,8 +16,20 @@
 //   inset:   true → each block carries .ac-ins (margin:0 14px 10px) for
 //            flush cards (club dashboard). Default false = padded card.
 //   title:   false → no title block (profile puts the title in its header).
-//   feeling: true → render the "Feeling:" line (profile only).
+//   feeling: true → render the "Feeling:" line on peer/own surfaces, never club-coach cards.
 (function () {
+  // Shared with the log form and server-side AI summaries. Only these keys
+  // may become labels or aggregated feeling evidence; unknown values stay hidden.
+  var ACTIVITY_FEELING_LABELS = Object.freeze({
+    strong: 'Strong', tired: 'Tired', motivated: 'Motivated',
+    struggled: 'Struggled', sore: 'Sore', easy: 'Easy day'
+  });
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { ACTIVITY_FEELING_LABELS: ACTIVITY_FEELING_LABELS };
+  }
+  if (typeof window === 'undefined') return;
+  window.ARENAS_ACTIVITY_FEELING_LABELS = ACTIVITY_FEELING_LABELS;
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -85,8 +97,8 @@
     // No "Coach's note" block: the old ai_insight strings were server-canned
     // templates masquerading as a human coach — removed by user decision.
     // Existing DB rows may still carry ai_insight; it must never render.
-    if (opts.feeling && a.feeling) {
-      html += '<div class="ac-feeling' + ins + '">Feeling: ' + esc(a.feeling) + '</div>';
+    if (opts.feeling && Object.prototype.hasOwnProperty.call(ACTIVITY_FEELING_LABELS, a.feeling)) {
+      html += '<div class="ac-feeling' + ins + '">Feeling: ' + esc(ACTIVITY_FEELING_LABELS[a.feeling]) + '</div>';
     }
     return html;
   };

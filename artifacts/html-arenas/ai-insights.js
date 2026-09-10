@@ -1,4 +1,7 @@
 const crypto = require('crypto');
+const { ACTIVITY_FEELING_LABELS } = require('./html/arenas-activity-card.js');
+const ACTIVITY_FEELING_KEYS = Object.keys(ACTIVITY_FEELING_LABELS);
+const ACTIVITY_FEELING_KEY_PATTERN = ACTIVITY_FEELING_KEYS.join('|');
 
 const FALLBACK_COPY = "I couldn’t produce an answer supported by your recorded data. Try asking about your activity count, volume, sports, streaks, personal records, standings, upcoming schedule, events, or active goals.";
 const REFUSAL_COPY = "I can describe your recorded training, but I can’t prescribe workouts or comment on diet, weight, body composition, or whether you are under-training. Try asking what changed in your volume, consistency, sports, personal records, or standings.";
@@ -163,7 +166,8 @@ function safeDiagnosticPath(path) {
     'target', 'progress', 'value', 'unit', 'period', 'percent', 'onTrack',
     'isComplete', 'windowStart', 'windowEnd', 'limitations', 'byMonth',
     'plannedCount', 'totalPlannedMinutes', 'count', 'previousPeriods', 'achieved',
-    'previousPeriodRange', 'previousPeriodUnavailableReason'
+    'previousPeriodRange', 'previousPeriodUnavailableReason', 'feelings', 'feelingsTotal',
+    ...ACTIVITY_FEELING_KEYS
   ]);
   return tokens.every((token) => /^\d+$/.test(token) || allowed.has(token)) ? tokens.join('.') : null;
 }
@@ -333,6 +337,24 @@ function metricDescription(context, path) {
       averageDistanceKmPerActivity: 'average recorded distance per activity'
     };
     return `Your ${row.sport} ${labels[match[2]]} in the last 12 weeks`;
+  }
+  match = path.match(new RegExp(`^last12Weeks\\.feelings\\.(\\d+)\\.(${ACTIVITY_FEELING_KEY_PATTERN})$`));
+  if (match) {
+    const row = context.last12Weeks && context.last12Weeks.feelings &&
+      context.last12Weeks.feelings[Number(match[1])];
+    const label = ACTIVITY_FEELING_LABELS[match[2]];
+    const recognizedCount = row && ACTIVITY_FEELING_KEYS
+      .reduce((sum, key) => sum + (Number.isInteger(row[key]) && row[key] >= 0 ? row[key] : 0), 0);
+    if (!row || !row.weekStart || !label || recognizedCount === 0) return null;
+    return `Your ${label} count ${weeklyPeriodPhrase(row)}`;
+  }
+  match = path.match(new RegExp(`^last12Weeks\\.feelingsTotal\\.(${ACTIVITY_FEELING_KEY_PATTERN})$`));
+  if (match) {
+    const label = ACTIVITY_FEELING_LABELS[match[1]];
+    const totals = context.last12Weeks && context.last12Weeks.feelingsTotal;
+    const recognizedCount = totals && ACTIVITY_FEELING_KEYS
+      .reduce((sum, key) => sum + (Number.isInteger(totals[key]) && totals[key] >= 0 ? totals[key] : 0), 0);
+    return label && recognizedCount > 0 ? `Your ${label} count in the last 12 weeks` : null;
   }
   match = path.match(/^last12Months\.(\d+)\.(sessions|durationHours|distanceKm|activeDays|restDays|observedDays|averageSessionDurationHours|averageHoursPerWeek|averageSessionsPerWeek|averageDistanceKmPerActivity)$/);
   if (match) {
@@ -1079,6 +1101,9 @@ function buildSystemPrompt() {
     'last12Months contains 12 athlete-timezone calendar buckets, oldest first, including zero months. Each month has totals, activeDays, restDays, observedDays, common averages, and active-sport summaries.',
     'RELATIVE PERIODS: when the user says “this week”, “last week”, “this month”, or “last month”, select the weekly, last12Months, or pastPlanAdherence entry whose relative label exactly matches this_week, last_week, this_month, or last_month. Never derive a relative period from array position, weekStart, month, or any date arithmetic.',
     'last12Weeks.sports contains aggregate sport summaries for the detailed 12-week window. Use these direct paths instead of calculating from weekly or daily rows.',
+    `FEELINGS: last12Weeks.feelings contains 12 weekly rows aligned exactly with last12Weeks.weekly by weekStart and relative label. Each row and feelingsTotal contains only these server-counted keys: ${ACTIVITY_FEELING_KEYS.join(', ')}. A zero for one key is answerable only when at least one recognized feeling was recorded in that same weekly row or 12-week total; an all-zero row or total has no feeling evidence.`,
+    `FEELINGS: use metric findings on exact feeling-count paths. In user-visible meaning, ${Object.entries(ACTIVITY_FEELING_LABELS).map(([key, label]) => `${key} is “${label}”`).join(', ')}; server prose supplies these labels. You may select feeling and volume metrics together to describe a recorded pattern, but do not infer causes, characterize the athlete, or give advice.`,
+    'FEELINGS: weekly feeling buckets cannot answer calendar-month questions exactly. For “last month” or another calendar month, use recorded_training unsupported_metric. If there are no recorded feelings in the requested available period, also use recorded_training unsupported_metric rather than presenting zero counts as how the athlete felt.',
     'calendar contains only the athlete’s own future plans, visible eligible future events, and 12 monthly plan-status counts. plannedSessions.total/included cover all future plan records across planned, done, and skipped statuses. Each byMonth collection is contiguous from the current athlete-timezone month through the later of next month or that collection’s last scheduled item, including exact zero buckets computed before the item caps. A zero bucket is known empty and answerable. A requested future month beyond that collection’s last byMonth bucket is unknown; use calendar_month_out_of_range. Use byMonth.plannedCount for sessions left, and use direct byMonth paths for month counts and planned minutes; never derive a month count from items or use the all-future total for one month.',
     'Use calendar_plan_list or calendar_event_list when the user asks what the month’s matching items are. Canonical list findings contain exactly type, path, and filter; omit value and every other key. The server applies the month filter and renders at most 10 items. If the relevant month bucket is truncated, include CALENDAR_RESULTS_TRUNCATED.',
     'goals contains at most five active goals with server-computed progress and on-track status. Eligible weekly and monthly non-streak goals also contain up to three previousPeriods, newest first. Their compact windowStart/windowEnd dates use an exclusive windowEnd. Use goal_period for one requested closed period and goal_period_list when the user asks about all three. previousPeriodRange is the exact three-period coverage boundary. previousPeriodUnavailableReason explains why one or more recent periods are absent. Streak and custom goals never expose previousPeriods. Cross-goal comparison and catch-up projections remain unsupported.',

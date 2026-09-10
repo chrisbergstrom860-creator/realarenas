@@ -17,6 +17,8 @@ let clubId = null;
 let foreignClubId = null;
 let subscriptionId = null;
 let failures = 0;
+let checksRun = 0;
+let checksPassed = 0;
 const captured = [];
 const REFUSAL_COPY = "I can describe your recorded training, but I can’t prescribe workouts or comment on diet, weight, body composition, or whether you are under-training. Try asking what changed in your volume, consistency, sports, personal records, or standings.";
 const GROUNDED_METRIC_COPY = 'Your all-time activity count was 11.';
@@ -86,9 +88,24 @@ const ANSWERABLE_QUESTIONS = [
   'What events do I have this month?',
   'Is my cycling goal on track?',
   'How did I do last week on my weightlifting goal?',
-  'How did I do last month on my cycling goal?'
+  'How did I do last month on my cycling goal?',
+  'How have I been feeling lately?',
+  'How often did I record feeling tired in the last 12 weeks?'
 ];
 const NOT_ANSWERABLE_CASES = [
+  {
+    question: 'How often was I tired in the last month?',
+    domain: 'recorded_training',
+    reason: 'unsupported_metric',
+    copy: "Your recorded data does not include the measurement needed to answer that question."
+  },
+  {
+    question: 'How have I been feeling lately when I have no feeling data?',
+    domain: 'recorded_training',
+    reason: 'unsupported_metric',
+    user: 'noGoals',
+    copy: "Your recorded data does not include the measurement needed to answer that question."
+  },
   {
     question: 'How many activities did I log after my injury?',
     domain: 'recorded_training',
@@ -163,7 +180,11 @@ const POLICY_REFUSAL_CASES = [
 ];
 
 function check(name, ok, detail) {
-  if (ok) console.log('  ok  ' + name);
+  checksRun++;
+  if (ok) {
+    checksPassed++;
+    console.log('  ok  ' + name);
+  }
   else {
     failures++;
     console.error('FAIL  ' + name + (detail ? ' — ' + String(detail).slice(0, 900) : ''));
@@ -507,6 +528,20 @@ function findingsForAnswerableQuestion(question, data) {
     const path = `goals.active.items.${index}.previousPeriods.0`;
     return [{ type: 'goal_period', path, value: valueAtPath(data, path) }];
   }
+  if (question === 'How have I been feeling lately?') {
+    const index = data.last12Weeks.feelings.findLastIndex((row) =>
+      Object.keys(row).some((key) => !['weekStart', 'relative'].includes(key) && row[key] > 0));
+    const key = Object.keys(data.last12Weeks.feelings[index])
+      .find((candidate) => !['weekStart', 'relative'].includes(candidate) &&
+        data.last12Weeks.feelings[index][candidate] > 0);
+    return [
+      metricFinding(data, `last12Weeks.feelings.${index}.${key}`),
+      metricFinding(data, `last12Weeks.weekly.${index}.activityCount`)
+    ];
+  }
+  if (question === 'How often did I record feeling tired in the last 12 weeks?') {
+    return [metricFinding(data, 'last12Weeks.feelingsTotal.tired')];
+  }
   throw new Error('No answerable fixture response for: ' + question);
 }
 
@@ -523,6 +558,24 @@ function legacyContextProjection(data) {
   }
   delete legacy.last12Weeks.sports;
   return legacy;
+}
+
+function providerRequestWithoutFeelings(body) {
+  const baseline = JSON.parse(JSON.stringify(body));
+  baseline.system = baseline.system.split('\n')
+    .filter((line) => !line.startsWith('FEELINGS:'))
+    .join('\n');
+  baseline.messages = baseline.messages.map((message) => {
+    if (typeof message.content !== 'string') return message;
+    const envelope = JSON.parse(message.content);
+    if (envelope.data && envelope.data.last12Weeks) {
+      envelope.data.schemaVersion = 6;
+      delete envelope.data.last12Weeks.feelings;
+      delete envelope.data.last12Weeks.feelingsTotal;
+    }
+    return { ...message, content: JSON.stringify(envelope) };
+  });
+  return baseline;
 }
 
 function startStub() {
@@ -633,8 +686,8 @@ async function cleanup() {
   let browser;
   try {
     writeManifest();
-    check('verification matrix contains exactly 35 preserved-and-extended questions',
-      ANSWERABLE_QUESTIONS.length + NOT_ANSWERABLE_CASES.length + POLICY_REFUSAL_CASES.length === 35,
+    check('verification matrix contains exactly 39 preserved-and-extended questions',
+      ANSWERABLE_QUESTIONS.length + NOT_ANSWERABLE_CASES.length + POLICY_REFUSAL_CASES.length === 39,
       JSON.stringify({
         answerable: ANSWERABLE_QUESTIONS.length,
         notAnswerable: NOT_ANSWERABLE_CASES.length,
@@ -717,7 +770,8 @@ async function cleanup() {
         title: 'PRO_PRIVATE_TITLE_' + i,
         date: activityDate.toISOString(),
         duration: i === 2 || i === 3 ? '1.04h' : '1h',
-        distance: i === 2 ? '10.04 km' : i === 3 ? '11.04 km' : (10 + i) + ' km'
+        distance: i === 2 ? '10.04 km' : i === 3 ? '11.04 km' : (10 + i) + ' km',
+        feeling: ['tired', 'strong', 'motivated', 'struggled', 'sore', 'easy', null, 'UNKNOWN_FEELING_MUST_NOT_REACH_MODEL'][i]
       });
     }
     const currentWeekStart = weekStartKeyInZone(new Date(), TEST_TIMEZONE);
@@ -729,7 +783,8 @@ async function cleanup() {
         title: 'GOAL_HISTORY_WEIGHTLIFTING_' + offset,
         date: shiftDay(lastWeekStart, offset) + 'T19:00:00.000Z',
         duration: '1h',
-        distance: null
+        distance: null,
+        feeling: offset === 0 ? 'tired' : null
       });
     }
     activityRows.push({
@@ -855,6 +910,7 @@ async function cleanup() {
     await app.ready;
     const proLogin = await login('pro');
     const freeLogin = await login('free');
+    const noGoalsLogin = await login('noGoals');
 
     const providerCountBeforeFree = captured.length;
     const freeResult = await api(freeLogin, 'POST', '/api/profile/ai-insights', { question: 'How am I doing?', history: [] });
@@ -868,11 +924,18 @@ async function cleanup() {
     check('Pro comparison request succeeds through captured provider', privacyResult.status === 200 && !!privacyResult.body.historyTurn, JSON.stringify(privacyResult));
     const privacyCapture = captured[captured.length - 1];
     const serializedPayload = JSON.stringify(privacyCapture.body);
+    const requestWithoutFeelings = JSON.stringify(providerRequestWithoutFeelings(privacyCapture.body));
+    const feelingRequestDeltaChars = serializedPayload.length - requestWithoutFeelings.length;
+    const feelingRequestDeltaTokens = Math.ceil(feelingRequestDeltaChars / 4);
     const hybridContextChars = JSON.stringify(privacyCapture.envelope.data).length;
     const legacyContextChars = JSON.stringify(legacyContextProjection(privacyCapture.envelope.data)).length;
     const addedContextChars = hybridContextChars - legacyContextChars;
     console.log(`  info realistic serialized provider request: ${serializedPayload.length} JSON characters (~${Math.ceil(serializedPayload.length / 4)} estimated input tokens)`);
     console.log(`  info hybrid context adds ${addedContextChars} JSON characters (~${Math.ceil(addedContextChars / 4)} estimated input tokens for this fixture)`);
+    console.log(`  info feeling summary adds ${feelingRequestDeltaChars} JSON characters (~${feelingRequestDeltaTokens} estimated input tokens) to the same serialized prompt + context fixture`);
+    check('feeling input-token delta includes prompt and context for the same fixture',
+      feelingRequestDeltaChars > 0 && feelingRequestDeltaChars < 5000,
+      JSON.stringify({ feelingRequestDeltaChars, feelingRequestDeltaTokens }));
     check('hybrid context stays within the expected incremental token budget',
       addedContextChars > 0 && addedContextChars < 12000,
       JSON.stringify({ hybridContextChars, legacyContextChars, addedContextChars }));
@@ -887,7 +950,7 @@ async function cleanup() {
       privacyCapture.body.system);
     check('actual model payload contains the allowlisted data object', !!privacyCapture.envelope.data && privacyCapture.envelope.data.allTime.activityCount === 11, serializedPayload);
     check('actual model payload has 12 timezone-calendar month buckets including zero months',
-      privacyCapture.envelope.data.schemaVersion === 6 &&
+      privacyCapture.envelope.data.schemaVersion === 7 &&
       privacyCapture.envelope.data.last12Months.length === 12 &&
       privacyCapture.envelope.data.last12Months.every((month) =>
         JSON.stringify(Object.keys(month).sort()) === JSON.stringify([
@@ -901,6 +964,22 @@ async function cleanup() {
       privacyCapture.envelope.data.last12Weeks.weekly.at(-1).relative === 'this_week' &&
       privacyCapture.envelope.data.last12Weeks.weekly.at(-2).relative === 'last_week',
       JSON.stringify(privacyCapture.envelope.data.last12Weeks.weekly.slice(-2)));
+    const feelingKeys = ['easy', 'motivated', 'sore', 'strong', 'struggled', 'tired'];
+    check('feeling summaries are bounded, six-key, and aligned to weekly labels',
+      privacyCapture.envelope.data.last12Weeks.feelings.length === 12 &&
+      privacyCapture.envelope.data.last12Weeks.feelings.every((row, index) =>
+        row.weekStart === privacyCapture.envelope.data.last12Weeks.weekly[index].weekStart &&
+        row.relative === privacyCapture.envelope.data.last12Weeks.weekly[index].relative &&
+        JSON.stringify(Object.keys(row).filter((key) => !['weekStart', 'relative'].includes(key)).sort()) === JSON.stringify(feelingKeys) &&
+        feelingKeys.every((key) => Number.isInteger(row[key]) && row[key] >= 0)) &&
+      JSON.stringify(Object.keys(privacyCapture.envelope.data.last12Weeks.feelingsTotal).sort()) === JSON.stringify(feelingKeys),
+      JSON.stringify(privacyCapture.envelope.data.last12Weeks.feelings));
+    check('feeling summaries exclude null, unknown, raw rows, and free text',
+      privacyCapture.envelope.data.last12Weeks.feelingsTotal.tired === 2 &&
+      !serializedPayload.includes('UNKNOWN_FEELING_MUST_NOT_REACH_MODEL') &&
+      !serializedPayload.includes('PRO_PRIVATE_TITLE_') &&
+      !Object.prototype.hasOwnProperty.call(privacyCapture.envelope.data.last12Weeks, 'feelingRows'),
+      JSON.stringify(privacyCapture.envelope.data.last12Weeks));
     check('month buckets and plan adherence carry matching server-owned relative labels',
       privacyCapture.envelope.data.last12Months.at(-1).relative === 'this_month' &&
       privacyCapture.envelope.data.last12Months.at(-2).relative === 'last_month' &&
@@ -1422,16 +1501,30 @@ async function cleanup() {
           /^Last month your cycling distance goal reached .+ and was (?:not )?achieved\.$/.test(result.body.answer),
           result.body.answer);
       }
+      if (question === 'How have I been feeling lately?') {
+        check('recent feeling answer uses friendly server prose with exact weekly proof and no advice',
+          /\b(?:Strong|Tired|Motivated|Struggled|Sore|Easy day) count\b/.test(result.body.answer) &&
+          /last week|this week|week starting/.test(result.body.answer) &&
+          !/\bshould|recommend|increase|decrease\b/i.test(result.body.answer),
+          JSON.stringify(result.body));
+      }
+      if (question === 'How often did I record feeling tired in the last 12 weeks?') {
+        check('12-week tired total renders the exact canonical friendly label',
+          result.body.answer ===
+            `Your Tired count in the last 12 weeks was ${providerRecord.envelope.data.last12Weeks.feelingsTotal.tired}.`,
+          JSON.stringify(result.body));
+      }
     }
 
     for (const notAnswerableCase of NOT_ANSWERABLE_CASES) {
-      const usageBeforeNotAnswerable = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+      const caseLogin = notAnswerableCase.user === 'noGoals' ? noGoalsLogin : proLogin;
+      const usageBeforeNotAnswerable = await api(caseLogin, 'GET', '/api/profile/ai-insights/status');
       const providerCountBefore = captured.length;
-      const result = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+      const result = await api(caseLogin, 'POST', '/api/profile/ai-insights', {
         question: notAnswerableCase.question,
         history: []
       });
-      const usageAfterNotAnswerable = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+      const usageAfterNotAnswerable = await api(caseLogin, 'GET', '/api/profile/ai-insights/status');
       const providerRecord = captured[captured.length - 1];
       const expectedFinding = findingForNotAnswerableCase(notAnswerableCase, providerRecord.envelope.data);
       check('not-answerable question reaches provider: ' + notAnswerableCase.question,
@@ -1453,6 +1546,12 @@ async function cleanup() {
         usageAfterNotAnswerable.body.used === usageBeforeNotAnswerable.body.used &&
         usageAfterNotAnswerable.body.remaining === usageBeforeNotAnswerable.body.remaining,
         JSON.stringify({ before: usageBeforeNotAnswerable.body, after: usageAfterNotAnswerable.body }));
+      if (notAnswerableCase.user === 'noGoals') {
+        check('absent-feeling not-answerable fixture has six honest zero totals',
+          Object.values(providerRecord.envelope.data.last12Weeks.feelingsTotal)
+            .every((count) => count === 0),
+          JSON.stringify(providerRecord.envelope.data.last12Weeks.feelingsTotal));
+      }
     }
 
     for (const policyCase of POLICY_REFUSAL_CASES) {
@@ -1508,7 +1607,6 @@ async function cleanup() {
     const providerCountBeforeStats = captured.length;
     const usageBeforeStats = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
     const heroStats = await api(proLogin, 'GET', '/api/profile/ai-insights/hero-stats');
-    const noGoalsLogin = await login('noGoals');
     const noGoalsHero = await api(noGoalsLogin, 'GET', '/api/profile/ai-insights/hero-stats');
     const usageAfterStats = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
     const fixtureContext = captured[captured.length - 1].envelope.data;
@@ -1801,6 +1899,6 @@ async function cleanup() {
     console.error(`\n${failures} FAILURE(S)`);
     process.exitCode = 1;
   } else {
-    console.log('\nALL AI INSIGHTS CHECKS PASSED');
+    console.log(`\nALL ${checksPassed}/${checksRun} AI INSIGHTS CHECKS PASSED`);
   }
 })();
