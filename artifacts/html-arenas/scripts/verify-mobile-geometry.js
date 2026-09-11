@@ -110,7 +110,7 @@ const dt = (d) => iso(d).slice(0, 10);
 let browser = null;
 try {
 for (const k of Object.keys(userDefs)) await mkUser(k);
-await login('creator'); await login('member');
+await login('creator'); await login('member'); await login('f6');
 const C = users.creator.id, M = users.member.id;
 const F = [...Array(8)].map((_, i) => users['f' + i].id);
 console.log('MANIFEST users:', JSON.stringify(Object.fromEntries(Object.entries(users).map(([k, v]) => [k, v.id]))));
@@ -145,7 +145,21 @@ await ins('challenge_invites', { challenge_id: chPriv.id, inviter_id: C, invitee
 const chShort = await mkCh(C, '5K Blitz', 'public', [C, M, ...F.slice(0, 3)]);
 const chLong = await mkCh(C, LONG + ' II', 'public', [C, ...F.slice(0, 4)]);
 const chByM = await mkCh(M, 'Dawn Patrol Weekly Sunrise Kilometre Accumulation Series', 'public', [M, users.f3.id]);
-const CHALLENGES = [chPriv.id, chShort.id, chLong.id, chByM.id];
+// A genuinely ended challenge keeps the Completed tab rendered with real API
+// data. It is not discoverable and does not appear in the active friends view.
+const chCompleted = await ins('challenges', {
+  created_by: C,
+  title: 'Completed Fjord-to-Fjord Distance Progress Challenge',
+  visibility: 'public',
+  sport: 'running',
+  goal_type: 'distance',
+  goal_target: 120,
+  goal_unit: 'km',
+  start_date: iso(-30),
+  end_date: iso(-2)
+});
+await ins('challenge_participants', { challenge_id: chCompleted.id, user_id: C });
+const CHALLENGES = [chPriv.id, chShort.id, chLong.id, chByM.id, chCompleted.id];
 
 // activities: dense, multi-sport, long titles, spread over the month → feeds
 // PRs, stats-4, calendar, leaderboards, club rollups, points, streaks.
@@ -258,6 +272,57 @@ const athleteNav = (activeLabel = null, fab = true) => ({
 const dashboardNav = { itemCount: 5, activeCount: 1, activeLabel: 'Overview', fab: false };
 const memberNav = { itemCount: 5, activeCount: 1, activeLabel: 'Overview', fab: false };
 const memberLeaderboardNav = { itemCount: 4, activeCount: 1, activeLabel: 'Ranks', fab: true };
+// Contract with the Challenges redesign: the band has one stable hook so its
+// presence can be checked without coupling the guard to illustration markup.
+// Accept the data hook as well so a class-name-only styling refactor cannot
+// silently remove coverage.
+const WHY_JOIN_SELECTOR = '.ch-why-join, [data-challenge-why-join]';
+const whyJoinState = (name, expectedBands, expectedCards) => ({
+  name,
+  js: `(() => {
+    const visible = (el) => {
+      const r = el.getBoundingClientRect(), s = getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && s.display !== 'none'
+        && s.visibility !== 'hidden' && s.opacity !== '0';
+    };
+    const bands = [...document.querySelectorAll(${JSON.stringify(WHY_JOIN_SELECTOR)})];
+    const visibleBands = bands.filter(visible);
+    const cards = [...document.querySelectorAll('#tab-mine .challenge-card')];
+    const labels = ['Stay motivated', 'Compete with friends', 'Earn points', 'Build healthy habits'];
+    const bandText = visibleBands.map((el) => el.textContent.replace(/\\s+/g, ' ').trim()).join(' ');
+    const labelsPresent = labels.filter((label) => bandText.includes(label));
+    const normalize = (value) => value.replace(/\\s+/g, ' ').trim();
+    const headingMatches = visibleBands.flatMap((band) => [band, ...band.querySelectorAll('*')])
+      .filter((el) => normalize(el.textContent || '') === 'Why join a challenge?');
+    const headingPresent = headingMatches.length > 0;
+    return {
+      ok: bands.length === ${expectedBands} && visibleBands.length === ${expectedBands}
+        && cards.length ${expectedCards === 0 ? '=== 0' : '> 0'}
+        && (${expectedBands === 0 ? 'true' : 'headingPresent && labelsPresent.length === labels.length'}),
+      bands: bands.length, visibleBands: visibleBands.length, cards: cards.length,
+      headingPresent, headingCount: headingMatches.length, labelsPresent,
+      expectedBands: ${expectedBands}, expectedCards: ${expectedCards}
+    };
+  })()`
+});
+const heroFullBleedState = () => ({
+  name: 'mobile Challenges hero reaches both .main edges',
+  js: `(() => {
+    if (window.innerWidth > 480) return { ok: true, skipped: 'desktop width' };
+    const hero = document.querySelector('.ch-hero');
+    const main = document.querySelector('.main');
+    if (!hero || !main) return { ok: false, missing: !hero ? '.ch-hero' : '.main' };
+    const h = hero.getBoundingClientRect();
+    const m = main.getBoundingClientRect();
+    const T = 1.5;
+    return {
+      ok: Math.abs(h.left - m.left) <= T && Math.abs(h.right - m.right) <= T,
+      hero: { left: h.left, right: h.right, width: h.width },
+      main: { left: m.left, right: m.right, width: m.width },
+      leftDelta: h.left - m.left, rightDelta: h.right - m.right
+    };
+  })()`
+});
 const PAGES = [
   { user: 'creator', name: 'feed', path: '/feed', waitFor: '.feed-item-wrap', root: 'body', bottomNav: athleteNav('Feed'),
     surfaces: [
@@ -269,7 +334,15 @@ const PAGES = [
     ] },
   { user: 'creator', name: 'challenges', path: '/challenges', waitFor: '#tab-mine .challenge-card', root: 'body', bottomNav: athleteNav('Challenges'),
     surfaces: [{ name: 'mine cards', sel: '#tab-mine', min: 2 }],
+    checks: [
+      whyJoinState('populated My challenges omits the Why-join band', 0, 1),
+      heroFullBleedState()
+    ],
     steps: [
+      { name: 'friends', js: `document.getElementById('tab-btn-friends').click()`, waitFor: '#tab-friends .challenge-card',
+        surfaces: [{ name: 'friends cards', sel: '#tab-friends', min: 1, max: 1 }] },
+      { name: 'completed', js: `document.getElementById('tab-btn-completed').click()`, waitFor: '#completed-list .challenge-card',
+        surfaces: [{ name: 'completed cards', sel: '#completed-list', min: 1, max: 1 }] },
       { name: 'discover', js: `document.getElementById('tab-btn-discover').click()`, waitFor: '#discover-grid .challenge-card',
         surfaces: [{ name: 'discover cards', sel: '#discover-grid', min: 1 }] },
       // arenasOverlay-built modal states (runtime construction — trigger them,
@@ -284,6 +357,14 @@ const PAGES = [
         waitFor: '#invite-manager-overlay', root: '#invite-manager-overlay' },
       { name: 'modal-manage-challenge', js: closeOverlays + `document.querySelector('[onclick^="openDeleteChallenge"]').click()`,
         waitFor: '#challenge-delete-overlay', root: '#challenge-delete-overlay' }
+    ] },
+  // f6 is deliberately never added to a challenge: this is the permanent
+  // empty-state identity, while the other seeded users exercise populated
+  // cards and modal states above.
+  { user: 'f6', name: 'challenges-empty', path: '/challenges', waitFor: '#tab-mine .ch-why-join, #tab-mine [data-challenge-why-join]', root: 'body', bottomNav: athleteNav('Challenges'),
+    surfaces: [{ name: 'empty mine with Why-join band', sel: '#tab-mine', min: 1 }],
+    checks: [
+      whyJoinState('empty My challenges shows the Why-join band', 1, 0)
     ] },
   { user: 'member', name: 'challenges-member', path: '/challenges', waitFor: '#tab-mine .challenge-card', root: 'body', bottomNav: athleteNav('Challenges'),
     surfaces: [{ name: 'mine cards (member)', sel: '#tab-mine', min: 1 }],
@@ -590,7 +671,7 @@ const PAGES = [
 const only = process.argv.includes('--page') ? process.argv[process.argv.indexOf('--page') + 1] : null;
 browser = await launchBrowser();
 const contexts = {};
-for (const key of ['creator', 'member']) {
+for (const key of ['creator', 'member', 'f6']) {
   contexts[key] = await browser.newContext({ ignoreHTTPSErrors: true });
   await contexts[key].addCookies(users[key].cookies);
 }

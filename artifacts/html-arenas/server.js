@@ -5317,21 +5317,104 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
         const fChallengeIds = [...new Set((fParts || []).map((p) => p.challenge_id).filter(Boolean))];
         if (fChallengeIds.length) {
           const { data: pubCh } = await supabaseAdmin
-            .from('challenges').select('id, title, sport')
-            .in('id', fChallengeIds).eq('visibility', 'public');
-          const pubMap = {};
-          (pubCh || []).forEach((c) => { pubMap[c.id] = c; });
-          const byUser = {};
+            // Completion is derived per participant below, so fetch the same
+            // goal/window fields used by the challenges enrichment rather than
+            // trusting a status column (there is no challenge status column).
+            .from('challenges')
+            .select('id, title, sport, goal_type, goal_target, goal_unit, start_date, end_date')
+            .in('id', fChallengeIds).eq('visibility', 'public')
+            .order('end_date', { ascending: false });
+          // A friend's rail card is viewer-facing, so end-day semantics follow
+          // the viewer's zone just like `isExpired` in the main enrichment.
+          // Pre-start challenges remain active here too: that is the existing
+          // challenges-page meaning of active (`!isExpired && !isComplete`).
+          const activePublic = (pubCh || []).filter(
+            (c) => !challengeHasEnded(c, viewerTz)
+          );
+
+          // Group participants by the already end-date-ordered challenge list,
+          // not by fParts' database order. This makes the displayed title the
+          // latest-ending active challenge and makes moreCount count only the
+          // same active, incomplete set.
+          const partsByChallenge = {};
+          const seenFriendPairs = new Set();
           (fParts || []).forEach((p) => {
-            const ch = pubMap[p.challenge_id];
-            if (ch) { (byUser[p.user_id] = byUser[p.user_id] || []).push(ch); }
+            if (!p.challenge_id || !p.user_id) return;
+            const pair = p.challenge_id + ':' + p.user_id;
+            if (seenFriendPairs.has(pair)) return;
+            seenFriendPairs.add(pair);
+            (partsByChallenge[p.challenge_id] = partsByChallenge[p.challenge_id] || []).push(p.user_id);
           });
-          const fNameMap = await buildUserDisplayMap(Object.keys(byUser));
+
+          const friendIdsByChallenge = {};
+          const activeFriendIds = new Set();
+          activePublic.forEach((challenge) => {
+            const participantIds = [...new Set(partsByChallenge[challenge.id] || [])];
+            if (!participantIds.length) return;
+            friendIdsByChallenge[challenge.id] = participantIds;
+            participantIds.forEach((id) => activeFriendIds.add(id));
+          });
+
+          // Pull the widest necessary activity interval once, then use the
+          // canonical participant-zone window helper for each challenge. This
+          // preserves the existing local-midnight boundary rules without
+          // exposing any activity rows in the response.
+          const activeFriendIdList = [...activeFriendIds];
+          const fProfileMap = await buildUserProfileMap(activeFriendIdList);
+          const actsByUser = {};
+          if (activeFriendIdList.length) {
+            const ranges = activePublic
+              .filter((challenge) => friendIdsByChallenge[challenge.id])
+              .map((challenge) => challengeFetchRange(challenge));
+            const gteIso = ranges.reduce(
+              (earliest, range) => range.gteIso < earliest ? range.gteIso : earliest,
+              ranges[0].gteIso
+            );
+            const lteIso = ranges.reduce(
+              (latest, range) => range.lteIso > latest ? range.lteIso : latest,
+              ranges[0].lteIso
+            );
+            // Use the shared paged reader: an active challenge can have more
+            // than PostgREST's 1000-row default, and truncating here could
+            // misclassify a participant who completed a goal in a later row.
+            const fActs = await fetchAllRows(
+              'activities',
+              (q) => q
+                .in('user_id', activeFriendIdList)
+                .gte('date', gteIso)
+                .lte('date', lteIso),
+              'user_id, distance, duration, sport, date'
+            );
+            // A failed activity lookup cannot prove that a participant has
+            // not completed a goal. Fail closed for this best-effort card
+            // rather than showing a completed challenge as active.
+            (fActs || []).forEach((activity) => {
+              (actsByUser[activity.user_id] = actsByUser[activity.user_id] || []).push(activity);
+            });
+          }
+
+          const byUser = {};
+          activePublic.forEach((challenge) => {
+            const participantIds = friendIdsByChallenge[challenge.id] || [];
+            const target = parseFloat(challenge.goal_target) || 0;
+            participantIds.forEach((participantId) => {
+              const participantTz = memberZone(fProfileMap[participantId]);
+              const progress = computeChallengeProgress(
+                challenge,
+                actsInChallengeWindow(actsByUser[participantId], challenge, participantTz),
+                participantTz
+              );
+              // Completion is participant-specific: one friend can finish a
+              // shared challenge while another remains active.
+              if (target > 0 && progress >= target) return;
+              (byUser[participantId] = byUser[participantId] || []).push(challenge);
+            });
+          });
           friendsInChallenges = Object.keys(byUser).map((uid) => ({
             id: uid,
-            name: (fNameMap[uid] || {}).name || 'Athlete',
-            avatar_url: (fNameMap[uid] || {}).avatar_url || null,
-            profilePublic: fNameMap[uid] ? fNameMap[uid].profilePublic !== false : true,
+            name: (fProfileMap[uid] || {}).name || 'Athlete',
+            avatar_url: (fProfileMap[uid] || {}).avatar_url || null,
+            profilePublic: fProfileMap[uid] ? fProfileMap[uid].profilePublic !== false : true,
             sport: byUser[uid][0].sport,
             challengeTitle: byUser[uid][0].title,
             moreCount: byUser[uid].length - 1

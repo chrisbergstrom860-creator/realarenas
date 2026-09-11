@@ -20,6 +20,9 @@ const FOR_CLUBS_URL = BASE_URL + '/for-clubs';
 const ASSET_URL = BASE_URL + '/landing-assets/';
 const EXECUTABLE = process.env.REPLIT_PLAYWRIGHT_CHROMIUM_EXECUTABLE;
 const ASSET_DIR = path.join(__dirname, '..', 'html', 'landing-assets');
+const CHALLENGES_HTML = fs.readFileSync(
+  path.join(__dirname, '..', 'html', 'arenas-challenges.html'), 'utf8'
+);
 const MANIFEST = JSON.parse(fs.readFileSync(path.join(ASSET_DIR, 'manifest.json'), 'utf8'));
 const asset = (logicalName) => {
   const entry = MANIFEST.assets && MANIFEST.assets[logicalName];
@@ -43,6 +46,8 @@ const FEED_800 = asset('feed-yoga-800.avif');
 const FEED_1600 = asset('feed-yoga-1600.avif');
 const EVENTS_800 = asset('events-hikers-800.avif');
 const EVENTS_1600 = asset('events-hikers-1600.avif');
+const CHALLENGES_800 = asset('challenges-hero-800.avif');
+const CHALLENGES_1600 = asset('challenges-hero-1600.avif');
 const APPROVED_LEADERBOARD_HERO_HASHES = {
   'leaderboards-hero-hiker-800.avif': 'e663dc32c5504b85fbb2e16670dcef8001bfd3d21c1877a044b06a6efe5d1649',
   'leaderboards-hero-hiker-800.webp': '3a9c8f714e0634f856034ff43924d6972a728de8eddb2ab3bba6fce1289f534d',
@@ -51,6 +56,16 @@ const APPROVED_LEADERBOARD_HERO_HASHES = {
 };
 const LEADERBOARD_HERO_HASHES = Object.fromEntries(
   Object.entries(APPROVED_LEADERBOARD_HERO_HASHES)
+    .map(([logicalName, digest]) => [asset(logicalName), digest])
+);
+const APPROVED_CHALLENGES_HERO_HASHES = {
+  'challenges-hero-800.avif': 'bbb206051b9e7966c7b8dc3012074a2ffcd178ca16a4e9fb1e517da93e6f5c6c',
+  'challenges-hero-800.webp': 'dc99b02eaff9690e5a0a2cc343ca32fc9ff6e53ecdec825ef0dc2aff852f9980',
+  'challenges-hero-1600.avif': 'eb00222d9f8b055b0fa17e4a1b52b70b5d268da1c77c7b7a7c36d4798d709174',
+  'challenges-hero-1600.webp': 'e5b96a36ec223f380959f6ecb5213d510e3ae00db438e9aa833af95351adfe29'
+};
+const CHALLENGES_HERO_HASHES = Object.fromEntries(
+  Object.entries(APPROVED_CHALLENGES_HERO_HASHES)
     .map(([logicalName, digest]) => [asset(logicalName), digest])
 );
 const mobile = (width, density) =>
@@ -97,6 +112,7 @@ const ANALYTICS_RE = /^analytics-(?:weekly-activity-(?:800|1600)|mobile-composit
 const AUTH_RE = /^auth-football-(?:800|1536)\.[0-9a-f]{12}\.(?:avif|webp)$/;
 const FEED_RE = /^feed-yoga-(?:800|1600)\.[0-9a-f]{12}\.(?:avif|webp)$/;
 const EVENTS_RE = /^events-hikers-(?:800|1600)\.[0-9a-f]{12}\.(?:avif|webp)$/;
+const CHALLENGES_RE = /^challenges-hero-(?:800|1600)\.[0-9a-f]{12}\.(?:avif|webp)$/;
 
 let passes = 0;
 let failures = 0;
@@ -143,7 +159,7 @@ function expectedAssetFiles() {
 function verifyManifestAndReferences() {
   const entries = Object.entries(MANIFEST.assets || {});
   const allowedFiles = new Set(entries.map(([, entry]) => entry.file));
-  check(null, 'manifest has the complete 48-image inventory', entries.length === 48, '48', String(entries.length));
+  check(null, 'manifest has the complete 52-image inventory', entries.length === 52, '52', String(entries.length));
   for (const [logicalName, entry] of entries) {
     const extension = path.extname(logicalName).replace('.', '');
     const pattern = new RegExp(`\\.${entry.sha256.slice(0, MANIFEST.hashLength)}\\.${extension}$`);
@@ -160,7 +176,8 @@ function verifyManifestAndReferences() {
     'arenas-for-clubs.html',
     'arenas-leaderboards.html',
     'arenas-feed.html',
-    'arenas-events.html'
+    'arenas-events.html',
+    'arenas-challenges.html'
   ]) {
     const html = fs.readFileSync(path.join(__dirname, '..', 'html', htmlName), 'utf8');
     const references = [...html.matchAll(/\/html\/landing-assets\/([^"'()\s,]+)/g)]
@@ -305,6 +322,34 @@ async function verifyEventsImageContract() {
     html.includes(`${asset('events-hikers-1600.webp')} 1600w`));
 }
 
+async function verifyChallengesImageContract() {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'html', 'arenas-challenges.html'), 'utf8');
+  console.log('— Challenges hero responsive image contract —');
+  for (const [logicalAvif, expectedWidth, expectedHeight] of [
+    ['challenges-hero-800.avif', 800, 300],
+    ['challenges-hero-1600.avif', 1600, 600]
+  ]) {
+    for (const logicalName of [logicalAvif, logicalAvif.replace(/\.avif$/, '.webp')]) {
+      const file = asset(logicalName);
+      const assetPath = path.join(ASSET_DIR, file);
+      const metadata = await sharp(assetPath).metadata();
+      check(null, `${file} dimensions`,
+        metadata.width === expectedWidth && metadata.height === expectedHeight,
+        `${expectedWidth}x${expectedHeight}`, `${metadata.width}x${metadata.height}`);
+      const digest = crypto.createHash('sha256').update(fs.readFileSync(assetPath)).digest('hex');
+      check(null, `${file} is an approved Challenges hero encode`,
+        digest === CHALLENGES_HERO_HASHES[file],
+        CHALLENGES_HERO_HASHES[file], digest);
+    }
+  }
+  check(null, 'Challenges hero declares AVIF and WebP 800/1600 source sets',
+    html.includes(`${asset('challenges-hero-800.avif')} 800w`) &&
+    html.includes(`${asset('challenges-hero-1600.avif')} 1600w`) &&
+    html.includes(`${asset('challenges-hero-800.webp')} 800w`) &&
+    html.includes(`${asset('challenges-hero-1600.webp')} 1600w`));
+  console.log('  ok  Challenges hero assets and source sets');
+}
+
 async function verifyEventsImageMatrix() {
   const browser = await chromium.launch({
     headless: true, executablePath: EXECUTABLE, args: ['--no-sandbox']
@@ -344,6 +389,90 @@ async function verifyEventsImageMatrix() {
         const events = requested.filter((file) => EVENTS_RE.test(file));
         assertImageRequests(caseKey, 'Events banner', expected, events);
         if (!failedCases.has(caseKey)) console.log(`  ok  ${caseKey} — ${receivedList(events)}`);
+        await context.close();
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
+async function verifyChallengesImageMatrix() {
+  const browser = await chromium.launch({
+    headless: true, executablePath: EXECUTABLE, args: ['--no-sandbox']
+  });
+  const widths = [360, 380, 768, 1280, 1920];
+  // Use the page's real HTML/CSS and its shared athlete shell. The route is
+  // fulfilled from the checked-in page so this guard does not require a
+  // database user or challenge fixtures; only the page's data requests are
+  // stubbed below.
+  const matrixPage = CHALLENGES_HTML
+    .replace('</head>',
+      '<script>' +
+      'window.ARENAS_DATA={profile:{name:"Image verifier"},clubs:[],gating:{proLocked:false},sports:[]};' +
+      'window.ARENAS_SPORTS=[];window.ARENAS_SPORT_ICONS={any:"⚡"};' +
+      '</script></head>')
+    .replace('</body>',
+      '<nav class="bottom-nav bn-has-fab" aria-label="Primary">' +
+      '<a class="bn-item" onclick="nav(\'/feed\')"><span class="bn-icon">🏠</span><span class="bn-label">Feed</span></a>' +
+      '<a class="bn-item" onclick="nav(\'/events\')"><span class="bn-icon">🎟️</span><span class="bn-label">Events</span></a>' +
+      '<a class="bn-item" onclick="nav(\'/calendar\')"><span class="bn-icon">🗓️</span><span class="bn-label">Cal</span></a>' +
+      '<a class="bn-item" onclick="nav(\'/leaderboards\')"><span class="bn-icon">🏆</span><span class="bn-label">Ranks</span></a>' +
+      '<a class="bn-item bn-active" onclick="nav(\'/challenges\')"><span class="bn-icon">⚡</span><span class="bn-label">Challenges</span></a>' +
+      '<a class="bn-item" onclick="nav(\'/profile\')"><span class="bn-icon">👤</span><span class="bn-label">Profile</span></a>' +
+      '</nav><a class="bn-fab" aria-label="Log activity" onclick="nav(\'/log\')">➕</a></body>');
+  const challengeResponse = {
+    myChallenges: [],
+    friendsChallenges: [],
+    publicChallenges: [],
+    publicCount: 0,
+    pointsThisMonth: 0
+  };
+  console.log(`— Challenges hero browser matrix (${widths.length * 3} fresh-cache cases) —`);
+  try {
+    for (const width of widths) {
+      for (const dpr of [1, 2, 3]) {
+        const caseKey = `Challenges hero ${width}px DPR ${dpr}`;
+        const slotWidth = width <= 768 ? width : width - 216;
+        const expected = slotWidth * dpr <= 800 ? CHALLENGES_800 : CHALLENGES_1600;
+        const context = await browser.newContext({
+          viewport: { width, height: 500 }, deviceScaleFactor: dpr,
+          serviceWorkers: 'block', extraHTTPHeaders: { 'Cache-Control': 'no-cache' }
+        });
+        const page = await context.newPage();
+        const session = await context.newCDPSession(page);
+        await session.send('Network.setCacheDisabled', { cacheDisabled: true });
+        await page.route('**/html/challenges*', (route) => route.fulfill({
+          status: 200,
+          contentType: 'text/html',
+          headers: { 'cache-control': 'no-store' },
+          body: matrixPage
+        }));
+        await page.route('**/html/api/notifications*', (route) => route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ unreadCount: 0 })
+        }));
+        await page.route('**/html/api/challenges*', (route) => route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(challengeResponse)
+        }));
+        const requested = [];
+        page.on('request', (request) => {
+          try {
+            const pathname = new URL(request.url()).pathname;
+            const prefix = '/html/landing-assets/';
+            if (pathname.startsWith(prefix)) requested.push(pathname.slice(prefix.length));
+          } catch {}
+        });
+        await page.goto(`${BASE_URL}/challenges?verify-challenges-images=${width}-${dpr}`, {
+          waitUntil: 'networkidle', timeout: 30000
+        });
+        await page.locator('.ch-hero-bg').evaluate((img) => img.decode());
+        const challenges = requested.filter((file) => CHALLENGES_RE.test(file));
+        assertImageRequests(caseKey, 'Challenges hero', expected, challenges);
+        if (!failedCases.has(caseKey)) console.log(`  ok  ${caseKey} — ${receivedList(challenges)}`);
         await context.close();
       }
     }
@@ -592,17 +721,19 @@ function reportBoundaryFailures() {
   await verifyAuthImageContract();
   await verifyFeedImageContract();
   await verifyEventsImageContract();
+  await verifyChallengesImageContract();
   await verifyBrowserMatrix();
   await verifyForClubsMatrix();
   await verifyAuthImageMatrix();
   await verifyFeedImageMatrix();
   await verifyEventsImageMatrix();
+  await verifyChallengesImageMatrix();
   reportBoundaryFailures();
   if (failures) {
     console.log(`\nverify-landing-images FAILED (${failures} failures, ${passes} passes)`);
     process.exit(1);
   }
-  console.log(`\nverify-landing-images OK (${passes} assertions; ${EXPECTATIONS.length * 3 + 53} browser cases; ${expectedAssetFiles().length} served files)`);
+  console.log(`\nverify-landing-images OK (${passes} assertions; ${EXPECTATIONS.length * 3 + 68} browser cases; ${expectedAssetFiles().length} served files)`);
 })().catch((error) => {
   console.error('verify-landing-images FATAL:', error && error.stack ? error.stack : error);
   process.exit(1);

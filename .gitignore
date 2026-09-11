@@ -73,6 +73,9 @@ attached_assets/Pasted-*
 *.mp4
 /artifacts/arenas-promo/
 
+# Original hero sources are local-only inputs for repeatable encodes.
+/artifacts/html-arenas/hero-sources/
+
 # Presented screenshots and other attached assets stay outside source control.
 attached_assets/
 screenshots/

@@ -146,6 +146,30 @@
       "width": 800,
       "height": 533
     },
+    "challenges-hero-1600.avif": {
+      "file": "challenges-hero-1600.eb00222d9f8b.avif",
+      "sha256": "eb00222d9f8b055b0fa17e4a1b52b70b5d268da1c77c7b7a7c36d4798d709174",
+      "width": 1600,
+      "height": 600
+    },
+    "challenges-hero-1600.webp": {
+      "file": "challenges-hero-1600.e5b96a36ec22.webp",
+      "sha256": "e5b96a36ec223f380959f6ecb5213d510e3ae00db438e9aa833af95351adfe29",
+      "width": 1600,
+      "height": 600
+    },
+    "challenges-hero-800.avif": {
+      "file": "challenges-hero-800.bbb206051b9e.avif",
+      "sha256": "bbb206051b9e7966c7b8dc3012074a2ffcd178ca16a4e9fb1e517da93e6f5c6c",
+      "width": 800,
+      "height": 300
+    },
+    "challenges-hero-800.webp": {
+      "file": "challenges-hero-800.dc99b02eaff9.webp",
+      "sha256": "dc99b02eaff9690e5a0a2cc343ca32fc9ff6e53ecdec825ef0dc2aff852f9980",
+      "width": 800,
+      "height": 300
+    },
     "events-hikers-1600.avif": {
       "file": "events-hikers-1600.d06b83f0ceef.avif",
       "sha256": "d06b83f0ceefb5540e8cd074b221142a696cf28f3ba674b93e2734656ece7899",
