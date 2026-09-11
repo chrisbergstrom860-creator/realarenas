@@ -22,6 +22,7 @@
 // passing. Runs alongside verify-points-page.js / verify-km-consistency.js
 // after any change to shell CSS, card renderers, or page templates.
 import { createClient } from '@supabase/supabase-js';
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { launchBrowser, auditPage } from './lib/mobile-geometry.js';
 import { mustWrite, makeCleanup } from './lib/checked-writes.js';
 
@@ -57,6 +58,8 @@ async function mkUser(key) {
   });
   if (error) throw new Error(key + ': ' + error.message);
   users[key] = { id: data.user.id };
+  createdUsers.push(data.user.id);
+  saveManifest();
 }
 async function login(key) {
   const r = await fetch(BASE + '/auth/login', {
@@ -74,13 +77,29 @@ async function login(key) {
 }
 // Every created row is tracked the moment it exists, so cleanup (in the
 // finally block below) removes everything even after a partial-seed crash.
-const createdRows = []; // { table, id } in creation order
-const createdUsers = []; // auth user ids
+// Persist the manifest after every create: a process killed between two
+// awaits must still leave the next run enough information to clean itself up.
+const MANIFEST = '/tmp/verify-mobile-geometry-manifest.json';
+let priorManifest = {};
+if (existsSync(MANIFEST)) {
+  try {
+    priorManifest = JSON.parse(readFileSync(MANIFEST, 'utf8'));
+  } catch (e) {
+    throw new Error(`fixture manifest is unreadable: ${e.message}`);
+  }
+}
+const createdRows = Array.isArray(priorManifest.rows) ? priorManifest.rows : []; // { table, id } in creation order
+const createdUsers = Array.isArray(priorManifest.users) ? priorManifest.users : []; // auth user ids
+const saveManifest = () => writeFileSync(MANIFEST, JSON.stringify({
+  rows: createdRows, users: createdUsers
+}, null, 2) + '\n');
+saveManifest();
 async function ins(table, row) {
   const { data, error } = await admin.from(table).insert(row).select().maybeSingle();
   if (error) throw new Error(table + ': ' + error.message);
   if (data && data.id) createdRows.push({ table, id: data.id });
   else createdRows.push({ table, match: row });
+  saveManifest();
   return data;
 }
 const day = 86400000;
@@ -90,7 +109,7 @@ const dt = (d) => iso(d).slice(0, 10);
 // ── seed (dense) ──
 let browser = null;
 try {
-for (const k of Object.keys(userDefs)) { await mkUser(k); createdUsers.push(users[k].id); }
+for (const k of Object.keys(userDefs)) await mkUser(k);
 await login('creator'); await login('member');
 const C = users.creator.id, M = users.member.id;
 const F = [...Array(8)].map((_, i) => users['f' + i].id);
@@ -233,8 +252,14 @@ console.log('MANIFEST club:', club.id, 'challenges:', JSON.stringify(CHALLENGES)
 const htab = (id) => `document.getElementById('htab-${id}').click()`;
 const closeModals = `document.querySelectorAll('.modal-overlay').forEach((m) => m.classList.remove('open'));`;
 const closeOverlays = `['create-challenge-overlay','challenge-leaderboard-overlay','invite-manager-overlay','challenge-delete-overlay'].forEach((i) => window.arenasOverlay && arenasOverlay.close(i));`;
+const athleteNav = (activeLabel = null, fab = true) => ({
+  itemCount: 6, activeCount: activeLabel ? 1 : 0, activeLabel, fab
+});
+const dashboardNav = { itemCount: 5, activeCount: 1, activeLabel: 'Overview', fab: false };
+const memberNav = { itemCount: 5, activeCount: 1, activeLabel: 'Overview', fab: false };
+const memberLeaderboardNav = { itemCount: 4, activeCount: 1, activeLabel: 'Ranks', fab: true };
 const PAGES = [
-  { user: 'creator', name: 'feed', path: '/feed', waitFor: '.feed-item-wrap', root: 'body',
+  { user: 'creator', name: 'feed', path: '/feed', waitFor: '.feed-item-wrap', root: 'body', bottomNav: athleteNav('Feed'),
     surfaces: [
       { name: 'feed items', sel: '.feed-items', min: 3 },
       // The feed rail stacks beneath the feed on phones. Your week, streak,
@@ -242,7 +267,7 @@ const PAGES = [
       // when there are no eligible users.
       { name: 'right rail (side-col)', sel: '.side-col', min: 3, max: 4, mobileOnly: true }
     ] },
-  { user: 'creator', name: 'challenges', path: '/challenges', waitFor: '#tab-mine .challenge-card', root: 'body',
+  { user: 'creator', name: 'challenges', path: '/challenges', waitFor: '#tab-mine .challenge-card', root: 'body', bottomNav: athleteNav('Challenges'),
     surfaces: [{ name: 'mine cards', sel: '#tab-mine', min: 2 }],
     steps: [
       { name: 'discover', js: `document.getElementById('tab-btn-discover').click()`, waitFor: '#discover-grid .challenge-card',
@@ -260,11 +285,11 @@ const PAGES = [
       { name: 'modal-manage-challenge', js: closeOverlays + `document.querySelector('[onclick^="openDeleteChallenge"]').click()`,
         waitFor: '#challenge-delete-overlay', root: '#challenge-delete-overlay' }
     ] },
-  { user: 'member', name: 'challenges-member', path: '/challenges', waitFor: '#tab-mine .challenge-card', root: 'body',
+  { user: 'member', name: 'challenges-member', path: '/challenges', waitFor: '#tab-mine .challenge-card', root: 'body', bottomNav: athleteNav('Challenges'),
     surfaces: [{ name: 'mine cards (member)', sel: '#tab-mine', min: 1 }],
     steps: [{ name: 'discover', js: `document.getElementById('tab-btn-discover').click()`, waitFor: '#discover-grid .challenge-card',
       surfaces: [{ name: 'discover cards (member)', sel: '#discover-grid', min: 1 }] }] },
-  { user: 'creator', name: 'events', path: '/events', waitFor: '#events-grid > *', root: 'body',
+  { user: 'creator', name: 'events', path: '/events', waitFor: '#events-grid > *', root: 'body', bottomNav: athleteNav('Events'),
     // Going-attendee avatars overlap by design; fallback initials inherit the
     // same overlap, so exempt only that stack from the generic text-box rule.
     ignoreOverlap: ['.evx-avatar-stack'],
@@ -339,7 +364,7 @@ const PAGES = [
         waitFor: '#arenas-crop-overlay #ac-slider', root: '#arenas-crop-overlay',
         surfaces: [{ name: 'crop overlay panel', sel: '#arenas-crop-overlay > div', min: 4 }] }
     ] },
-  { user: 'creator', name: 'leaderboards', path: '/leaderboards', waitFor: '.board-container', root: 'body',
+  { user: 'creator', name: 'leaderboards', path: '/leaderboards', waitFor: '.board-container', root: 'body', bottomNav: athleteNav('Ranks'),
     surfaces: [
       { name: 'overall board', sel: '.board-container', min: 1 },
       { name: 'podium region', sel: '.board-podium', min: 1 },
@@ -365,7 +390,7 @@ const PAGES = [
       { name: 'modal-hpw', js: `document.querySelector('.hpw-link').click()`,
         waitFor: '#hpw-modal-body', root: '#hpw-modal-overlay' }
     ] },
-  { user: 'creator', name: 'profile', path: '/profile', waitFor: '.owner-activity-grid .activity-grid-row', root: 'body',
+  { user: 'creator', name: 'profile', path: '/profile', waitFor: '.owner-activity-grid .activity-grid-row', root: 'body', bottomNav: athleteNav('Profile'),
     // The 📷 edit badge deliberately sits ON the avatar circle (desktop
     // parity) — exempt the wrap from the text-overlap rule only.
     ignoreOverlap: ['.hero-av-wrap'],
@@ -416,7 +441,7 @@ const PAGES = [
       { name: 'modal-goal', js: `window.arenasOverlay.close('modal-delete-account'); ` + closeModals + `window.openGoalForm()`,
         waitFor: '#modal-goal .modal-close', root: '#modal-goal' }
     ] },
-  { user: 'member', name: 'athlete-profile', path: '/athletes/' + C,
+  { user: 'member', name: 'athlete-profile', path: '/athletes/' + C, bottomNav: athleteNav(),
     waitFor: '.activity-overview-split [data-activity-grid]', root: 'body',
     surfaces: [
       { name: 'public four-week rows', sel: '.activity-overview-split .activity-grid-rows', min: 4, max: 4 },
@@ -469,7 +494,7 @@ const PAGES = [
         return { ok: naturalSpacing && (mobile || slackBelowBody > 20), mobile, gaps, slackBelowBody };
       })()` }
     ] },
-  { user: 'member', name: 'athlete-profile-one-sport', path: '/athletes/' + F[7],
+  { user: 'member', name: 'athlete-profile-one-sport', path: '/athletes/' + F[7], bottomNav: athleteNav(),
     waitFor: '.activity-overview-split [data-activity-grid]', root: 'body',
     surfaces: [
       { name: 'one-sport full-grid rows', sel: '.activity-overview-split .activity-grid-rows', min: 4, max: 4 },
@@ -501,7 +526,7 @@ const PAGES = [
     ] },
   // Mobile defaults to WEEK view (no .cal-grid) — wait on the shell, then
   // audit week (default) plus an explicit switch to month.
-  { user: 'creator', name: 'calendar', path: '/calendar', waitFor: '.main', root: 'body',
+  { user: 'creator', name: 'calendar', path: '/calendar', waitFor: '.main', root: 'body', bottomNav: athleteNav('Cal'),
     surfaces: [{ name: 'calendar body', sel: '.main', min: 1 }],
     steps: [
       { name: 'month', js: `(document.querySelector('[data-view="month"], #view-month') || [...document.querySelectorAll('button')].find((b) => /month/i.test(b.textContent)) || {click(){}}).click()`,
@@ -511,7 +536,7 @@ const PAGES = [
         waitFor: '#day-panel.open', root: '#day-panel',
         surfaces: [{ name: 'day panel body', sel: '#day-panel .modal-body', min: 1 }] }
     ] },
-  { user: 'creator', name: 'athletes', path: '/athletes', waitFor: '#athlete-grid > *', root: 'body',
+  { user: 'creator', name: 'athletes', path: '/athletes', waitFor: '#athlete-grid > *', root: 'body', bottomNav: athleteNav(),
     // NOTE: .rec-strip / .nearby-grid / .network-stats exist only as dead
     // prototype CSS — no DOM ever renders them, so they are not surfaces.
     surfaces: [{ name: 'directory cards', sel: '#athlete-grid', min: 4 }],
@@ -521,17 +546,17 @@ const PAGES = [
         // per-open, no .open class); panel ids are unchanged.
         waitFor: '#modal-profile #modal-banner', root: '#modal-profile' }
     ] },
-  { user: 'member', name: 'clubs-directory', path: '/clubs', waitFor: '#club-grid > *', root: 'body',
+  { user: 'member', name: 'clubs-directory', path: '/clubs', waitFor: '#club-grid > *', root: 'body', bottomNav: athleteNav(),
     surfaces: [{ name: 'club cards', sel: '#club-grid', min: 1 }] },
-  { user: 'creator', name: 'log', path: '/log', waitFor: 'form, #act-form, .main', root: 'body',
+  { user: 'creator', name: 'log', path: '/log', waitFor: 'form, #act-form, .main', root: 'body', bottomNav: athleteNav(null, false),
     surfaces: [{ name: 'log form', sel: '.main', min: 1 }] },
-  { user: 'creator', name: 'billing', path: '/billing', waitFor: '.main', root: 'body',
+  { user: 'creator', name: 'billing', path: '/billing', waitFor: '.main', root: 'body', bottomNav: athleteNav(),
     surfaces: [{ name: 'billing content', sel: '.main', min: 1 }] },
   // The ordinary Replit server intentionally has CLUB_PLAN_GATES_ENABLED unset,
   // so this geometry pass sees unlocked free-club analytics. It is not proof of
   // production entitlement or locked-state rendering; verify-club-pro-gates.js
   // owns those assertions on an explicitly gated child server.
-  { user: 'creator', name: 'club-dashboard', path: '/clubs/dashboard?club=' + club.id, waitFor: '.main', root: 'body',
+  { user: 'creator', name: 'club-dashboard', path: '/clubs/dashboard?club=' + club.id, waitFor: '.main', root: 'body', bottomNav: dashboardNav,
     surfaces: [{ name: 'overview', sel: '.main', min: 1 }],
     steps: [
       { name: 'members', js: `setTab('members', document.querySelector('.nav-item'))`, surfaces: [{ name: 'members tab', sel: '#tab-members', min: 1 }] },
@@ -550,8 +575,11 @@ const PAGES = [
         js: `window.arenasOverlay.close('modal-club-logo'); ` + closeModals + `window.viewEventRsvps('${EVENTS[0]}')`,
         waitFor: '#rsvp-modal-overlay', root: '#rsvp-modal-overlay',
         surfaces: [{ name: 'rsvp list panel', sel: '#rsvp-modal-overlay > div', min: 2 }] }
-    ] },
-  { user: 'member', name: 'club-member', path: '/clubs/member/' + club.id, waitFor: '.main', root: 'body',
+     ] },
+  { user: 'member', name: 'club-member-leaderboard', path: '/clubs/member/' + club.id + '/leaderboard',
+    waitFor: '.lb-table', root: 'body', bottomNav: memberLeaderboardNav,
+    surfaces: [{ name: 'member leaderboard table', sel: '.lb-table tbody', min: 1 }] },
+  { user: 'member', name: 'club-member', path: '/clubs/member/' + club.id, waitFor: '.main', root: 'body', bottomNav: memberNav,
     surfaces: [
       { name: 'member home', sel: '.main', min: 1 },
       { name: 'member home content', sel: '#cm-content', min: 1 }
@@ -587,11 +615,16 @@ for (const cfg of PAGES) {
   }
   let pageFails = 0;
   for (const r of out.results) {
+    for (const c of r.bottomNav?.checks || []) {
+      check(`${r.tag}: ${c.name}`, c.ok, c.detail);
+    }
     check(`${r.tag}: no page-level horizontal scroll`, r.hscroll <= 1, { hscroll: r.hscroll });
     check(`${r.tag}: nothing clipped inside a container`, !r.audit.missing && r.audit.clipped.length === 0, r.audit.clipped);
     check(`${r.tag}: no text bounding boxes overlap`, !r.audit.missing && r.audit.overlaps.length === 0, r.audit.overlaps);
     check(`${r.tag}: all buttons in-viewport and hit-testable`, !r.audit.missing && r.audit.offscreenButtons.length === 0, r.audit.offscreenButtons);
-    pageFails += (r.hscroll > 1) + (r.audit.missing || r.audit.clipped.length ? 1 : 0) + (r.audit.overlaps.length ? 1 : 0) + (r.audit.offscreenButtons.length ? 1 : 0);
+    pageFails += (r.bottomNav?.checks || []).filter((c) => !c.ok).length
+      + (r.hscroll > 1) + (r.audit.missing || r.audit.clipped.length ? 1 : 0)
+      + (r.audit.overlaps.length ? 1 : 0) + (r.audit.offscreenButtons.length ? 1 : 0);
   }
   check(`${cfg.name}: zero console/page errors`, out.errors.length === 0, out.errors.slice(0, 4));
   summary.push({ page: cfg.name, failedChecks: pageFails + (out.errors.length ? 1 : 0), surfacesEmpty: out.surfaceReport.filter((s) => !s.ok).length });
@@ -647,8 +680,13 @@ console.log('\nPER-PAGE SUMMARY:', JSON.stringify(summary, null, 1));
     for (const u of createdUsers) {
       await del('auth user ' + u, admin.auth.admin.deleteUser(u));
     }
-    if (clean.failed()) { failures += clean.count(); console.log(`cleanup: ${clean.count()} FAILURE(S) — residue may remain, run scripts/test-data-sweep.js`); }
-    else console.log(`cleanup: ${createdRows.length} rows + ${createdUsers.length} users removed`);
+    if (clean.failed()) {
+      failures += clean.count();
+      console.log(`cleanup: ${clean.count()} FAILURE(S) — residue may remain; manifest retained at ${MANIFEST}; run scripts/test-data-sweep.js`);
+    } else {
+      if (existsSync(MANIFEST)) unlinkSync(MANIFEST);
+      console.log(`cleanup: ${createdRows.length} rows + ${createdUsers.length} users removed; manifest removed`);
+    }
   }
 }
 console.log(failures ? `\n${failures} FAILURE(S) of ${assertions} assertions` : `\nALL PASS (${assertions} assertions)`);

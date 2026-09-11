@@ -528,9 +528,15 @@ body:has(.club-member-tabs) .app > .main { min-height: 0; overflow-y: auto; }
    (they would otherwise lose all navigation). Once the nav is rolled out to all
    shell pages the gate is satisfied everywhere and becomes a no-op.
    =========================================================================== */
-.bottom-nav { display: none; }
+.bottom-nav, .bn-fab { display: none; }
 
 @media (max-width: 768px) {
+  body:has(.bottom-nav) {
+    --bn-clearance: calc(60px + 16px + env(safe-area-inset-bottom, 0));
+  }
+  body:has(.bottom-nav.bn-has-fab) {
+    --bn-clearance: calc(60px + 12px + 52px + 12px + env(safe-area-inset-bottom, 0));
+  }
   body:has(.bottom-nav) .club-member-shell .topbar-club-pill .tc-name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   /* Collapse the shell grid to a single column and drop the sidebar */
   body:has(.bottom-nav) .app {
@@ -556,7 +562,7 @@ body:has(.club-member-tabs) .app > .main { min-height: 0; overflow-y: auto; }
      Right rails are always the last child, so they stack below naturally. */
   body:has(.bottom-nav) .main {
     grid-template-columns: minmax(0, 1fr) !important;
-    padding-bottom: 76px !important;
+    padding-bottom: var(--bn-clearance) !important;
   }
   /* min-width:0 lets grid/flex children shrink below their content width so
      long text wraps instead of widening the column past the viewport. */
@@ -616,7 +622,7 @@ body:has(.club-member-tabs) .app > .main { min-height: 0; overflow-y: auto; }
     display: flex;
     position: fixed;
     bottom: 0; left: 0; right: 0;
-    height: 60px;
+    height: calc(60px + env(safe-area-inset-bottom, 0));
     background: #fff;
     border-top: 1px solid var(--gray-200);
     z-index: 300;
@@ -631,14 +637,19 @@ body:has(.club-member-tabs) .app > .main { min-height: 0; overflow-y: auto; }
     font-size: 10px;
   }
   .bn-icon { font-size: 20px; line-height: 1; }
-  .bn-label { line-height: 1; }
+  .bn-label { line-height: 1; white-space: nowrap; }
   .bn-item.bn-active { color: var(--gray-900); }
   .bn-item.bn-active .bn-icon { transform: scale(1.05); }
-  .bn-primary .bn-icon {
-    background: var(--yellow); color: var(--gray-900);
-    width: 38px; height: 38px; border-radius: 50%;
+  .bn-fab {
+    position: fixed; right: 16px;
+    bottom: calc(60px + 12px + env(safe-area-inset-bottom, 0));
+    z-index: 301;
+    background: #FFD21E; color: #111827;
+    width: 52px; height: 52px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    margin-top: -4px; box-shadow: 0 2px 8px rgba(230,184,0,.4);
+    font-size: 26px; line-height: 1; cursor: pointer; text-decoration: none;
+    outline: 3px solid var(--gray-50);
+    box-shadow: 0 2px 8px rgba(230,184,0,.4);
   }
 
   /* Notifications pop-down (club dashboard only). On desktop it's a 360px panel

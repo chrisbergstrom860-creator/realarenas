@@ -1537,7 +1537,7 @@ function injectClubMemberShell(html, pageData, navState, activeKey) {
 // </body> on shell pages so the markup is not duplicated across the static HTML.
 // It is hidden on desktop and only shown <=768px (see arenas.css). The athlete
 // variant mirrors the sidebar's nav() targets across the 7 athlete-facing pages;
-// activeKey receives the bn-active class (challenges/athletes/notifications have
+// activeKey receives the bn-active class (athletes/notifications have
 // no matching item, so nothing is active there — that is intentional).
 function bnItem(activeKey, key, onclick, icon, label, primary) {
   const cls = 'bn-item' + (primary ? ' bn-primary' : '') + (activeKey === key ? ' bn-active' : '');
@@ -1547,13 +1547,13 @@ function athleteBottomNav(activeKey) {
   return '<nav class="bottom-nav" aria-label="Primary">'
     + bnItem(activeKey, 'feed', "nav('/feed')", '🏠', 'Feed', false)
     + bnItem(activeKey, 'events', "nav('/events')", '🎟️', 'Events', false)
-    + bnItem(activeKey, 'log', "nav('/log')", '➕', 'Log', true)
     + bnItem(activeKey, 'calendar', "nav('/calendar')", '🗓️', 'Cal', false)
     + bnItem(activeKey, 'ranks', "nav('/leaderboards')", '🏆', 'Ranks', false)
+    + bnItem(activeKey, 'challenges', "nav('/challenges')", '⚡', 'Challenges', false)
     + bnItem(activeKey, 'profile', "nav('/profile')", '👤', 'Profile', false)
     + '</nav>';
 }
-const ATHLETE_NAV_ACTIVE = { feed: 'feed', profile: 'profile', events: 'events', log: 'log', calendar: 'calendar', leaderboards: 'ranks', challenges: null, athletes: null, clubs: null, notifications: null, billing: null };
+const ATHLETE_NAV_ACTIVE = { feed: 'feed', profile: 'profile', events: 'events', log: 'log', calendar: 'calendar', leaderboards: 'ranks', challenges: 'challenges', athletes: null, clubs: null, notifications: null, billing: null };
 
 // Club pages (coach dashboard + member home) navigate by switching tabs/sections
 // in place via setTab(), not by loading a new URL, so their bottom nav calls
@@ -1591,7 +1591,6 @@ function clubMemberLeaderboardBottomNav() {
   return '<nav class="bottom-nav" aria-label="Primary">'
     + bnItem(null, 'club', "nav('/clubs/member/'+" + clubId + ')', '📊', 'Club', false)
     + bnItem(null, 'events', "nav('/events')", '🎟️', 'Events', false)
-    + bnItem(null, 'log', "nav('/log')", '➕', 'Log', true)
     + bnItem('ranks', 'ranks', "nav('/clubs/member/'+" + clubId + "+'/leaderboard')", '🏆', 'Ranks', false)
     + bnItem(null, 'profile', "nav('/profile')", '👤', 'Profile', false)
     + '</nav>';
@@ -1831,9 +1830,19 @@ function injectNotificationsPanel(html) {
 }
 function injectBottomNav(html, pageKey) {
   let out = html;
-  if (!out.includes('class="bottom-nav"')) {
-    const nav = bottomNavFor(pageKey);
-    if (nav) out = out.replace('</body>', nav + '</body>');
+  if (!/class="bottom-nav(?:\s|")/.test(out)) {
+    let nav = bottomNavFor(pageKey);
+    const hasFab = pageKey !== 'log' && (
+      Object.prototype.hasOwnProperty.call(ATHLETE_NAV_ACTIVE, pageKey)
+      || pageKey === 'club-member-leaderboard'
+    );
+    if (nav) {
+      if (hasFab) {
+        nav = nav.replace('class="bottom-nav"', 'class="bottom-nav bn-has-fab"')
+          + '<a class="bn-fab" aria-label="Log activity" onclick="nav(\'/log\')">➕</a>';
+      }
+      out = out.replace('</body>', nav + '</body>');
+    }
   }
   // Shared avatar-dropdown "Clubs you manage" enhancement (one source of truth
   // for all shell pages; self-guards against double injection and no-ops for
