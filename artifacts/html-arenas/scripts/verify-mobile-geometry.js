@@ -305,21 +305,29 @@ const whyJoinState = (name, expectedBands, expectedCards) => ({
     };
   })()`
 });
-const heroFullBleedState = () => ({
-  name: 'mobile Challenges hero reaches both .main edges',
+const heroFullBleedState = (selector = '.ch-hero') => ({
+  name: 'hero reaches both .main edges and fills the desktop content column',
   js: `(() => {
-    if (window.innerWidth > 480) return { ok: true, skipped: 'desktop width' };
-    const hero = document.querySelector('.ch-hero');
+    const hero = document.querySelector(${JSON.stringify(selector)});
     const main = document.querySelector('.main');
-    if (!hero || !main) return { ok: false, missing: !hero ? '.ch-hero' : '.main' };
+    if (!hero || !main) return { ok: false, missing: !hero ? ${JSON.stringify(selector)} : '.main' };
     const h = hero.getBoundingClientRect();
     const m = main.getBoundingClientRect();
-    const T = 1.5;
+    const T = 1;
+    // Full bleed cancels main's padding. Comparing only hero to main misses
+    // a shrink-to-fit main: independently anchor desktop to the shell track.
+    const app = main.parentElement;
+    const tracks = getComputedStyle(app).gridTemplateColumns.split(' ').map(parseFloat);
+    const desktop = window.innerWidth >= 1024;
+    const columnLeft = desktop ? app.getBoundingClientRect().left + tracks[0] + tracks[1] : m.left;
+    const columnRight = desktop ? columnLeft + tracks[2] : m.right;
+    const fillsColumn = Math.abs(m.left - columnLeft) <= T && Math.abs(m.right - columnRight) <= T;
     return {
-      ok: Math.abs(h.left - m.left) <= T && Math.abs(h.right - m.right) <= T,
+      ok: Math.abs(h.left - m.left) <= T && Math.abs(h.right - m.right) <= T && fillsColumn,
       hero: { left: h.left, right: h.right, width: h.width },
       main: { left: m.left, right: m.right, width: m.width },
-      leftDelta: h.left - m.left, rightDelta: h.right - m.right
+      leftDelta: h.left - m.left, rightDelta: h.right - m.right,
+      columnLeft, columnRight, fillsColumn
     };
   })()`
 });
@@ -364,6 +372,7 @@ const PAGES = [
   { user: 'f6', name: 'challenges-empty', path: '/challenges', waitFor: '#tab-mine .ch-why-join, #tab-mine [data-challenge-why-join]', root: 'body', bottomNav: athleteNav('Challenges'),
     surfaces: [{ name: 'empty mine with Why-join band', sel: '#tab-mine', min: 1 }],
     checks: [
+      heroFullBleedState(),
       whyJoinState('empty My challenges shows the Why-join band', 1, 0)
     ] },
   { user: 'member', name: 'challenges-member', path: '/challenges', waitFor: '#tab-mine .challenge-card', root: 'body', bottomNav: athleteNav('Challenges'),
@@ -385,6 +394,7 @@ const PAGES = [
       { name: 'right rail (sidebar-col)', sel: '.sidebar-col', min: 4, max: 4, mobileOnly: true }
     ],
     checks: [
+      heroFullBleedState('.ev-hero'),
       { name: 'public max-length overflow fixture renders all text fields', js: `(() => {
         const cards = [...document.querySelectorAll('#events-grid .evx-card')];
         const card = cards.find((el) => el.querySelector('.evx-title')?.textContent.trim() === ${JSON.stringify(OVERFLOW_EVENT_TITLE)});
@@ -452,6 +462,7 @@ const PAGES = [
       { name: 'ranked-list region', sel: '.board-list', min: 1 }
     ],
     checks: [
+      heroFullBleedState('.page-header'),
       { name: 'podium uses vertical cards only on narrow phones', js: `(() => {
         const cols = [...document.querySelectorAll('.podium-col')];
         if (cols.length < 2) return { ok: true, skipped: 'fewer than two ranked athletes' };
