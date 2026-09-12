@@ -21,7 +21,7 @@ const DEFAULT_LOGICAL_ASSETS = [
   ...variants('auth-football', ['800', '1536']),
   ...variants('feed-yoga', ['800', '1600']),
   ...variants('events-hikers', ['800', '1600']),
-  ...variants('challenges-hero', ['800', '1600']),
+  ...variants('challenges-hero', ['800', '1600', 'mobile']),
   ...variants('analytics-weekly-activity', ['800', '1600']),
   ...variants('analytics-mobile-composite', [
     '380-2x', '380-3x', '390-2x', '390-3x',

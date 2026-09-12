@@ -170,6 +170,18 @@
       "width": 800,
       "height": 300
     },
+    "challenges-hero-mobile.avif": {
+      "file": "challenges-hero-mobile.c2c8d40c0bf2.avif",
+      "sha256": "c2c8d40c0bf28b8c3198c274e83ebb3eeeef6271419bd506a8252e1851286a77",
+      "width": 984,
+      "height": 738
+    },
+    "challenges-hero-mobile.webp": {
+      "file": "challenges-hero-mobile.e22fbc720b93.webp",
+      "sha256": "e22fbc720b9354245ad4abe462bfc74d03409bddd78b88c67ca0e6c4a281375b",
+      "width": 984,
+      "height": 738
+    },
     "events-hikers-1600.avif": {
       "file": "events-hikers-1600.d06b83f0ceef.avif",
       "sha256": "d06b83f0ceefb5540e8cd074b221142a696cf28f3ba674b93e2734656ece7899",

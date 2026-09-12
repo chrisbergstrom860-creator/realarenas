@@ -11,6 +11,9 @@ const TARGETS = [
   { suffix: '800', width: 800, height: 300 },
   { suffix: '1600', width: 1600, height: 600 }
 ];
+// Largest exact integer 4:3 crop within 2128x739, anchored right. Keeps
+// both faces and the high-five, with sky above the man's raised fingertips.
+const MOBILE_CROP = { left: 1144, top: 0, width: 984, height: 738 };
 
 async function encodeHero() {
   if (!fs.existsSync(SOURCE)) {
@@ -40,12 +43,20 @@ async function encodeHero() {
       path.join(OUTPUT_DIR, `challenges-hero-${target.suffix}.webp`)
     );
   }
+
+  const mobile = source.clone().extract(MOBILE_CROP);
+  await mobile.clone().avif({ quality: 65, effort: 4 }).toFile(
+    path.join(OUTPUT_DIR, 'challenges-hero-mobile.avif')
+  );
+  await mobile.clone().webp({ quality: 82 }).toFile(
+    path.join(OUTPUT_DIR, 'challenges-hero-mobile.webp')
+  );
 }
 
 if (require.main === module) {
   encodeHero()
     .then(() => {
-      console.log('Encoded Challenges hero at 800x300 and 1600x600 in AVIF and WebP.');
+      console.log('Encoded Challenges hero at 800x300, 1600x600 and mobile 984x738 in AVIF and WebP.');
     })
     .catch((error) => {
       console.error(error.stack || error.message);
@@ -53,4 +64,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { encodeHero, SOURCE, OUTPUT_DIR, TARGETS };
+module.exports = { encodeHero, SOURCE, OUTPUT_DIR, TARGETS, MOBILE_CROP };
