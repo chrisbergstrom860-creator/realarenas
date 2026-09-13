@@ -106,6 +106,89 @@ const day = 86400000;
 const iso = (d) => new Date(Date.now() + d * day).toISOString();
 const dt = (d) => iso(d).slice(0, 10);
 
+// Browser-only AI Insights states. These never touch Supabase: the profile
+// document's Pro flag and the three Insights fetches are intercepted in memory
+// for the one geometry page below. Daily deliberately has exactly 84 bars;
+// live contexts can legitimately stop earlier in the current week.
+const chartDate = (start, offset) => {
+  const date = new Date(start + 'T12:00:00Z');
+  date.setUTCDate(date.getUTCDate() + offset);
+  return date.toISOString().slice(0, 10);
+};
+const dailyChartStub = {
+  metric: 'sessions', unit: 'sessions', period: 'daily',
+  title: 'Sessions per day — last 12 weeks', caption: '',
+  labels: Array.from({ length: 84 }, (_, index) => chartDate('2026-01-01', index)),
+  relative: [],
+  series: [{ key: 'sessions', label: 'Sessions', color: '#FFD21E',
+    values: Array.from({ length: 84 }, (_, index) => index % 9 === 0 ? 3 : index % 4 === 0 ? 1 : 0) }],
+  totals: Array.from({ length: 84 }, (_, index) => index % 9 === 0 ? 3 : index % 4 === 0 ? 1 : 0)
+};
+const weeklyStackedChartStub = {
+  metric: 'sessions', unit: 'sessions', period: 'weekly',
+  title: 'Sessions per week — last 12 weeks', caption: '',
+  labels: Array.from({ length: 12 }, (_, index) => chartDate('2026-06-22', index * 7)),
+  relative: Array.from({ length: 12 }, (_, index) => `${11 - index}_weeks_ago`),
+  series: [
+    { key: 'running', label: 'Running', color: '#C2410C', values: [2, 0, 3, 1, 2, 4, 1, 2, 0, 3, 2, 1] },
+    { key: 'cycling', label: 'Cycling', color: '#1E40AF', values: [1, 2, 0, 2, 1, 0, 3, 1, 2, 0, 1, 2] },
+    { key: 'weightlifting', label: 'Weightlifting', color: '#713F12', values: [0, 1, 2, 0, 1, 1, 0, 2, 1, 1, 0, 1] },
+    { key: 'pickleball', label: 'Pickleball', color: '#155E75', values: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0] },
+    { key: 'basketball', label: 'Basketball', color: '#A3412C', values: [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1] },
+    { key: 'hockey', label: 'Hockey', color: '#1E293B', values: [1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0] }
+  ]
+};
+weeklyStackedChartStub.totals = weeklyStackedChartStub.labels.map((_, index) =>
+  weeklyStackedChartStub.series.reduce((sum, series) => sum + series.values[index], 0));
+const insightResponseStub = (chart) => ({
+  answer: 'Your recorded activity count was 42 in this detailed window.',
+  chart,
+  limitations: [],
+  evidence: [{ path: chart.period === 'daily' ? 'last12Weeks.daily' : 'last12Weeks.weekly', value: null }],
+  usage: { used: 1, remaining: 29, limit: 30, resetDate: '2026-10-01' }
+});
+const insightsChartGeometryCheck = (titlePart, legendLabels) => ({
+  name: titlePart + ' chart fits its answer card and preserves its legend',
+  js: `(() => {
+    const svg = [...document.querySelectorAll('#ai-insights-thread svg[role="img"]')]
+      .find((node) => (node.getAttribute('aria-label') || '').includes(${JSON.stringify(titlePart)}));
+    if (!svg) return { ok: false, missing: 'chart svg' };
+    let box = svg.parentElement;
+    while (box && !${JSON.stringify(legendLabels)}.every((label) => box.textContent.includes(label))) box = box.parentElement;
+    if (!box) return { ok: false, missing: 'chart wrapper/legend' };
+    const sr = svg.getBoundingClientRect(), br = box.getBoundingClientRect();
+    const legend = ${JSON.stringify(legendLabels)}.map((label) => {
+      const leaf = [...box.querySelectorAll('*')].find((node) => node.children.length === 0 && node.textContent.trim() === label);
+      return leaf ? { label, rect: leaf.getBoundingClientRect().toJSON() } : { label, missing: true };
+    });
+    const mobile = innerWidth <= 768;
+    const rows = new Set(legend.filter((entry) => !entry.missing).map((entry) => Math.round(entry.rect.top))).size;
+    return {
+      ok: sr.width <= br.width + 1 && sr.left >= br.left - 1 && sr.right <= br.right + 1 &&
+        document.documentElement.scrollWidth <= innerWidth + 1 &&
+        legend.every((entry) => !entry.missing) && (!mobile || !legend.length || rows >= 2),
+      svg: { width: sr.width, left: sr.left, right: sr.right },
+      container: { width: br.width, left: br.left, right: br.right },
+      overflow: document.documentElement.scrollWidth - innerWidth, mobile, legend, legendRows: rows
+    };
+  })()`
+});
+const insightsHeroTextVisibilityCheck = {
+  name: 'full-bleed Insights hero keeps all meaningful text inside MAIN',
+  js: `(() => {
+    const main = document.querySelector('.main');
+    const nodes = [...document.querySelectorAll('.ai2-hero-title, .ai2-hero-body')];
+    if (!main || nodes.length !== 2) return { ok: false, main: !!main, textNodes: nodes.length };
+    const mainRect = main.getBoundingClientRect();
+    const text = nodes.map((node) => ({ tag: node.tagName, text: node.textContent.trim().slice(0, 60), rect: node.getBoundingClientRect().toJSON() }));
+    return {
+      ok: text.every((entry) => entry.rect.left >= mainRect.left - 1 && entry.rect.right <= mainRect.right + 1 &&
+        entry.rect.width > 0 && entry.rect.height > 0),
+      main: mainRect.toJSON(), text
+    };
+  })()`
+};
+
 // ── seed (dense) ──
 let browser = null;
 try {
@@ -483,9 +566,63 @@ const PAGES = [
         waitFor: '#hpw-modal-body', root: '#hpw-modal-overlay' }
     ] },
   { user: 'creator', name: 'profile', path: '/profile', waitFor: '.owner-activity-grid .activity-grid-row', root: 'body', bottomNav: athleteNav('Profile'),
+    // The general geometry fixture deliberately has no paid subscription.
+    // Intercept only this page's browser requests so Insights answers (including
+    // both chart variants) are measured without changing seeded entitlement.
+    setup: async (page) => {
+      // addInitScript must use an accessor, not a one-time object mutation:
+      // the server's inline `window.ARENAS_DATA = …` assignment happens after
+      // init scripts and otherwise replaces the override. This is a second,
+      // browser-side safety net for the navigation-response transform below.
+      await page.addInitScript(() => {
+        let arenasData;
+        Object.defineProperty(window, 'ARENAS_DATA', {
+          configurable: true,
+          get: () => arenasData,
+          set: (value) => {
+            if (value && typeof value === 'object') {
+              value.gating = { ...(value.gating || {}), aiInsightsPro: true };
+            }
+            arenasData = value;
+          }
+        });
+      });
+      await page.route(/\/html\/profile(?:[?#]|$)/, async (route) => {
+        const response = await route.fetch();
+        const html = await response.text();
+        await route.fulfill({
+          response,
+          // Whitespace-tolerant so this remains effective if the server's
+          // JSON serializer formatting changes.
+          body: html.replace(/("aiInsightsPro"\s*:\s*)false\b/g, '$1true')
+        });
+      });
+      await page.route(/\/html\/api\/profile\/ai-insights\/status(?:[?#]|$)/, async (route) => {
+        await route.fulfill({ contentType: 'application/json', body: JSON.stringify({
+          used: 0, remaining: 30, limit: 30, resetDate: '2026-10-01'
+        }) });
+      });
+      await page.route(/\/html\/api\/profile\/ai-insights\/hero-stats(?:[?#]|$)/, async (route) => {
+        await route.fulfill({ contentType: 'application/json', body: JSON.stringify({
+          stats: [], suggestions: []
+        }) });
+      });
+      await page.route(/\/html\/api\/profile\/ai-insights(?:[?#]|$)/, async (route) => {
+        const post = route.request().postData() || '';
+        const question = (() => { try { return JSON.parse(post).question || ''; } catch (_) { return ''; } })();
+        const chart = /stacked/i.test(question) ? weeklyStackedChartStub : dailyChartStub;
+        await route.fulfill({ contentType: 'application/json', body: JSON.stringify(insightResponseStub(chart)) });
+      });
+    },
     // The 📷 edit badge deliberately sits ON the avatar circle (desktop
     // parity) — exempt the wrap from the text-overlap rule only.
     ignoreOverlap: ['.hero-av-wrap'],
+    // On desktop only, the Insights introduction intentionally has a 16px
+    // negative margin for its full-bleed background. The generic clip audit
+    // still evaluates every descendant (including its title/body); only these
+    // two wrapper boxes are exempt, with an explicit text-visibility check in
+    // the Insights state below.
+    ignoreClipping: ['.ai2-hero-band', '.ai2-hero'],
     surfaces: [
       { name: 'overview', sel: '#tab-overview', min: 1 },
       { name: 'owner four-week rows', sel: '.owner-activity-grid .activity-grid-rows', min: 4, max: 4 },
@@ -517,6 +654,30 @@ const PAGES = [
       { name: 'achievements', js: htab('achievements'), surfaces: [{ name: 'achievements tab', sel: '#tab-achievements .content-cols-full', min: 1 }] },
       { name: 'following', js: htab('following'), surfaces: [{ name: 'following grid', sel: '.following-grid', min: 2 }] },
       { name: 'goals', js: htab('goals'), surfaces: [{ name: 'goals tab', sel: '#tab-goals', min: 1 }] },
+      { name: 'insights-daily-chart',
+        js: `(async () => {
+          document.getElementById('htab-insights').click();
+          for (let i = 0; i < 40 && !document.getElementById('ai-insights-question'); i++) {
+            await new Promise((resolve) => setTimeout(resolve, 25));
+          }
+          const input = document.getElementById('ai-insights-question');
+          if (!input) throw new Error('Insights composer did not render from in-memory stub');
+          input.value = 'Show my training day by day';
+          document.getElementById('ai-insights-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        })()`,
+        waitFor: '#ai-insights-thread svg[aria-label*="Sessions per day"]',
+        surfaces: [{ name: 'Insights composer', sel: '#ai-insights-body', min: 1 }],
+        checks: [
+          insightsChartGeometryCheck('Sessions per day', []),
+          insightsHeroTextVisibilityCheck
+        ] },
+      { name: 'insights-weekly-stacked-chart',
+        js: `(() => { const input = document.getElementById('ai-insights-question');
+          input.value = 'Show my stacked sessions by sport';
+          document.getElementById('ai-insights-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        })()`,
+        waitFor: '#ai-insights-thread svg[aria-label*="Sessions per week"]',
+        checks: [insightsChartGeometryCheck('Sessions per week', ['Running', 'Cycling', 'Weightlifting', 'Pickleball', 'Basketball', 'Hockey'])] },
       // Live my-profile modals. (modal-comment is dead prototype markup with
       // no opener anywhere — not a reachable state, so not measured.)
       // Batch C2: avatar rides arenasOverlay too (root created per-open,

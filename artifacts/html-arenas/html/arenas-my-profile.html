@@ -2074,6 +2074,214 @@ if (logHashMatch) {
     });
   }
 
+  /*
+   * The API sends a resolved chart (not a chart request): labels, values,
+   * units, and the already-approved palette are all in this object.  Keeping
+   * the SVG builder here, rather than in a shared chart helper, is deliberate:
+   * Insights answers are the only surface that should be able to render this
+   * data and every piece of user/context text goes through escapeAiHtml().
+   *
+   * measuredWidth is optional so the function remains useful to the verifier
+   * and to non-DOM callers. addTurn supplies the host's measured width after
+   * insertion, which makes the viewBox and slot gap physical-pixel accurate.
+   */
+  function renderInsightsChart(chart) {
+    var measuredWidth = arguments.length > 1 ? arguments[1] : undefined;
+    chart = chart || {};
+    var labels = Array.isArray(chart.labels) ? chart.labels : [];
+    var series = Array.isArray(chart.series) ? chart.series : [];
+    var period = chart.period === 'daily' || chart.period === 'monthly' ? chart.period : 'weekly';
+    var unit = chart.unit == null ? '' : String(chart.unit);
+    var width = Number(measuredWidth);
+    if (!(width > 0) && typeof document !== 'undefined') {
+      var pendingHost = document.querySelector('.ai-chart[data-ai-chart-pending="1"]');
+      if (pendingHost && pendingHost.getBoundingClientRect) {
+        width = pendingHost.getBoundingClientRect().width;
+      }
+    }
+    if (!(width > 0) && typeof window !== 'undefined' && window.innerWidth > 0) {
+      width = window.innerWidth <= 768 ? Math.max(1, window.innerWidth - 62) : Math.max(1, window.innerWidth - 582);
+    }
+    if (!(width > 0)) width = 698;
+    width = Math.max(120, Math.round(width));
+    var isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 768;
+    var isMobile = isMobileViewport || (typeof window === 'undefined' && width < 600);
+    var height = isMobile ? 160 : 180;
+    var margin = { top: 28, right: 5, bottom: 34, left: 38 };
+    var plotWidth = Math.max(1, width - margin.left - margin.right);
+    var plotHeight = Math.max(1, height - margin.top - margin.bottom);
+    var bottom = margin.top + plotHeight;
+    var count = labels.length;
+    series.forEach(function (item) {
+      if (item && Array.isArray(item.values) && item.values.length > count) count = item.values.length;
+    });
+    if (!count) count = 1;
+
+    function finiteValue(value) {
+      var number = Number(value);
+      return isFinite(number) && number >= 0 ? number : 0;
+    }
+    function formatNumber(value) {
+      var number = finiteValue(value);
+      if (Math.abs(number - Math.round(number)) < 0.000001) return String(Math.round(number));
+      return number.toFixed(1).replace(/\.0$/, '');
+    }
+    function unitSuffix() {
+      return unit ? ' ' + unit : '';
+    }
+    function dateFor(value) {
+      if (value == null) return null;
+      var text = String(value);
+      if (!/^\d{4}-\d{2}(?:-\d{2})?$/.test(text)) return null;
+      var date = new Date(text.length === 7 ? text + '-01T00:00:00Z' : text + 'T00:00:00Z');
+      return isNaN(date.getTime()) ? null : date;
+    }
+    function monthName(date) {
+      return date.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+    }
+    function labelFor(index) {
+      return labels[index] == null ? '' : String(labels[index]);
+    }
+    function xFor(index) {
+      return margin.left + (index * plotWidth / count);
+    }
+    function xCenter(index) {
+      return xFor(index) + (plotWidth / count) / 2;
+    }
+    function axisValue(value) {
+      return formatNumber(value);
+    }
+    function safeColor(value) {
+      /*
+       * Resolved series colors are registry hex values. Rejecting anything
+       * else avoids allowing a model-controlled CSS value into SVG/style
+       * markup; no client fallback palette is used.
+       */
+      var color = String(value == null ? '' : value);
+      return /^#[0-9a-fA-F]{3,8}$/.test(color) ? color : 'transparent';
+    }
+
+    var totals = [];
+    var maxValue = 0;
+    for (var i = 0; i < count; i += 1) {
+      var total = 0;
+      series.forEach(function (item) {
+        total += finiteValue(item && Array.isArray(item.values) ? item.values[i] : 0);
+      });
+      totals.push(total);
+      if (total > maxValue) maxValue = total;
+    }
+    var scaleMax = maxValue > 0 ? maxValue : 1;
+    var titleText = chart.title == null ? 'Training chart' : String(chart.title);
+    var hasUnitInTitle = unit && new RegExp('(^|[^a-z])' + unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^a-z]|$)', 'i').test(titleText);
+    if (unit && !hasUnitInTitle) titleText += ' (' + unit + ')';
+    var maxIndex = 0;
+    totals.forEach(function (total, index) {
+      if (total > totals[maxIndex]) maxIndex = index;
+    });
+    var maxSummary = 'Maximum ' + formatNumber(maxValue) + unitSuffix() + ' on ' + labelFor(maxIndex) + '.';
+    var ariaLabel = titleText + '. ' + maxSummary;
+
+    var svg = '<svg class="ai-chart-svg" role="img" aria-label="' + escapeAiHtml(ariaLabel) +
+      '" width="100%" height="' + height + '" viewBox="0 0 ' + width + ' ' + height +
+      '" preserveAspectRatio="none" focusable="false">';
+    [scaleMax, scaleMax / 2, 0].forEach(function (gridValue) {
+      var y = bottom - (gridValue / scaleMax) * plotHeight;
+      svg += '<line class="ai-chart-grid" x1="' + margin.left + '" y1="' + y +
+        '" x2="' + (width - margin.right) + '" y2="' + y + '"></line>' +
+        '<text class="ai-chart-axis-label" x="' + (margin.left - 6) + '" y="' + (y + 3) +
+        '" text-anchor="end">' + escapeAiHtml(axisValue(gridValue)) + '</text>';
+    });
+
+    /* Daily month starts and Mondays are intentionally derived from the
+       bounded labels sent by the server; sparse activity rows never shorten
+       the 84-slot window. */
+    if (period === 'daily') {
+      labels.forEach(function (label, index) {
+        var date = dateFor(label);
+        if (!date) return;
+        if (date.getUTCDay() === 1) {
+          svg += '<line class="ai-chart-monday" x1="' + xFor(index) + '" y1="' + margin.top +
+            '" x2="' + xFor(index) + '" y2="' + bottom + '"></line>';
+        }
+        if (date.getUTCDate() === 1) {
+          svg += '<text class="ai-chart-x-label" x="' + xCenter(index) + '" y="' + (height - 12) +
+            '" text-anchor="middle">' + escapeAiHtml(monthName(date)) + '</text>';
+        }
+      });
+    } else {
+      var slotEvery = period === 'weekly' && isMobile ? 2 : 1;
+      labels.forEach(function (label, index) {
+        if (index % slotEvery !== 0) return;
+        var date = dateFor(label);
+        var text = date
+          ? (period === 'monthly' ? monthName(date) : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }))
+          : labelFor(index);
+        svg += '<text class="ai-chart-x-label" x="' + xCenter(index) + '" y="' + (height - (period === 'monthly' ? 15 : 12)) +
+          '" text-anchor="middle">' + escapeAiHtml(text) + '</text>';
+        var previousDate = index > 0 ? dateFor(labels[index - 1]) : null;
+        if (period === 'monthly' && date && (index === 0 || !previousDate || date.getUTCFullYear() !== previousDate.getUTCFullYear())) {
+          svg += '<text class="ai-chart-year-label" x="' + xCenter(index) + '" y="' + (height - 3) +
+            '" text-anchor="middle">' + escapeAiHtml(String(date.getUTCFullYear())) + '</text>';
+        }
+      });
+    }
+
+    var slotWidth = plotWidth / count;
+    var gap = Math.max(1, Math.min(4, slotWidth * 0.24));
+    var barWidth = Math.max(0.25, slotWidth - gap);
+    /*
+     * The resolved contract deliberately omits the request's stackBySport
+     * flag. A one-sport stack is therefore distinguishable from a sport
+     * filter by its series key: stacked sport series use the registry id,
+     * while an unstacked series keeps chart.metric as its key. Feelings are
+     * inherently a six-series stack even if a defensive fixture is partial.
+     */
+    var metricKey = chart.metric == null ? '' : String(chart.metric);
+    var sportKeyedSeries = series.length > 0 && series.every(function (item) {
+      var key = item && (item.key != null ? item.key : '');
+      return key !== '' && String(key) !== metricKey;
+    });
+    var stacked = series.length > 1 || chart.metric === 'feelings' || sportKeyedSeries;
+    for (var barIndex = 0; barIndex < count; barIndex += 1) {
+      var x = xFor(barIndex) + gap / 2;
+      var cumulative = 0;
+      series.forEach(function (item) {
+        var value = finiteValue(item && Array.isArray(item.values) ? item.values[barIndex] : 0);
+        var segmentHeight = (value / scaleMax) * plotHeight;
+        var y = bottom - cumulative - segmentHeight;
+        var seriesLabel = item && (item.label != null ? item.label : item.key) != null
+          ? String(item.label != null ? item.label : item.key)
+          : 'Series';
+        var tip = labelFor(barIndex) + ' — ' + seriesLabel + ': ' + formatNumber(value) + unitSuffix();
+        svg += '<rect class="ai-chart-bar' + (stacked ? ' ai-chart-segment' : '') +
+          '" x="' + x + '" y="' + y + '" width="' + barWidth + '" height="' + segmentHeight +
+          '" fill="' + escapeAiHtml(safeColor(item && item.color)) + '">' +
+          '<title>' + escapeAiHtml(tip) + '</title></rect>';
+        cumulative += segmentHeight;
+      });
+    }
+    svg += '</svg>';
+
+    var legend = '';
+    if (stacked) {
+      legend = '<div class="ai-chart-legend" role="list">' + series.map(function (item) {
+        var seriesLabel = item && (item.label != null ? item.label : item.key) != null
+          ? String(item.label != null ? item.label : item.key)
+          : 'Series';
+        return '<div class="ai-chart-legend-item" role="listitem"><span class="ai-chart-swatch" style="background-color:' +
+          escapeAiHtml(safeColor(item && item.color)) + '"></span><span>' + escapeAiHtml(seriesLabel) + '</span></div>';
+      }).join('') + '</div>';
+    }
+    var caption = chart.caption
+      ? '<div class="ai-chart-caption">' + escapeAiHtml(chart.caption) + '</div>'
+      : '';
+    return '<div class="ai-chart-shell">' +
+      '<div class="ai-chart-title">' + escapeAiHtml(titleText) + '</div>' +
+      svg + legend + caption +
+      '</div>';
+  }
+
   function usageText() {
     if (!aiUsage) return '';
     return aiUsage.used + ' of ' + aiUsage.limit + ' questions used · resets ' +
@@ -2198,10 +2406,40 @@ if (logHashMatch) {
       '<div style="background:white;border:var(--border);border-radius:3px 12px 12px 12px;padding:13px 14px">' +
         '<div style="font-size:10px;font-weight:700;letter-spacing:.05em;color:#9A7600;text-transform:uppercase;margin-bottom:6px">✦ AI Insights</div>' +
         '<div style="font-size:13px;color:var(--gray-800);line-height:1.65;white-space:pre-wrap">' + escapeAiHtml(response.answer) + '</div>' +
+          (response.chart ? '<div class="ai-chart" data-ai-chart-pending="1"></div>' : '') +
         (limitations ? '<ul style="margin:10px 0 0;padding-left:18px;font-size:12px;color:var(--gray-500);line-height:1.5">' + limitations + '</ul>' : '') +
         (evidence ? '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--gray-200);font-size:10px;color:var(--gray-400)">Verified data:<br>' + evidence + '</div>' : '') +
       '</div>';
+    var chartHost = wrap.querySelector('.ai-chart');
     while (wrap.firstChild) thread.appendChild(wrap.firstChild);
+    if (chartHost && response.chart) {
+      var lastChartWidth = 0;
+      var lastChartHeight = 0;
+      var renderInsertedChart = function () {
+        var measured = 0;
+        if (chartHost.getBoundingClientRect) measured = chartHost.getBoundingClientRect().width;
+        if (!(measured > 0) && chartHost.clientWidth) measured = chartHost.clientWidth;
+        var roundedWidth = measured > 0 ? Math.round(measured) : 0;
+        var mobile = typeof window !== 'undefined' && window.innerWidth <= 768;
+        var expectedHeight = mobile ? 160 : 180;
+        if (roundedWidth === lastChartWidth && expectedHeight === lastChartHeight && chartHost.innerHTML) return;
+        chartHost.innerHTML = renderInsightsChart(response.chart, roundedWidth);
+        chartHost.removeAttribute('data-ai-chart-pending');
+        lastChartWidth = roundedWidth;
+        lastChartHeight = expectedHeight;
+      };
+      /* The host is in the live thread now, so this is the first measurement
+         that reflects the response card's 298/352/698px content width. */
+      renderInsertedChart();
+      if (typeof ResizeObserver === 'function') {
+        var chartObserver = new ResizeObserver(renderInsertedChart);
+        chartObserver.observe(chartHost);
+        chartHost.__aiChartResizeObserver = chartObserver;
+      } else if (typeof window !== 'undefined') {
+        window.addEventListener('resize', renderInsertedChart);
+        chartHost.__aiChartResizeHandler = renderInsertedChart;
+      }
+    }
   }
 
   function addPlainTextTurn(question, response) {
@@ -2347,6 +2585,19 @@ if (logHashMatch) {
         .ai2-trust-item { flex: 1; display: flex; flex-direction: column; gap: 6px; }
         .ai2-trust-header { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--gray-900); }
         .ai2-trust-desc { font-size: 11px; color: var(--gray-500); line-height: 1.5; }
+        .ai-chart { width: 100%; min-width: 0; margin-top: 14px; }
+        .ai-chart-shell { width: 100%; min-width: 0; color: var(--gray-700); }
+        .ai-chart-title { font-size: 12px; font-weight: 600; color: var(--gray-800); line-height: 1.4; margin-bottom: 6px; }
+        .ai-chart-svg { display: block; width: 100%; max-width: 100%; overflow: visible; }
+        .ai-chart-grid { stroke: var(--gray-200); stroke-width: 1; vector-effect: non-scaling-stroke; }
+        .ai-chart-monday { stroke: var(--gray-100); stroke-width: 1; vector-effect: non-scaling-stroke; }
+        .ai-chart-axis-label, .ai-chart-x-label, .ai-chart-year-label { fill: var(--gray-400); font-family: var(--mono); font-size: 9px; }
+        .ai-chart-x-label, .ai-chart-year-label { font-size: 9px; }
+        .ai-chart-bar { shape-rendering: crispEdges; }
+        .ai-chart-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px; margin-top: 8px; font-size: 10px; color: var(--gray-500); line-height: 1.35; }
+        .ai-chart-legend-item { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+        .ai-chart-swatch { width: 9px; height: 9px; border-radius: 2px; flex: 0 0 9px; }
+        .ai-chart-caption { margin-top: 8px; font-size: 11px; color: var(--gray-500); line-height: 1.5; }
       `;
       document.head.appendChild(st);
     }

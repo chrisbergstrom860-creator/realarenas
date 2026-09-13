@@ -8972,7 +8972,7 @@ async function buildAiInsightsContext(user) {
     });
   }
   const context = {
-    schemaVersion: 7,
+    schemaVersion: 8,
     asOfDate: today,
     timezone: tz,
     coverage: {
@@ -9337,6 +9337,13 @@ app.get(BASE + '/api/profile/ai-insights/hero-stats', requireAuth, requireActive
       },
       { icon: 'rest', category: 'Rest days', question: 'How many rest days did I take last month?' }
     ];
+    if (context.last12Weeks.activityCount > 0) {
+      suggestions.push({
+        icon: 'activities',
+        category: 'Training volume',
+        question: 'Show my training day by day for the last 3 months'
+      });
+    }
     const topSport = context.last12Weeks.sports[0];
     if (topSport) {
       suggestions.push({
@@ -9461,6 +9468,7 @@ app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_in
       answer,
       evidence: validated.ok ? validated.evidence : [],
       limitations: validated.ok ? validated.limitations : [],
+      chart: validated.ok ? validated.chart || null : null,
       policyRefusal: validated.policyRefusal || undefined,
       policyReason: validated.policyReason,
       notAnswerable: validated.notAnswerable || undefined,

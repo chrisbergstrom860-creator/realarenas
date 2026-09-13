@@ -3,13 +3,16 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const { createClient } = require('@supabase/supabase-js');
-const { FALLBACK_COPY } = require('../ai-insights');
+const aiInsights = require('../ai-insights');
+const { FALLBACK_COPY } = aiInsights;
+const { SPORTS } = require('../sports');
 
 const APP_PORT = 3987;
 const STUB_PORT = 3988;
 const BASE = `http://127.0.0.1:${APP_PORT}`;
 const PASSWORD = 'AiInsightsVerify!234';
 const MANIFEST = '/tmp/verify-ai-insights-manifest.json';
+const CLEANUP_ONLY = process.argv.includes('--cleanup-stale-fixture');
 const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const nonce = Date.now().toString(36);
 const users = {};
@@ -73,6 +76,13 @@ const TWO_MONTHS_AGO_KEY = shiftMonth(CURRENT_MONTH_KEY, -2);
 const LAST_MONTH_LABEL = monthLabel(LAST_MONTH_KEY);
 const LAST_MONTH_YEAR_LABEL = monthLabel(LAST_MONTH_KEY, true);
 const TWO_MONTHS_AGO_LABEL = monthLabel(TWO_MONTHS_AGO_KEY);
+const CHART_QUESTIONS = [
+  'Show me how I\'ve been training day by day for the last three months',
+  'Chart my distance by week',
+  'Show my sessions per month by sport',
+  'Graph my cycling hours per week',
+  'How have I been feeling week by week?'
+];
 const ANSWERABLE_QUESTIONS = [
   `How many hours on average did I workout in ${LAST_MONTH_YEAR_LABEL}?`,
   'How many rest days did I take last month?',
@@ -91,7 +101,15 @@ const ANSWERABLE_QUESTIONS = [
   'How did I do last week on my weightlifting goal?',
   'How did I do last month on my cycling goal?',
   'How have I been feeling lately?',
-  'How often did I record feeling tired in the last 12 weeks?'
+  'How often did I record feeling tired in the last 12 weeks?',
+  ...CHART_QUESTIONS
+];
+const CHART_REJECTION_CASES = [
+  { question: 'Return a chart alone rejection fixture.', reason: /chart/i },
+  { question: 'Return a daily chart with sport rejection fixture.', reason: /chart.*(?:daily|sport)|(?:daily|sport).*chart/i },
+  { question: 'Return a feelings chart with stack rejection fixture.', reason: /chart.*(?:feeling|stack)|(?:feeling|stack).*chart/i },
+  { question: 'Return a chart with absent sport rejection fixture.', reason: /chart.*sport|sport.*chart/i },
+  { question: 'Return an all-zero chart rejection fixture.', reason: /chart.*(?:zero|data)|(?:zero|data).*chart/i }
 ];
 const NOT_ANSWERABLE_CASES = [
   {
@@ -381,6 +399,43 @@ function responseFor(envelope) {
       findings: [{ type: 'metric', path: 'allTime.activityCount', value: count + 1 }],
       limitations: []
     };
+  } else if (/chart alone rejection fixture/i.test(question)) {
+    output = {
+      findings: [{ type: 'chart', metric: 'sessions', period: 'weekly', evidence: 'last12Weeks.weekly' }],
+      limitations: []
+    };
+  } else if (/daily chart with sport rejection fixture/i.test(question)) {
+    output = {
+      findings: [
+        { type: 'chart', metric: 'sessions', period: 'daily', sport: 'cycling', evidence: 'last12Weeks.daily' },
+        metricFinding(envelope.data, 'allTime.activityCount')
+      ],
+      limitations: []
+    };
+  } else if (/feelings chart with stack rejection fixture/i.test(question)) {
+    output = {
+      findings: [
+        { type: 'chart', metric: 'feelings', period: 'weekly', stackBySport: true, evidence: 'last12Weeks.feelings' },
+        metricFinding(envelope.data, 'allTime.activityCount')
+      ],
+      limitations: []
+    };
+  } else if (/chart with absent sport rejection fixture/i.test(question)) {
+    output = {
+      findings: [
+        { type: 'chart', metric: 'sessions', period: 'weekly', sport: 'swimming', evidence: 'last12Weeks.weekly' },
+        metricFinding(envelope.data, 'allTime.activityCount')
+      ],
+      limitations: []
+    };
+  } else if (/all-zero chart rejection fixture/i.test(question)) {
+    output = {
+      findings: [
+        { type: 'chart', metric: 'distanceKm', period: 'weekly', sport: 'golf', evidence: 'last12Weeks.weekly' },
+        metricFinding(envelope.data, 'allTime.activityCount')
+      ],
+      limitations: []
+    };
   } else if (
     ANSWERABLE_QUESTIONS.includes(question) ||
     /^What percentage of my recorded training was [a-z][a-z_-]*\?$/.test(question) ||
@@ -430,6 +485,10 @@ function metricFinding(data, pathValue) {
   return { type: 'metric', path: pathValue, value: valueAtPath(data, pathValue) };
 }
 
+function chartFinding(metric, period, evidence, extras) {
+  return { type: 'chart', metric, period, ...(extras || {}), evidence };
+}
+
 // Matches the extra exact `value` array observed in a real Replit-provider
 // response, while sourcing records from disposable verifier data.
 function realProviderCalendarPlanListFixture(data, month) {
@@ -442,11 +501,193 @@ function realProviderCalendarPlanListFixture(data, month) {
   };
 }
 
+function chartDaysInCoverage(data) {
+  const window = data.coverage && data.coverage.detailedWindow;
+  if (!window || !/^\d{4}-\d{2}-\d{2}$/.test(window.startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(window.endDate)) {
+    throw new Error('Chart fixture has no valid detailed-window coverage bounds');
+  }
+  const labels = [];
+  for (let date = window.startDate; date <= window.endDate; date = shiftDay(date, 1)) labels.push(date);
+  return labels;
+}
+
+function seriesValue(row, metric, sport) {
+  if (!sport) return metric === 'sessions' ? row.activityCount : row[metric];
+  const sportRow = (row.sports || []).find((item) => item.sport === sport);
+  return sportRow ? sportRow[metric] : 0;
+}
+
+function expectedChartForQuestion(question, data) {
+  const sportColor = Object.fromEntries(SPORTS.map((sport) => [sport.id, sport.colors.text]));
+  if (question === 'Show me how I\'ve been training day by day for the last three months') {
+    const labels = chartDaysInCoverage(data);
+    const byDate = new Map((data.last12Weeks.daily || []).map((row) => [row.date, row.sessions]));
+    return {
+      metric: 'sessions', unit: 'sessions', period: 'daily', labels,
+      relative: [], values: labels.map((date) => byDate.get(date) || 0),
+      series: [{ key: 'sessions', color: '#FFD21E' }],
+      title: 'Sessions per day — last 12 weeks', caption: ''
+    };
+  }
+  if (question === 'Chart my distance by week') {
+    return {
+      metric: 'distanceKm', unit: 'km', period: 'weekly',
+      labels: data.last12Weeks.weekly.map((row) => row.weekStart),
+      relative: data.last12Weeks.weekly.map((row) => row.relative),
+      values: data.last12Weeks.weekly.map((row) => row.distanceKm),
+      series: [{ key: 'distanceKm', color: '#FFD21E' }],
+      title: 'Distance (km) per week — last 12 weeks'
+    };
+  }
+  if (question === 'Show my sessions per month by sport') {
+    const totals = new Map();
+    data.last12Months.forEach((month) => (month.sports || []).forEach((row) =>
+      totals.set(row.sport, (totals.get(row.sport) || 0) + row.sessions)));
+    const ids = [...totals.keys()].filter((id) => totals.get(id) > 0)
+      .sort((a, b) => totals.get(b) - totals.get(a) || a.localeCompare(b));
+    return {
+      metric: 'sessions', unit: 'sessions', period: 'monthly',
+      labels: data.last12Months.map((row) => row.month),
+      relative: data.last12Months.map((row) => row.relative),
+      values: null,
+      series: ids.map((id) => ({ key: id, color: sportColor[id] })),
+      title: 'Sessions per month — last 12 months', caption: ''
+    };
+  }
+  if (question === 'Graph my cycling hours per week') {
+    return {
+      metric: 'durationHours', unit: 'h', period: 'weekly',
+      labels: data.last12Weeks.weekly.map((row) => row.weekStart),
+      relative: data.last12Weeks.weekly.map((row) => row.relative),
+      values: data.last12Weeks.weekly.map((row) => seriesValue(row, 'durationHours', 'cycling')),
+      // Sport filtering changes the label, not the fixed single-series colour.
+      series: [{ key: 'durationHours', color: aiInsights.INSIGHTS_CHART_BAR_COLOR }],
+      title: 'Duration (h) per week — last 12 weeks', caption: 'Cycling'
+    };
+  }
+  if (question === 'How have I been feeling week by week?') {
+    const order = ['strong', 'motivated', 'easy', 'tired', 'sore', 'struggled'];
+    return {
+      metric: 'feelings', unit: 'count', period: 'weekly',
+      labels: data.last12Weeks.feelings.map((row) => row.weekStart),
+      relative: data.last12Weeks.feelings.map((row) => row.relative),
+      values: null,
+      series: order.map((key) => {
+        const item = (aiInsights.INSIGHTS_FEELING_SERIES || []).find((series) => series.key === key);
+        return { key, color: item && item.color };
+      }),
+      title: 'Feelings per week — last 12 weeks', caption: ''
+    };
+  }
+  return null;
+}
+
+function assertResolvedChart(question, chart, data) {
+  const expected = expectedChartForQuestion(question, data);
+  const problem = (message, extra) => ({ ok: false, message, ...(extra || {}) });
+  if (!expected || !chart || typeof chart !== 'object') return problem('missing chart', { chart });
+  const keys = ['caption', 'evidence', 'labels', 'metric', 'period', 'relative', 'series', 'title', 'totals', 'unit'];
+  if (JSON.stringify(Object.keys(chart).sort()) !== JSON.stringify(keys)) return problem('unexpected chart shape', { keys: Object.keys(chart).sort() });
+  if (chart.metric !== expected.metric || chart.unit !== expected.unit || chart.period !== expected.period ||
+      !Array.isArray(chart.labels) || !Array.isArray(chart.relative) || !Array.isArray(chart.series) ||
+      !Array.isArray(chart.totals) || !Array.isArray(chart.evidence) || chart.evidence.length !== 1 ||
+      chart.evidence[0].path !== (question === 'How have I been feeling week by week?'
+        ? 'last12Weeks.feelings'
+        : question === 'Show my sessions per month by sport' ? 'last12Months'
+          : question.includes('day by day') ? 'last12Weeks.daily' : 'last12Weeks.weekly') ||
+      typeof chart.title !== 'string' || !chart.title || typeof chart.caption !== 'string') {
+    return problem('invalid required chart fields', { chart });
+  }
+  if (chart.title !== expected.title || (expected.caption !== undefined && chart.caption !== expected.caption)) {
+    return problem('chart title or caption differs from the resolver contract',
+      { expected: { title: expected.title, caption: expected.caption }, received: { title: chart.title, caption: chart.caption } });
+  }
+  if (JSON.stringify(chart.labels) !== JSON.stringify(expected.labels) ||
+      JSON.stringify(chart.relative) !== JSON.stringify(expected.relative) ||
+      chart.series.length !== expected.series.length ||
+      chart.totals.length !== expected.labels.length ||
+      (expected.period === 'daily' && (chart.labels.length > 84 || chart.labels.length < 1)) ||
+      (expected.period !== 'daily' && chart.labels.length !== 12)) {
+    return problem('labels, relative labels, or series length differ from context', { expected, chart });
+  }
+  const expectedSeries = expected.series.map((series) => series.key);
+  if (JSON.stringify(chart.series.map((series) => series.key)) !== JSON.stringify(expectedSeries)) {
+    return problem('series order differs from contract', { expectedSeries, received: chart.series.map((series) => series.key) });
+  }
+  for (let index = 0; index < chart.series.length; index++) {
+    const received = chart.series[index];
+    const expectedSeriesItem = expected.series[index];
+    if (received.color !== expectedSeriesItem.color || !Array.isArray(received.values) ||
+        received.values.length !== expected.labels.length || typeof received.label !== 'string' || !received.label) {
+      return problem('series colour, label, or values are invalid', { expected: expectedSeriesItem, received });
+    }
+    let expectedValues;
+    if (expected.values) expectedValues = expected.values;
+    else if (question === 'Show my sessions per month by sport') {
+      expectedValues = data.last12Months.map((row) => seriesValue(row, 'sessions', received.key));
+    } else {
+      expectedValues = data.last12Weeks.feelings.map((row) => row[received.key]);
+    }
+    if (JSON.stringify(received.values) !== JSON.stringify(expectedValues)) {
+      return problem('series values differ from context', { key: received.key, expectedValues, receivedValues: received.values });
+    }
+  }
+  const expectedTotals = expected.labels.map((_, index) =>
+    chart.series.reduce((sum, series) => sum + series.values[index], 0));
+  if (JSON.stringify(chart.totals) !== JSON.stringify(expectedTotals)) {
+    return problem('totals do not equal their series', { expectedTotals, receivedTotals: chart.totals });
+  }
+  if (question === 'Chart my distance by week') {
+    const contributors = new Set();
+    data.last12Weeks.weekly.forEach((row) => (row.sports || []).forEach((sport) => {
+      if (sport.distanceKm > 0) contributors.add(sport.sport);
+    }));
+    const names = SPORTS.filter((sport) => contributors.has(sport.id)).map((sport) => sport.label.toLowerCase());
+    const expectedCaption = names.length === 1 ? `Includes ${names[0]}` :
+      names.length === 2 ? `Includes ${names[0]} and ${names[1]}` :
+        `Includes ${names.slice(0, -1).join(', ')}, and ${names.at(-1)}`;
+    if (!names.length || chart.caption !== expectedCaption) {
+      return problem('distance chart caption omits contributing sports', { contributors: names, caption: chart.caption });
+    }
+  }
+  return { ok: true };
+}
+
 function findingsForAnswerableQuestion(question, data) {
   const currentMonth = data.last12Months[data.last12Months.length - 1].month;
   const [year, month] = currentMonth.split('-').map(Number);
   const previousDate = new Date(Date.UTC(year, month - 2, 1));
   const lastMonth = `${previousDate.getUTCFullYear()}-${String(previousDate.getUTCMonth() + 1).padStart(2, '0')}`;
+  if (question === 'Show me how I\'ve been training day by day for the last three months') {
+    return [
+      chartFinding('sessions', 'daily', 'last12Weeks.daily'),
+      metricFinding(data, 'last12Weeks.activityCount')
+    ];
+  }
+  if (question === 'Chart my distance by week') {
+    return [
+      chartFinding('distanceKm', 'weekly', 'last12Weeks.weekly'),
+      metricFinding(data, 'last12Weeks.distanceKm')
+    ];
+  }
+  if (question === 'Show my sessions per month by sport') {
+    return [
+      chartFinding('sessions', 'monthly', 'last12Months', { stackBySport: true }),
+      metricFinding(data, 'allTime.activityCount')
+    ];
+  }
+  if (question === 'Graph my cycling hours per week') {
+    return [
+      chartFinding('durationHours', 'weekly', 'last12Weeks.weekly', { sport: 'cycling' }),
+      metricFinding(data, 'last12Weeks.activityCount')
+    ];
+  }
+  if (question === 'How have I been feeling week by week?') {
+    return [
+      chartFinding('feelings', 'weekly', 'last12Weeks.feelings'),
+      metricFinding(data, 'last12Weeks.activityCount')
+    ];
+  }
   if (question === `How many hours on average did I workout in ${LAST_MONTH_YEAR_LABEL}?`) {
     return [metricFinding(data, monthPath(data, LAST_MONTH_KEY, 'averageHoursPerWeek'))];
   }
@@ -577,6 +818,28 @@ function providerRequestWithoutFeelings(body) {
       delete data.last12Weeks.feelings;
       delete data.last12Weeks.feelingsTotal;
     }
+    message.content[0].text = JSON.stringify(data);
+    return message;
+  });
+  return baseline;
+}
+
+// Schema v8 adds a chart *request* contract to the prompt, not model-visible
+// chart numbers. The v7 comparison therefore removes only chart prompt lines
+// and rewrites the schema marker; DATA_JSON itself remains byte-for-byte the
+// same apart from schemaVersion.
+function providerRequestWithoutCharts(body) {
+  const baseline = JSON.parse(JSON.stringify(body));
+  baseline.system = baseline.system.map((block) => ({
+    ...block,
+    text: block.text.split('\n')
+      .filter((line) => !/\bchart\b/i.test(line))
+      .join('\n')
+  }));
+  baseline.messages = baseline.messages.map((message) => {
+    if (!Array.isArray(message.content) || !message.content[0]) return message;
+    const data = JSON.parse(message.content[0].text);
+    if (data) data.schemaVersion = 7;
     message.content[0].text = JSON.stringify(data);
     return message;
   });
@@ -735,6 +998,16 @@ async function cleanup() {
   if (fs.existsSync(MANIFEST)) fs.unlinkSync(MANIFEST);
 }
 
+// Verification phases share this fixture user but not a quota budget. This is
+// intentionally scoped to its internal counter rows only; it never touches
+// notification rows for another account.
+async function resetFixtureAiUsage(label) {
+  if (!users.pro || !users.pro.id) throw new Error('Cannot reset AI usage before the Pro fixture exists');
+  await must(label, admin.from('notifications').delete()
+    .eq('user_id', users.pro.id)
+    .eq('type', 'ai_insights_usage'));
+}
+
 async function verifyNoFixtureResidue(ids, clubIds) {
   const checks = [];
   for (const [table, column] of [
@@ -768,12 +1041,17 @@ async function verifyNoFixtureResidue(ids, clubIds) {
   let app;
   let browser;
   try {
+    if (CLEANUP_ONLY) {
+      await cleanup();
+      check('stale fixture manifest is removed by the authorized cleanup routine', !fs.existsSync(MANIFEST));
+      return;
+    }
     if (fs.existsSync(MANIFEST)) {
       await cleanup();
     }
     writeManifest();
-    check('verification matrix contains exactly 39 preserved-and-extended questions',
-      ANSWERABLE_QUESTIONS.length + NOT_ANSWERABLE_CASES.length + POLICY_REFUSAL_CASES.length === 39,
+    check('verification matrix contains exactly 44 preserved-and-extended questions',
+      ANSWERABLE_QUESTIONS.length + NOT_ANSWERABLE_CASES.length + POLICY_REFUSAL_CASES.length === 44,
       JSON.stringify({
         answerable: ANSWERABLE_QUESTIONS.length,
         notAnswerable: NOT_ANSWERABLE_CASES.length,
@@ -854,11 +1132,14 @@ async function verifyNoFixtureResidue(ids, clubIds) {
         : new Date(today.getTime() - i * 7 * 86400000);
       activityRows.push({
         user_id: users.pro.id,
-        sport: i <= 3 ? 'cycling' : i === 4 ? 'weightlifting' : 'running',
+        // Golf is a valid registry sport with one zero-distance activity. It
+        // makes the all-zero chart rejection test a real resolver case rather
+        // than an invalid/unknown-sport shortcut.
+        sport: i <= 3 ? 'cycling' : i === 4 ? 'weightlifting' : i === 7 ? 'golf' : 'running',
         title: 'PRO_PRIVATE_TITLE_' + i,
         date: activityDate.toISOString(),
         duration: i === 2 || i === 3 ? '1.04h' : '1h',
-        distance: i === 2 ? '10.04 km' : i === 3 ? '11.04 km' : (10 + i) + ' km',
+        distance: i === 7 ? null : i === 2 ? '10.04 km' : i === 3 ? '11.04 km' : (10 + i) + ' km',
         feeling: ['tired', 'strong', 'motivated', 'struggled', 'sore', 'easy', null, 'UNKNOWN_FEELING_MUST_NOT_REACH_MODEL'][i]
       });
     }
@@ -1013,6 +1294,7 @@ async function verifyNoFixtureResidue(ids, clubIds) {
     const privacyCapture = captured[captured.length - 1];
     const serializedPayload = JSON.stringify(privacyCapture.body);
     const requestWithoutFeelings = JSON.stringify(providerRequestWithoutFeelings(privacyCapture.body));
+    const requestWithoutCharts = providerRequestWithoutCharts(privacyCapture.body);
     const feelingRequestDeltaChars = serializedPayload.length - requestWithoutFeelings.length;
     const feelingRequestDeltaTokens = Math.ceil(feelingRequestDeltaChars / 4);
     const hybridContextChars = JSON.stringify(privacyCapture.envelope.data).length;
@@ -1021,6 +1303,16 @@ async function verifyNoFixtureResidue(ids, clubIds) {
     console.log(`  info realistic serialized provider request: ${serializedPayload.length} JSON characters (~${Math.ceil(serializedPayload.length / 4)} estimated input tokens)`);
     console.log(`  info hybrid context adds ${addedContextChars} JSON characters (~${Math.ceil(addedContextChars / 4)} estimated input tokens for this fixture)`);
     console.log(`  info feeling summary adds ${feelingRequestDeltaChars} JSON characters (~${feelingRequestDeltaTokens} estimated input tokens) to the same serialized prompt + context fixture`);
+    check('v7 chart comparison removes chart-only prompt instructions and preserves all context numbers',
+      requestWithoutCharts.system.every((block) => !/\bchart\b/i.test(block.text)) &&
+      JSON.parse(requestWithoutCharts.messages[0].content[0].text).schemaVersion === 7 &&
+      (() => {
+        const v7 = JSON.parse(requestWithoutCharts.messages[0].content[0].text);
+        const v8 = privacyCapture.envelope.data;
+        v7.schemaVersion = v8.schemaVersion;
+        return JSON.stringify(v7) === JSON.stringify(v8);
+      })(),
+      JSON.stringify({ v7PromptHasChart: requestWithoutCharts.system.some((block) => /\bchart\b/i.test(block.text)) }));
     check('feeling input-token delta includes prompt and context for the same fixture',
       feelingRequestDeltaChars > 0 && feelingRequestDeltaChars < 5000,
       JSON.stringify({ feelingRequestDeltaChars, feelingRequestDeltaTokens }));
@@ -1116,8 +1408,8 @@ async function verifyNoFixtureResidue(ids, clubIds) {
       usageLogsAfterCacheProbes.length === logsBeforeCacheProbes + 3,
       usageLogsAfterCacheProbes.join(' | '));
     check('actual model payload contains the allowlisted data object', !!privacyCapture.envelope.data && privacyCapture.envelope.data.allTime.activityCount === 11, serializedPayload);
-    check('actual model payload has 12 timezone-calendar month buckets including zero months',
-      privacyCapture.envelope.data.schemaVersion === 7 &&
+    check('actual model payload has schema v8 and 12 timezone-calendar month buckets including zero months',
+      privacyCapture.envelope.data.schemaVersion === 8 &&
       privacyCapture.envelope.data.last12Months.length === 12 &&
       privacyCapture.envelope.data.last12Months.every((month) =>
         JSON.stringify(Object.keys(month).sort()) === JSON.stringify([
@@ -1127,6 +1419,35 @@ async function verifyNoFixtureResidue(ids, clubIds) {
         ])
       ),
       JSON.stringify(privacyCapture.envelope.data.last12Months));
+    const stackedDistanceChart = aiInsights.resolveChartSeries({
+      type: 'chart',
+      metric: 'distanceKm',
+      period: 'monthly',
+      stackBySport: true,
+      evidence: 'last12Months'
+    }, privacyCapture.envelope.data);
+    const stackedDistanceContributorIds = new Set();
+    privacyCapture.envelope.data.last12Months.forEach((month) => (month.sports || []).forEach((sport) => {
+      if (sport.distanceKm > 0) stackedDistanceContributorIds.add(sport.sport);
+    }));
+    const stackedDistanceContributorNames = SPORTS
+      .filter((sport) => stackedDistanceContributorIds.has(sport.id))
+      .map((sport) => sport.label.toLowerCase());
+    const stackedDistanceCaption = stackedDistanceContributorNames.length === 1
+      ? `Includes ${stackedDistanceContributorNames[0]}`
+      : stackedDistanceContributorNames.length === 2
+        ? `Includes ${stackedDistanceContributorNames[0]} and ${stackedDistanceContributorNames[1]}`
+        : `Includes ${stackedDistanceContributorNames.slice(0, -1).join(', ')}, and ${stackedDistanceContributorNames.at(-1)}`;
+    check('stacked distance chart includes exact selected-month distance contributors in its caption',
+      !stackedDistanceChart.error &&
+      stackedDistanceContributorNames.length > 0 &&
+      stackedDistanceChart.caption === stackedDistanceCaption &&
+      stackedDistanceChart.evidence.length === 1 &&
+      stackedDistanceChart.evidence[0].path === 'last12Months' &&
+      stackedDistanceChart.series.length > 0 &&
+      stackedDistanceChart.series.every((series) =>
+        SPORTS.some((sport) => sport.id === series.key && sport.colors.text === series.color)),
+      JSON.stringify({ chart: stackedDistanceChart, contributors: stackedDistanceContributorNames }));
     check('integration fixture labels the final week current and the preceding week last',
       privacyCapture.envelope.data.last12Weeks.weekly.at(-1).relative === 'this_week' &&
       privacyCapture.envelope.data.last12Weeks.weekly.at(-2).relative === 'last_week',
@@ -1494,6 +1815,28 @@ async function verifyNoFixtureResidue(ids, clubIds) {
       usageAfterMalformed.body.remaining === usageBeforeMalformed.body.remaining,
       JSON.stringify({ before: usageBeforeMalformed.body, after: usageAfterMalformed.body }));
 
+    for (const rejectionCase of CHART_REJECTION_CASES) {
+      const usageBeforeChartRejection = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+      const rejected = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+        question: rejectionCase.question,
+        history: []
+      });
+      const usageAfterChartRejection = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+      check('invalid chart finding fails the whole answer with a chart-rule reason: ' + rejectionCase.question,
+        rejected.status === 200 &&
+        rejected.body.answer === FALLBACK_COPY &&
+        typeof rejected.body.rejectedReason === 'string' &&
+        rejectionCase.reason.test(rejected.body.rejectedReason) &&
+        rejected.body.chart === null,
+        JSON.stringify(rejected));
+      check('invalid chart finding refunds its exact quota slot: ' + rejectionCase.question,
+        usageBeforeChartRejection.status === 200 &&
+        usageAfterChartRejection.status === 200 &&
+        usageBeforeChartRejection.body.used === usageAfterChartRejection.body.used &&
+        usageBeforeChartRejection.body.remaining === usageAfterChartRejection.body.remaining,
+        JSON.stringify({ before: usageBeforeChartRejection.body, after: usageAfterChartRejection.body }));
+    }
+
     const numericString = await api(proLogin, 'POST', '/api/profile/ai-insights', {
       question: 'Return the numeric string fixture.',
       history: []
@@ -1595,6 +1938,10 @@ async function verifyNoFixtureResidue(ids, clubIds) {
         !line.includes('"title"')),
       rejectionLogs.join(' | '));
 
+    // Earlier provider, calendar, malformed-output, and refund proofs have
+    // their own quota assertions. The independent 44-case matrix needs a
+    // clean budget so all normal answerable cases reach the provider.
+    await resetFixtureAiUsage('reset fixture AI usage before independent answerability matrix');
     for (const question of ANSWERABLE_QUESTIONS) {
       const providerCountBefore = captured.length;
       const result = await api(proLogin, 'POST', '/api/profile/ai-insights', {
@@ -1614,6 +1961,7 @@ async function verifyNoFixtureResidue(ids, clubIds) {
       }).filter(Boolean));
       const expectedPaths = expectedFindings.flatMap((finding) => {
         if (finding.type === 'comparison') return [finding.leftPath, finding.rightPath];
+        if (finding.type === 'chart') return [finding.evidence];
         let countMatch = finding.type === 'metric' &&
           finding.path.match(/^calendar\.plannedSessions\.byMonth\.(\d+)\.plannedCount$/);
         if (countMatch) {
@@ -1644,6 +1992,20 @@ async function verifyNoFixtureResidue(ids, clubIds) {
         expectedPaths.every((expectedPath) => result.body.evidence.some((item) => item.path === expectedPath)) &&
         JSON.stringify(providerRecord.output.findings) === JSON.stringify(expectedFindings),
         JSON.stringify({ body: result.body, output: providerRecord.output, expectedPaths }));
+      if (CHART_QUESTIONS.includes(question)) {
+        const chartAssertion = assertResolvedChart(question, result.body.chart, providerRecord.envelope.data);
+        check('chart response preserves the validated context series: ' + question,
+          chartAssertion.ok,
+          JSON.stringify(chartAssertion));
+        check('chart answer remains non-chart grounded prose: ' + question,
+          typeof result.body.answer === 'string' && result.body.answer.trim().length > 0 &&
+          result.body.answer !== FALLBACK_COPY && result.body.answer !== REFUSAL_COPY,
+          JSON.stringify(result.body));
+      } else {
+        check('non-chart response explicitly has no chart: ' + question,
+          result.body.chart === null,
+          JSON.stringify(result.body));
+      }
       if (question === 'How many planned sessions do I have left this month and what are they?') {
         const countPhrase = `planned sessions left in ${CURRENT_MONTH_YEAR_LABEL}`;
         check('same-month count plus plan list renders one count-bearing sentence',
@@ -1787,7 +2149,10 @@ async function verifyNoFixtureResidue(ids, clubIds) {
     const heroStats = await api(proLogin, 'GET', '/api/profile/ai-insights/hero-stats');
     const noGoalsHero = await api(noGoalsLogin, 'GET', '/api/profile/ai-insights/hero-stats');
     const usageAfterStats = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
-    const fixtureContext = captured[captured.length - 1].envelope.data;
+    // Hero metrics are activity-derived and must be compared to the stable
+    // baseline capture, not whichever request happened to be last (which may
+    // be a deliberately malformed/no-data chart rejection fixture).
+    const fixtureContext = privacyCapture.envelope.data;
     const expectedStats = {
       'last12Weeks.durationHours': `${fixtureContext.last12Weeks.durationHours}h`,
       'last12Weeks.activityCount': String(fixtureContext.last12Weeks.activityCount),
@@ -1815,10 +2180,7 @@ async function verifyNoFixtureResidue(ids, clubIds) {
       noGoalsHero.status === 200 &&
       !noGoalsHero.body.suggestions.some((row) => /percentage|next planned|goal on track/.test(row.question)),
       JSON.stringify(noGoalsHero.body.suggestions));
-    await must('reset fixture AI usage before browser rendering checks',
-      admin.from('notifications').delete()
-        .eq('user_id', users.pro.id)
-        .eq('type', 'ai_insights_usage'));
+    await resetFixtureAiUsage('reset fixture AI usage before browser rendering checks');
 
     const { launchBrowser } = await import('./lib/mobile-geometry.js');
     browser = await launchBrowser();

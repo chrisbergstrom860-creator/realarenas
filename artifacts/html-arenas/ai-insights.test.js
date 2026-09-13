@@ -12,11 +12,14 @@ const {
   resolveAnthropicProvider,
   buildSystemPrompt,
   buildAiInsightsRequest,
-  buildAiInsightsUsageLog
+  buildAiInsightsUsageLog,
+  resolveChartSeries,
+  INSIGHTS_CHART_BAR_COLOR,
+  INSIGHTS_FEELING_SERIES
 } = require('./ai-insights');
 
 test('cacheable request preserves data bytes and separates changing question/history', () => {
-  const data = { schemaVersion: 7, z: [{ sport: 'running', sessions: 3 }], a: 1 };
+  const data = { schemaVersion: 8, z: [{ sport: 'running', sessions: 3 }], a: 1 };
   const history = [{ question: 'Earlier?', answer: 'Earlier answer.', createdAt: '2026-09-10T10:00:00Z' }];
   const request = buildAiInsightsRequest(data, 'How far?', history);
   assert.deepEqual(request.system, [{ type: 'text', text: buildSystemPrompt() }]);
@@ -53,7 +56,7 @@ test('SDK 0.123.0 forwards array-form caching through a custom integration base 
       }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
   });
-  const request = buildAiInsightsRequest({ schemaVersion: 7 }, 'Question?', []);
+  const request = buildAiInsightsRequest({ schemaVersion: 8 }, 'Question?', []);
   await client.messages.create(request);
   assert.equal(captured.url, 'https://integration.invalid/anthropic/v1/messages');
   assert.deepEqual(captured.body, request);
@@ -86,7 +89,7 @@ test('usage logging defaults missing and invalid provider counters to zero', () 
 });
 
 const context = {
-  schemaVersion: 7,
+  schemaVersion: 8,
   asOfDate: '2026-09-10',
   timezone: 'America/Los_Angeles',
   allTime: {
@@ -190,8 +193,222 @@ const context = {
   }
 };
 
-test('fixture uses AI context schema version 7', () => {
-  assert.equal(context.schemaVersion, 7);
+test('fixture uses AI context schema version 8', () => {
+  assert.equal(context.schemaVersion, 8);
+});
+
+function addUtcDate(date, days) {
+  const result = new Date(date + 'T12:00:00Z');
+  result.setUTCDate(result.getUTCDate() + days);
+  return result.toISOString().slice(0, 10);
+}
+
+function chartContext() {
+  const weekly = Array.from({ length: 12 }, (_, index) => {
+    const cyclingSessions = index + 1;
+    const runningSessions = index % 2 ? 2 : 1;
+    return {
+      weekStart: addUtcDate('2026-06-22', index * 7),
+      relative: index === 11 ? 'this_week' : index === 10 ? 'last_week' : `${11 - index}_weeks_ago`,
+      activityCount: cyclingSessions + runningSessions,
+      durationHours: cyclingSessions + runningSessions / 2,
+      distanceKm: cyclingSessions * 10 + runningSessions * 5,
+      sports: [
+        { sport: 'cycling', sessions: cyclingSessions, durationHours: cyclingSessions, distanceKm: cyclingSessions * 10 },
+        { sport: 'running', sessions: runningSessions, durationHours: runningSessions / 2, distanceKm: runningSessions * 5 }
+      ]
+    };
+  });
+  const months = Array.from({ length: 12 }, (_, index) => {
+    const month = addUtcDate('2025-10-01', index * 31).slice(0, 7);
+    const cyclingSessions = index + 2;
+    const runningSessions = index % 3 + 1;
+    return {
+      month,
+      relative: index === 11 ? 'this_month' : index === 10 ? 'last_month' : `${11 - index}_months_ago`,
+      sessions: cyclingSessions + runningSessions,
+      durationHours: cyclingSessions + runningSessions / 2,
+      distanceKm: cyclingSessions * 12 + runningSessions * 6,
+      sports: [
+        { sport: 'cycling', sessions: cyclingSessions, durationHours: cyclingSessions, distanceKm: cyclingSessions * 12 },
+        { sport: 'running', sessions: runningSessions, durationHours: runningSessions / 2, distanceKm: runningSessions * 6 }
+      ]
+    };
+  });
+  return {
+    schemaVersion: 8,
+    asOfDate: '2026-09-10',
+    coverage: { detailedWindow: { startDate: '2026-06-19', endDate: '2026-09-10', weeks: 12 } },
+    allTime: { activityCount: 99 },
+    last12Weeks: {
+      daily: [
+        { date: '2026-06-19', sessions: 2, durationHours: 1.5, distanceKm: 8 },
+        { date: '2026-06-21', sessions: 1, durationHours: 0.5, distanceKm: 4 },
+        { date: '2026-09-10', sessions: 3, durationHours: 2, distanceKm: 14 }
+      ],
+      weekly,
+      feelings: weekly.map((row, index) => ({
+        weekStart: row.weekStart,
+        relative: row.relative,
+        strong: index + 1,
+        motivated: index % 2,
+        easy: 2,
+        tired: index % 3,
+        sore: 0,
+        struggled: 1
+      })),
+      sports: [
+        { sport: 'cycling', sessions: 30, durationHours: 30, distanceKm: 120 },
+        { sport: 'hiking', sessions: 2, durationHours: 8, distanceKm: 16 }
+      ]
+    },
+    last12Months: months,
+    dataQuality: { activityCount: 99, activeWeeksInDetailedWindow: 12, trendEligible: true }
+  };
+}
+
+function chartFinding(metric, period, evidence, extra = {}) {
+  return { type: 'chart', metric, period, evidence, ...extra };
+}
+
+test('chart resolver zero-fills the exact detailed coverage and uses aggregate distance contributors', () => {
+  const data = chartContext();
+  const chart = resolveChartSeries(chartFinding('distanceKm', 'daily', 'last12Weeks.daily'), data);
+  assert.equal(chart.error, undefined);
+  assert.equal(chart.title, 'Distance (km) per day — last 12 weeks');
+  assert.equal(chart.unit, 'km');
+  assert.equal(chart.labels.length, 84);
+  assert.deepEqual(chart.labels.slice(0, 3), ['2026-06-19', '2026-06-20', '2026-06-21']);
+  assert.equal(chart.labels.at(-1), '2026-09-10');
+  assert.deepEqual(chart.series, [{
+    key: 'distanceKm', label: 'Distance (km)', color: INSIGHTS_CHART_BAR_COLOR,
+    values: chart.totals
+  }]);
+  assert.equal(chart.totals[0], 8);
+  assert.equal(chart.totals[1], 0);
+  assert.equal(chart.totals[2], 4);
+  assert.equal(chart.totals.at(-1), 14);
+  assert.equal(chart.caption, 'Includes cycling and hiking');
+  assert.deepEqual(chart.relative, []);
+});
+
+test('chart resolver maps collection-native session names, sport colors, ordering, and feeling constants', () => {
+  const data = chartContext();
+  const weekly = resolveChartSeries(chartFinding('sessions', 'weekly', 'last12Weeks.weekly'), data);
+  assert.deepEqual(weekly.labels, data.last12Weeks.weekly.map((row) => row.weekStart));
+  assert.deepEqual(weekly.totals, data.last12Weeks.weekly.map((row) => row.activityCount));
+  assert.equal(weekly.series[0].color, INSIGHTS_CHART_BAR_COLOR);
+  const weeklyDistance = resolveChartSeries(chartFinding('distanceKm', 'weekly', 'last12Weeks.weekly'), data);
+  assert.equal(weeklyDistance.caption, 'Includes running and cycling');
+  const weeklyDistanceStack = resolveChartSeries(
+    chartFinding('distanceKm', 'weekly', 'last12Weeks.weekly', { stackBySport: true }), data
+  );
+  assert.equal(weeklyDistanceStack.caption, 'Includes running and cycling');
+  assert.deepEqual(weeklyDistanceStack.series.map((series) => series.key), ['cycling', 'running']);
+
+  const monthlyStack = resolveChartSeries(chartFinding('sessions', 'monthly', 'last12Months', { stackBySport: true }), data);
+  assert.equal(monthlyStack.labels.length, 12);
+  assert.deepEqual(monthlyStack.series.map((series) => series.key), ['cycling', 'running']);
+  assert.deepEqual(monthlyStack.series.map((series) => series.color), ['#1E40AF', '#C2410C']);
+  assert.deepEqual(monthlyStack.totals, data.last12Months.map((row) => row.sessions));
+  const monthlyDistanceStack = resolveChartSeries(
+    chartFinding('distanceKm', 'monthly', 'last12Months', { stackBySport: true }), data
+  );
+  assert.equal(monthlyDistanceStack.caption, 'Includes running and cycling');
+  assert.deepEqual(monthlyDistanceStack.totals, data.last12Months.map((row) => row.distanceKm));
+
+  const sport = resolveChartSeries(chartFinding('durationHours', 'weekly', 'last12Weeks.weekly', { sport: 'cycling' }), data);
+  assert.equal(sport.caption, 'Cycling');
+  assert.deepEqual(sport.totals, data.last12Weeks.weekly.map((row) => row.sports[0].durationHours));
+
+  const feelings = resolveChartSeries(chartFinding('feelings', 'weekly', 'last12Weeks.feelings'), data);
+  assert.equal(feelings.unit, 'count');
+  assert.deepEqual(feelings.series.map(({ key, label, color }) => ({ key, label, color })), INSIGHTS_FEELING_SERIES);
+  assert.deepEqual(feelings.totals, data.last12Weeks.feelings.map((row) =>
+    INSIGHTS_FEELING_SERIES.reduce((total, series) => total + row[series.key], 0)));
+});
+
+test('chart finding requires a non-chart data finding and returns chart evidence without model values', () => {
+  const data = chartContext();
+  const finding = chartFinding('sessions', 'daily', 'last12Weeks.daily');
+  const alone = validateInsightResponse({ findings: [finding], limitations: [] }, data);
+  assert.equal(alone.ok, false);
+  assert.equal(alone.reason, 'chart_requires_data_finding');
+  assert.equal(alone.answer, FALLBACK_COPY);
+
+  const accepted = validateInsightResponse({
+    findings: [finding, { type: 'metric', path: 'allTime.activityCount', value: 99 }],
+    limitations: []
+  }, data);
+  assert.equal(accepted.ok, true);
+  assert.match(accepted.answer, /99/);
+  assert.equal(accepted.chart.labels.length, 84);
+  assert.deepEqual(accepted.evidence.map((item) => item.path), ['last12Weeks.daily', 'allTime.activityCount']);
+
+  const controlOnly = validateInsightResponse({
+    findings: [finding, { type: 'insufficient_trend_data' }],
+    limitations: []
+  }, { ...data, dataQuality: { activityCount: 2, activeWeeksInDetailedWindow: 1, trendEligible: false } });
+  assert.equal(controlOnly.ok, false);
+  assert.equal(controlOnly.reason, 'chart_requires_data_finding');
+});
+
+test('chart finding rejects invalid contracts, no-data requests, and invalid context safely', () => {
+  const data = chartContext();
+  const withMetric = (finding) => validateInsightResponse({
+    findings: [finding, { type: 'metric', path: 'allTime.activityCount', value: 99 }],
+    limitations: []
+  }, data);
+  const cases = [
+    [chartFinding('sessions', 'daily', 'last12Weeks.daily', { sport: 'cycling' }), 'chart_daily_constraints'],
+    [chartFinding('sessions', 'daily', 'last12Weeks.daily', { stackBySport: false }), 'chart_daily_constraints'],
+    [chartFinding('feelings', 'weekly', 'last12Weeks.feelings', { stackBySport: false }), 'chart_feelings_constraints'],
+    [chartFinding('durationHours', 'weekly', 'last12Weeks.weekly', { sport: 'cycling', stackBySport: false }), 'chart_sport_stack_conflict'],
+    [chartFinding('durationHours', 'weekly', 'last12Weeks.weekly', { sport: 'triathlon' }), 'chart_invalid_sport'],
+    [chartFinding('sessions', 'weekly', 'last12Weeks.daily'), 'chart_evidence_period_mismatch'],
+    [{ ...chartFinding('sessions', 'weekly', 'last12Weeks.weekly'), values: [999] }, 'invalid_chart_finding']
+  ];
+  for (const [finding, reason] of cases) {
+    const result = withMetric(finding);
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, reason);
+    assert.equal(result.answer, FALLBACK_COPY);
+  }
+  const absentSport = withMetric(chartFinding('durationHours', 'weekly', 'last12Weeks.weekly', { sport: 'hiking' }));
+  assert.equal(absentSport.reason, 'chart_sport_not_present');
+  const multiple = validateInsightResponse({
+    findings: [
+      chartFinding('sessions', 'daily', 'last12Weeks.daily'),
+      chartFinding('sessions', 'weekly', 'last12Weeks.weekly'),
+      { type: 'metric', path: 'allTime.activityCount', value: 99 }
+    ],
+    limitations: []
+  }, data);
+  assert.equal(multiple.ok, false);
+  assert.equal(multiple.reason, 'chart_limit');
+
+  const noData = chartContext();
+  noData.last12Weeks.weekly.forEach((row) => { row.activityCount = 0; });
+  const zero = validateInsightResponse({
+    findings: [
+      chartFinding('sessions', 'weekly', 'last12Weeks.weekly'),
+      { type: 'metric', path: 'allTime.activityCount', value: 99 }
+    ],
+    limitations: []
+  }, noData);
+  assert.equal(zero.ok, false);
+  assert.equal(zero.reason, 'chart_no_data');
+
+  const malformed = chartContext();
+  malformed.last12Weeks.daily[0].sessions = Infinity;
+  const unsafe = resolveChartSeries(chartFinding('sessions', 'daily', 'last12Weeks.daily'), malformed);
+  assert.equal(unsafe.error, 'chart_invalid_context');
+  const futureWindow = chartContext();
+  futureWindow.coverage.detailedWindow.endDate = '2026-09-11';
+  assert.equal(
+    resolveChartSeries(chartFinding('sessions', 'daily', 'last12Weeks.daily'), futureWindow).error,
+    'chart_invalid_context'
+  );
 });
 
 test('evidence validator accepts exact paths and values', () => {

@@ -242,14 +242,17 @@ export function bottomNavExpr(expected) {
 
 // Browser-side geometry audit. rootSel scopes the audit; ignoreOverlapSels is
 // an array of CSS selectors for INTENTIONAL overlays (badges over avatars
-// etc.) excluded from the text-overlap rule only — clipping still applies.
-export function auditExpr(rootSel, ignoreOverlapSels = []) {
+// etc.) excluded from the text-overlap rule only. ignoreClippingSels is a
+// deliberately narrow, element-only exception for visual full-bleed wrappers;
+// their descendant text and controls are still audited for clipping.
+export function auditExpr(rootSel, ignoreOverlapSels = [], ignoreClippingSels = []) {
   return `(() => {
   const T = 1.5; // px tolerance for rounding/antialiasing
   window.scrollTo(0, 0); // prior hit-tests scroll the page; measure from the top
   const root = document.querySelector(${JSON.stringify(rootSel)});
   if (!root) return { missing: true };
   const IGNORE = ${JSON.stringify(ignoreOverlapSels)};
+  const IGNORE_CLIPPING = ${JSON.stringify(ignoreClippingSels)};
   const ignored = (el) => IGNORE.some((s) => el.closest(s));
   const out = { missing: false, clipped: [], overlaps: [], offscreenButtons: [] };
   const vis = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el);
@@ -260,6 +263,7 @@ export function auditExpr(rootSel, ignoreOverlapSels = []) {
   // deliberate .table-scroll wrappers stay legal.
   for (const el of root.querySelectorAll('*')) {
     if (!vis(el)) continue;
+    if (IGNORE_CLIPPING.some((s) => el.matches(s))) continue;
     const r = el.getBoundingClientRect();
     let a = el.parentElement;
     while (a && a !== document.body) {
@@ -362,9 +366,12 @@ export function surfacesExpr(surfaces) {
 }
 
 // Runs one page config across all viewports on an authenticated context.
-// cfg: { name, path, waitFor, root, ignoreOverlap?, surfaces?, checks?,
-//        bottomNav?, steps? }
-// steps: [{ name, js, waitFor? }] — extra states (tab clicks) audited after
+// cfg: { name, path, waitFor, root, ignoreOverlap?, ignoreClipping?, surfaces?, checks?,
+//        bottomNav?, steps?, setup? }
+// setup(page) is an optional in-memory route/stub hook installed before the
+// first navigation. It lets a geometry state exercise browser-only response
+// variants without adding durable fixture rows.
+// steps: [{ name, js, waitFor?, checks? }] — extra states (tab clicks) audited after
 // the initial one. `checks` are page-specific browser expressions returning
 // either true or { ok, ...detail }; they supplement the generic geometry audit.
 // Returns { results: [{tag, audit}], surfaceReport, checksReport, errors }.
@@ -373,6 +380,7 @@ export async function auditPage(context, base, cfg) {
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('pageerror', (e) => errors.push(String(e)));
+  if (typeof cfg.setup === 'function') await cfg.setup(page);
   const results = [];
   const surfaceReport = []; // measured at EVERY viewport — a surface that
   const checksReport = [];
@@ -402,7 +410,7 @@ export async function auditPage(context, base, cfg) {
       });
     }
     results.push({ tag: `${cfg.name}@${w}px`,
-      audit: await page.evaluate(auditExpr(cfg.root || '.main', cfg.ignoreOverlap)),
+      audit: await page.evaluate(auditExpr(cfg.root || '.main', cfg.ignoreOverlap, cfg.ignoreClipping)),
       bottomNav: cfg.bottomNav ? await page.evaluate(bottomNavExpr(cfg.bottomNav)) : null,
       hscroll: await page.evaluate('document.documentElement.scrollWidth - window.innerWidth') });
     for (const step of cfg.steps || []) {
@@ -412,7 +420,15 @@ export async function auditPage(context, base, cfg) {
       if (step.surfaces && applicable(step.surfaces).length) {
         surfaceReport.push(...(await page.evaluate(surfacesExpr(applicable(step.surfaces)))).map((s) => ({ ...s, name: s.name + '@' + w + 'px' })));
       }
-      results.push({ tag: `${cfg.name}:${step.name}@${w}px`, audit: await page.evaluate(auditExpr(step.root || cfg.root || '.main', cfg.ignoreOverlap)),
+      for (const custom of (step.checks || []).filter((c) => !(w > 768 && c.mobileOnly) && !(w <= 768 && c.desktopOnly))) {
+        const detail = await page.evaluate(custom.js);
+        checksReport.push({
+          name: `${cfg.name}:${step.name}: ${custom.name}@${w}px`,
+          ok: detail === true || !!(detail && detail.ok),
+          detail
+        });
+      }
+      results.push({ tag: `${cfg.name}:${step.name}@${w}px`, audit: await page.evaluate(auditExpr(step.root || cfg.root || '.main', cfg.ignoreOverlap, cfg.ignoreClipping)),
         hscroll: await page.evaluate('document.documentElement.scrollWidth - window.innerWidth') });
     }
   }

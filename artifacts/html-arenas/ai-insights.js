@@ -1,7 +1,36 @@
 const crypto = require('crypto');
 const { ACTIVITY_FEELING_LABELS } = require('./html/arenas-activity-card.js');
+const { SPORTS } = require('./sports');
 const ACTIVITY_FEELING_KEYS = Object.keys(ACTIVITY_FEELING_LABELS);
 const ACTIVITY_FEELING_KEY_PATTERN = ACTIVITY_FEELING_KEYS.join('|');
+const SPORTS_BY_ID = new Map(SPORTS.map((sport) => [sport.id, sport]));
+
+// These colors are owned by the chart finding contract rather than model output.
+// Keep the key order intentional: it is both the SVG stack order and legend order.
+const INSIGHTS_FEELING_SERIES = Object.freeze([
+  Object.freeze({ key: 'strong', label: ACTIVITY_FEELING_LABELS.strong, color: '#16A34A' }),
+  Object.freeze({ key: 'motivated', label: ACTIVITY_FEELING_LABELS.motivated, color: '#2563EB' }),
+  Object.freeze({ key: 'easy', label: ACTIVITY_FEELING_LABELS.easy, color: '#0F766E' }),
+  Object.freeze({ key: 'tired', label: ACTIVITY_FEELING_LABELS.tired, color: '#D97706' }),
+  Object.freeze({ key: 'sore', label: ACTIVITY_FEELING_LABELS.sore, color: '#DC2626' }),
+  Object.freeze({ key: 'struggled', label: ACTIVITY_FEELING_LABELS.struggled, color: '#7C3AED' })
+]);
+const INSIGHTS_CHART_BAR_COLOR = '#FFD21E';
+const CHART_METRICS = new Set(['sessions', 'durationHours', 'distanceKm', 'feelings']);
+const CHART_PERIODS = new Set(['daily', 'weekly', 'monthly']);
+// Deliberately separate from scalar metric support: a chart may reference only
+// one whole, known collection, never a model-selected numeric leaf.
+const CHART_EVIDENCE_BY_PERIOD = Object.freeze({
+  daily: 'last12Weeks.daily',
+  weekly: 'last12Weeks.weekly',
+  monthly: 'last12Months'
+});
+const CHART_EVIDENCE_PATHS = new Set([
+  'last12Weeks.daily',
+  'last12Weeks.weekly',
+  'last12Months',
+  'last12Weeks.feelings'
+]);
 
 const FALLBACK_COPY = "I couldn’t produce an answer supported by your recorded data. Try asking about your activity count, volume, sports, streaks, personal records, standings, upcoming schedule, events, or active goals.";
 const REFUSAL_COPY = "I can describe your recorded training, but I can’t prescribe workouts or comment on diet, weight, body composition, or whether you are under-training. Try asking what changed in your volume, consistency, sports, personal records, or standings.";
@@ -173,7 +202,7 @@ function safeDiagnosticPath(path) {
     'isComplete', 'windowStart', 'windowEnd', 'limitations', 'byMonth',
     'plannedCount', 'totalPlannedMinutes', 'count', 'previousPeriods', 'achieved',
     'previousPeriodRange', 'previousPeriodUnavailableReason', 'feelings', 'feelingsTotal',
-    ...ACTIVITY_FEELING_KEYS
+    'metric', 'evidence', 'stackBySport', ...ACTIVITY_FEELING_KEYS
   ]);
   return tokens.every((token) => /^\d+$/.test(token) || allowed.has(token)) ? tokens.join('.') : null;
 }
@@ -800,6 +829,247 @@ function renderGoalPeriodFinding(finding, context) {
   };
 }
 
+function isPlainObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isDateKey(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(value + 'T12:00:00Z');
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function isMonthKey(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}$/.test(value)) return false;
+  const date = new Date(value + '-01T12:00:00Z');
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 7) === value;
+}
+
+function chartNumber(value, integer = false) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 &&
+    (!integer || Number.isInteger(value));
+}
+
+function chartMetricConfig(metric) {
+  return {
+    sessions: { unit: 'sessions', label: 'Sessions' },
+    durationHours: { contextKey: 'durationHours', unit: 'h', label: 'Duration (h)' },
+    distanceKm: { contextKey: 'distanceKm', unit: 'km', label: 'Distance (km)' }
+  }[metric] || null;
+}
+
+function chartValueKey(metric, period, perSport = false) {
+  if (metric !== 'sessions') return chartMetricConfig(metric).contextKey;
+  // Daily and monthly collections name their top-level count `sessions`;
+  // weekly alone uses `activityCount`. Per-sport rows always use `sessions`.
+  return perSport || period !== 'weekly' ? 'sessions' : 'activityCount';
+}
+
+function chartTitle(metric, period) {
+  const config = metric === 'feelings'
+    ? { label: 'Feelings' }
+    : chartMetricConfig(metric);
+  const suffix = period === 'daily' ? 'last 12 weeks' : period === 'weekly' ? 'last 12 weeks' : 'last 12 months';
+  return `${config.label} per ${period === 'daily' ? 'day' : period === 'weekly' ? 'week' : 'month'} — ${suffix}`;
+}
+
+function chartSportCaption(sport) {
+  return sport ? SPORTS_BY_ID.get(sport).label : '';
+}
+
+function formatDistanceContributors(ids) {
+  const labels = ids.map((id) => SPORTS_BY_ID.get(id).label.toLowerCase());
+  if (!labels.length) return '';
+  if (labels.length === 1) return `Includes ${labels[0]}`;
+  if (labels.length === 2) return `Includes ${labels[0]} and ${labels[1]}`;
+  return `Includes ${labels.slice(0, -1).join(', ')}, and ${labels.at(-1)}`;
+}
+
+function distanceContributorsFromSportRows(rows) {
+  const contributors = new Set();
+  for (const row of rows) {
+    if (!row || !Array.isArray(row.sports)) return { error: 'chart_invalid_context' };
+    for (const item of row.sports) {
+      if (!isPlainObject(item) || typeof item.sport !== 'string' || !chartNumber(item.distanceKm)) {
+        return { error: 'chart_invalid_context' };
+      }
+      if (SPORTS_BY_ID.has(item.sport) && item.distanceKm > 0) contributors.add(item.sport);
+    }
+  }
+  return { contributors: [...contributors] };
+}
+
+function resolveChartSeries(finding, context) {
+  if (!isPlainObject(finding)) return { error: 'invalid_chart_finding' };
+  const keys = Object.keys(finding).sort();
+  const allowedKeys = ['evidence', 'metric', 'period', 'sport', 'stackBySport', 'type'];
+  if (keys.some((key) => !allowedKeys.includes(key)) ||
+      !['type', 'metric', 'period', 'evidence'].every((key) => keys.includes(key))) {
+    return { error: 'invalid_chart_finding' };
+  }
+  if (finding.type !== 'chart' || !CHART_METRICS.has(finding.metric) || !CHART_PERIODS.has(finding.period) ||
+      typeof finding.evidence !== 'string' || !CHART_EVIDENCE_PATHS.has(finding.evidence)) {
+    return { error: 'invalid_chart_finding' };
+  }
+  const hasSport = Object.prototype.hasOwnProperty.call(finding, 'sport');
+  const hasStack = Object.prototype.hasOwnProperty.call(finding, 'stackBySport');
+  if (hasSport && typeof finding.sport !== 'string') return { error: 'chart_invalid_sport' };
+  if (hasStack && typeof finding.stackBySport !== 'boolean') return { error: 'chart_invalid_stack_by_sport' };
+  if (finding.metric === 'feelings') {
+    if (finding.period !== 'weekly' || finding.evidence !== 'last12Weeks.feelings') {
+      return { error: 'chart_evidence_period_mismatch' };
+    }
+    if (hasSport || hasStack) return { error: 'chart_feelings_constraints' };
+  } else {
+    if (finding.evidence !== CHART_EVIDENCE_BY_PERIOD[finding.period]) {
+      return { error: 'chart_evidence_period_mismatch' };
+    }
+    if (finding.period === 'daily' && (hasSport || hasStack)) return { error: 'chart_daily_constraints' };
+    if (hasSport && hasStack) return { error: 'chart_sport_stack_conflict' };
+  }
+  if (hasSport && !SPORTS_BY_ID.has(finding.sport)) return { error: 'chart_invalid_sport' };
+
+  const collection = valueAtPath(context, finding.evidence);
+  if (!collection.found || !Array.isArray(collection.value)) {
+    return { error: 'chart_invalid_context', offendingPath: finding.evidence };
+  }
+  const rows = collection.value;
+  const metric = finding.metric;
+  const config = chartMetricConfig(metric);
+  const valueKey = metric === 'feelings' ? null : chartValueKey(metric, finding.period);
+  const sportValueKey = metric === 'feelings' ? null : chartValueKey(metric, finding.period, true);
+  let labels;
+  let relative;
+  let normalizedRows;
+
+  if (finding.period === 'daily') {
+    const window = context && context.coverage && context.coverage.detailedWindow;
+    const asOfDate = context && context.asOfDate;
+    if (!isPlainObject(window) || !isDateKey(window.startDate) || !isDateKey(window.endDate) ||
+        !isDateKey(asOfDate) || window.endDate > asOfDate || window.endDate < window.startDate) {
+      return { error: 'chart_invalid_context', offendingPath: 'coverage.detailedWindow' };
+    }
+    const dayCount = Math.floor((Date.parse(window.endDate + 'T12:00:00Z') -
+      Date.parse(window.startDate + 'T12:00:00Z')) / 86400000) + 1;
+    if (dayCount < 1 || dayCount > 84) return { error: 'chart_invalid_context', offendingPath: 'coverage.detailedWindow' };
+    const sparse = new Map();
+    for (const row of rows) {
+      if (!isPlainObject(row) || !isDateKey(row.date) || row.date < window.startDate || row.date > window.endDate ||
+          sparse.has(row.date) || !chartNumber(row[valueKey], metric === 'sessions')) {
+        return { error: 'chart_invalid_context', offendingPath: finding.evidence };
+      }
+      sparse.set(row.date, row);
+    }
+    labels = [];
+    normalizedRows = [];
+    for (let day = window.startDate; day <= window.endDate; day = addUtcDays(day, 1)) {
+      labels.push(day);
+      normalizedRows.push(sparse.get(day) || null);
+    }
+    relative = [];
+  } else {
+    if (rows.length !== 12) return { error: 'chart_invalid_context', offendingPath: finding.evidence };
+    const labelKey = finding.period === 'weekly' ? 'weekStart' : 'month';
+    const validLabel = finding.period === 'weekly' ? isDateKey : isMonthKey;
+    const seen = new Set();
+    for (const row of rows) {
+      if (!isPlainObject(row) || !validLabel(row[labelKey]) || seen.has(row[labelKey]) ||
+          (metric !== 'feelings' && !chartNumber(row[valueKey], metric === 'sessions')) ||
+          (metric === 'feelings' && !INSIGHTS_FEELING_SERIES.every((series) => chartNumber(row[series.key], true)))) {
+        return { error: 'chart_invalid_context', offendingPath: finding.evidence };
+      }
+      seen.add(row[labelKey]);
+    }
+    labels = rows.map((row) => row[labelKey]);
+    relative = rows.map((row) => typeof row.relative === 'string' ? row.relative : '');
+    normalizedRows = rows;
+  }
+
+  const hasPerSport = (sport) => normalizedRows.some((row) =>
+    row && Array.isArray(row.sports) && row.sports.some((item) => isPlainObject(item) && item.sport === sport));
+  if (hasSport && !hasPerSport(finding.sport)) return { error: 'chart_sport_not_present' };
+
+  let series;
+  if (metric === 'feelings') {
+    series = INSIGHTS_FEELING_SERIES.map((item) => ({
+      key: item.key,
+      label: item.label,
+      color: item.color,
+      values: normalizedRows.map((row) => row[item.key])
+    }));
+  } else if (finding.stackBySport) {
+    const sportIds = new Set();
+    for (const row of normalizedRows) {
+      if (!Array.isArray(row.sports)) return { error: 'chart_invalid_context', offendingPath: finding.evidence };
+      for (const item of row.sports) {
+        if (!isPlainObject(item) || !SPORTS_BY_ID.has(item.sport) ||
+            !chartNumber(item[sportValueKey], metric === 'sessions')) {
+          return { error: 'chart_invalid_context', offendingPath: finding.evidence };
+        }
+        sportIds.add(item.sport);
+      }
+    }
+    series = [...sportIds].map((sport) => {
+      const values = normalizedRows.map((row) => {
+        const item = row.sports.find((candidate) => candidate.sport === sport);
+        return item ? item[sportValueKey] : 0;
+      });
+      return {
+        key: sport,
+        label: SPORTS_BY_ID.get(sport).label,
+        color: SPORTS_BY_ID.get(sport).colors.text,
+        values
+      };
+    }).sort((a, b) => b.values.reduce((sum, value) => sum + value, 0) -
+      a.values.reduce((sum, value) => sum + value, 0) || a.key.localeCompare(b.key));
+  } else {
+    const values = normalizedRows.map((row) => {
+      if (!hasSport) return row ? row[valueKey] : 0;
+      if (!Array.isArray(row.sports)) return null;
+      const item = row.sports.find((candidate) => isPlainObject(candidate) && candidate.sport === finding.sport);
+      if (!item) return 0;
+      return chartNumber(item[sportValueKey], metric === 'sessions') ? item[sportValueKey] : null;
+    });
+    if (values.some((value) => value === null)) return { error: 'chart_invalid_context', offendingPath: finding.evidence };
+    series = [{
+      key: metric,
+      label: hasSport ? SPORTS_BY_ID.get(finding.sport).label : config.label,
+      color: INSIGHTS_CHART_BAR_COLOR,
+      values
+    }];
+  }
+  const totals = labels.map((_, index) => series.reduce((sum, item) => sum + item.values[index], 0));
+  if (!totals.some((value) => value > 0)) return { error: 'chart_no_data' };
+
+  let caption = hasSport ? chartSportCaption(finding.sport) : '';
+  if (metric === 'distanceKm' && !hasSport) {
+    let contributorResult;
+    if (finding.period === 'daily') {
+      const aggregate = context && context.last12Weeks && context.last12Weeks.sports;
+      if (!Array.isArray(aggregate)) return { error: 'chart_invalid_context', offendingPath: 'last12Weeks.sports' };
+      contributorResult = distanceContributorsFromSportRows([{ sports: aggregate }]);
+    } else {
+      contributorResult = distanceContributorsFromSportRows(normalizedRows);
+    }
+    if (contributorResult.error) return { error: contributorResult.error, offendingPath: finding.period === 'daily'
+      ? 'last12Weeks.sports' : finding.evidence };
+    caption = formatDistanceContributors(contributorResult.contributors.sort((a, b) =>
+      SPORTS.findIndex((sport) => sport.id === a) - SPORTS.findIndex((sport) => sport.id === b)));
+  }
+  return {
+    metric,
+    unit: metric === 'feelings' ? 'count' : config.unit,
+    period: finding.period,
+    title: chartTitle(metric, finding.period),
+    caption,
+    labels,
+    relative,
+    series,
+    totals,
+    evidence: [evidenceItem(finding.evidence, collection.value)]
+  };
+}
+
 function renderTypedFinding(finding, context) {
   if (!finding || typeof finding !== 'object' || typeof finding.type !== 'string') {
     return { error: 'invalid_finding' };
@@ -922,6 +1192,10 @@ function renderTypedFinding(finding, context) {
   if (finding.type === 'goal_period' || finding.type === 'goal_period_list') {
     return renderGoalPeriodFinding(finding, context);
   }
+  if (finding.type === 'chart') {
+    const chart = resolveChartSeries(finding, context);
+    return chart.error ? chart : { chart, evidence: chart.evidence };
+  }
   if (finding.type === 'insufficient_trend_data') {
     if (Object.keys(finding).length !== 1) return { error: 'invalid_finding' };
     if (context.dataQuality && context.dataQuality.trendEligible) return { error: 'invalid_limitation' };
@@ -939,7 +1213,7 @@ function renderTypedFinding(finding, context) {
 const DIAGNOSTIC_FINDING_TYPES = new Set([
   'metric', 'comparison', 'standing', 'personal_record', 'calendar_plan',
   'calendar_event', 'calendar_plan_list', 'calendar_event_list', 'plan_adherence',
-  'goal_projection', 'goal_period', 'goal_period_list', 'insufficient_trend_data',
+  'goal_projection', 'goal_period', 'goal_period_list', 'insufficient_trend_data', 'chart',
   'not_answerable', 'policy_refusal'
 ]);
 
@@ -952,6 +1226,8 @@ function safeFindingDiagnostics(raw) {
       const safeType = finding && DIAGNOSTIC_FINDING_TYPES.has(finding.type) ? finding.type : 'unknown';
       const candidates = safeType === 'comparison'
         ? [finding.leftPath, finding.rightPath]
+        : safeType === 'chart'
+          ? [finding && finding.evidence]
         : [finding && finding.path];
       return {
         type: safeType,
@@ -969,6 +1245,10 @@ function validateInsightResponse(raw, context) {
   }
   if (!parsed.findings.length || parsed.findings.length > 8 || parsed.limitations.length > 8) {
     return { ok: false, answer: FALLBACK_COPY, reason: 'bounds' };
+  }
+  const chartFindings = parsed.findings.filter((finding) => finding && finding.type === 'chart');
+  if (chartFindings.length > 1) {
+    return { ok: false, answer: FALLBACK_COPY, reason: 'chart_limit' };
   }
   const policyFindings = parsed.findings.filter((finding) => finding && finding.type === 'policy_refusal');
   if (policyFindings.length) {
@@ -1019,6 +1299,8 @@ function validateInsightResponse(raw, context) {
   }
   const allEvidence = [];
   const rendered = [];
+  let chart = null;
+  let nonChartDataFindingCount = 0;
   let requiresCalendarTruncationDisclosure = false;
   const monthlyListKeys = new Set(parsed.findings.map(monthlyListFindingKey).filter(Boolean));
   for (const finding of parsed.findings) {
@@ -1046,9 +1328,19 @@ function validateInsightResponse(raw, context) {
       };
     }
     const suppressDuplicateCount = monthlyListKeys.has(monthlyCountFindingKey(finding, context));
-    if (!suppressDuplicateCount) rendered.push(result.text);
+    if (result.chart) {
+      chart = result.chart;
+    } else if (!suppressDuplicateCount) {
+      rendered.push(result.text);
+      // A limitation/control finding is not the data finding that makes a
+      // chart answer meaningful on its own.
+      if (finding.type !== 'insufficient_trend_data') nonChartDataFindingCount += 1;
+    }
     if (result.requiresCalendarTruncationDisclosure) requiresCalendarTruncationDisclosure = true;
     if (!suppressDuplicateCount) allEvidence.push(...result.evidence);
+  }
+  if (chart && nonChartDataFindingCount < 1) {
+    return { ok: false, answer: FALLBACK_COPY, reason: 'chart_requires_data_finding' };
   }
   const allowedLimitations = {
     INSUFFICIENT_TREND_DATA: 'There is not enough logged history to establish a reliable trend or usual training pattern.',
@@ -1075,7 +1367,8 @@ function validateInsightResponse(raw, context) {
     ok: true,
     answer: rendered.join(' '),
     evidence: allEvidence,
-    limitations
+    limitations,
+    chart
   };
 }
 
@@ -1097,6 +1390,9 @@ function buildSystemPrompt() {
     '{"type":"goal_projection","path":"goals.active.items.N","value":"exact copied object"}',
     '{"type":"goal_period","path":"goals.active.items.N.previousPeriods.N","value":"exact copied object"}',
     '{"type":"goal_period_list","path":"goals.active.items.N.previousPeriods"} renders up to three exact recent closed periods. An optional value key is allowed only when it exactly copies the full previousPeriods array.',
+    '{"type":"chart","metric":"sessions","period":"daily","evidence":"last12Weeks.daily"} is a literal chart request. It requests a server-resolved bar chart and contains no values or other numeric fields. Allowed metric values are sessions, durationHours, distanceKm, feelings; periods are daily, weekly, monthly. Optional sport is a registry id string; optional stackBySport is a boolean. Use exactly one of: daily → last12Weeks.daily; weekly → last12Weeks.weekly; monthly → last12Months; feelings → weekly + last12Weeks.feelings.',
+    'CHARTS: metric feelings is weekly only and cannot include sport or stackBySport. sport and stackBySport are weekly/monthly only, are mutually exclusive even when stackBySport is false, and a sport id must be an exact id that appears in at least one sports row for the requested collection in DATA_JSON. A chart request must be accompanied by at least one non-chart data finding; insufficient_trend_data does not qualify. Never emit more than one chart.',
+    'CHARTS: use one for explicit visual asks (“show me”, “chart”, “graph”, “plot”, “day by day”, “over time”), and optionally for trend or comparison-over-time answers. Never use one for a single-number or yes/no answer. Do not mention the chart in prose beyond a short lead-in such as “Here’s your training by day:”. The server resolves all chart numbers only from the evidence collection.',
     '{"type":"insufficient_trend_data"} only when DATA_JSON.dataQuality.trendEligible is false.',
     '{"type":"not_answerable","domain":"recorded_training|future_schedule","reason":"domain-compatible reason"} or {"type":"not_answerable","domain":"goals","subjectPath":"goals.active.items.N","reason":"domain-compatible goal reason"} must be the only finding, with no limitations, when DATA_JSON lacks the information needed to answer honestly.',
     'Choose the question’s subject domain before choosing a not_answerable reason.',
@@ -1179,5 +1475,9 @@ module.exports = {
   buildSystemPrompt,
   buildAiInsightsRequest,
   buildAiInsightsUsageLog,
-  valueAtPath
+  valueAtPath,
+  resolveChartSeries,
+  INSIGHTS_CHART_BAR_COLOR,
+  INSIGHTS_FEELING_SERIES,
+  CHART_EVIDENCE_PATHS
 };
