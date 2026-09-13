@@ -111,6 +111,7 @@ const CHART_REJECTION_CASES = [
   { question: 'Return a chart with absent sport rejection fixture.', reason: /chart.*sport|sport.*chart/i },
   { question: 'Return an all-zero chart rejection fixture.', reason: /chart.*(?:zero|data)|(?:zero|data).*chart/i }
 ];
+const TRUNCATED_JSON_QUESTION = 'Return a truncated JSON fixture.';
 const NOT_ANSWERABLE_CASES = [
   {
     question: 'How often was I tired in the last month?',
@@ -208,6 +209,20 @@ function check(name, ok, detail) {
     failures++;
     console.error('FAIL  ' + name + (detail ? ' — ' + String(detail).slice(0, 900) : ''));
   }
+}
+
+function parseStructuredLogLine(line, marker) {
+  const start = marker ? line.indexOf(marker) + marker.length : line.indexOf('{');
+  if (start < (marker ? marker.length : 0)) return null;
+  try {
+    return JSON.parse(line.slice(start).trim());
+  } catch (error) {
+    return null;
+  }
+}
+
+function isCorrelationId(value) {
+  return typeof value === 'string' && /^[0-9a-f]{16}$/.test(value);
 }
 
 async function must(label, promise) {
@@ -685,7 +700,10 @@ function findingsForAnswerableQuestion(question, data) {
   if (question === 'How have I been feeling week by week?') {
     return [
       chartFinding('feelings', 'weekly', 'last12Weeks.feelings'),
-      metricFinding(data, 'last12Weeks.activityCount')
+      // A feelings chart needs a scalar, non-chart finding as well. Keep that
+      // scalar on the feelings summary rather than silently grounding it in
+      // the unrelated activity-count aggregate.
+      metricFinding(data, 'last12Weeks.feelingsTotal.tired')
     ];
   }
   if (question === `How many hours on average did I workout in ${LAST_MONTH_YEAR_LABEL}?`) {
@@ -833,7 +851,9 @@ function providerRequestWithoutCharts(body) {
   baseline.system = baseline.system.map((block) => ({
     ...block,
     text: block.text.split('\n')
-      .filter((line) => !/\bchart\b/i.test(line))
+      // Keep this comparison useful when the chart contract grows with
+      // visual/graph/plot terminology that does not literally say "chart".
+      .filter((line) => !/\bchart(?:s|ing)?\b|\bvisual(?:ization|izations)?\b|\bgraphs?\b|\bplots?\b|stackBySport/i.test(line))
       .join('\n')
   }));
   baseline.messages = baseline.messages.map((message) => {
@@ -900,7 +920,16 @@ function startStub() {
             }));
             return;
           }
+          const truncatedJson = envelope.question === TRUNCATED_JSON_QUESTION;
           const providerResponse = responseFor(envelope);
+          if (truncatedJson) {
+            providerResponse.stop_reason = 'max_tokens';
+            // This is intentionally incomplete JSON. The HTTP/provider
+            // envelope remains valid so the app exercises response
+            // validation (and its refund path), not provider transport error
+            // handling.
+            providerResponse.content[0].text = '{"findings":[';
+          }
           const prefixSize = Buffer.byteLength(parsed.prefixBytes);
           const cacheHit = cachePrefixes.has(parsed.prefixBytes);
           if (cacheHit) {
@@ -912,7 +941,8 @@ function startStub() {
             providerResponse.usage.cache_read_input_tokens = 0;
           }
           record.usage = providerResponse.usage;
-          record.output = JSON.parse(providerResponse.content[0].text);
+          record.stop_reason = providerResponse.stop_reason;
+          record.output = truncatedJson ? null : JSON.parse(providerResponse.content[0].text);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(providerResponse));
         } catch (error) {
@@ -1353,6 +1383,7 @@ async function verifyNoFixtureResidue(ids, clubIds) {
     const usageLogsAfterPrivacy = app.output().split('\n')
       .filter((line) => line.includes('"event":"ai_insights_usage"'));
     const privacyUsageLog = usageLogsAfterPrivacy.at(-1) || '';
+    const privacyUsageEntry = parseStructuredLogLine(privacyUsageLog);
     check('successful request emits the complete structured provider usage log',
       usageLogsAfterPrivacy.length === 1 &&
       [
@@ -1360,16 +1391,21 @@ async function verifyNoFixtureResidue(ids, clubIds) {
         '"input_tokens":', '"cache_creation_input_tokens":',
         '"cache_read_input_tokens":', '"output_tokens":', '"estimated_cost_usd":'
       ].every((field) => privacyUsageLog.includes(field)) &&
+      privacyUsageLog.includes('"correlationId":') &&
+      isCorrelationId(privacyUsageEntry && privacyUsageEntry.correlationId) &&
       privacyUsageLog.includes('"cache_creation_input_tokens":') &&
       privacyCapture.usage.cache_creation_input_tokens > 0 &&
-      privacyCapture.usage.cache_read_input_tokens === 0,
+      privacyCapture.usage.cache_read_input_tokens === 0 &&
+      privacyUsageEntry.output_tokens === privacyCapture.usage.output_tokens,
       privacyUsageLog);
     check('structured provider usage logs contain no question or answer text',
       usageLogsAfterPrivacy.every((line) =>
         !line.includes('Compare my month with other athletes in my club.') &&
         !line.includes(GROUNDED_METRIC_COPY) &&
         !line.includes('"question"') &&
-        !line.includes('"answer"')),
+        !line.includes('"answer"') &&
+        !line.includes('PRO_PRIVATE_TITLE_') &&
+        !line.includes('UNKNOWN_FEELING_MUST_NOT_REACH_MODEL')),
       usageLogsAfterPrivacy.join(' | '));
 
     const cacheProbeQuestion = 'Return a fabricated cache probe for stable context.';
@@ -1404,6 +1440,17 @@ async function verifyNoFixtureResidue(ids, clubIds) {
       }));
     const usageLogsAfterCacheProbes = app.output().split('\n')
       .filter((line) => line.includes('"event":"ai_insights_usage"'));
+    const usageEntriesAfterCacheProbes = usageLogsAfterCacheProbes
+      .map((line) => parseStructuredLogLine(line));
+    const cacheProbeCorrelationIds = usageEntriesAfterCacheProbes.map((entry) =>
+      entry && entry.correlationId);
+    check('provider usage logs have a valid unique correlation id for every request',
+      usageEntriesAfterCacheProbes.length === 4 &&
+      usageEntriesAfterCacheProbes.every((entry) =>
+        entry && isCorrelationId(entry.correlationId) &&
+        Number.isInteger(entry.output_tokens) && entry.output_tokens >= 0) &&
+      new Set(cacheProbeCorrelationIds).size === usageEntriesAfterCacheProbes.length,
+      JSON.stringify(usageEntriesAfterCacheProbes));
     check('usage is logged after SDK success even when response validation refunds quota',
       usageLogsAfterCacheProbes.length === logsBeforeCacheProbes + 3,
       usageLogsAfterCacheProbes.join(' | '));
@@ -1768,12 +1815,75 @@ async function verifyNoFixtureResidue(ids, clubIds) {
     const usageLogsAfterFailure = app.output().split('\n')
       .filter((line) => line.includes('"event":"ai_insights_usage"'));
     const failureUsageLog = usageLogsAfterFailure.at(-1) || '';
+    const failureUsageEntry = parseStructuredLogLine(failureUsageLog);
     check('provider failure emits exactly one zero-counter structured usage log',
       usageLogsAfterFailure.length === usageLogCountBeforeFailure + 1 &&
       ['input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens', 'output_tokens']
         .every((field) => failureUsageLog.includes(`"${field}":0`)) &&
-      failureUsageLog.includes('"estimated_cost_usd":0'),
+      failureUsageLog.includes('"estimated_cost_usd":0') &&
+      isCorrelationId(failureUsageEntry && failureUsageEntry.correlationId) &&
+      failureUsageEntry.output_tokens === 0 &&
+      new Set(usageLogsAfterFailure.map((line) => {
+        const entry = parseStructuredLogLine(line);
+        return entry && entry.correlationId;
+      })).size === usageLogsAfterFailure.length,
       failureUsageLog);
+
+    const usageBeforeTruncated = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+    const usageLogCountBeforeTruncated = app.output().split('\n')
+      .filter((line) => line.includes('"event":"ai_insights_usage"')).length;
+    const rejectionLogCountBeforeTruncated = app.output().split('\n')
+      .filter((line) => line.includes('AI Insights validation rejection:')).length;
+    const truncatedJson = await api(proLogin, 'POST', '/api/profile/ai-insights', {
+      question: TRUNCATED_JSON_QUESTION,
+      history: []
+    });
+    const truncatedRecord = captured[captured.length - 1];
+    const usageLogsAfterTruncated = app.output().split('\n')
+      .filter((line) => line.includes('"event":"ai_insights_usage"'));
+    const rejectionLogsAfterTruncated = app.output().split('\n')
+      .filter((line) => line.includes('AI Insights validation rejection:'));
+    const usageAfterTruncated = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
+    const truncatedUsageEntry = parseStructuredLogLine(usageLogsAfterTruncated.at(-1) || '');
+    const truncatedRejectionLog = rejectionLogsAfterTruncated.at(-1) || '';
+    const truncatedRejectionEntry = parseStructuredLogLine(
+      truncatedRejectionLog,
+      'AI Insights validation rejection:'
+    );
+    check('truncated provider JSON returns the exact invalid_shape fallback',
+      truncatedJson.status === 200 &&
+      truncatedJson.body.rejectedReason === 'invalid_shape' &&
+      truncatedJson.body.answer === FALLBACK_COPY &&
+      truncatedRecord.stop_reason === 'max_tokens',
+      JSON.stringify({ response: truncatedJson, provider: truncatedRecord }));
+    check('truncated JSON rejection matches usage metadata and refunds its exact quota slot',
+      usageBeforeTruncated.status === 200 &&
+      usageAfterTruncated.status === 200 &&
+      usageBeforeTruncated.body.used === usageAfterTruncated.body.used &&
+      usageBeforeTruncated.body.remaining === usageAfterTruncated.body.remaining &&
+      usageLogsAfterTruncated.length === usageLogCountBeforeTruncated + 1 &&
+      rejectionLogsAfterTruncated.length === rejectionLogCountBeforeTruncated + 1 &&
+      truncatedUsageEntry &&
+      truncatedRejectionEntry &&
+      truncatedUsageEntry.correlationId === truncatedRejectionEntry.correlationId &&
+      isCorrelationId(truncatedUsageEntry.correlationId) &&
+      truncatedRejectionEntry.findingCount === null &&
+      Array.isArray(truncatedRejectionEntry.findings) &&
+      truncatedRejectionEntry.stop_reason === 'max_tokens' &&
+      truncatedRejectionEntry.output_tokens === truncatedUsageEntry.output_tokens &&
+      truncatedRejectionEntry.output_tokens === truncatedRecord.usage.output_tokens,
+      JSON.stringify({
+        before: usageBeforeTruncated.body,
+        usage: truncatedUsageEntry,
+        rejection: truncatedRejectionEntry,
+        provider: truncatedRecord
+      }));
+    check('truncated JSON diagnostics do not leak raw provider or question text',
+      !truncatedRejectionLog.includes(TRUNCATED_JSON_QUESTION) &&
+      !truncatedRejectionLog.includes('{"findings":[') &&
+      !truncatedRejectionLog.includes('"question"') &&
+      !truncatedRejectionLog.includes('"answer"'),
+      truncatedRejectionLog);
 
     const usageBeforeMalformed = await api(proLogin, 'GET', '/api/profile/ai-insights/status');
     const fabricated = await api(proLogin, 'POST', '/api/profile/ai-insights', {
@@ -1905,6 +2015,47 @@ async function verifyNoFixtureResidue(ids, clubIds) {
       JSON.stringify({ before: usageBeforeWrongDomain.body, after: usageAfterWrongDomain.body }));
 
     const rejectionLogs = app.output().split('\n').filter((line) => line.includes('AI Insights validation rejection:'));
+    const rejectionEntries = rejectionLogs.map((line) => ({
+      line,
+      entry: parseStructuredLogLine(line, 'AI Insights validation rejection:')
+    }));
+    const allUsageLogsBeforeMatrix = app.output().split('\n')
+      .filter((line) => line.includes('"event":"ai_insights_usage"'));
+    const allUsageEntriesBeforeMatrix = allUsageLogsBeforeMatrix
+      .map((line) => parseStructuredLogLine(line));
+    const usageByCorrelationId = new Map(allUsageEntriesBeforeMatrix
+      .filter((entry) => entry && isCorrelationId(entry.correlationId))
+      .map((entry) => [entry.correlationId, entry]));
+    const rejectionCorrelationIds = rejectionEntries.map(({ entry }) =>
+      entry && entry.correlationId);
+    check('validation rejection diagnostics correlate to one unique usage log per request',
+      rejectionEntries.length > 0 &&
+      rejectionEntries.every(({ entry }) =>
+        entry &&
+        isCorrelationId(entry.correlationId) &&
+        usageByCorrelationId.has(entry.correlationId)) &&
+      new Set(rejectionCorrelationIds).size === rejectionEntries.length &&
+      allUsageEntriesBeforeMatrix.every((entry) => entry && isCorrelationId(entry.correlationId)) &&
+      new Set(allUsageEntriesBeforeMatrix.map((entry) => entry && entry.correlationId)).size ===
+        allUsageEntriesBeforeMatrix.length,
+      JSON.stringify({ rejectionEntries, usageEntries: allUsageEntriesBeforeMatrix }));
+    check('validation rejection diagnostics expose only allowlisted metadata',
+      rejectionEntries.every(({ entry }) =>
+        entry &&
+        (entry.findingCount === null ||
+          (Number.isInteger(entry.findingCount) && entry.findingCount >= 0)) &&
+        Array.isArray(entry.findings) &&
+        entry.findings.every((finding) =>
+          finding &&
+          JSON.stringify(Object.keys(finding).sort()) === JSON.stringify(['paths', 'type']) &&
+          typeof finding.type === 'string' &&
+          Array.isArray(finding.paths) &&
+          finding.paths.every((findingPath) => typeof findingPath === 'string')) &&
+        ['end_turn', 'max_tokens', 'stop_sequence', 'tool_use'].includes(entry.stop_reason) &&
+        Number.isInteger(entry.output_tokens) &&
+        entry.output_tokens >= 0 &&
+        usageByCorrelationId.get(entry.correlationId).output_tokens === entry.output_tokens),
+      JSON.stringify(rejectionEntries));
     check('rejection diagnostics include safe scalar mismatch values and types only on allowlisted paths',
       rejectionLogs.some((line) => line.includes('"rejectedReason":"invalid_finding"') && line.includes('"offendingPath":"allTime.activityCount"')) &&
       rejectionLogs.some((line) => line.includes('"rejectedReason":"missing_path"') && line.includes('"offendingPath":"last12Months.99.durationHours"')) &&
@@ -1935,7 +2086,10 @@ async function verifyNoFixtureResidue(ids, clubIds) {
         !line.includes('987654321') &&
         !line.includes('PRIVATE') &&
         !line.includes('"question"') &&
-        !line.includes('"title"')),
+        !line.includes('"title"') &&
+        !line.includes('TAMPERED_CLIENT_ANSWER_123456') &&
+        !line.includes(TRUNCATED_JSON_QUESTION) &&
+        !line.includes('{"findings":[')),
       rejectionLogs.join(' | '));
 
     // Earlier provider, calendar, malformed-output, and refund proofs have

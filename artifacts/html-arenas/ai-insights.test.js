@@ -353,6 +353,67 @@ test('chart finding requires a non-chart data finding and returns chart evidence
   assert.equal(controlOnly.reason, 'chart_requires_data_finding');
 });
 
+test('feelings chart with an exact feelingsTotal scalar is accepted', () => {
+  const data = chartContext();
+  data.last12Weeks.feelingsTotal = Object.fromEntries(INSIGHTS_FEELING_SERIES.map(({ key }) => [
+    key, data.last12Weeks.feelings.reduce((sum, row) => sum + row[key], 0)
+  ]));
+  const result = validateInsightResponse({
+    findings: [
+      chartFinding('feelings', 'weekly', 'last12Weeks.feelings'),
+      { type: 'metric', path: 'last12Weeks.feelingsTotal.motivated', value: data.last12Weeks.feelingsTotal.motivated }
+    ],
+    limitations: []
+  }, data);
+  assert.equal(result.ok, true);
+  assert.equal(result.chart.metric, 'feelings');
+  assert.equal(result.chart.period, 'weekly');
+  assert.deepEqual(result.evidence.map(({ path }) => path), [
+    'last12Weeks.feelings', 'last12Weeks.feelingsTotal.motivated'
+  ]);
+});
+
+test('whole feeling rows as metric values are rejected as unsupported_path', () => {
+  const data = chartContext();
+  const result = validateInsightResponse({
+    findings: [{ type: 'metric', path: 'last12Weeks.feelings[1]', value: data.last12Weeks.feelings[1] }],
+    limitations: []
+  }, data);
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'unsupported_path');
+  assert.equal(result.offendingPath, 'last12Weeks.feelings.1');
+});
+
+test('truncated findings reject as invalid_shape and retain safe provider diagnostics', () => {
+  const raw = '{"findings":[{"type":"metric","path":"last12Weeks.feelings[10]","value":{"relative":"last_week","';
+  const result = validateInsightResponse(raw, chartContext());
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'invalid_shape');
+  assert.deepEqual(safeFindingDiagnostics(raw, {
+    stop_reason: 'max_tokens', usage: { output_tokens: 1200 }
+  }, '0123456789abcdef'), {
+    correlationId: '0123456789abcdef',
+    stop_reason: 'max_tokens',
+    output_tokens: 1200,
+    findingCount: null,
+    findings: []
+  });
+});
+
+test('chart prompt uses scalar companions and treats series phrasing as charts', () => {
+  const prompt = buildSystemPrompt();
+  assert.match(prompt, /Metric values must always be scalar leaves/);
+  assert.match(prompt, /“week by week”, “over the weeks”, and “month by month” mean a chart request/);
+  assert.match(prompt, /Never enumerate weeks or months as separate findings/);
+  assert.match(prompt, /Keep at most 8 findings/);
+  assert.match(prompt, /must be accompanied by at least one non-chart data finding/);
+  assert.match(prompt, /"metric":"feelings","period":"weekly","evidence":"last12Weeks.feelings"/);
+  assert.match(prompt, /"type":"metric","path":"last12Weeks.feelingsTotal.motivated","value":24/);
+  assert.match(prompt, /not the example number/);
+  assert.match(prompt, /“by sport” means ONE chart with stackBySport:true/);
+  assert.match(FALLBACK_COPY, /recorded feelings/);
+});
+
 test('chart finding rejects invalid contracts, no-data requests, and invalid context safely', () => {
   const data = chartContext();
   const withMetric = (finding) => validateInsightResponse({
@@ -1003,6 +1064,9 @@ test('safe rejection diagnostics expose only allowlisted finding types and paths
     ],
     limitations: []
   }), {
+    correlationId: null,
+    stop_reason: null,
+    output_tokens: null,
     findingCount: 3,
     findings: [
       { type: 'metric', paths: ['calendar.plannedSessions.total'] },
@@ -1010,6 +1074,21 @@ test('safe rejection diagnostics expose only allowlisted finding types and paths
       { type: 'unknown', paths: ['calendar.events.items.0'] }
     ]
   });
+});
+
+test('rejection diagnostics count all attempted findings but bound details and suppress unknown metadata', () => {
+  const findings = Array.from({ length: 12 }, () => ({
+    type: 'metric', path: 'last12Weeks.feelingsTotal.tired', value: 7
+  }));
+  const diagnostics = safeFindingDiagnostics({ findings, limitations: [] }, {
+    stop_reason: 'PRIVATE TEXT', usage: { output_tokens: 'PRIVATE TEXT' }
+  }, 'PRIVATE TEXT');
+  assert.equal(diagnostics.findingCount, 12);
+  assert.equal(diagnostics.findings.length, 8);
+  assert.equal(diagnostics.correlationId, null);
+  assert.equal(diagnostics.stop_reason, null);
+  assert.equal(diagnostics.output_tokens, null);
+  assert.equal(JSON.stringify(diagnostics).includes('PRIVATE TEXT'), false);
 });
 
 test('calendar cap disclosure is server-enforced when the model omits it', () => {

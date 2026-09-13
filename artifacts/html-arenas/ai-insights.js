@@ -32,7 +32,7 @@ const CHART_EVIDENCE_PATHS = new Set([
   'last12Weeks.feelings'
 ]);
 
-const FALLBACK_COPY = "I couldn’t produce an answer supported by your recorded data. Try asking about your activity count, volume, sports, streaks, personal records, standings, upcoming schedule, events, or active goals.";
+const FALLBACK_COPY = "I couldn’t produce an answer supported by your recorded data. Try asking about your activity count, volume, sports, recorded feelings, streaks, personal records, standings, upcoming schedule, events, or active goals.";
 const REFUSAL_COPY = "I can describe your recorded training, but I can’t prescribe workouts or comment on diet, weight, body composition, or whether you are under-training. Try asking what changed in your volume, consistency, sports, personal records, or standings.";
 const MODEL = 'claude-haiku-4-5';
 // Anthropic Haiku 4.5 list prices as of September 2026, USD per million
@@ -1217,11 +1217,16 @@ const DIAGNOSTIC_FINDING_TYPES = new Set([
   'not_answerable', 'policy_refusal'
 ]);
 
-function safeFindingDiagnostics(raw) {
+function safeFindingDiagnostics(raw, providerResponse = {}, correlationId = null) {
   const parsed = parseModelJson(raw);
   const findings = parsed && Array.isArray(parsed.findings) ? parsed.findings : [];
+  const stopReasons = new Set(['end_turn', 'max_tokens', 'stop_sequence', 'tool_use', 'pause_turn', 'refusal', 'model_context_window_exceeded']);
+  const outputTokens = providerResponse && providerResponse.usage && providerResponse.usage.output_tokens;
   return {
-    findingCount: findings.length,
+    correlationId: typeof correlationId === 'string' && /^[a-f0-9]{16}$/.test(correlationId) ? correlationId : null,
+    stop_reason: providerResponse && stopReasons.has(providerResponse.stop_reason) ? providerResponse.stop_reason : null,
+    output_tokens: Number.isInteger(outputTokens) && outputTokens >= 0 ? outputTokens : null,
+    findingCount: parsed && Array.isArray(parsed.findings) ? findings.length : null,
     findings: findings.slice(0, 8).map((finding) => {
       const safeType = finding && DIAGNOSTIC_FINDING_TYPES.has(finding.type) ? finding.type : 'unknown';
       const candidates = safeType === 'comparison'
@@ -1377,6 +1382,7 @@ function buildSystemPrompt() {
     'You are Arenas AI Insights, a descriptive training-data analyst.',
     'The first user text block contains the context object itself as DATA_JSON. The second user text block contains a JSON object with question and history; history is HISTORY_JSON. DATA_JSON is the sole factual authority. HISTORY_JSON is conversational context only and is never evidence.',
     'Never write answer prose. Select only typed findings whose referenced paths and copied values exist exactly in DATA_JSON.',
+    'Metric values must always be scalar leaves, never an entire week, month, row object, or array. Copy the exact scalar at the metric path; do not invent or calculate values.',
     'Allowed finding forms:',
     '{"type":"metric","path":"last12Months.10.durationHours","value":16.4}',
     '{"type":"comparison","leftPath":"numeric-leaf","leftValue":0,"rightPath":"same-metric numeric-leaf","rightValue":0}',
@@ -1393,6 +1399,9 @@ function buildSystemPrompt() {
     '{"type":"chart","metric":"sessions","period":"daily","evidence":"last12Weeks.daily"} is a literal chart request. It requests a server-resolved bar chart and contains no values or other numeric fields. Allowed metric values are sessions, durationHours, distanceKm, feelings; periods are daily, weekly, monthly. Optional sport is a registry id string; optional stackBySport is a boolean. Use exactly one of: daily → last12Weeks.daily; weekly → last12Weeks.weekly; monthly → last12Months; feelings → weekly + last12Weeks.feelings.',
     'CHARTS: metric feelings is weekly only and cannot include sport or stackBySport. sport and stackBySport are weekly/monthly only, are mutually exclusive even when stackBySport is false, and a sport id must be an exact id that appears in at least one sports row for the requested collection in DATA_JSON. A chart request must be accompanied by at least one non-chart data finding; insufficient_trend_data does not qualify. Never emit more than one chart.',
     'CHARTS: use one for explicit visual asks (“show me”, “chart”, “graph”, “plot”, “day by day”, “over time”), and optionally for trend or comparison-over-time answers. Never use one for a single-number or yes/no answer. Do not mention the chart in prose beyond a short lead-in such as “Here’s your training by day:”. The server resolves all chart numbers only from the evidence collection.',
+    'CHARTS: “week by week”, “over the weeks”, and “month by month” mean a chart request. Never enumerate weeks or months as separate findings; a chart carries the series. Keep at most 8 findings and include one scalar data metric alongside the chart.',
+    'CHARTS: “by sport” means ONE chart with stackBySport:true, not one chart per sport and not a second total chart. Never emit separate chart findings for individual sports. For “Show my sessions per month by sport”, the only chart finding is {"type":"chart","metric":"sessions","period":"monthly","evidence":"last12Months","stackBySport":true}; accompany it with a scalar metric, not another chart. Before returning, ensure exactly one chart finding for a chart request.',
+    'CHARTS: worked feelings example, ONLY if DATA_JSON.last12Weeks.feelingsTotal.motivated is exactly 24: {"findings":[{"type":"chart","metric":"feelings","period":"weekly","evidence":"last12Weeks.feelings"},{"type":"metric","path":"last12Weeks.feelingsTotal.motivated","value":24}],"limitations":[]}. For the actual answer copy a supported feeling-count scalar from DATA_JSON, not the example number. A feelings chart is weekly, with no sport or stackBySport. Do not copy weekly feeling objects into metric values.',
     '{"type":"insufficient_trend_data"} only when DATA_JSON.dataQuality.trendEligible is false.',
     '{"type":"not_answerable","domain":"recorded_training|future_schedule","reason":"domain-compatible reason"} or {"type":"not_answerable","domain":"goals","subjectPath":"goals.active.items.N","reason":"domain-compatible goal reason"} must be the only finding, with no limitations, when DATA_JSON lacks the information needed to answer honestly.',
     'Choose the question’s subject domain before choosing a not_answerable reason.',

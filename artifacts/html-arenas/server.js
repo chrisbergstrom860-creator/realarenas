@@ -9376,6 +9376,7 @@ app.get(BASE + '/api/profile/ai-insights/hero-stats', requireAuth, requireActive
 });
 
 app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_insights'), async (req, res) => {
+  const correlationId = crypto.randomBytes(8).toString('hex');
   const question = typeof req.body.question === 'string' ? req.body.question.trim() : '';
   if (!question || question.length > 500) return res.status(400).json({ error: 'invalid_question' });
   const verifiedHistory = verifyHistoryTurns(SESSION_SECRET, req.user.id, req.body.history);
@@ -9419,9 +9420,9 @@ app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_in
     response = await getAnthropicClient(providerConfig).messages.create(
       buildAiInsightsRequest(context, question, verifiedHistory)
     );
-    console.log(JSON.stringify(buildAiInsightsUsageLog(req.user.id, question.length, response.usage)));
+    console.log(JSON.stringify({ ...buildAiInsightsUsageLog(req.user.id, question.length, response.usage), correlationId }));
   } catch (err) {
-    console.log(JSON.stringify(buildAiInsightsUsageLog(req.user.id, question.length, null)));
+    console.log(JSON.stringify({ ...buildAiInsightsUsageLog(req.user.id, question.length, null), correlationId }));
     let refunded = false;
     try {
       await releaseAiUsageClaim(req.user.id, usage.sourceKey);
@@ -9446,7 +9447,7 @@ app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_in
         offendingPath: validated.offendingPath || null,
         filterPresent: validated.filterPresent === true,
         filterValid: validated.filterValid === true,
-        ...safeFindingDiagnostics(text),
+        ...safeFindingDiagnostics(text, response, correlationId),
         ...(validated.mismatchDetails || {})
       }));
     }
