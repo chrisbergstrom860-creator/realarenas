@@ -1121,7 +1121,13 @@ function fixtureProgram() {
       ${prefix}
       globalThis.__seedFixture = async function () {
         ${seedStatements}
-        return { users, creatorId: users.creator.id, memberId: users.member.id };
+        return {
+          users, creatorId: users.creator.id, memberId: users.member.id,
+          loginCreator: async () => {
+            await login('creator');
+            return users.creator.cookies;
+          }
+        };
       };
       globalThis.__cleanupFixture = async function () {
         ${cleanupStatements}
@@ -1185,6 +1191,7 @@ async function startMobileFixture() {
       creatorId: state.creatorId,
       memberId: state.memberId,
       users: state.users,
+      loginCreator: state.loginCreator,
       async cleanup() {
         if (cleaned) return;
         cleaned = true;

@@ -5049,7 +5049,7 @@ app.get(BASE + '/api/profile/overview', requireAuth, async (req, res) => {
 // `profiles` table, no FK embeds).
 app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
   if (!supabaseAdmin) {
-    return res.json({ myChallenges: [], friendsChallenges: [], publicChallenges: [], publicCount: 0, myJoinedIds: [], pointsThisMonth: 0, longestStreak: 0, currentStreak: 0, weekGrid: [], friendsInChallenges: [], followsAnyone: false });
+    return res.json({ myChallenges: [], friendsChallenges: [], publicChallenges: [], publicCount: 0, myJoinedIds: [], pointsThisMonth: 0, longestStreak: 0, currentStreak: 0, weekGrid: [] });
   }
   const userId = req.user.id;
   const PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
@@ -5069,8 +5069,7 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
       myParticipations,
       createdChallenges,
       receivedInviteRows,
-      viewerActivityRead,
-      followingRows
+      viewerActivityRead
     ] = await Promise.all([
       supabaseAdmin
         .from('challenge_participants').select('challenge_id').eq('user_id', userId)
@@ -5101,17 +5100,6 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
           // loop establishes whether the old route would have thrown.
           return { data: [], errorThrown: err };
         }
-      })(),
-      (async () => {
-        try {
-          const { data } = await supabaseAdmin
-            .from('follows').select('following_id').eq('follower_id', userId);
-          return data || [];
-        } catch (err) {
-          // The rail was historically best-effort; a follows transport
-          // failure must not fail the primary challenges response.
-          return [];
-        }
       })()
     ]);
     const myIds = [...new Set((myParticipations || []).map((p) => p.challenge_id).filter(Boolean))];
@@ -5127,24 +5115,6 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
         .order('created_at', { ascending: false })
         .then((result) => result.data || [])
       : Promise.resolve([]);
-
-    // Stage 3 starts as soon as Stage 1 is complete and overlaps all
-    // challenge-list enrichment below. Its chain retains the rail's own
-    // best-effort error boundary and array ordering.
-    const friendsRailPromise = buildFriendsInChallengesRail({
-      supabaseAdmin,
-      userId,
-      viewerTz,
-      followingRows,
-      buildUserProfileMap,
-      identityMemo,
-      memberZone,
-      challengeHasEnded,
-      challengeFetchRange,
-      actsInChallengeWindow,
-      computeChallengeProgress,
-      fetchAllRows
-    });
 
     // Stage 2 begins with the challenge-id-dependent reads. The discover
     // filters are shared by its exact count and capped grid query.
@@ -5359,15 +5329,6 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
       console.log('Challenge header stats error:', statErr.message);
     }
 
-    // ── "Friends in challenges" — people the viewer follows who have joined a
-    // PUBLIC challenge (private/club titles are never leaked). Honest empty when
-    // the viewer follows no one or none of them are in a public challenge. ──
-    const friendsRail = await friendsRailPromise;
-    const friendsInChallenges = friendsRail.friendsInChallenges;
-    const followsAnyone = friendsRail.followsAnyone;
-    // The implementation lives in challenges-query.js so the lazy rail
-    // endpoint can reuse this exact chain in the follow-up commit.
-
     res.json({
       myChallenges: enrich(myChallenges),
       friendsChallenges,
@@ -5377,13 +5338,51 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
       pointsThisMonth,
       longestStreak,
       currentStreak,
-      weekGrid,
-      friendsInChallenges,
-      followsAnyone
+      weekGrid
     });
   } catch (err) {
     console.log('Challenges list error:', err.message);
     res.json({ error: err.message });
+  }
+});
+
+// Friends-in-challenges is deliberately separate from the primary challenges
+// payload. The rail is below the fold on desktop and hidden on mobile, so its
+// existing Stage 3 chain is reused here rather than delaying the cards above it.
+app.get(BASE + '/api/challenges/friends-rail', requireAuth, async (req, res) => {
+  if (!supabaseAdmin) return res.json({ friendsInChallenges: [], followsAnyone: false });
+  const userId = req.user.id;
+  try {
+    const identityMemo = createRequestAuthMemo({
+      seedUser: req.user,
+      lookup: (id) => supabaseAdmin.auth.admin.getUserById(id)
+    });
+    const rail = await buildFriendsInChallengesRail({
+      supabaseAdmin,
+      userId,
+      viewerTz: getUserTimezone(req.user),
+      readFollowing: async () => {
+        try {
+          const { data, error } = await supabaseAdmin
+            .from('follows').select('following_id').eq('follower_id', userId);
+          return error ? [] : (data || []);
+        } catch (err) {
+          return [];
+        }
+      },
+      buildUserProfileMap,
+      identityMemo,
+      memberZone,
+      challengeHasEnded,
+      challengeFetchRange,
+      actsInChallengeWindow,
+      computeChallengeProgress,
+      fetchAllRows
+    });
+    return res.json(rail);
+  } catch (err) {
+    console.log('Challenge friends rail error:', err.message);
+    return res.json({ friendsInChallenges: [], followsAnyone: false });
   }
 });
 
