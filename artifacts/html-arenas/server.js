@@ -42,6 +42,15 @@ const {
   buildAiInsightsRequest,
   buildAiInsightsUsageLog
 } = require('./ai-insights');
+const {
+  createRequestAuthMemo,
+  challengeWindowFor,
+  actsInChallengeWindow,
+  challengeFetchRange,
+  selectChallengeProgressActivities,
+  activityReadErrorForProgress,
+  buildFriendsInChallengesRail
+} = require('./challenges-query');
 
 // Exact club-sport contract shared by BOTH creation paths and the settings
 // editor. Deliberately trims but does NOT lowercase: canonical registry ids and
@@ -2000,14 +2009,16 @@ async function enrichNotifications(notifications) {
 // Resolve a set of user IDs to their display info (name/handle) from auth
 // metadata. There is no `profiles` table, so this mirrors enrichNotifications:
 // one getUserById lookup per unique ID. Returns a map keyed by user ID.
-async function buildUserDisplayMap(ids) {
+async function buildUserDisplayMap(ids, identityMemo) {
   const map = {};
   if (!supabaseAdmin) return map;
   const unique = [...new Set((ids || []).filter(Boolean))];
   await Promise.all(unique.map(async (id) => {
     try {
-      const { data: u } = await supabaseAdmin.auth.admin.getUserById(id);
-      if (u && u.user) map[id] = displayFromUser(u.user);
+      const user = identityMemo
+        ? await identityMemo.get(id)
+        : (await supabaseAdmin.auth.admin.getUserById(id)).data?.user;
+      if (user) map[id] = displayFromUser(user);
     } catch (err) {
       // Ignore individual lookup failures; callers fall back to defaults.
     }
@@ -3109,16 +3120,18 @@ function bucketActivities(activities) {
 // Resolve user IDs to richer display info (name/handle/sports/location) from auth
 // metadata. There is no `profiles` table, so this mirrors buildUserDisplayMap but
 // also returns sports/location. One getUserById per unique id (small sets only).
-async function buildUserProfileMap(ids) {
+async function buildUserProfileMap(ids, identityMemo) {
   const map = {};
   if (!supabaseAdmin) return map;
   const unique = [...new Set((ids || []).filter(Boolean))];
   await Promise.all(unique.map(async (id) => {
     try {
-      const { data: u } = await supabaseAdmin.auth.admin.getUserById(id);
-      if (u && u.user) {
-        const m = u.user.user_metadata || {};
-        const disp = displayFromUser(u.user);
+      const user = identityMemo
+        ? await identityMemo.get(id)
+        : (await supabaseAdmin.auth.admin.getUserById(id)).data?.user;
+      if (user) {
+        const m = user.user_metadata || {};
+        const disp = displayFromUser(user);
         map[id] = {
           name: disp.name,
           handle: disp.handle,
@@ -4621,40 +4634,6 @@ function memberZone(prof) {
   return prof && isValidTimezone(prof.timezone) ? prof.timezone : 'UTC';
 }
 
-// A challenge's window for one participant, per the policy above. Start/end
-// keys come from the stored UTC-midnight timestamps; the instants are those
-// calendar days' midnights in the PARTICIPANT'S zone, compared inclusively
-// exactly like the legacy gte/lte pair.
-function challengeWindowFor(challenge, tz) {
-  // ASSUMPTION: challenge start/end_date are stored as UTC-midnight instants
-  // (all creation paths do this today). dayKey(.., 'UTC') snaps any
-  // non-midnight timestamp to its UTC day — if a creation path ever stores a
-  // non-midnight instant, UTC-user parity with the legacy gte/lte window
-  // breaks for that row.
-  const startKey = dayKey(challenge.start_date, 'UTC');
-  const endKey = dayKey(challenge.end_date, 'UTC');
-  return {
-    startMs: zoneMidnightUtc(startKey, tz).getTime(),
-    endMs: zoneMidnightUtc(endKey, tz).getTime()
-  };
-}
-function actsInChallengeWindow(activities, challenge, tz) {
-  const w = challengeWindowFor(challenge, tz);
-  return (activities || []).filter((a) => {
-    const t = new Date(a.date).getTime();
-    return t >= w.startMs && t <= w.endMs;
-  });
-}
-// DB fetch bounds for challenge activities: the stored UTC window widened by
-// one day each side so every zone's local window (UTC-12 … UTC+14) is covered;
-// actsInChallengeWindow re-filters exactly per participant.
-function challengeFetchRange(challenge) {
-  return {
-    gteIso: new Date(new Date(challenge.start_date).getTime() - 86400000).toISOString(),
-    lteIso: new Date(new Date(challenge.end_date).getTime() + 86400000).toISOString()
-  };
-}
-
 // Challenge goal types. Stored values are FROZEN ('streak' rows keep working
 // untouched) — 'streak' is presented as "Active days" everywhere, because
 // that is what the computation has always measured (distinct active days in
@@ -5075,65 +5054,104 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
   const userId = req.user.id;
   const PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
   try {
-    const { data: myParticipations } = await supabaseAdmin
-      .from('challenge_participants').select('challenge_id').eq('user_id', userId);
+    const requestNow = new Date();
+    const viewerTz = getUserTimezone(req.user);
+    const identityMemo = createRequestAuthMemo({
+      seedUser: req.user,
+      lookup: (id) => supabaseAdmin.auth.admin.getUserById(id)
+    });
+
+    // Stage 1: these reads have no dependencies on one another. Keep the
+    // activity projection to the union needed by progress, points, streaks,
+    // and the week grid. This intentionally remains one physical unbounded
+    // PostgREST read, matching the existing header-stats read and its API cap.
+    const [
+      myParticipations,
+      createdChallenges,
+      receivedInviteRows,
+      viewerActivityRead,
+      followingRows
+    ] = await Promise.all([
+      supabaseAdmin
+        .from('challenge_participants').select('challenge_id').eq('user_id', userId)
+        .then((result) => result.data || []),
+      supabaseAdmin
+        .from('challenges').select('*')
+        .eq('created_by', userId)
+        .order('created_at', { ascending: false })
+        .then((result) => result.data || []),
+      (async () => {
+        try {
+          const { data, error } = await supabaseAdmin
+            .from('challenge_invites').select('challenge_id, invitee_id, inviter_id')
+            .eq('invitee_id', userId);
+          return error ? [] : (data || []);
+        } catch (err) {
+          return [];
+        }
+      })(),
+      (async () => {
+        try {
+          const { data, error } = await supabaseAdmin
+            .from('activities').select('distance, duration, sport, date')
+            .eq('user_id', userId);
+          return { data: error ? [] : (data || []), errorThrown: null };
+        } catch (err) {
+          // Retain transport failures until the joined-challenge progress
+          // loop establishes whether the old route would have thrown.
+          return { data: [], errorThrown: err };
+        }
+      })(),
+      (async () => {
+        try {
+          const { data } = await supabaseAdmin
+            .from('follows').select('following_id').eq('follower_id', userId);
+          return data || [];
+        } catch (err) {
+          // The rail was historically best-effort; a follows transport
+          // failure must not fail the primary challenges response.
+          return [];
+        }
+      })()
+    ]);
     const myIds = [...new Set((myParticipations || []).map((p) => p.challenge_id).filter(Boolean))];
 
     // My challenges = ones I created + ones I joined. Split into two queries to
     // sidestep Supabase .or() quirks with UUID id.in lists.
-    const { data: createdChallenges } = await supabaseAdmin
-      .from('challenges').select('*')
-      .eq('created_by', userId)
-      .order('created_at', { ascending: false });
     const createdIds = new Set((createdChallenges || []).map((c) => c.id));
     const joinedIds = myIds.filter((id) => !createdIds.has(id));
-    let joinedChallenges = [];
-    if (joinedIds.length) {
-      const { data } = await supabaseAdmin
+    const joinedChallengesPromise = joinedIds.length
+      ? supabaseAdmin
         .from('challenges').select('*')
         .in('id', joinedIds)
-        .order('created_at', { ascending: false });
-      joinedChallenges = data || [];
-    }
-    const myChallenges = [...(createdChallenges || []), ...joinedChallenges];
+        .order('created_at', { ascending: false })
+        .then((result) => result.data || [])
+      : Promise.resolve([]);
 
-    // Pending invites RECEIVED by the viewer (the real private-challenge rails).
-    // Any lookup failure (e.g. the challenge_invites table not provisioned yet)
-    // degrades to "no invites" — never a 500, never fabricated state.
-    let receivedInviteRows = [];
-    try {
-      const { data: invRows, error: invErr } = await supabaseAdmin
-        .from('challenge_invites').select('challenge_id, invitee_id, inviter_id')
-        .eq('invitee_id', userId);
-      if (!invErr) receivedInviteRows = invRows || [];
-    } catch (e) { /* degrade to none */ }
-    // Dropping self-created ids is input sanity (self-invites don't exist);
-    // the pending verdict itself comes from the ONE shared pendingInvites rule.
-    const pendingInviteRows = pendingInvites(
-      receivedInviteRows.filter((r) => !createdIds.has(r.challenge_id)),
-      myIds.map((id) => ({ challenge_id: id, user_id: userId }))
-    );
-    // Only live private solo challenges — an ended or malformed invite target
-    // must not surface as an actionable invitation.
-    let invitedChallenges = [];
-    if (pendingInviteRows.length) {
-      const { data } = await supabaseAdmin
-        .from('challenges').select('*')
-        .in('id', [...new Set(pendingInviteRows.map((r) => r.challenge_id))])
-        .eq('visibility', 'private').is('club_id', null)
-        .gt('end_date', new Date().toISOString())
-        .order('created_at', { ascending: false });
-      invitedChallenges = data || [];
-    }
+    // Stage 3 starts as soon as Stage 1 is complete and overlaps all
+    // challenge-list enrichment below. Its chain retains the rail's own
+    // best-effort error boundary and array ordering.
+    const friendsRailPromise = buildFriendsInChallengesRail({
+      supabaseAdmin,
+      userId,
+      viewerTz,
+      followingRows,
+      buildUserProfileMap,
+      identityMemo,
+      memberZone,
+      challengeHasEnded,
+      challengeFetchRange,
+      actsInChallengeWindow,
+      computeChallengeProgress,
+      fetchAllRows
+    });
 
-    // Discover = public, non-expired challenges the user neither created nor
-    // joined. Skip the .not() filter entirely when there's nothing to exclude.
-    //
-    // applyDiscoverFilters is the SINGLE definition of the three filter
-    // conditions shared by both queries below. Editing conditions here
-    // affects both; there is no second copy that could drift.
-    const excludeFromDiscover = [...new Set([...myChallenges.map((c) => c.id), ...myIds])];
-    const discoverNowIso = new Date().toISOString();
+    // Stage 2 begins with the challenge-id-dependent reads. The discover
+    // filters are shared by its exact count and capped grid query.
+    const discoverNowIso = requestNow.toISOString();
+    const excludeFromDiscover = [
+      ...new Set([...(createdChallenges || []).map((c) => c.id), ...myIds])
+    ];
     function applyDiscoverFilters(q) {
       let query = q.eq('visibility', 'public').gt('end_date', discoverNowIso);
       if (excludeFromDiscover.length) {
@@ -5141,15 +5159,53 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
       }
       return query;
     }
-
-    // Run an exact head-count (no row data transferred) and the 20-row grid
-    // fetch in parallel. Both use applyDiscoverFilters so the filter set is
-    // guaranteed to be identical.
-    const [countResult, gridResult] = await Promise.all([
+    const pendingInviteRows = pendingInvites(
+      (receivedInviteRows || []).filter((r) => !createdIds.has(r.challenge_id)),
+      myIds.map((id) => ({ challenge_id: id, user_id: userId }))
+    );
+    const ownedPrivateIds = (createdChallenges || [])
+      .filter((c) => c.visibility === 'private' && !c.club_id).map((c) => c.id);
+    const [
+      joinedChallenges,
+      invitedChallenges,
+      countResult,
+      gridResult,
+      sentInviteResult
+    ] = await Promise.all([
+      joinedChallengesPromise,
+      pendingInviteRows.length
+        ? supabaseAdmin
+          .from('challenges').select('*')
+          .in('id', [...new Set(pendingInviteRows.map((r) => r.challenge_id))])
+          .eq('visibility', 'private').is('club_id', null)
+          .gt('end_date', requestNow.toISOString())
+          .order('created_at', { ascending: false })
+          .then((result) => result.data || [])
+        : Promise.resolve([]),
       applyDiscoverFilters(supabaseAdmin.from('challenges').select('*', { count: 'exact', head: true })),
       applyDiscoverFilters(supabaseAdmin.from('challenges').select('*'))
-        .order('created_at', { ascending: false }).limit(20)
+        .order('created_at', { ascending: false }).limit(20),
+      ownedPrivateIds.length
+        ? (async () => {
+          try {
+            return await supabaseAdmin
+              .from('challenge_invites').select('challenge_id, invitee_id')
+              .in('challenge_id', ownedPrivateIds);
+          } catch (err) {
+            return { data: [], error: err };
+          }
+        })()
+        : Promise.resolve({ data: [], error: null })
     ]);
+    const myChallenges = [...(createdChallenges || []), ...joinedChallenges];
+
+    // Pending invites RECEIVED by the viewer (the real private-challenge rails).
+    // Any lookup failure (e.g. the challenge_invites table not provisioned yet)
+    // degrades to "no invites" — never a 500, never fabricated state.
+    // Dropping self-created ids is input sanity (self-invites don't exist);
+    // the pending verdict itself comes from the ONE shared pendingInvites rule.
+    // Only live private solo challenges — an ended or malformed invite target
+    // must not surface as an actionable invitation.
     const publicChallenges = gridResult.data || [];
     // publicCount: exact total of joinable public challenges (always ≥ grid
     // length). Falls back to the grid length when the count query errors so
@@ -5166,6 +5222,8 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
     });
     const allIds = allChallenges.map((c) => c.id);
 
+    // Participant rows are only safe to request once the complete challenge
+    // set is known; they feed counts and the creator's pending verdict.
     const { data: allParticipants } = await supabaseAdmin
       .from('challenge_participants').select('challenge_id, user_id')
       .in('challenge_id', allIds.length ? allIds : [PLACEHOLDER]);
@@ -5173,52 +5231,54 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
     // Pending-invite counts for private solo challenges the viewer created —
     // powers the owner's "Invites · N pending" affordance. Error-tolerant:
     // before the invites table exists this stays empty (chip simply absent).
-    const ownedPrivateIds = (createdChallenges || [])
-      .filter((c) => c.visibility === 'private' && !c.club_id).map((c) => c.id);
     const pendingCountByChallenge = {};
-    if (ownedPrivateIds.length) {
-      try {
-        const { data: sentRows, error: sentErr } = await supabaseAdmin
-          .from('challenge_invites').select('challenge_id, invitee_id')
-          .in('challenge_id', ownedPrivateIds);
-        if (!sentErr) {
-          pendingInvites(sentRows, allParticipants || []).forEach((r) => {
-            pendingCountByChallenge[r.challenge_id] = (pendingCountByChallenge[r.challenge_id] || 0) + 1;
-          });
-        }
-      } catch (e) { /* degrade to no counts */ }
+    if (!sentInviteResult.error) {
+      pendingInvites(sentInviteResult.data || [], allParticipants || []).forEach((r) => {
+        pendingCountByChallenge[r.challenge_id] = (pendingCountByChallenge[r.challenge_id] || 0) + 1;
+      });
     }
 
     // Progress for each challenge the user has joined — the viewer's own
     // activities, cut to their local challenge window (boundary policy).
-    const viewerTz = getUserTimezone(req.user);
     const progressMap = {};
+    const viewerActivities = viewerActivityRead.data || [];
+    const progressReadError = activityReadErrorForProgress(
+      viewerActivityRead,
+      myIds,
+      allChallenges
+    );
+    if (progressReadError) throw progressReadError;
     for (const challengeId of myIds) {
       const challenge = allChallenges.find((c) => c.id === challengeId);
       if (!challenge) continue;
-      const range = challengeFetchRange(challenge);
-      const { data: activities } = await supabaseAdmin
-        .from('activities').select('distance, duration, sport, date')
-        .eq('user_id', userId)
-        .gte('date', range.gteIso).lte('date', range.lteIso);
       progressMap[challengeId] =
-        computeChallengeProgress(challenge, actsInChallengeWindow(activities, challenge, viewerTz), viewerTz);
+        computeChallengeProgress(
+          challenge,
+          selectChallengeProgressActivities(viewerActivities, challenge, viewerTz),
+          viewerTz
+        );
     }
 
     // Creator display names (auth metadata) and club names (clubs table).
-    const creatorMap = await buildUserDisplayMap([
-      ...allChallenges.map((c) => c.created_by),
-      ...pendingInviteRows.map((r) => r.inviter_id)
-    ]);
     const challengeClubIds = [...new Set(allChallenges.map((c) => c.club_id).filter(Boolean))];
-    const clubNameMap = {};
-    if (challengeClubIds.length) {
-      const { data: clubs } = await supabaseAdmin.from('clubs').select('id, name').in('id', challengeClubIds);
-      (clubs || []).forEach((c) => { clubNameMap[c.id] = c.name; });
-    }
+    const [creatorMap, clubNameMap] = await Promise.all([
+      buildUserDisplayMap([
+        ...allChallenges.map((c) => c.created_by),
+        ...pendingInviteRows.map((r) => r.inviter_id)
+      ], identityMemo),
+      (async () => {
+        const map = {};
+        if (challengeClubIds.length) {
+          const { data: clubs } = await supabaseAdmin
+            .from('clubs').select('id, name').in('id', challengeClubIds);
+          (clubs || []).forEach((c) => { map[c.id] = c.name; });
+        }
+        return map;
+      })()
+    ]);
 
-    const now = Date.now();
-    const viewerTzEnrich = getUserTimezone(req.user);
+    const now = requestNow.getTime();
+    const viewerTzEnrich = viewerTz;
     const enrich = (list) => (list || []).map((c) => {
       const end = new Date(c.end_date).getTime();
       const goalTarget = parseFloat(c.goal_target) || 0;
@@ -5269,13 +5329,11 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
     let pointsThisMonth = 0, longestStreak = 0, currentStreak = 0;
     let weekGrid = [];
     try {
-      const { data: userActs } = await supabaseAdmin
-        .from('activities').select('sport, distance, date')
-        .eq('user_id', userId);
-      const acts = userActs || [];
-      const hdrTz = getUserTimezone(req.user);
-      const mNow = new Date();
-      const monthRange = getDateRange('month', hdrTz);
+      if (viewerActivityRead.errorThrown) throw viewerActivityRead.errorThrown;
+      const acts = viewerActivities || [];
+      const hdrTz = viewerTz;
+      const mNow = requestNow;
+      const monthRange = getDateRange('month', hdrTz, requestNow);
       const monthStart = new Date(monthRange.start).getTime();
       const monthEnd = new Date(monthRange.end).getTime();
       const monthActs = acts.filter((a) => {
@@ -5288,7 +5346,7 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
       // Distinct active days (user-zone day keys) still drive the week grid;
       // both streak numbers now come from the shared helper (same semantics).
       const daySet = new Set(acts.map((a) => dayKey(a.date, hdrTz)));
-      ({ currentStreak, longestStreak } = computeStreaks(acts, hdrTz));
+      ({ currentStreak, longestStreak } = computeStreaks(acts, hdrTz, requestNow.getTime()));
       // This week's grid (Mon→Sun) in the user's zone: active day, today, and
       // future (unfilled) cells — key comparisons, no server-local Dates.
       const todayK = dayKey(mNow, hdrTz);
@@ -5304,126 +5362,11 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
     // ── "Friends in challenges" — people the viewer follows who have joined a
     // PUBLIC challenge (private/club titles are never leaked). Honest empty when
     // the viewer follows no one or none of them are in a public challenge. ──
-    let friendsInChallenges = [], followsAnyone = false;
-    try {
-      const { data: follows } = await supabaseAdmin
-        .from('follows').select('following_id').eq('follower_id', userId);
-      const followingIds = [...new Set((follows || []).map((f) => f.following_id).filter(Boolean))];
-      followsAnyone = followingIds.length > 0;
-      if (followingIds.length) {
-        const { data: fParts } = await supabaseAdmin
-          .from('challenge_participants').select('challenge_id, user_id')
-          .in('user_id', followingIds);
-        const fChallengeIds = [...new Set((fParts || []).map((p) => p.challenge_id).filter(Boolean))];
-        if (fChallengeIds.length) {
-          const { data: pubCh } = await supabaseAdmin
-            // Completion is derived per participant below, so fetch the same
-            // goal/window fields used by the challenges enrichment rather than
-            // trusting a status column (there is no challenge status column).
-            .from('challenges')
-            .select('id, title, sport, goal_type, goal_target, goal_unit, start_date, end_date')
-            .in('id', fChallengeIds).eq('visibility', 'public')
-            .order('end_date', { ascending: false });
-          // A friend's rail card is viewer-facing, so end-day semantics follow
-          // the viewer's zone just like `isExpired` in the main enrichment.
-          // Pre-start challenges remain active here too: that is the existing
-          // challenges-page meaning of active (`!isExpired && !isComplete`).
-          const activePublic = (pubCh || []).filter(
-            (c) => !challengeHasEnded(c, viewerTz)
-          );
-
-          // Group participants by the already end-date-ordered challenge list,
-          // not by fParts' database order. This makes the displayed title the
-          // latest-ending active challenge and makes moreCount count only the
-          // same active, incomplete set.
-          const partsByChallenge = {};
-          const seenFriendPairs = new Set();
-          (fParts || []).forEach((p) => {
-            if (!p.challenge_id || !p.user_id) return;
-            const pair = p.challenge_id + ':' + p.user_id;
-            if (seenFriendPairs.has(pair)) return;
-            seenFriendPairs.add(pair);
-            (partsByChallenge[p.challenge_id] = partsByChallenge[p.challenge_id] || []).push(p.user_id);
-          });
-
-          const friendIdsByChallenge = {};
-          const activeFriendIds = new Set();
-          activePublic.forEach((challenge) => {
-            const participantIds = [...new Set(partsByChallenge[challenge.id] || [])];
-            if (!participantIds.length) return;
-            friendIdsByChallenge[challenge.id] = participantIds;
-            participantIds.forEach((id) => activeFriendIds.add(id));
-          });
-
-          // Pull the widest necessary activity interval once, then use the
-          // canonical participant-zone window helper for each challenge. This
-          // preserves the existing local-midnight boundary rules without
-          // exposing any activity rows in the response.
-          const activeFriendIdList = [...activeFriendIds];
-          const fProfileMap = await buildUserProfileMap(activeFriendIdList);
-          const actsByUser = {};
-          if (activeFriendIdList.length) {
-            const ranges = activePublic
-              .filter((challenge) => friendIdsByChallenge[challenge.id])
-              .map((challenge) => challengeFetchRange(challenge));
-            const gteIso = ranges.reduce(
-              (earliest, range) => range.gteIso < earliest ? range.gteIso : earliest,
-              ranges[0].gteIso
-            );
-            const lteIso = ranges.reduce(
-              (latest, range) => range.lteIso > latest ? range.lteIso : latest,
-              ranges[0].lteIso
-            );
-            // Use the shared paged reader: an active challenge can have more
-            // than PostgREST's 1000-row default, and truncating here could
-            // misclassify a participant who completed a goal in a later row.
-            const fActs = await fetchAllRows(
-              'activities',
-              (q) => q
-                .in('user_id', activeFriendIdList)
-                .gte('date', gteIso)
-                .lte('date', lteIso),
-              'user_id, distance, duration, sport, date'
-            );
-            // A failed activity lookup cannot prove that a participant has
-            // not completed a goal. Fail closed for this best-effort card
-            // rather than showing a completed challenge as active.
-            (fActs || []).forEach((activity) => {
-              (actsByUser[activity.user_id] = actsByUser[activity.user_id] || []).push(activity);
-            });
-          }
-
-          const byUser = {};
-          activePublic.forEach((challenge) => {
-            const participantIds = friendIdsByChallenge[challenge.id] || [];
-            const target = parseFloat(challenge.goal_target) || 0;
-            participantIds.forEach((participantId) => {
-              const participantTz = memberZone(fProfileMap[participantId]);
-              const progress = computeChallengeProgress(
-                challenge,
-                actsInChallengeWindow(actsByUser[participantId], challenge, participantTz),
-                participantTz
-              );
-              // Completion is participant-specific: one friend can finish a
-              // shared challenge while another remains active.
-              if (target > 0 && progress >= target) return;
-              (byUser[participantId] = byUser[participantId] || []).push(challenge);
-            });
-          });
-          friendsInChallenges = Object.keys(byUser).map((uid) => ({
-            id: uid,
-            name: (fProfileMap[uid] || {}).name || 'Athlete',
-            avatar_url: (fProfileMap[uid] || {}).avatar_url || null,
-            profilePublic: fProfileMap[uid] ? fProfileMap[uid].profilePublic !== false : true,
-            sport: byUser[uid][0].sport,
-            challengeTitle: byUser[uid][0].title,
-            moreCount: byUser[uid].length - 1
-          })).slice(0, 6);
-        }
-      }
-    } catch (frErr) {
-      console.log('Challenge friends error:', frErr.message);
-    }
+    const friendsRail = await friendsRailPromise;
+    const friendsInChallenges = friendsRail.friendsInChallenges;
+    const followsAnyone = friendsRail.followsAnyone;
+    // The implementation lives in challenges-query.js so the lazy rail
+    // endpoint can reuse this exact chain in the follow-up commit.
 
     res.json({
       myChallenges: enrich(myChallenges),

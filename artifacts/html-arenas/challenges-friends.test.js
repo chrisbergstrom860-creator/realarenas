@@ -5,28 +5,18 @@
 // HTTP listener at module load and needs a live auth/database configuration.
 const fs = require('node:fs');
 const path = require('node:path');
-const vm = require('node:vm');
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { buildFriendsInChallengesRail } = require('./challenges-query');
 
-const SERVER_SOURCE = fs.readFileSync(
-  path.join(__dirname, 'server.js'),
+const FRIENDS_SOURCE = fs.readFileSync(
+  path.join(__dirname, 'challenges-query.js'),
   'utf8'
 );
-const FRIENDS_MARKER = '// ── "Friends in challenges"';
-const friendsStart = SERVER_SOURCE.indexOf(FRIENDS_MARKER);
-const friendsTryStart = SERVER_SOURCE.indexOf('    try {', friendsStart);
-const friendsEnd = SERVER_SOURCE.indexOf(
-  '\n\n    res.json({',
-  friendsTryStart
-);
-assert.ok(friendsStart >= 0 && friendsTryStart >= 0 && friendsEnd >= 0,
-  'Friends route block must remain extractable for its focused tests');
-const FRIENDS_ROUTE_BLOCK = SERVER_SOURCE.slice(friendsTryStart, friendsEnd);
 
-// Execute the production route block as-is. Only its database client and
-// existing helpers are supplied by the fixture; the grouping/progress logic is
-// never reimplemented in this test file.
+// Execute the production helper as-is. Only its database client and existing
+// helpers are supplied by the fixture; the grouping/progress logic is never
+// reimplemented in this test file.
 async function runFriendsBlock({
   supabaseAdmin,
   fetchAllRows,
@@ -39,7 +29,7 @@ async function runFriendsBlock({
   userId = 'viewer',
   viewerTz = 'America/Los_Angeles'
 }) {
-  const context = {
+  return buildFriendsInChallengesRail({
     supabaseAdmin,
     fetchAllRows,
     buildUserProfileMap,
@@ -50,14 +40,13 @@ async function runFriendsBlock({
     computeChallengeProgress,
     userId,
     viewerTz,
-    console: { log() {} }
-  };
-  const script = new vm.Script(`(async () => {
-    let friendsInChallenges = [], followsAnyone = false;
-    ${FRIENDS_ROUTE_BLOCK}
-    return { friendsInChallenges, followsAnyone };
-  })()`);
-  return script.runInNewContext(context);
+    readFollowing: async () => {
+      const { data } = await supabaseAdmin
+        .from('follows').select('following_id').eq('follower_id', userId);
+      return data || [];
+    },
+    logger: { log() {} }
+  });
 }
 
 function makeSupabase({ follows, participants, challenges }) {
@@ -172,7 +161,7 @@ function dayKey(iso, tz) {
 }
 
 test('Friends block uses public goal/window fields, end-date ordering, and paged activities', () => {
-  const friendsBlock = FRIENDS_ROUTE_BLOCK;
+  const friendsBlock = FRIENDS_SOURCE;
   assert.match(
     friendsBlock,
     /\.select\('id, title, sport, goal_type, goal_target, goal_unit, start_date, end_date'\)/
