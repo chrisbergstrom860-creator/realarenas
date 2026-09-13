@@ -186,7 +186,9 @@ async function buildFriendsInChallengesRail({
             (q) => q
               .in('user_id', activeFriendIdList)
               .gte('date', gteIso)
-              .lte('date', lteIso),
+              .lte('date', lteIso)
+              .order('date', { ascending: true })
+              .order('id', { ascending: true }),
             'user_id, distance, duration, sport, date'
           );
           // A failed activity lookup cannot prove that a participant has

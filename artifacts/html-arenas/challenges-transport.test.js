@@ -20,6 +20,7 @@ function rejectingActivityClient(joined) {
         select() { return query; },
         order() { return query; },
         limit() { return query; },
+        range() { return query; },
         gt() { return query; },
         gte() { return query; },
         lte() { return query; },

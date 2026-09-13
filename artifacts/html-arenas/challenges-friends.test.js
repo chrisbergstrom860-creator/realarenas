@@ -132,6 +132,10 @@ function makeHelpers({ profiles, activityRows, nowIso, fetchCalls, zoneCalls = [
         lte(column, value) {
           queryCalls.push(['lte', column, value]);
           return this;
+        },
+        order(column, options) {
+          queryCalls.push(['order', column, options]);
+          return this;
         }
       };
       applyFilters(query);

@@ -5063,8 +5063,8 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
 
     // Stage 1: these reads have no dependencies on one another. Keep the
     // activity projection to the union needed by progress, points, streaks,
-    // and the week grid. This intentionally remains one physical unbounded
-    // PostgREST read, matching the existing header-stats read and its API cap.
+    // and the week grid. One shared, paginated history has no date bound;
+    // date + unique id ordering makes page boundaries deterministic.
     const [
       myParticipations,
       createdChallenges,
@@ -5091,12 +5091,16 @@ app.get(BASE + '/api/challenges', requireAuth, async (req, res) => {
       })(),
       (async () => {
         try {
-          const { data, error } = await supabaseAdmin
-            .from('activities').select('distance, duration, sport, date')
-            .eq('user_id', userId);
-          return { data: error ? [] : (data || []), errorThrown: null };
+          const data = await fetchAllRows(
+            'activities',
+            (q) => q.eq('user_id', userId)
+              .order('date', { ascending: true })
+              .order('id', { ascending: true }),
+            'distance, duration, sport, date'
+          );
+          return { data, errorThrown: null };
         } catch (err) {
-          // Retain transport failures until the joined-challenge progress
+          // Retain read failures until the joined-challenge progress
           // loop establishes whether the old route would have thrown.
           return { data: [], errorThrown: err };
         }
