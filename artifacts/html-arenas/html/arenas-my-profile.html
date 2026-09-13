@@ -2171,7 +2171,30 @@ if (logHashMatch) {
       totals.push(total);
       if (total > maxValue) maxValue = total;
     }
+    var countUnit = unit === 'sessions' || unit === 'count';
     var scaleMax = maxValue > 0 ? maxValue : 1;
+    var ticks;
+    if (countUnit) {
+      var integerMax = Math.ceil(maxValue);
+      var tickStep = 1;
+      if (integerMax > 3) {
+        var niceSteps = [1, 2, 5, 10, 20, 50, 100];
+        tickStep = niceSteps[niceSteps.length - 1];
+        for (var stepIndex = 0; stepIndex < niceSteps.length; stepIndex += 1) {
+          // Include zero: at most three intervals means at most four ticks.
+          if (Math.ceil(integerMax / niceSteps[stepIndex]) <= 3) {
+            tickStep = niceSteps[stepIndex];
+            break;
+          }
+        }
+      }
+      var topTick = Math.ceil(integerMax / tickStep) * tickStep;
+      scaleMax = topTick || 1; // Empty charts still need a nonzero divisor.
+      ticks = [];
+      for (var tick = 0; tick <= topTick; tick += tickStep) ticks.push(tick);
+    } else {
+      ticks = [0, scaleMax / 2, scaleMax];
+    }
     var titleText = chart.title == null ? 'Training chart' : String(chart.title);
     var hasUnitInTitle = unit && new RegExp('(^|[^a-z])' + unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^a-z]|$)', 'i').test(titleText);
     if (unit && !hasUnitInTitle) titleText += ' (' + unit + ')';
@@ -2185,7 +2208,7 @@ if (logHashMatch) {
     var svg = '<svg class="ai-chart-svg" role="img" aria-label="' + escapeAiHtml(ariaLabel) +
       '" width="100%" height="' + height + '" viewBox="0 0 ' + width + ' ' + height +
       '" preserveAspectRatio="none" focusable="false">';
-    [scaleMax, scaleMax / 2, 0].forEach(function (gridValue) {
+    ticks.forEach(function (gridValue) {
       var y = bottom - (gridValue / scaleMax) * plotHeight;
       svg += '<line class="ai-chart-grid" x1="' + margin.left + '" y1="' + y +
         '" x2="' + (width - margin.right) + '" y2="' + y + '"></line>' +

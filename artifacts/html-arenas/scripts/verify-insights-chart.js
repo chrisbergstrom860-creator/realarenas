@@ -24,6 +24,7 @@ const {
 const SPORT_BY_ID = new Map(SPORTS.map((sport) => [sport.id, sport]));
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PROFILE = path.join(ROOT, 'html', 'arenas-my-profile.html');
+const THEME = fs.readFileSync(path.join(ROOT, 'html', 'arenas.css'), 'utf8').match(/:root\s*\{[^}]+\}/)[0];
 const WIDTHS = [
   { viewport: 360, container: 298 },
   { viewport: 414, container: 352 },
@@ -140,6 +141,25 @@ const fixtures = {
   })()
 };
 
+// Founder-shaped synthetic feelings data: six series over twelve weeks,
+// with a stacked peak of 11 (no account reads or durable fixtures).
+fixtures.feelingsMax11 = {
+  ...fixtures.feelings,
+  series: fixtures.feelings.series.map((item, index) => ({
+    ...item, values: item.values.map((value, week) => week === 5 ? [3, 2, 1, 2, 1, 2][index] : value)
+  })),
+  expectedTicks: [0, 5, 10, 15]
+};
+fixtures.feelingsMax11.totals = totals(fixtures.feelingsMax11.series, fixtures.feelingsMax11.labels);
+for (const [max, expectedTicks] of [[2, [0, 1, 2]], [47, [0, 20, 40, 60]]]) {
+  fixtures['sessionsMax' + max] = {
+    metric: 'sessions', unit: 'sessions', period: 'weekly',
+    title: 'Sessions per week', labels: ['2026-08-31', '2026-09-07'],
+    series: [{ key: 'sessions', label: 'Sessions', color: INSIGHTS_CHART_BAR_COLOR, values: [1, max] }],
+    totals: [1, max], expectedTicks, screenshot: false
+  };
+}
+
 function insightsScriptFromProfile(source) {
   const marker = '// ── AI INSIGHTS TAB ──';
   const markerIndex = source.indexOf(marker);
@@ -169,6 +189,7 @@ function chartCssFromProfile(source) {
 async function renderFixture(page, fixture, width, chartCss) {
   await page.setViewportSize({ width: width.viewport, height: 640 });
   await page.setContent(`<!doctype html><html><head><style>
+    ${THEME}
     body { margin:0; padding:24px 0; font-family:Arial,sans-serif; }
     #host { width:${width.container}px; margin:0 auto; min-width:0; }
     ${chartCss}
@@ -188,7 +209,16 @@ async function renderFixture(page, fixture, width, chartCss) {
     const legendItems = legend ? [...legend.querySelectorAll('[role="listitem"]')].map((node) => node.getBoundingClientRect().toJSON()) : [];
     const hostRect = host.getBoundingClientRect();
     const svgRect = svg && svg.getBoundingClientRect();
+    const gridYs = [...svg.querySelectorAll('.ai-chart-grid')].map((node) => node.getBoundingClientRect().top);
+    const baseline = Math.max(...gridYs);
+    const plotHeight = baseline - Math.min(...gridYs);
+    const bars = [...svg.querySelectorAll('.ai-chart-bar')];
+    const barTops = bars.map((node) => node.getBoundingClientRect().top);
     return {
+      yLabels: [...svg.querySelectorAll('.ai-chart-axis-label')].map((node) => node.textContent),
+      plotHeight,
+      barCount: bars.length,
+      tallestBarHeight: baseline - Math.min(baseline, ...barTops),
       html: host.innerHTML,
       svgCount: host.querySelectorAll('svg[role="img"]').length,
       aria: svg && svg.getAttribute('aria-label'),
@@ -209,6 +239,29 @@ async function renderFixture(page, fixture, width, chartCss) {
 }
 
 function assertFixture(name, fixture, result, width) {
+  const tickValues = result.yLabels.map(Number);
+  const max = Math.max(...totals(fixture.series, fixture.labels));
+  const countUnit = fixture.unit === 'sessions' || fixture.unit === 'count';
+  if (countUnit) {
+    check(`${name}@${width.viewport}: count tick labels are integers`,
+      result.yLabels.length > 0 && result.yLabels.every((label) => /^\d+$/.test(label)), result.yLabels);
+    check(`${name}@${width.viewport}: ticks strictly increase`,
+      tickValues.every((value, index) => index === 0 || value > tickValues[index - 1]), tickValues);
+    check(`${name}@${width.viewport}: top tick covers the stacked maximum`,
+      tickValues.at(-1) >= max, { tickValues, max });
+    check(`${name}@${width.viewport}: count scale has two to four ticks`,
+      tickValues.length >= 2 && tickValues.length <= 4, tickValues);
+  } else {
+    check(`${name}@${width.viewport}: continuous tick labels have at most one decimal`,
+      result.yLabels.every((label) => /^\d+(?:\.\d)?$/.test(label)), result.yLabels);
+  }
+  check(`${name}@${width.viewport}: tallest stacked bar fits the plot`,
+    result.barCount === fixture.labels.length * fixture.series.length &&
+    result.plotHeight > 0 && result.tallestBarHeight <= result.plotHeight + 0.01, result);
+  if (fixture.expectedTicks) {
+    check(`${name}@${width.viewport}: exact nice ticks`,
+      JSON.stringify(tickValues) === JSON.stringify(fixture.expectedTicks), tickValues);
+  }
   const expectedTitleCount = fixture.labels.length * fixture.series.length;
   const hasEscapingSentinel = JSON.stringify(fixture).includes('<unsafe>') || JSON.stringify(fixture).includes('<cycling>');
   check(`${name}@${width.viewport}: exactly one accessible SVG`, result.svgCount === 1 &&
@@ -255,8 +308,7 @@ try {
     for (const [name, fixture] of Object.entries(fixtures)) {
       const result = await renderFixture(page, fixture, width, chartCss);
       assertFixture(name, fixture, result, width);
-      // Keep the requested diagnostics at four variants × three widths. The
-      // one-sport stack is a behavioural fixture, not a fifth screenshot set.
+      // Keep screenshots in /tmp, including the max-11 feelings harness.
       if (fixture.screenshot !== false) {
         await page.screenshot({ path: `/tmp/verify-insights-chart-${name}-${width.viewport}.png` });
       }
