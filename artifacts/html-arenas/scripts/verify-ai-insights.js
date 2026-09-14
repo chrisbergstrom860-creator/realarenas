@@ -2170,10 +2170,16 @@ async function verifyNoFixtureResidue(ids, clubIds) {
       if (question === 'How many sessions did I workout last week?') {
         const previousIndex = providerRecord.envelope.data.last12Weeks.weekly.findIndex((row) => row.relative === 'last_week');
         const currentIndex = providerRecord.envelope.data.last12Weeks.weekly.findIndex((row) => row.relative === 'this_week');
+        const previousWeek = providerRecord.envelope.data.last12Weeks.weekly[previousIndex];
+        const start = new Date(previousWeek.weekStart + 'T12:00:00Z');
+        const end = new Date(start);
+        end.setUTCDate(end.getUTCDate() + 6);
+        const label = (date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+        const expectedPeriod = `last week (${label(start)} – ${label(end)})`;
         check('last-week evidence uses the labelled previous week, never the current Monday bucket',
           result.body.evidence.some((item) => item.path === `last12Weeks.weekly.${previousIndex}.activityCount`) &&
           !result.body.evidence.some((item) => item.path === `last12Weeks.weekly.${currentIndex}.activityCount`) &&
-          result.body.answer.includes('last week (Aug 31 – Sep 6)'),
+          result.body.answer.includes(expectedPeriod),
           JSON.stringify(result.body));
       }
       if (question === 'How many sessions did I workout last month?') {
@@ -2390,7 +2396,7 @@ async function verifyNoFixtureResidue(ids, clubIds) {
             if (actual + 0.001 < minimum) failures.push({ selector, text: element.textContent.trim(), actual, minimum });
           });
         });
-        const root = document.querySelector('#ai-insights-body');
+        const root = document.querySelector('#tab-insights');
         const rect = root.getBoundingClientRect();
         const hero = document.querySelector('.ai2-hero').getBoundingClientRect();
         const copy = document.querySelector('.ai2-hero-copy').getBoundingClientRect();
@@ -2431,35 +2437,43 @@ async function verifyNoFixtureResidue(ids, clubIds) {
         JSON.stringify(visualAudit.failures));
     }
     await proPage.setViewportSize({ width: 1280, height: 900 });
-    await proPage.locator('#ai-insights-question').fill('How many activities have I logged?');
-    await proPage.locator('#ai-insights-form button[type="submit"]').click();
-    await proPage.locator('#ai-insights-thread').getByText('Your all-time activity count was 11.').waitFor();
+    // The mounted module owns generated label IDs.  These stable, container-
+    // scoped role hooks preserve each assertion without coupling a verifier
+    // to a particular mount’s generated identifier.
+    const proInsights = proPage.locator('#tab-insights');
+    const aiQuestion = proInsights.locator('[data-ai-role="question"]');
+    const aiForm = proInsights.locator('[data-ai-role="form"]');
+    const aiThread = proInsights.locator('[data-ai-role="thread"]');
+    const aiError = proInsights.locator('[data-ai-role="error"]');
+    await aiQuestion.fill('How many activities have I logged?');
+    await aiForm.locator('button[type="submit"]').click();
+    await aiThread.getByText('Your all-time activity count was 11.').waitFor();
     check('Pro browser renders the returned AI answer',
-      (await proPage.locator('#ai-insights-thread').innerText()).includes('Your all-time activity count was 11.'));
+      (await aiThread.innerText()).includes('Your all-time activity count was 11.'));
     check('successful Pro browser rendering leaves the inline error empty',
-      (await proPage.locator('#ai-insights-error').innerText()).trim() === '',
-      await proPage.locator('#ai-insights-error').innerText());
+      (await aiError.innerText()).trim() === '',
+      await aiError.innerText());
 
     const chipQuestion = 'How many rest days did I take last month?';
-    const threadChildrenBeforeChip = await proPage.locator('#ai-insights-thread > *').count();
-    await proPage.locator('.ai2-chip').filter({ hasText: chipQuestion }).click();
-    await proPage.locator('#ai-insights-thread').getByText(chipQuestion, { exact: true }).waitFor();
+    const threadChildrenBeforeChip = await aiThread.locator(':scope > *').count();
+    await proInsights.locator('.ai2-chip').filter({ hasText: chipQuestion }).click();
+    await aiThread.getByText(chipQuestion, { exact: true }).waitFor();
     await proPage.waitForFunction(
-      (before) => document.querySelectorAll('#ai-insights-thread > *').length >= before + 2,
+      (before) => document.querySelectorAll('#tab-insights [data-ai-role="thread"] > *').length >= before + 2,
       threadChildrenBeforeChip
     );
     check('suggested-question chip immediately submits and renders an answer',
-      await proPage.locator('#ai-insights-thread > *').count() >= threadChildrenBeforeChip + 2 &&
-      (await proPage.locator('#ai-insights-question').inputValue()) === '' &&
-      (await proPage.locator('#ai-insights-error').innerText()).trim() === '');
+      await aiThread.locator(':scope > *').count() >= threadChildrenBeforeChip + 2 &&
+      (await aiQuestion.inputValue()) === '' &&
+      (await aiError.innerText()).trim() === '');
     for (const dynamicQuestion of [
       'What percentage of my recorded training was cycling?',
       'Is my weightlifting frequency goal on track?'
     ]) {
-      await proPage.locator('.ai2-chip').filter({ hasText: dynamicQuestion }).click();
-      await proPage.locator('#ai-insights-thread').getByText(dynamicQuestion, { exact: true }).waitFor();
+      await proInsights.locator('.ai2-chip').filter({ hasText: dynamicQuestion }).click();
+      await aiThread.getByText(dynamicQuestion, { exact: true }).waitFor();
       check(`dynamic chip renders a verified answer: ${dynamicQuestion}`,
-        (await proPage.locator('#ai-insights-error').innerText()).trim() === '');
+        (await aiError.innerText()).trim() === '');
     }
 
     await proPage.route('**/api/profile/ai-insights', async (route) => {
@@ -2472,15 +2486,15 @@ async function verifyNoFixtureResidue(ids, clubIds) {
         body: JSON.stringify(body)
       });
     });
-    await proPage.locator('#ai-insights-question').fill('Show this answer through the plain-text fallback.');
-    await proPage.locator('#ai-insights-form button[type="submit"]').click();
-    const renderedAnswers = proPage.locator('#ai-insights-thread').getByText('Your all-time activity count was 11.', { exact: true });
+    await aiQuestion.fill('Show this answer through the plain-text fallback.');
+    await aiForm.locator('button[type="submit"]').click();
+    const renderedAnswers = aiThread.getByText('Your all-time activity count was 11.', { exact: true });
     await renderedAnswers.nth(1).waitFor();
     check('post-200 enhanced-render failure still displays the answer as plain text',
       await renderedAnswers.count() === 2);
     check('plain-text fallback leaves the inline error empty',
-      (await proPage.locator('#ai-insights-error').innerText()).trim() === '',
-      await proPage.locator('#ai-insights-error').innerText());
+      (await aiError.innerText()).trim() === '',
+      await aiError.innerText());
     check('Pro answer and fallback paths have zero console/page errors',
       proBrowserErrors.length === 0,
       proBrowserErrors.join(' | '));

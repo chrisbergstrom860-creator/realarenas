@@ -147,10 +147,61 @@ const insightResponseStub = (chart) => ({
   evidence: [{ path: chart.period === 'daily' ? 'last12Weeks.daily' : 'last12Weeks.weekly', value: null }],
   usage: { used: 1, remaining: 29, limit: 30, resetDate: '2026-10-01' }
 });
+// Insights is now a container-mounted module. Keep these selectors scoped to
+// its tab and accept either the stable classes/data hooks or the generated
+// per-mount ids (the module prefixes the legacy id names). The extracted
+// module's data-ai-role hooks are the primary contract; suffix forms
+// intentionally continue to match generated and legacy ids without making the
+// guard depend on document-global ids.
+const INSIGHTS_SCOPE_SELECTOR = '#tab-insights';
+const INSIGHTS_FORM_SELECTOR = [
+  'form.ai2-composer',
+  'form.ai-insights-form',
+  'form[data-ai-role="form"]',
+  'form[data-ai-insights-form]',
+  'form[id^="ai-insights-form"]',
+  'form[id$="ai-insights-form"]',
+  'form[id$="-form"]'
+].join(', ');
+const INSIGHTS_INPUT_SELECTOR = [
+  'textarea.ai2-textarea',
+  'textarea.ai-insights-question',
+  'textarea[data-ai-role="question"]',
+  'textarea[data-ai-insights-question]',
+  'textarea[id^="ai-insights-question"]',
+  'textarea[id$="ai-insights-question"]',
+  'textarea[id$="-question"]'
+].join(', ');
+const INSIGHTS_THREAD_SELECTOR = [
+  '[id^="ai-insights-thread"]',
+  '[id$="ai-insights-thread"]',
+  '[data-ai-role="thread"]',
+  '[data-ai-insights-thread]',
+  '.ai-insights-thread',
+  '.ai2-thread',
+  '[aria-live="polite"]',
+  '[id$="-thread"]'
+].join(', ');
+const INSIGHTS_BODY_SELECTOR = [
+  '[id^="ai-insights-body"]',
+  '[id$="ai-insights-body"]',
+  '[data-ai-role="body"]',
+  '[data-ai-insights-body]',
+  '.ai-insights-body',
+  '.ai2-body',
+  '[id$="-body"]'
+].join(', ');
+const scopedInsightsSelector = (selector) =>
+  selector.split(', ').map((part) => `${INSIGHTS_SCOPE_SELECTOR} ${part}`).join(', ');
+const INSIGHTS_BODY_SCOPED_SELECTOR = scopedInsightsSelector(INSIGHTS_BODY_SELECTOR);
+const INSIGHTS_THREAD_SVG_SELECTOR = INSIGHTS_THREAD_SELECTOR.split(', ')
+  .map((part) => `${INSIGHTS_SCOPE_SELECTOR} ${part} svg[aria-label*="Sessions per day"]`).join(', ');
 const insightsChartGeometryCheck = (titlePart, legendLabels) => ({
   name: titlePart + ' chart fits its answer card and preserves its legend',
   js: `(() => {
-    const svg = [...document.querySelectorAll('#ai-insights-thread svg[role="img"]')]
+    const panel = document.querySelector(${JSON.stringify(INSIGHTS_SCOPE_SELECTOR)});
+    const thread = panel && panel.querySelector(${JSON.stringify(INSIGHTS_THREAD_SELECTOR)});
+    const svg = [...(thread ? thread.querySelectorAll('svg[role="img"]') : [])]
       .find((node) => (node.getAttribute('aria-label') || '').includes(${JSON.stringify(titlePart)}));
     if (!svg) return { ok: false, missing: 'chart svg' };
     let box = svg.parentElement;
@@ -177,7 +228,8 @@ const insightsHeroTextVisibilityCheck = {
   name: 'full-bleed Insights hero keeps all meaningful text inside MAIN',
   js: `(() => {
     const main = document.querySelector('.main');
-    const nodes = [...document.querySelectorAll('.ai2-hero-title, .ai2-hero-body')];
+    const panel = document.querySelector(${JSON.stringify(INSIGHTS_SCOPE_SELECTOR)});
+    const nodes = panel ? [...panel.querySelectorAll('.ai2-hero-title, .ai2-hero-body')] : [];
     if (!main || nodes.length !== 2) return { ok: false, main: !!main, textNodes: nodes.length };
     const mainRect = main.getBoundingClientRect();
     const text = nodes.map((node) => ({ tag: node.tagName, text: node.textContent.trim().slice(0, 60), rect: node.getBoundingClientRect().toJSON() }));
@@ -657,26 +709,34 @@ const PAGES = [
       { name: 'insights-daily-chart',
         js: `(async () => {
           document.getElementById('htab-insights').click();
-          for (let i = 0; i < 40 && !document.getElementById('ai-insights-question'); i++) {
+          const panel = document.querySelector(${JSON.stringify(INSIGHTS_SCOPE_SELECTOR)});
+          const find = (selector) => panel && panel.querySelector(selector);
+          for (let i = 0; i < 40 && !find(${JSON.stringify(INSIGHTS_INPUT_SELECTOR)}); i++) {
             await new Promise((resolve) => setTimeout(resolve, 25));
           }
-          const input = document.getElementById('ai-insights-question');
+          const input = find(${JSON.stringify(INSIGHTS_INPUT_SELECTOR)});
           if (!input) throw new Error('Insights composer did not render from in-memory stub');
           input.value = 'Show my training day by day';
-          document.getElementById('ai-insights-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+          const form = find(${JSON.stringify(INSIGHTS_FORM_SELECTOR)});
+          if (!form) throw new Error('Insights form did not render from in-memory stub');
+          form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
         })()`,
-        waitFor: '#ai-insights-thread svg[aria-label*="Sessions per day"]',
-        surfaces: [{ name: 'Insights composer', sel: '#ai-insights-body', min: 1 }],
+        waitFor: INSIGHTS_THREAD_SVG_SELECTOR,
+        surfaces: [{ name: 'Insights composer', sel: INSIGHTS_BODY_SCOPED_SELECTOR, min: 1 }],
         checks: [
           insightsChartGeometryCheck('Sessions per day', []),
           insightsHeroTextVisibilityCheck
         ] },
       { name: 'insights-weekly-stacked-chart',
-        js: `(() => { const input = document.getElementById('ai-insights-question');
+        js: `(() => { const panel = document.querySelector(${JSON.stringify(INSIGHTS_SCOPE_SELECTOR)});
+          const input = panel && panel.querySelector(${JSON.stringify(INSIGHTS_INPUT_SELECTOR)});
+          const form = panel && panel.querySelector(${JSON.stringify(INSIGHTS_FORM_SELECTOR)});
+          if (!input || !form) throw new Error('Insights composer did not remain mounted between chart states');
           input.value = 'Show my stacked sessions by sport';
-          document.getElementById('ai-insights-form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+          form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
         })()`,
-        waitFor: '#ai-insights-thread svg[aria-label*="Sessions per week"]',
+        waitFor: INSIGHTS_THREAD_SELECTOR.split(', ')
+          .map((part) => `${INSIGHTS_SCOPE_SELECTOR} ${part} svg[aria-label*="Sessions per week"]`).join(', '),
         checks: [insightsChartGeometryCheck('Sessions per week', ['Running', 'Cycling', 'Weightlifting', 'Pickleball', 'Basketball', 'Hockey'])] },
       // Live my-profile modals. (modal-comment is dead prototype markup with
       // no opener anywhere — not a reachable state, so not measured.)

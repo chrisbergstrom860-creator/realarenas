@@ -1,19 +1,17 @@
-// Pure browser guard for the real inline AI Insights SVG renderer.
-// It deliberately loads the renderer out of arenas-my-profile.html rather
-// than copying it: fixed response fixtures exercise daily (84 slots),
+// Pure browser guard for the real container-mounted AI Insights SVG renderer.
+// It deliberately drives arenas-insights.js rather than copying the renderer:
+// fixed response fixtures exercise daily (84 slots),
 // stacked weekly, monthly, and six-series feelings output without any server,
 // login, or durable test data.
 //
-// Run only after the profile renderer is present:
+// Run only after arenas-insights.js is present:
 //   node scripts/verify-insights-chart.js
 //
 // Screenshots are diagnostic artifacts only and are written exclusively to
 // /tmp/verify-insights-chart-<variant>-<width>.png.
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { launchBrowser } from './lib/mobile-geometry.js';
+import { currentCss, currentModule, setProofPage } from './lib/insights-proof.js';
 
 const require = createRequire(import.meta.url);
 const { SPORTS } = require('../sports');
@@ -22,13 +20,10 @@ const {
   INSIGHTS_FEELING_SERIES
 } = require('../ai-insights');
 const SPORT_BY_ID = new Map(SPORTS.map((sport) => [sport.id, sport]));
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PROFILE = path.join(ROOT, 'html', 'arenas-my-profile.html');
-const THEME = fs.readFileSync(path.join(ROOT, 'html', 'arenas.css'), 'utf8').match(/:root\s*\{[^}]+\}/)[0];
 const WIDTHS = [
-  { viewport: 360, container: 298 },
-  { viewport: 414, container: 352 },
-  { viewport: 1280, container: 698 }
+  { viewport: 360 },
+  { viewport: 414 },
+  { viewport: 1280 }
 ];
 let failures = 0;
 let assertions = 0;
@@ -160,44 +155,15 @@ for (const [max, expectedTicks] of [[2, [0, 1, 2]], [47, [0, 20, 40, 60]]]) {
   };
 }
 
-function insightsScriptFromProfile(source) {
-  const marker = '// ── AI INSIGHTS TAB ──';
-  const markerIndex = source.indexOf(marker);
-  if (markerIndex < 0) throw new Error('AI Insights script marker was not found');
-  const opening = source.lastIndexOf('<script', markerIndex);
-  const start = source.indexOf('>', opening) + 1;
-  const end = source.indexOf('</script>', markerIndex);
-  if (opening < 0 || start < 1 || end < 0) throw new Error('AI Insights script tags were not found');
-  const script = source.slice(start, end);
-  if (!/function\s+renderInsightsChart\s*\(/.test(script)) {
-    throw new Error('renderInsightsChart must be a named client function in the AI Insights script');
-  }
-  const close = script.lastIndexOf('})();');
-  if (close < 0) throw new Error('AI Insights closure ending was not found');
-  return script.slice(0, close) +
-    'window.__verifyInsightsChartRenderer = renderInsightsChart;\n' +
-    script.slice(close);
-}
-
-function chartCssFromProfile(source) {
-  const start = source.indexOf('.ai-chart {');
-  const end = source.indexOf('\n      `;', start);
-  if (start < 0 || end < 0) throw new Error('AI Insights chart CSS was not found in the profile source');
-  return source.slice(start, end);
-}
-
-async function renderFixture(page, fixture, width, chartCss) {
-  await page.setViewportSize({ width: width.viewport, height: 640 });
-  await page.setContent(`<!doctype html><html><head><style>
-    ${THEME}
-    body { margin:0; padding:24px 0; font-family:Arial,sans-serif; }
-    #host { width:${width.container}px; margin:0 auto; min-width:0; }
-    ${chartCss}
-  </style></head><body><div id="host"></div></body></html>`);
-  const html = await page.evaluate((chart) => window.__verifyInsightsChartRenderer(chart), fixture);
-  await page.evaluate((chartHtml) => { document.getElementById('host').innerHTML = chartHtml; }, html);
+async function renderFixture(page, fixture, width, css, moduleSource) {
+  await setProofPage(page, { css, moduleSource, width: width.viewport });
+  await page.evaluate((chart) => { window.__insightsProofFixture = { chart }; }, fixture);
+  const hostLocator = page.locator('#tab-insights');
+  await hostLocator.locator('textarea').fill('Render this resolved chart.');
+  await hostLocator.locator('form').evaluate((form) => form.requestSubmit());
+  await hostLocator.locator('svg[role="img"]').waitFor();
   const report = await page.evaluate((fixture) => {
-    const host = document.getElementById('host');
+    const host = document.getElementById('tab-insights');
     const svg = host.querySelector('svg[role="img"]');
     const colors = [...host.querySelectorAll('[fill], [style*="fill"]')].flatMap((node) => {
       const values = [node.getAttribute('fill'), node.style.fill];
@@ -232,10 +198,15 @@ async function renderFixture(page, fixture, width, chartCss) {
       injectedNodes: [...host.querySelectorAll('unsafe, cycling, script, img')].map((node) => node.tagName.toLowerCase()),
       legendRole: legend && legend.getAttribute('role'),
       legendItems,
-      legendRows: new Set(legendItems.map((rect) => Math.round(rect.top))).size
+      legendRows: new Set(legendItems.map((rect) => Math.round(rect.top))).size,
+      // outerHTML intentionally normalizes '<' inside ARIA attributes.  Test
+      // the text-node serialization separately so a safe aria label does not
+      // look like an escaping regression merely because of DOM serialization.
+      escapedText: [...host.querySelectorAll('.ai-chart-title, .ai-chart-caption, .ai-chart-legend-item, .ai-chart-svg title')]
+        .map((node) => node.innerHTML).join('\n')
     };
   }, fixture);
-  return { ...report, rendererHtml: html };
+  return report;
 }
 
 function assertFixture(name, fixture, result, width) {
@@ -282,8 +253,8 @@ function assertFixture(name, fixture, result, width) {
     fixture.series.every((series) => result.colors.includes(series.color.toUpperCase())),
     { expected: fixture.series.map((series) => series.color), actual: [...new Set(result.colors)] });
   check(`${name}@${width.viewport}: all renderer text is escaped`,
-    !result.rendererHtml.includes('<unsafe>') && !result.rendererHtml.includes('<cycling>') &&
-    (!hasEscapingSentinel || (result.rendererHtml.includes('&lt;unsafe&gt;') && result.rendererHtml.includes('&lt;cycling&gt;'))) &&
+    !result.escapedText.includes('<unsafe>') && !result.escapedText.includes('<cycling>') &&
+    (!hasEscapingSentinel || (result.escapedText.includes('&lt;unsafe&gt;') && result.escapedText.includes('&lt;cycling&gt;'))) &&
     result.injectedNodes.length === 0, result);
   check(`${name}@${width.viewport}: stacked legends expose every series and multi-series legends wrap on mobile`,
     !(fixture.expectLegend || fixture.series.length > 1) ||
@@ -298,15 +269,13 @@ function assertFixture(name, fixture, result, width) {
 
 let browser;
 try {
-  const source = fs.readFileSync(PROFILE, 'utf8');
-  const script = insightsScriptFromProfile(source);
-  const chartCss = chartCssFromProfile(source);
+  const css = currentCss();
+  const moduleSource = currentModule();
   browser = await launchBrowser();
   const page = await browser.newPage();
-  await page.addScriptTag({ content: script });
   for (const width of WIDTHS) {
     for (const [name, fixture] of Object.entries(fixtures)) {
-      const result = await renderFixture(page, fixture, width, chartCss);
+      const result = await renderFixture(page, fixture, width, css, moduleSource);
       assertFixture(name, fixture, result, width);
       // Keep screenshots in /tmp, including the max-11 feelings harness.
       if (fixture.screenshot !== false) {

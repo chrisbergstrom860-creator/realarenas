@@ -582,6 +582,11 @@ app.get(['/html/arenas-stack.js', '/arenas-stack.js'], (req, res) => {
 app.get(['/html/arenas-time.js', '/arenas-time.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-time.js'));
 });
+// Shared, container-mounted AI Insights UI. Deliberately explicit rather than
+// express.static so it follows the existing dual-path shared-asset convention.
+app.get(['/html/arenas-insights.js', '/arenas-insights.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-insights.js'));
+});
 // Shared four-week activity-dot grid renderer (public + owner profiles).
 app.get(['/html/arenas-activity-grid.js', '/arenas-activity-grid.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-activity-grid.js'));
