@@ -147,6 +147,24 @@ const insightResponseStub = (chart) => ({
   evidence: [{ path: chart.period === 'daily' ? 'last12Weeks.daily' : 'last12Weeks.weekly', value: null }],
   usage: { used: 1, remaining: 29, limit: 30, resetDate: '2026-10-01' }
 });
+const setupInsightsStubs = async (page) => {
+  await page.route(/\/html\/api\/profile\/ai-insights\/status(?:[?#]|$)/, async (route) => {
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({
+      used: 0, remaining: 30, limit: 30, resetDate: '2026-10-01'
+    }) });
+  });
+  await page.route(/\/html\/api\/profile\/ai-insights\/hero-stats(?:[?#]|$)/, async (route) => {
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({
+      stats: [], suggestions: []
+    }) });
+  });
+  await page.route(/\/html\/api\/profile\/ai-insights(?:[?#]|$)/, async (route) => {
+    const post = route.request().postData() || '';
+    const question = (() => { try { return JSON.parse(post).question || ''; } catch (_) { return ''; } })();
+    const chart = /stacked/i.test(question) ? weeklyStackedChartStub : dailyChartStub;
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(insightResponseStub(chart)) });
+  });
+};
 // Insights is now a container-mounted module. Keep these selectors scoped to
 // its tab and accept either the stable classes/data hooks or the generated
 // per-mount ids (the module prefixes the legacy id names). The extracted
@@ -240,6 +258,145 @@ const insightsHeroTextVisibilityCheck = {
     };
   })()`
 };
+const AI_SHEET_ROOT = '.ai-sheet-backdrop > .ai-sheet';
+const AI_SHEET_THREAD = `${AI_SHEET_ROOT} [data-ai-role="thread"]`;
+const AI_SHEET_DAILY_CHART = `${AI_SHEET_THREAD} svg[aria-label*="Sessions per day"]`;
+const sheetBackdropCheck = {
+  name: 'AI sheet backdrop covers the viewport and blocks outside-sheet hit tests',
+  js: `(() => {
+    const backdrop = document.querySelector('.ai-sheet-backdrop');
+    const sheet = document.querySelector(${JSON.stringify(AI_SHEET_ROOT)});
+    if (!backdrop || !sheet) return { ok: false, missing: !backdrop ? 'backdrop' : 'sheet' };
+    const br = backdrop.getBoundingClientRect();
+    const sr = sheet.getBoundingClientRect();
+    const coversViewport = br.left <= 1 && br.top <= 1
+      && br.right >= innerWidth - 1 && br.bottom >= innerHeight - 1;
+    const candidates = [[1, 1], [innerWidth - 2, 1], [1, innerHeight - 2], [innerWidth - 2, innerHeight - 2]];
+    const point = candidates.find(([x, y]) => !(x >= sr.left && x <= sr.right && y >= sr.top && y <= sr.bottom));
+    const hit = point ? document.elementFromPoint(point[0], point[1]) : null;
+    return {
+      ok: coversViewport && !!point && hit === backdrop,
+      backdrop: br.toJSON(), sheet: sr.toJSON(), point, hit: hit && (hit.id || hit.className || hit.tagName)
+    };
+  })()`
+};
+const sheetBehaviorCheck = {
+  name: 'AI sheet has a real backdrop, locked body, composer, and cyclic Tab focus',
+  js: `(() => {
+    const backdrop = document.querySelector('.ai-sheet-backdrop');
+    const sheet = document.querySelector(${JSON.stringify(AI_SHEET_ROOT)});
+    const input = sheet && sheet.querySelector('[data-ai-role="question"]');
+    const close = sheet && sheet.querySelector('.ai-sheet-close');
+    const body = sheet && sheet.querySelector('.ai-sheet-body');
+    const chart = sheet && sheet.querySelector(${JSON.stringify(AI_SHEET_DAILY_CHART)});
+    const focusables = sheet ? [...sheet.querySelectorAll('button, input, textarea, select, [href], [tabindex]')]
+      .filter((el) => !el.disabled && el.getClientRects().length && el.getAttribute('tabindex') !== '-1') : [];
+    let shiftWrap = false, forwardWrap = false;
+    if (focusables.length > 1) {
+      focusables[0].focus();
+      focusables[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+      shiftWrap = document.activeElement === focusables[focusables.length - 1];
+      focusables[focusables.length - 1].focus();
+      focusables[focusables.length - 1].dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+      forwardWrap = document.activeElement === focusables[0];
+    }
+    const bodyLocked = document.body.style.overflow === 'hidden';
+    const bodyRect = body && body.getBoundingClientRect();
+    const chartRect = chart && chart.getBoundingClientRect();
+    const chartFitsBody = !!body && !!chart && !!bodyRect && !!chartRect
+      && body.scrollWidth <= body.clientWidth + 1
+      && chartRect.left >= bodyRect.left - 1 && chartRect.right <= bodyRect.right + 1;
+    return {
+      ok: !!backdrop && !!sheet && backdrop.classList.contains('ai-sheet-backdrop')
+        && backdrop.contains(sheet) && sheet.getAttribute('aria-modal') === 'true'
+        && !!input && !!close && bodyLocked && focusables.length >= 2 && shiftWrap && forwardWrap
+        && chartFitsBody,
+      backdrop: !!backdrop, sheet: !!sheet, composer: !!input, close: !!close,
+      bodyOverflow: document.body.style.overflow, focusables: focusables.length, shiftWrap, forwardWrap,
+      chartFitsBody, bodyScrollWidth: body && body.scrollWidth, bodyClientWidth: body && body.clientWidth
+    };
+  })()`
+};
+const sheetCloseFocusCheck = {
+  name: 'closing the AI sheet restores trigger focus and body scrolling',
+  js: `(() => {
+    const trigger = document.querySelector('.bn-fab-ai');
+    const backdrop = document.querySelector('.ai-sheet-backdrop');
+    return {
+      ok: !document.querySelector('.ai-sheet-backdrop')
+        && document.body.style.overflow !== 'hidden'
+        && !!trigger && document.activeElement === trigger,
+      hadBackdrop: !!backdrop, bodyOverflowAfter: document.body.style.overflow,
+      focused: document.activeElement && document.activeElement.className
+    };
+  })()`
+};
+const sheetRetainsThreadCheck = {
+  name: 'reopening the AI sheet retains its answered chart thread',
+  js: `(() => {
+    const sheet = document.querySelector(${JSON.stringify(AI_SHEET_ROOT)});
+    const thread = sheet && sheet.querySelector('[data-ai-role="thread"]');
+    const text = thread ? thread.textContent : '';
+    const chart = thread && thread.querySelector('svg[aria-label*="Sessions per day"]');
+    return { ok: !!sheet && !!thread && !!chart && text.includes('recorded activity count was 42'), text: text.slice(0, 180), chart: !!chart };
+  })()`
+};
+const composerVisualViewportCheck = {
+  name: 'focused composer stays inside the reduced visual viewport',
+  js: `(() => {
+    const sheet = document.querySelector(${JSON.stringify(AI_SHEET_ROOT)});
+    const input = sheet && sheet.querySelector('[data-ai-role="question"]');
+    const form = sheet && sheet.querySelector('[data-ai-role="form"]');
+    const vv = window.visualViewport;
+    const top = vv ? vv.offsetTop : 0;
+    const bottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+    const target = form || input;
+    if (!target) return { ok: false, missing: 'composer' };
+    const r = target.getBoundingClientRect();
+    return {
+      ok: !!vv && document.activeElement === input && r.bottom <= bottom + 2 && r.top >= top - 2,
+      active: document.activeElement === input, rect: r.toJSON(),
+      visualViewport: vv ? { top, bottom, height: vv.height } : null
+    };
+  })()`
+};
+const feedDesktopSheetCheck = {
+  name: 'desktop feed does not create the mobile AI sheet',
+  desktopOnly: true,
+  js: `(() => ({ ok: !document.querySelector('.ai-sheet-backdrop'), backdrops: document.querySelectorAll('.ai-sheet-backdrop').length }))()`
+};
+const freeProfileNoAiCheck = {
+  name: 'free filler profile has no AI entitlement or AI FAB',
+  js: `(() => {
+    const data = window.ARENAS_DATA || {};
+    return {
+      ok: data.gating?.aiInsightsPro !== true && !document.querySelector('.bn-fab-ai')
+        && !document.querySelector('.ai-sheet-backdrop'),
+      aiInsightsPro: data.gating?.aiInsightsPro, fab: !!document.querySelector('.bn-fab-ai'),
+      sheet: !!document.querySelector('.ai-sheet-backdrop')
+    };
+  })()`
+};
+const pwaCardClearanceCheck = {
+  name: 'real beforeinstallprompt PWA card clears both FABs',
+  js: `(() => {
+    const card = document.querySelector('#arenas-install-card');
+    const cardRect = card && card.getBoundingClientRect();
+    const fabs = [...document.querySelectorAll('.bn-fab, .bn-fab-ai')].filter((el) => {
+      const r = el.getBoundingClientRect(), s = getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden';
+    });
+    const intersects = (a, b) => a && b && Math.min(a.right, b.right) > Math.max(a.left, b.left)
+      && Math.min(a.bottom, b.bottom) > Math.max(a.top, b.top);
+    return {
+      ok: !!card && !!cardRect && cardRect.left >= -1 && cardRect.right <= innerWidth + 1
+        && cardRect.top >= -1 && cardRect.bottom <= innerHeight + 1
+        && fabs.every((fab) => !intersects(cardRect, fab.getBoundingClientRect())),
+      card: cardRect ? cardRect.toJSON() : null,
+      fabs: fabs.map((fab) => fab.getBoundingClientRect().toJSON())
+    };
+  })()`
+};
 
 // ── seed (dense) ──
 let browser = null;
@@ -249,6 +406,24 @@ await login('creator'); await login('member'); await login('f6');
 const C = users.creator.id, M = users.member.id;
 const F = [...Array(8)].map((_, i) => users['f' + i].id);
 console.log('MANIFEST users:', JSON.stringify(Object.fromEntries(Object.entries(users).map(([k, v]) => [k, v.id]))));
+
+// The geometry guard must exercise the same server-resolved entitlement that
+// real users receive. Track each paid row immediately so cleanup removes it
+// before deleting its owning auth user, even after a partial-seed failure.
+const makeProSubscription = (ownerId, label) => {
+  const suffix = Date.now().toString(36) + '_' + label;
+  const stripeSubscriptionId = 'sub_geo_' + suffix;
+  return {
+    owner_type: 'user', owner_id: ownerId, plan: 'pro', status: 'active',
+    stripe_customer_id: 'cus_geo_' + suffix,
+    stripe_subscription_id: stripeSubscriptionId,
+    ever_paid: true, last_paid_subscription_id: stripeSubscriptionId,
+    cancel_at_period_end: false
+  };
+};
+const proSubscription = await ins('subscriptions', makeProSubscription(C, 'creator'));
+const memberProSubscription = await ins('subscriptions', makeProSubscription(M, 'member'));
+console.log('MANIFEST Pro subscriptions:', proSubscription?.id, memberProSubscription?.id);
 
 const LONG = 'Late Autumn Ultra-Distance Trail Running Consistency and Elevation Gain Challenge';
 const club = await ins('clubs', {
@@ -401,12 +576,12 @@ console.log('MANIFEST club:', club.id, 'challenges:', JSON.stringify(CHALLENGES)
 const htab = (id) => `document.getElementById('htab-${id}').click()`;
 const closeModals = `document.querySelectorAll('.modal-overlay').forEach((m) => m.classList.remove('open'));`;
 const closeOverlays = `['create-challenge-overlay','challenge-leaderboard-overlay','invite-manager-overlay','challenge-delete-overlay'].forEach((i) => window.arenasOverlay && arenasOverlay.close(i));`;
-const athleteNav = (activeLabel = null, fab = true) => ({
-  itemCount: 6, activeCount: activeLabel ? 1 : 0, activeLabel, fab
+const athleteNav = (activeLabel = null, log = true, ai = log) => ({
+  itemCount: 6, activeCount: activeLabel ? 1 : 0, activeLabel, log, ai
 });
-const dashboardNav = { itemCount: 5, activeCount: 1, activeLabel: 'Overview', fab: false };
-const memberNav = { itemCount: 5, activeCount: 1, activeLabel: 'Overview', fab: false };
-const memberLeaderboardNav = { itemCount: 4, activeCount: 1, activeLabel: 'Ranks', fab: true };
+const dashboardNav = { itemCount: 5, activeCount: 1, activeLabel: 'Overview', log: false, ai: false };
+const memberNav = { itemCount: 5, activeCount: 1, activeLabel: 'Overview', log: false, ai: false };
+const memberLeaderboardNav = { itemCount: 4, activeCount: 1, activeLabel: 'Ranks', log: true, ai: false };
 // Contract with the Challenges redesign: the band has one stable hook so its
 // presence can be checked without coupling the guard to illustration markup.
 // Accept the data hook as well so a class-name-only styling refactor cannot
@@ -468,12 +643,85 @@ const heroFullBleedState = (selector = '.ch-hero') => ({
 });
 const PAGES = [
   { user: 'creator', name: 'feed', path: '/feed', waitFor: '.feed-item-wrap', root: 'body', bottomNav: athleteNav('Feed'),
+    setup: setupInsightsStubs,
+    screenshot: { path: '/tmp/ask-ai-feed-both-fab-{width}.png', widths: [360, 414] },
+    checks: [feedDesktopSheetCheck],
+    // The feed hero's responsive picture intentionally paints beyond its
+    // visual wrapper; preserve that existing baseline exception for every
+    // newly-added feed state without exempting any sheet content.
+    ignoreClipping: ['.feed-banner-visual picture', '.feed-banner-visual img'],
     surfaces: [
       { name: 'feed items', sel: '.feed-items', min: 3 },
       // The feed rail stacks beneath the feed on phones. Your week, streak,
       // and quick actions are always present; Suggested athletes is optional
       // when there are no eligible users.
       { name: 'right rail (side-col)', sel: '.side-col', min: 3, max: 4, mobileOnly: true }
+    ],
+    steps: [
+      { name: 'ai-sheet-answer-chart',
+        js: `(async () => {
+          const fab = document.querySelector('.bn-fab-ai');
+          if (!fab) throw new Error('AI FAB did not render for the Pro creator');
+          fab.focus(); fab.click();
+          for (let i = 0; i < 80 && !document.querySelector(${JSON.stringify(AI_SHEET_ROOT + ' [data-ai-role="question"]')}); i++) {
+            await new Promise((resolve) => setTimeout(resolve, 25));
+          }
+          const sheet = document.querySelector(${JSON.stringify(AI_SHEET_ROOT)});
+          const input = sheet && sheet.querySelector('[data-ai-role="question"]');
+          const form = sheet && sheet.querySelector('[data-ai-role="form"]');
+          if (!input || !form) throw new Error('AI sheet composer did not render');
+          input.value = 'Show my training day by day';
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        })()`,
+        waitFor: AI_SHEET_DAILY_CHART,
+        root: AI_SHEET_ROOT,
+        screenshot: {
+          path: '/tmp/ask-ai-sheet-answer-chart-{width}.png',
+          widths: [360, 414], scrollSelector: AI_SHEET_DAILY_CHART
+        },
+        checks: [sheetBehaviorCheck, sheetBackdropCheck], mobileOnly: true },
+      { name: 'ai-sheet-close-focus',
+        js: `document.querySelector(${JSON.stringify(AI_SHEET_ROOT + ' .ai-sheet-close')}).click()`,
+        checks: [sheetCloseFocusCheck], mobileOnly: true },
+      { name: 'ai-sheet-reopen-retain-thread',
+        js: `(async () => {
+          const fab = document.querySelector('.bn-fab-ai');
+          if (!fab) throw new Error('AI FAB disappeared after sheet close');
+          fab.click();
+          for (let i = 0; i < 80 && !document.querySelector(${JSON.stringify(AI_SHEET_ROOT + ' [data-ai-role="thread"]')}); i++) {
+            await new Promise((resolve) => setTimeout(resolve, 25));
+          }
+        })()`,
+        waitFor: AI_SHEET_ROOT,
+        root: AI_SHEET_ROOT,
+        checks: [sheetRetainsThreadCheck], mobileOnly: true },
+      { name: 'ai-sheet-keyboard',
+        viewport: { height: 420 },
+        js: `(() => {
+          const input = document.querySelector(${JSON.stringify(AI_SHEET_ROOT + ' [data-ai-role="question"]')});
+          if (!input) throw new Error('AI sheet composer missing at reduced viewport');
+          input.focus();
+          window.dispatchEvent(new Event('resize'));
+        })()`,
+        root: AI_SHEET_ROOT,
+        checks: [composerVisualViewportCheck, sheetBackdropCheck],
+        screenshot: { path: '/tmp/ask-ai-keyboard-420-{width}.png', widths: [360, 414] }, mobileOnly: true },
+      { name: 'ai-sheet-close-before-pwa',
+        js: `(() => {
+          const close = document.querySelector(${JSON.stringify(AI_SHEET_ROOT + ' .ai-sheet-close')});
+          if (close) close.click();
+        })()`, mobileOnly: true },
+      { name: 'pwa-beforeinstallprompt',
+        js: `(() => {
+          const event = new Event('beforeinstallprompt', { bubbles: false, cancelable: true });
+          event.prompt = () => Promise.resolve();
+          event.userChoice = Promise.resolve({ outcome: 'dismissed' });
+          window.dispatchEvent(event);
+        })()`,
+        waitFor: '#arenas-install-card',
+        checks: [pwaCardClearanceCheck],
+        screenshot: { path: '/tmp/ask-ai-pwa-card-{width}.png', widths: [360, 414] }, mobileOnly: true }
     ] },
   { user: 'creator', name: 'challenges', path: '/challenges', waitFor: '#tab-mine .challenge-card', root: 'body', bottomNav: athleteNav('Challenges'),
     surfaces: [{ name: 'mine cards', sel: '#tab-mine', min: 2 }],
@@ -504,7 +752,7 @@ const PAGES = [
   // f6 is deliberately never added to a challenge: this is the permanent
   // empty-state identity, while the other seeded users exercise populated
   // cards and modal states above.
-  { user: 'f6', name: 'challenges-empty', path: '/challenges', waitFor: '#tab-mine .ch-why-join, #tab-mine [data-challenge-why-join]', root: 'body', bottomNav: athleteNav('Challenges'),
+  { user: 'f6', name: 'challenges-empty', path: '/challenges', waitFor: '#tab-mine .ch-why-join, #tab-mine [data-challenge-why-join]', root: 'body', bottomNav: athleteNav('Challenges', true, false),
     surfaces: [{ name: 'empty mine with Why-join band', sel: '#tab-mine', min: 1 }],
     checks: [
       heroFullBleedState(),
@@ -618,54 +866,10 @@ const PAGES = [
         waitFor: '#hpw-modal-body', root: '#hpw-modal-overlay' }
     ] },
   { user: 'creator', name: 'profile', path: '/profile', waitFor: '.owner-activity-grid .activity-grid-row', root: 'body', bottomNav: athleteNav('Profile'),
-    // The general geometry fixture deliberately has no paid subscription.
-    // Intercept only this page's browser requests so Insights answers (including
-    // both chart variants) are measured without changing seeded entitlement.
-    setup: async (page) => {
-      // addInitScript must use an accessor, not a one-time object mutation:
-      // the server's inline `window.ARENAS_DATA = …` assignment happens after
-      // init scripts and otherwise replaces the override. This is a second,
-      // browser-side safety net for the navigation-response transform below.
-      await page.addInitScript(() => {
-        let arenasData;
-        Object.defineProperty(window, 'ARENAS_DATA', {
-          configurable: true,
-          get: () => arenasData,
-          set: (value) => {
-            if (value && typeof value === 'object') {
-              value.gating = { ...(value.gating || {}), aiInsightsPro: true };
-            }
-            arenasData = value;
-          }
-        });
-      });
-      await page.route(/\/html\/profile(?:[?#]|$)/, async (route) => {
-        const response = await route.fetch();
-        const html = await response.text();
-        await route.fulfill({
-          response,
-          // Whitespace-tolerant so this remains effective if the server's
-          // JSON serializer formatting changes.
-          body: html.replace(/("aiInsightsPro"\s*:\s*)false\b/g, '$1true')
-        });
-      });
-      await page.route(/\/html\/api\/profile\/ai-insights\/status(?:[?#]|$)/, async (route) => {
-        await route.fulfill({ contentType: 'application/json', body: JSON.stringify({
-          used: 0, remaining: 30, limit: 30, resetDate: '2026-10-01'
-        }) });
-      });
-      await page.route(/\/html\/api\/profile\/ai-insights\/hero-stats(?:[?#]|$)/, async (route) => {
-        await route.fulfill({ contentType: 'application/json', body: JSON.stringify({
-          stats: [], suggestions: []
-        }) });
-      });
-      await page.route(/\/html\/api\/profile\/ai-insights(?:[?#]|$)/, async (route) => {
-        const post = route.request().postData() || '';
-        const question = (() => { try { return JSON.parse(post).question || ''; } catch (_) { return ''; } })();
-        const chart = /stacked/i.test(question) ? weeklyStackedChartStub : dailyChartStub;
-        await route.fulfill({ contentType: 'application/json', body: JSON.stringify(insightResponseStub(chart)) });
-      });
-    },
+    // Creator has a real active Individual Pro subscription seeded above.
+    // Intercept only the Insights data requests so both chart variants are
+    // deterministic while entitlement remains server-resolved.
+    setup: setupInsightsStubs,
     // The 📷 edit badge deliberately sits ON the avatar circle (desktop
     // parity) — exempt the wrap from the text-overlap rule only.
     ignoreOverlap: ['.hero-av-wrap'],
@@ -754,6 +958,13 @@ const PAGES = [
       { name: 'modal-goal', js: `window.arenasOverlay.close('modal-delete-account'); ` + closeModals + `window.openGoalForm()`,
         waitFor: '#modal-goal .modal-close', root: '#modal-goal' }
     ] },
+  { user: 'f6', name: 'profile-free-no-ai', path: '/profile',
+    waitFor: '.owner-activity-grid .activity-grid-row', root: 'body',
+    bottomNav: athleteNav('Profile', true, false),
+    // Same intentionally overlaid avatar edit badge as the Pro profile.
+    ignoreOverlap: ['.hero-av-wrap'],
+    surfaces: [{ name: 'free profile overview', sel: '#tab-overview', min: 1 }],
+    checks: [freeProfileNoAiCheck] },
   { user: 'member', name: 'athlete-profile', path: '/athletes/' + C, bottomNav: athleteNav(),
     waitFor: '.activity-overview-split [data-activity-grid]', root: 'body',
     surfaces: [
@@ -987,6 +1198,7 @@ console.log('\nPER-PAGE SUMMARY:', JSON.stringify(summary, null, 1));
       for (const t of ['activities', 'achievements', 'goals', 'notifications', 'memberships', 'posts']) {
         await del(t + ' by user', admin.from(t).delete().eq('user_id', u));
       }
+      await del('subscriptions by owner', admin.from('subscriptions').delete().eq('owner_id', u));
       await del('follows', admin.from('follows').delete().or(`follower_id.eq.${u},following_id.eq.${u}`));
       await del('notifications by actor', admin.from('notifications').delete().eq('actor_id', u));
     }

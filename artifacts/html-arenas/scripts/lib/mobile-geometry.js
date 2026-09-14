@@ -29,14 +29,17 @@ export async function launchBrowser() {
 // expected obstruction position when a FAB is missing: a missing FAB must not
 // turn the clearance assertion into a pass. That makes the pre-FAB layout a
 // useful baseline (its old 76px padding leaves content under the expected
-// FAB), rather than an artificial green run.
+// FAB), rather than an artificial green run. `log` and `ai` are independent
+// expectations because the two fixed actions have different entitlements and
+// are deliberately placed on opposite sides of the phone.
 export function bottomNavExpr(expected) {
   return `(() => {
   const T = 1.5;
   const EPS = 0.01;
   const E = ${JSON.stringify(expected)};
   const nav = document.querySelector('.bottom-nav');
-  const fab = document.querySelector('.bn-fab');
+  const logFab = document.querySelector('.bn-fab-log, .bn-fab:not(.bn-fab-ai)');
+  const aiFab = document.querySelector('.bn-fab-ai');
   const visible = (el) => {
     if (!el) return false;
     const r = el.getBoundingClientRect();
@@ -55,12 +58,16 @@ export function bottomNavExpr(expected) {
   const safe = safeInset();
   const desktop = window.innerWidth > 768;
   const navVisible = visible(nav);
-  const fabVisible = visible(fab);
+  const logVisible = visible(logFab);
+  const aiVisible = visible(aiFab);
+  const expectedLog = E.log !== undefined ? !!E.log : !!E.fab;
+  const expectedAi = E.ai !== undefined ? !!E.ai : false;
+  const expectedAnyFab = expectedLog || expectedAi;
   const out = {
     ok: true,
     desktop,
     nav: null,
-    fab: null,
+    fabs: { log: null, ai: null },
     items: [],
     labels: [],
     active: [],
@@ -74,8 +81,16 @@ export function bottomNavExpr(expected) {
   if (desktop) {
     add('desktop bottom nav is not rendered', !navVisible,
       nav ? { display: getComputedStyle(nav).display, rect: nav.getBoundingClientRect().toJSON() } : { missing: true });
-    add('desktop FAB is not rendered', !fabVisible,
-      fab ? { display: getComputedStyle(fab).display, rect: fab.getBoundingClientRect().toJSON() } : { missing: true });
+    // The server cannot know the viewport at render time. Desktop therefore
+    // checks visibility rather than requiring the optional elements to be
+    // absent from the DOM. This catches a desktop CSS regression without
+    // coupling the guard to response markup.
+    add('desktop log FAB is not visible', !logVisible,
+      logFab ? { display: getComputedStyle(logFab).display, rect: logFab.getBoundingClientRect().toJSON() } : { missing: true });
+    add('desktop AI FAB is not visible', !aiVisible,
+      aiFab ? { display: getComputedStyle(aiFab).display, rect: aiFab.getBoundingClientRect().toJSON() } : { missing: true });
+    add('desktop AI sheet has not been created', !document.querySelector('.ai-sheet-backdrop'),
+      { backdropCount: document.querySelectorAll('.ai-sheet-backdrop').length });
     return out;
   }
 
@@ -139,29 +154,72 @@ export function bottomNavExpr(expected) {
       && (!E.activeLabel || (active.length === 1 && out.active[0].label === E.activeLabel)),
     { expected: E.activeCount, expectedLabel: E.activeLabel || null, actual: active.length, active: out.active });
   add('FAB class is present only for FAB variants',
-    !!nav && nav.classList.contains('bn-has-fab') === !!E.fab,
-    nav ? { expected: !!E.fab, actual: nav.classList.contains('bn-has-fab') } : { missing: true });
+    !!nav && nav.classList.contains('bn-has-fab') === expectedAnyFab,
+    nav ? { expected: expectedAnyFab, actual: nav.classList.contains('bn-has-fab') } : { missing: true });
 
   const expectedFabTop = window.innerHeight - (60 + 12 + 52 + safe);
   const expectedBarTop = window.innerHeight - (60 + safe);
-  const fabRect = fab && fab.getBoundingClientRect();
-  out.fab = fab ? {
-    visible: fabVisible,
-    rect: fabRect ? { left: fabRect.left, top: fabRect.top, right: fabRect.right, bottom: fabRect.bottom,
-      width: fabRect.width, height: fabRect.height } : null
-  } : null;
-  if (E.fab) {
-    add('FAB exists, is at least 48x48px, and is fully inside the viewport',
-      !!fab && fabVisible && fabRect.width >= 48 - EPS && fabRect.height >= 48 - EPS
-        && fabRect.left >= -T && fabRect.right <= window.innerWidth + T
-        && fabRect.top >= -T && fabRect.bottom <= window.innerHeight + T,
-      out.fab || { missing: true });
-    add('FAB does not overlap the bottom-nav box',
-      !!fab && !!nav && fabRect.bottom <= navRect.top + T,
-      fab && nav ? { fabBottom: fabRect.bottom, navTop: navRect.top } : { fab: !!fab, nav: !!nav });
-  } else {
-    add('no-FAB page has no FAB element in the DOM', !fab,
-      fab ? { display: getComputedStyle(fab).display, rect: fabRect.toJSON() } : { missing: true });
+  const rectDetails = (el, isVisible) => {
+    const r = el && el.getBoundingClientRect();
+    return el ? {
+      visible: isVisible,
+      rect: r ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom,
+        width: r.width, height: r.height } : null
+    } : null;
+  };
+  out.fabs = { log: rectDetails(logFab, logVisible), ai: rectDetails(aiFab, aiVisible) };
+  const checkFab = (name, el, isVisible, expected) => {
+    const rect = el && el.getBoundingClientRect();
+    if (!expected) {
+      // At mobile widths the server knows this is an excluded page and must
+      // not emit the action at all. Desktop intentionally uses visibility-only
+      // checks above because the same response may be resized after render.
+      add(name + ' is absent on this mobile page', !el,
+        el ? { display: getComputedStyle(el).display, rect: rect.toJSON() } : { missing: true });
+      return;
+    }
+    const sideOffset = rect ? Math.min(rect.left, window.innerWidth - rect.right) : null;
+    const expectedSide = name === 'AI FAB'
+      ? (rect ? rect.left : null)
+      : (rect ? window.innerWidth - rect.right : null);
+    const expectedBottomInset = rect ? window.innerHeight - rect.bottom : null;
+    add(name + ' is exactly 52x52, 16px from a viewport side, and fully inside',
+      !!el && isVisible && Math.abs(rect.width - 52) <= EPS && Math.abs(rect.height - 52) <= EPS
+        && Math.abs(expectedSide - 16) <= T
+        && rect.left >= -T && rect.right <= window.innerWidth + T
+        && rect.top >= -T && rect.bottom <= window.innerHeight + T,
+      el ? { ...out.fabs[name === 'log FAB' ? 'log' : 'ai'], sideOffset, expectedSide } : { missing: true });
+    add(name + ' is exactly 72px plus safe-area above the viewport bottom',
+      !!el && isVisible && Math.abs(expectedBottomInset - (72 + safe)) <= T,
+      el ? { bottomInset: expectedBottomInset, expectedBottomInset: 72 + safe, safeArea: safe } : { missing: true });
+    if (name === 'AI FAB' && el && isVisible) {
+      const style = getComputedStyle(el);
+      const rgb = (value) => value.split(' ').join('').toLowerCase();
+      add('AI FAB preserves the reviewed dark/yellow control styling',
+        rgb(style.backgroundColor) === 'rgb(17,24,39)'
+          && rgb(style.color) === 'rgb(255,210,30)'
+          && style.fontSize === '24px'
+          && style.borderTopWidth === '0px' && style.borderRightWidth === '0px'
+          && style.borderBottomWidth === '0px' && style.borderLeftWidth === '0px'
+          && style.paddingTop === '0px' && style.paddingRight === '0px'
+          && style.paddingBottom === '0px' && style.paddingLeft === '0px'
+          && style.appearance === 'none',
+        { background: style.backgroundColor, color: style.color, fontSize: style.fontSize,
+          border: style.border, padding: style.padding, appearance: style.appearance });
+    }
+    add(name + ' clears the bottom-nav box',
+      !!el && !!nav && rect.bottom <= navRect.top + T,
+      el && nav ? { fabBottom: rect.bottom, navTop: navRect.top } : { fab: !!el, nav: !!nav });
+  };
+  checkFab('log FAB', logFab, logVisible, expectedLog);
+  checkFab('AI FAB', aiFab, aiVisible, expectedAi);
+  if (expectedLog && expectedAi && logVisible && aiVisible) {
+    const lr = logFab.getBoundingClientRect(), ar = aiFab.getBoundingClientRect();
+    const overlapX = Math.min(lr.right, ar.right) - Math.max(lr.left, ar.left);
+    const overlapY = Math.min(lr.bottom, ar.bottom) - Math.max(lr.top, ar.top);
+    add('log and AI FABs share a bottom edge without intersecting',
+      Math.abs(lr.bottom - ar.bottom) <= T && !(overlapX > EPS && overlapY > EPS),
+      { log: lr.toJSON(), ai: ar.toJSON(), overlapX, overlapY });
   }
 
   // The main content may scroll in the document or in the club-member shell's
@@ -199,7 +257,7 @@ export function bottomNavExpr(expected) {
   const content = [];
   if (main) for (const el of main.querySelectorAll('*')) {
     if (hasHiddenAncestor(el) || el.matches('script,style,template,svg defs,*[aria-hidden="true"]')
-      || el.closest('.bottom-nav,.bn-fab')) continue;
+     || el.closest('.bottom-nav,.bn-fab,.bn-fab-ai')) continue;
     let fixed = false;
     for (let a = el; a && a !== document.body; a = a.parentElement) {
       if (/(fixed|sticky)/.test(getComputedStyle(a).position)) { fixed = true; break; }
@@ -216,8 +274,15 @@ export function bottomNavExpr(expected) {
       ? '.' + el.className.split(' ')[0] : '') + ':' + (el.textContent || '').trim().replace(/\\s+/g, ' ').slice(0, 60) });
   }
   const last = content.sort((a, b) => a.visibleRect.bottom - b.visibleRect.bottom).at(-1);
-  const obstructionTop = E.fab
-    ? (fabVisible && fabRect ? fabRect.top : expectedFabTop)
+  const renderedFabTops = [
+    expectedLog && logVisible && logFab ? logFab.getBoundingClientRect().top : null,
+    expectedAi && aiVisible && aiFab ? aiFab.getBoundingClientRect().top : null
+  ].filter((top) => top !== null);
+  const expectedCount = Number(expectedLog) + Number(expectedAi);
+  const obstructionCandidates = expectedAnyFab && renderedFabTops.length < expectedCount
+    ? [...renderedFabTops, expectedFabTop] : renderedFabTops;
+  const obstructionTop = expectedAnyFab
+    ? (obstructionCandidates.length ? Math.min(...obstructionCandidates) : expectedFabTop)
     : (navVisible && navRect ? navRect.top : expectedBarTop);
   const clearance = {
     // Use the actual element box for the obstruction comparison. The clipped
@@ -228,7 +293,8 @@ export function bottomNavExpr(expected) {
     visibleContentBottom: last ? last.visibleRect.bottom : null,
     obstructionTop,
     gap: last ? obstructionTop - last.actual.bottom : null,
-    source: E.fab && !fabVisible ? 'expected-fab-position-baseline' : (E.fab ? 'rendered-fab' : 'rendered-bar'),
+    source: expectedAnyFab && renderedFabTops.length < expectedCount
+      ? 'expected-fab-position-baseline' : (expectedAnyFab ? 'rendered-fab' : 'rendered-bar'),
     lastContent: last ? last.label : null,
     scrollY: window.scrollY,
     scrollports: scrollports.map((el) => ({ tag: el.tagName, className: el.className,
@@ -258,9 +324,11 @@ export function auditExpr(rootSel, ignoreOverlapSels = [], ignoreClippingSels = 
   const vis = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el);
     return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none' && s.opacity !== '0'; };
   const label = (el) => (el.tagName + (el.className && typeof el.className === 'string' ? '.' + el.className.split(' ')[0] : '') + ':' + (el.textContent || '').trim().replace(/\\s+/g, ' ').slice(0, 45));
-  // 1. clipping: element vs nearest overflow-clipping ancestor. Scrollable
-  // (auto/scroll) ancestors clip at their scrollWidth, not their box edge —
-  // deliberate .table-scroll wrappers stay legal.
+  // 1. clipping: element vs nearest overflow-clipping ancestor. Vertical
+  // (auto/scroll) bodies are intentional scrollports: their offscreen
+  // top/bottom content is reachable and must not be reported as clipped. We
+  // still inspect explicit horizontal clipping, while preserving the existing
+  // allowance for intentionally horizontally scrollable tables/pills.
   for (const el of root.querySelectorAll('*')) {
     if (!vis(el)) continue;
     if (IGNORE_CLIPPING.some((s) => el.matches(s))) continue;
@@ -268,14 +336,24 @@ export function auditExpr(rootSel, ignoreOverlapSels = [], ignoreClippingSels = 
     let a = el.parentElement;
     while (a && a !== document.body) {
       const s = getComputedStyle(a);
-      if (/(hidden|auto|scroll|clip)/.test(s.overflow + s.overflowX)) {
+      if (/(hidden|auto|scroll|clip)/.test(s.overflow + s.overflowX + s.overflowY)) {
         const ar = a.getBoundingClientRect();
-        const scrollableX = /(auto|scroll)/.test(s.overflowX + s.overflow);
-        const scrollableY = /(auto|scroll)/.test(s.overflowY + s.overflow);
-        const clipR = scrollableX ? ar.left - a.scrollLeft + a.scrollWidth : ar.right;
-        const clipB = scrollableY ? ar.top - a.scrollTop + a.scrollHeight : ar.bottom;
-        if (r.right > clipR + T || r.left < ar.left - T
-          || r.bottom > clipB + T || r.top < ar.top - T) out.clipped.push(label(el) + ' ⊄ ' + label(a));
+        const verticalScroll = /(auto|scroll)/.test(s.overflowY + s.overflow)
+          && a.scrollHeight > a.clientHeight + T;
+        const horizontalScroll = /(auto|scroll)/.test(s.overflowX + s.overflow)
+          && a.scrollWidth > a.clientWidth + T;
+        const explicitHorizontalClip = /(hidden|clip)/.test(s.overflowX + s.overflow);
+        const horizontalScrollAllowed = /(auto|scroll)/.test(s.overflowX + s.overflow)
+          && !a.matches('.ai-sheet-body');
+        const checkHorizontal = explicitHorizontalClip
+          || (horizontalScroll && !horizontalScrollAllowed);
+        const checkVertical = !verticalScroll
+          && /(hidden|clip|auto|scroll)/.test(s.overflowY + s.overflow);
+        const outsideHorizontal = checkHorizontal
+          && (r.right > ar.right + T || r.left < ar.left - T);
+        const outsideVertical = checkVertical
+          && (r.bottom > ar.bottom + T || r.top < ar.top - T);
+        if (outsideHorizontal || outsideVertical) out.clipped.push(label(el) + ' ⊄ ' + label(a));
         break;
       }
       a = a.parentElement;
@@ -330,7 +408,7 @@ export function auditExpr(rootSel, ignoreOverlapSels = [], ignoreClippingSels = 
   // 3. controls fully inside the viewport width and hit-testable at center.
   // Bottom-nav items and the FAB are fixed controls, not decorative chrome:
   // include them explicitly and do not skip them in the fixed-position escape.
-  for (const b of root.querySelectorAll('button, a.btn, [role="button"], .bn-item, .bn-fab')) {
+  for (const b of root.querySelectorAll('button, a.btn, [role="button"], .bn-item, .bn-fab, .bn-fab-ai')) {
     if (!vis(b)) continue;
     // Buttons inside a horizontally scrollable ancestor (tab bars, pill rows)
     // are reachable by swiping — exempt from the in-viewport rule.
@@ -341,7 +419,7 @@ export function auditExpr(rootSel, ignoreOverlapSels = [], ignoreClippingSels = 
     }
     const r = b.getBoundingClientRect();
     if (!scrollable && (r.right > window.innerWidth + T || r.left < -T)) { out.offscreenButtons.push(label(b)); continue; }
-    if (inFixed(b) && !b.matches('.bn-item,.bn-fab')) continue; // fixed/sticky chrome is otherwise always reachable
+    if (inFixed(b) && !b.matches('.bn-item,.bn-fab,.bn-fab-ai')) continue; // fixed/sticky chrome is otherwise always reachable
     if (scrollable) b.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     // Center vertically first so fixed overlays (bottom nav) can't shadow the
     // hit test — a real user scrolls the button into view before tapping.
@@ -371,8 +449,9 @@ export function surfacesExpr(surfaces) {
 // setup(page) is an optional in-memory route/stub hook installed before the
 // first navigation. It lets a geometry state exercise browser-only response
 // variants without adding durable fixture rows.
-// steps: [{ name, js, waitFor?, checks? }] — extra states (tab clicks) audited after
-// the initial one. `checks` are page-specific browser expressions returning
+// steps: [{ name, js, waitFor?, checks?, viewport?, screenshot? }] — extra states
+// (tab clicks) audited after the initial one. A reduced step viewport is restored
+// to the normal 840px phone height before the next state. `checks` are page-specific browser expressions returning
 // either true or { ok, ...detail }; they supplement the generic geometry audit.
 // Returns { results: [{tag, audit}], surfaceReport, checksReport, errors }.
 export async function auditPage(context, base, cfg) {
@@ -384,6 +463,38 @@ export async function auditPage(context, base, cfg) {
   const results = [];
   const surfaceReport = []; // measured at EVERY viewport — a surface that
   const checksReport = [];
+  const captureScreenshot = async (hook, width, pageName, stepName = 'initial') => {
+    if (!hook) return;
+    const widths = hook.widths || [360, 414];
+    if (!widths.includes(width)) return;
+    const rawPath = typeof hook === 'string' ? hook : hook.path;
+    if (typeof rawPath !== 'string' || !rawPath.startsWith('/tmp/ask-ai-') || !rawPath.endsWith('.png')) {
+      throw new Error('screenshot hooks must save only /tmp/ask-ai-*.png files');
+    }
+    const path = rawPath
+      .replace(/\{width\}/g, String(width))
+      .replace(/\{page\}/g, pageName)
+      .replace(/\{step\}/g, stepName);
+    if (!path.startsWith('/tmp/ask-ai-') || !path.endsWith('.png')) {
+      throw new Error('expanded screenshot path must remain under /tmp/ask-ai-*.png');
+    }
+    // Geometry audits may leave the document at maximum scroll for the
+    // clearance assertion. Screenshots are requested as visual state captures,
+    // so return the page scrollport to its natural top without changing any
+    // modal/body scrollport state.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    if (typeof hook !== 'string' && hook.scrollSelector) {
+      const scrolled = await page.evaluate((selector) => {
+        const target = document.querySelector(selector);
+        if (!target) return false;
+        target.scrollIntoView({ block: 'center', inline: 'nearest' });
+        return true;
+      }, hook.scrollSelector);
+      if (!scrolled) throw new Error(`screenshot scroll target not found: ${hook.scrollSelector}`);
+      await page.waitForTimeout(50);
+    }
+    await page.screenshot({ path, fullPage: false });
+  };
   // renders at 360px but collapses empty at 414px must not pass unnoticed.
   // GEO_WIDTHS=mobile|desktop splits the run in half (the full 6-width run
   // exceeds a 5-minute shell window; background runs have been killed
@@ -393,7 +504,8 @@ export async function auditPage(context, base, cfg) {
     : /^[\d,]+$/.test(process.env.GEO_WIDTHS || '') ? process.env.GEO_WIDTHS.split(',').map(Number)
     : [...VIEWPORTS, ...DESKTOP_VIEWPORTS];
   for (const w of widths) {
-    await page.setViewportSize({ width: w, height: w > 768 ? 900 : 840 });
+    const defaultHeight = w > 768 ? 900 : 840;
+    await page.setViewportSize({ width: w, height: defaultHeight });
     await page.goto(base + cfg.path, { waitUntil: 'networkidle' });
     if (cfg.waitFor) await page.waitForSelector(cfg.waitFor, { timeout: 20000 });
     // Surfaces flagged mobileOnly encode mobile-only contracts (e.g. the
@@ -413,23 +525,35 @@ export async function auditPage(context, base, cfg) {
       audit: await page.evaluate(auditExpr(cfg.root || '.main', cfg.ignoreOverlap, cfg.ignoreClipping)),
       bottomNav: cfg.bottomNav ? await page.evaluate(bottomNavExpr(cfg.bottomNav)) : null,
       hscroll: await page.evaluate('document.documentElement.scrollWidth - window.innerWidth') });
-    for (const step of cfg.steps || []) {
-      await page.evaluate(step.js);
-      if (step.waitFor) await page.waitForSelector(step.waitFor, { timeout: 15000 });
-      await page.waitForTimeout(250);
-      if (step.surfaces && applicable(step.surfaces).length) {
-        surfaceReport.push(...(await page.evaluate(surfacesExpr(applicable(step.surfaces)))).map((s) => ({ ...s, name: s.name + '@' + w + 'px' })));
+    await captureScreenshot(cfg.screenshot, w, cfg.name);
+    for (const step of (cfg.steps || []).filter((step) =>
+      !(w > 768 && step.mobileOnly) && !(w <= 768 && step.desktopOnly))) {
+      const stepViewport = step.viewport && {
+        width: step.viewport.width || w,
+        height: step.viewport.height || defaultHeight
+      };
+      if (stepViewport) await page.setViewportSize(stepViewport);
+      try {
+        await page.evaluate(step.js);
+        if (step.waitFor) await page.waitForSelector(step.waitFor, { timeout: 15000 });
+        await page.waitForTimeout(250);
+        if (step.surfaces && applicable(step.surfaces).length) {
+          surfaceReport.push(...(await page.evaluate(surfacesExpr(applicable(step.surfaces)))).map((s) => ({ ...s, name: s.name + '@' + w + 'px' })));
+        }
+        for (const custom of (step.checks || []).filter((c) => !(w > 768 && c.mobileOnly) && !(w <= 768 && c.desktopOnly))) {
+          const detail = await page.evaluate(custom.js);
+          checksReport.push({
+            name: `${cfg.name}:${step.name}: ${custom.name}@${w}px`,
+            ok: detail === true || !!(detail && detail.ok),
+            detail
+          });
+        }
+        results.push({ tag: `${cfg.name}:${step.name}@${w}px`, audit: await page.evaluate(auditExpr(step.root || cfg.root || '.main', cfg.ignoreOverlap, cfg.ignoreClipping)),
+          hscroll: await page.evaluate('document.documentElement.scrollWidth - window.innerWidth') });
+        await captureScreenshot(step.screenshot, w, cfg.name, step.name);
+      } finally {
+        if (stepViewport) await page.setViewportSize({ width: w, height: defaultHeight });
       }
-      for (const custom of (step.checks || []).filter((c) => !(w > 768 && c.mobileOnly) && !(w <= 768 && c.desktopOnly))) {
-        const detail = await page.evaluate(custom.js);
-        checksReport.push({
-          name: `${cfg.name}:${step.name}: ${custom.name}@${w}px`,
-          ok: detail === true || !!(detail && detail.ok),
-          detail
-        });
-      }
-      results.push({ tag: `${cfg.name}:${step.name}@${w}px`, audit: await page.evaluate(auditExpr(step.root || cfg.root || '.main', cfg.ignoreOverlap, cfg.ignoreClipping)),
-        hscroll: await page.evaluate('document.documentElement.scrollWidth - window.innerWidth') });
     }
   }
   await page.close();

@@ -873,3 +873,79 @@ body:has(.club-member-tabs) .app > .main { min-height: 0; overflow-y: auto; }
 .ai-chart{width:100%;min-width:0;margin-top:14px}.ai-chart-shell{width:100%;min-width:0;color:var(--gray-700)}.ai-chart-title{font-size:12px;font-weight:600;color:var(--gray-800);line-height:1.4;margin-bottom:6px}.ai-chart-svg{display:block;width:100%;max-width:100%;overflow:visible}.ai-chart-grid{stroke:var(--gray-200);stroke-width:1;vector-effect:non-scaling-stroke}.ai-chart-monday{stroke:var(--gray-100);stroke-width:1;vector-effect:non-scaling-stroke}.ai-chart-axis-label,.ai-chart-x-label,.ai-chart-year-label{fill:var(--gray-400);font-family:var(--mono);font-size:9px}.ai-chart-x-label,.ai-chart-year-label{font-size:9px}.ai-chart-bar{shape-rendering:crispEdges}.ai-chart-legend{display:flex;flex-wrap:wrap;align-items:center;gap:5px 12px;margin-top:8px;font-size:10px;color:var(--gray-500);line-height:1.35}.ai-chart-legend-item{display:inline-flex;align-items:center;gap:5px;min-width:0}.ai-chart-swatch{width:9px;height:9px;border-radius:2px;flex:0 0 9px}.ai-chart-caption{margin-top:8px;font-size:11px;color:var(--gray-500);line-height:1.5}
 @media (max-width:767px){.ai2-hero-band{margin:0 0 32px}.ai2-hero{grid-template-columns:minmax(0,1fr);gap:24px;padding:24px 16px 32px;align-items:stretch}.ai2-hero-title{font-size:28px}}
 @media (max-width:768px){.ai2-sugg-grid{grid-template-columns:1fr}.ai2-trust-row{flex-direction:column;gap:20px}}
+
+/* AI entry shares the existing FAB row and its 136px + safe-area clearance.
+   Mobile-only in v1: the existing desktop rule hides both .bn-fab buttons;
+   the sheet controller never creates a sheet on desktop. */
+@media (max-width:768px) {
+  .bn-fab-ai {
+    left:16px;
+    right:auto;
+    border:0;
+    padding:0;
+    appearance:none;
+    background:#111827;
+    color:#FFD21E;
+    font-size:24px;
+  }
+}
+.ai-sheet-backdrop {
+  padding:0 !important;
+  align-items:flex-end !important;
+  overflow:hidden;
+}
+.ai-sheet {
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  display:flex;
+  flex-direction:column;
+  box-sizing:border-box;
+  max-height:92vh;
+  padding-bottom:env(safe-area-inset-bottom, 0px);
+  border-radius:16px 16px 0 0;
+  background:white;
+  overflow:hidden;
+  box-shadow:0 -8px 32px rgba(0,0,0,.16);
+}
+.ai-sheet-header {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-shrink:0;
+  gap:12px;
+  padding:8px 16px;
+  border-bottom:var(--border);
+}
+.ai-sheet-title {
+  margin:0;
+  font-size:16px;
+  font-weight:700;
+  color:var(--gray-900);
+}
+.ai-sheet-close {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+  width:44px;
+  height:44px;
+  padding:0;
+  border:0;
+  border-radius:8px;
+  background:transparent;
+  color:var(--gray-600);
+  font:inherit;
+  font-size:24px;
+  cursor:pointer;
+}
+.ai-sheet-close:hover { background:var(--gray-100); }
+.ai-sheet-close:focus-visible { outline:2px solid var(--yellow); outline-offset:2px; }
+.ai-sheet-body {
+  flex:1 1 auto;
+  min-height:0;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}

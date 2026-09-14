@@ -116,6 +116,9 @@
       'padding:8px 14px;cursor:pointer;flex-shrink:0}' +
       '#arenas-install-card .aic-close{font-size:16px;line-height:1;background:none;' +
       'border:none;color:#9CA3AF;cursor:pointer;padding:6px;flex-shrink:0;align-self:flex-start}' +
+      // On FAB pages the shared clearance already includes the complete FAB
+      // row. Leave the original 76px + safe-area position on no-FAB pages.
+      'body:has(.bottom-nav.bn-has-fab) #arenas-install-card{bottom:calc(var(--bn-clearance))}' +
       '@media (min-width:769px){#arenas-install-card{display:none}}';
     var el = document.createElement('style');
     el.id = 'arenas-install-css';

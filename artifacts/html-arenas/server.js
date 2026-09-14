@@ -587,6 +587,11 @@ app.get(['/html/arenas-time.js', '/arenas-time.js'], (req, res) => {
 app.get(['/html/arenas-insights.js', '/arenas-insights.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-insights.js'));
 });
+// Mobile Ask AI sheet controller. It is injected only alongside an eligible
+// athlete-page AI FAB (the profile's module is statically loaded by its page).
+app.get(['/html/arenas-insights-sheet.js', '/arenas-insights-sheet.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-insights-sheet.js'));
+});
 // Shared four-week activity-dot grid renderer (public + owner profiles).
 app.get(['/html/arenas-activity-grid.js', '/arenas-activity-grid.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-activity-grid.js'));
@@ -1842,10 +1847,54 @@ function injectNotificationsPanel(html) {
   }
   return out;
 }
-function injectBottomNav(html, pageKey) {
+function hasInsightsLoader(html, loader, assetName) {
+  // Check a real script element (or our explicit loader marker), never a broad
+  // filename substring: injected user data is allowed to contain arbitrary text,
+  // including an asset filename.
+  const marker = new RegExp(
+    '<script\\b[^>]*\\bdata-arenas-insights-loader\\s*=\\s*(?:"' + loader + '"|\\\'' + loader + '\\\')[^>]*>',
+    'i'
+  );
+  if (marker.test(html)) return true;
+  const scriptSrc = /<script\b[^>]*\bsrc\s*=\s*(["'])([^"']+)\1[^>]*>/gi;
+  let match;
+  while ((match = scriptSrc.exec(html))) {
+    const source = match[2].split(/[?#]/, 1)[0];
+    if (source.endsWith('/' + assetName)) return true;
+  }
+  return false;
+}
+function injectAiInsightsLoaders(html, pageKey, showAiFab) {
+  if (!showAiFab) return html;
+  const scripts = [];
+  // Load the overlay primitive ahead of its consumer where the page has not
+  // already loaded it. The sheet depends on it for Escape/backdrop/scroll lock.
+  if (!hasInsightsLoader(html, 'overlay', 'arenas-overlay.js')) {
+    scripts.push('<script data-arenas-insights-loader="overlay" src="' + BASE + '/arenas-overlay.js"></script>');
+  }
+  // arenas-my-profile.html intentionally loads this module in its document head
+  // for its Insights tab, including for free viewers. Every other eligible page
+  // receives the module immediately before the sheet controller.
+  if (pageKey !== 'profile' && !hasInsightsLoader(html, 'module', 'arenas-insights.js')) {
+    scripts.push('<script data-arenas-insights-loader="module" src="' + BASE + '/arenas-insights.js"></script>');
+  }
+  if (!hasInsightsLoader(html, 'sheet', 'arenas-insights-sheet.js')) {
+    scripts.push('<script data-arenas-insights-loader="sheet" src="' + BASE + '/arenas-insights-sheet.js"></script>');
+  }
+  return scripts.length ? html.replace('</body>', scripts.join('') + '</body>') : html;
+}
+function injectBottomNav(html, pageKey, { showAiFab } = {}) {
   let out = html;
+  let renderedAiFab = false;
+  // Club dashboard/member variants have their own navigation even when a viewer
+  // is Individual Pro. The Ask AI FAB belongs only to the athlete bar.
+  const rendersAiFab = !!showAiFab
+    && pageKey !== 'log'
+    && Object.prototype.hasOwnProperty.call(ATHLETE_NAV_ACTIVE, pageKey);
   if (!/class="bottom-nav(?:\s|")/.test(out)) {
     let nav = bottomNavFor(pageKey);
+    // Preserve the existing Log FAB placement, including the club-member
+    // leaderboard. Ask AI remains limited by rendersAiFab above.
     const hasFab = pageKey !== 'log' && (
       Object.prototype.hasOwnProperty.call(ATHLETE_NAV_ACTIVE, pageKey)
       || pageKey === 'club-member-leaderboard'
@@ -1855,9 +1904,15 @@ function injectBottomNav(html, pageKey) {
         nav = nav.replace('class="bottom-nav"', 'class="bottom-nav bn-has-fab"')
           + '<a class="bn-fab" aria-label="Log activity" onclick="nav(\'/log\')">➕</a>';
       }
+      if (rendersAiFab) {
+        nav = nav.replace('class="bottom-nav bn-has-fab"', 'class="bottom-nav bn-has-fab bn-has-ai-fab"')
+          + '<button class="bn-fab bn-fab-ai" aria-label="Ask AI Insights">✦</button>';
+        renderedAiFab = true;
+      }
       out = out.replace('</body>', nav + '</body>');
     }
   }
+  out = injectAiInsightsLoaders(out, pageKey, renderedAiFab);
   // Shared avatar-dropdown "Clubs you manage" enhancement (one source of truth
   // for all shell pages; self-guards against double injection and no-ops for
   // pure athletes / pages without ARENAS_DATA).
@@ -6427,7 +6482,13 @@ app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
     const feedMeta = req.user.user_metadata || {};
     const userSports = Array.isArray(feedMeta.sports) ? feedMeta.sports.filter(Boolean) : [];
     const userData = { profile: displayFromUser(req.user), userId: req.user.id, sports: userSports, posts, followsNobody, feedActivities, followingRsvps, clubs: userClubs, week: sidebar.week, dayStrip: sidebar.dayStrip, currentStreak: sidebar.currentStreak, clubRank: sidebar.clubRank, followSuggestions: sidebar.followSuggestions };
-    let html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), userData), 'feed'), (await getUserPlan(req.user.id)) === 'pro');
+    const userPlan = await getUserPlan(req.user.id);
+    const isProUser = userPlan === 'pro';
+    let html = injectProBadge(injectBottomNav(
+      injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-feed.html'), 'utf8'), userData),
+      'feed',
+      { showAiFab: isProUser }
+    ), isProUser);
     // "Signup Completed" analytics: server-decided flag, driven only by the
     // signed one-time marker the two account-creation paths set. Consumed
     // (cookie cleared) on first render so it cannot double-fire, and never
@@ -6545,7 +6606,13 @@ app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
     console.log('Athletes data error:', err.message);
   }
   try {
-    const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-athletes.html'), 'utf8'), athleteData), 'athletes'), (await getUserPlan(req.user.id)) === 'pro');
+    const userPlan = await getUserPlan(req.user.id);
+    const isProUser = userPlan === 'pro';
+    const html = injectProBadge(injectBottomNav(
+      injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-athletes.html'), 'utf8'), athleteData),
+      'athletes',
+      { showAiFab: isProUser }
+    ), isProUser);
     res.type('html').send(html);
   } catch (err) {
     console.log('Athletes render error:', err.message);
@@ -6743,9 +6810,15 @@ app.get(BASE + '/athletes/:userId', requirePageAuth, async (req, res) => {
       activities: cleanActs
     };
 
+    const viewerPlan = await getUserPlan(req.user.id);
+    const isProViewer = viewerPlan === 'pro';
     const html = injectProBadge(
-      injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-athlete-profile.html'), 'utf8'), data), 'athletes'),
-      (await getUserPlan(req.user.id)) === 'pro'
+      injectBottomNav(
+        injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-athlete-profile.html'), 'utf8'), data),
+        'athletes',
+        { showAiFab: isProViewer }
+      ),
+      isProViewer
     );
     res.type('html').send(html);
   } catch (err) {
@@ -6942,7 +7015,13 @@ app.get(BASE + '/clubs', requirePageAuth, async (req, res) => {
     console.log('Clubs page data error:', err.message);
   }
   try {
-    const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-clubs.html'), 'utf8'), pageData), 'clubs'), (await getUserPlan(req.user.id)) === 'pro');
+    const userPlan = await getUserPlan(req.user.id);
+    const isProUser = userPlan === 'pro';
+    const html = injectProBadge(injectBottomNav(
+      injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-clubs.html'), 'utf8'), pageData),
+      'clubs',
+      { showAiFab: isProUser }
+    ), isProUser);
     res.type('html').send(html);
   } catch (err) {
     console.log('Clubs page render error:', err.message);
@@ -8190,7 +8269,13 @@ app.get(BASE + '/events', requirePageAuth, async (req, res) => {
     }));
     const clubs = await getSidebarClubs(userId);
     const eventData = { userId, profile: displayFromUser(req.user), following: followingList, clubs };
-    const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-events.html'), 'utf8'), eventData), 'events'), (await getUserPlan(req.user.id)) === 'pro');
+    const userPlan = await getUserPlan(req.user.id);
+    const isProUser = userPlan === 'pro';
+    const html = injectProBadge(injectBottomNav(
+      injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-events.html'), 'utf8'), eventData),
+      'events',
+      { showAiFab: isProUser }
+    ), isProUser);
     res.type('html').send(html);
   } catch (err) {
     console.log('Events page error:', err.message);
@@ -8209,7 +8294,13 @@ app.get(BASE + '/leaderboards', requirePageAuth, async (req, res) => {
       profile: displayFromUser(req.user),
       clubs
     };
-    const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-leaderboards.html'), 'utf8'), lbData), 'leaderboards'), (await getUserPlan(req.user.id)) === 'pro');
+    const userPlan = await getUserPlan(req.user.id);
+    const isProUser = userPlan === 'pro';
+    const html = injectProBadge(injectBottomNav(
+      injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-leaderboards.html'), 'utf8'), lbData),
+      'leaderboards',
+      { showAiFab: isProUser }
+    ), isProUser);
     res.type('html').send(html);
   } catch (err) {
     console.log('Leaderboards page error:', err.message);
@@ -8243,7 +8334,13 @@ app.get(BASE + '/challenges', requirePageAuth, async (req, res) => {
     const meta = req.user.user_metadata || {};
     const sports = Array.isArray(meta.sports) ? meta.sports.filter(Boolean) : [];
     const challengeData = { userId, profile: displayFromUser(req.user), followers, clubs, gating, sports };
-    const html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-challenges.html'), 'utf8'), challengeData), 'challenges'), (await getUserPlan(userId)) === 'pro');
+    const userPlan = await getUserPlan(userId);
+    const isProUser = userPlan === 'pro';
+    const html = injectProBadge(injectBottomNav(
+      injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-challenges.html'), 'utf8'), challengeData),
+      'challenges',
+      { showAiFab: isProUser }
+    ), isProUser);
     res.send(html);
   } catch (err) {
     console.log('Challenges page error:', err.message);
@@ -8259,6 +8356,10 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
     if (!supabaseAdmin) return sendPageError(res);
     const meta = req.user.user_metadata || {};
     const display = displayFromUser(req.user);
+    // This real-plan result drives both the existing profile badge/Insights
+    // entitlement and the mobile Ask AI FAB. Keep it singular per render.
+    const userPlan = await getUserPlan(req.user.id);
+    const isProUser = userPlan === 'pro';
 
     const [postCountRes, followerRes, followingRes, postsRes, clubsRes, followingListRes, followerListRes, activitiesRes, activityCountRes] = await Promise.all([
       supabaseAdmin.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', req.user.id),
@@ -8439,12 +8540,15 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
         proLocked: await computeProLocked(req.user.id),
         // Unlike legacy flag-dependent gates, AI Insights is visibly locked
         // whenever the real subscription is not Individual Pro.
-        aiInsightsPro: (await getUserPlan(req.user.id)) === 'pro'
+        aiInsightsPro: isProUser
       }
     };
 
-    const isProUser = (await getUserPlan(req.user.id)) === 'pro';
-    let html = injectProBadge(injectBottomNav(injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-my-profile.html'), 'utf8'), profileData), 'profile'), isProUser);
+    let html = injectProBadge(injectBottomNav(
+      injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-my-profile.html'), 'utf8'), profileData),
+      'profile',
+      { showAiFab: isProUser }
+    ), isProUser);
     // Profile-header badge: the slot comment is stripped for everyone; only a
     // Pro subscriber's page ever contains the badge markup.
     html = html.replace('<!--PRO_BADGE_SLOT-->', isProUser ? PRO_BADGE_HTML : '');
@@ -10383,6 +10487,8 @@ app.get(BASE + '/api/calendar/month', requireAuth, async (req, res) => {
 app.get(BASE + '/calendar', requirePageAuth, async (req, res) => {
   try {
     if (!supabaseAdmin) return sendPageError(res);
+    const userPlan = await getUserPlan(req.user.id);
+    const isProUser = userPlan === 'pro';
     const data = {
       userId: req.user.id,
       profile: displayFromUser(req.user),
@@ -10392,9 +10498,10 @@ app.get(BASE + '/calendar', requirePageAuth, async (req, res) => {
     const html = injectProBadge(
       injectBottomNav(
         injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-calendar.html'), 'utf8'), data),
-        'calendar'
+        'calendar',
+        { showAiFab: isProUser }
       ),
-      (await getUserPlan(req.user.id)) === 'pro'
+      isProUser
     );
     res.type('html').send(html);
   } catch (err) {
@@ -13534,6 +13641,10 @@ app.get(BASE + '/clubs/:clubId', async (req, res) => {
     // so it can never accidentally widen the public club contract.
     const pageData = { club };
     const chromeData = { loggedIn: !!viewer };
+    // This authenticated public-club page had no Pro badge lookup. Resolve the
+    // real viewer plan once solely for the eligible athlete navigation FAB.
+    const viewerPlan = viewer ? await getUserPlan(viewer.id) : 'free';
+    const isProViewer = viewerPlan === 'pro';
     if (viewer) {
       chromeData.profile = displayFromUser(viewer);
       chromeData.clubs = await getSidebarClubs(viewer.id);
@@ -13556,7 +13667,7 @@ app.get(BASE + '/clubs/:clubId', async (req, res) => {
       .replaceAll('__CLUB_PAGE_TITLE__', escapeHtml(title))
       .replaceAll('__CLUB_PAGE_DESCRIPTION__', escapeHtml(description));
     if (viewer) {
-      html = injectBottomNav(html, 'clubs');
+      html = injectBottomNav(html, 'clubs', { showAiFab: isProViewer });
     }
     return res
       .set('Cache-Control', 'private, no-store')
@@ -13734,7 +13845,8 @@ app.get(BASE + '/billing', requirePageAuth, async (req, res) => {
     const html = injectProBadge(
       injectBottomNav(
         injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-billing.html'), 'utf8'), data),
-        'billing'
+        'billing',
+        { showAiFab: userPlan === 'pro' }
       ),
       userPlan === 'pro'
     );
