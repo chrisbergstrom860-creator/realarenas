@@ -38,7 +38,7 @@
     return typeof link === 'string' && /^\/(?!\/)/.test(link);
   }
   var panelOpen = false;
-  var typeIcons = { like: '👍', follow: '👤', comment: '💬', club: '🏃', challenge: '⚡', challenge_invite: '⚡', event: '🎟️', system: '✦' };
+  var typeIcons = { like: '👍', follow: '👤', comment: '💬', club: '🏃', challenge: '⚡', challenge_invite: '⚡', event: '🎟️', recap: '✦', system: '✦' };
   var allNotifs = [];
   var showAll = false;
   var COLLAPSED = 15;

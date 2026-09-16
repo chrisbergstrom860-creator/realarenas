@@ -6,6 +6,10 @@ const { createClient } = require('@supabase/supabase-js');
 const aiInsights = require('../ai-insights');
 const { FALLBACK_COPY } = aiInsights;
 const { SPORTS } = require('../sports');
+const { createAiInsightsService } = require('../ai-insights-service');
+const { createAiInsightsRuntime } = require('../ai-insights-runtime');
+const { runOne: runWeeklyRecap } = require('../jobs/recaps');
+const { createRecapNotification, recapWindowFor } = require('../weekly-recaps');
 
 const APP_PORT = 3987;
 const STUB_PORT = 3988;
@@ -13,6 +17,7 @@ const BASE = `http://127.0.0.1:${APP_PORT}`;
 const PASSWORD = 'AiInsightsVerify!234';
 const MANIFEST = '/tmp/verify-ai-insights-manifest.json';
 const CLEANUP_ONLY = process.argv.includes('--cleanup-stale-fixture');
+const RECAP_ONLY = process.argv.includes('--recap-only');
 const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const nonce = Date.now().toString(36);
 const users = {};
@@ -289,6 +294,234 @@ async function api(loginState, method, route, body) {
   return { status: response.status, body: await response.json().catch(() => ({})) };
 }
 
+function recapRpcRow(result) {
+  const data = result && result.data;
+  return Array.isArray(data) ? data[0] : data;
+}
+
+async function verifyWeeklyRecapRunnerAndStorage() {
+  // The runner runs against the real service module and this verifier's
+  // already-running provider stub. Its context builder is the standalone
+  // production runtime, so each recap is built at the runner's Monday
+  // contextAsOf boundary rather than reusing this verifier's ordinary Ask
+  // capture (which can have been built on another weekday).
+  const runtime = createAiInsightsRuntime({ supabaseAdmin: admin });
+  const service = createAiInsightsService({
+    ...runtime,
+    createAnthropicClient: () => ({
+      messages: {
+        create: async (request) => {
+          const response = await fetch(`http://127.0.0.1:${STUB_PORT}/v1/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': 'test-proxy-key' },
+            body: JSON.stringify(request)
+          });
+          if (!response.ok) throw new Error(`recap provider stub returned ${response.status}`);
+          return response.json();
+        }
+      }
+    })
+  });
+  const serviceCalls = [];
+  const contexts = new Map();
+  const runnerService = {
+    buildContextForUser: async (userId, asOf) => {
+      serviceCalls.push({ userId, asOf: new Date(asOf).toISOString() });
+      const context = await service.buildContextForUser(userId, asOf);
+      contexts.set(userId, context);
+      return context;
+    },
+    runValidatedRequest: (context, mode, opts) => service.runValidatedRequest(context, mode, {
+      ...opts,
+      providerConfig: { provider: 'verify-stub', apiKey: 'test-proxy-key', baseUrl: `http://127.0.0.1:${STUB_PORT}` }
+    })
+  };
+  const currentWeek = weekStartKeyInZone(new Date(), TEST_TIMEZONE);
+  const concurrentWeek = shiftDay(currentWeek, -21);
+  // Run at a local Monday boundary so the context builder's last_week bucket
+  // and the runner's completed-week window describe the same week.
+  const runnerNow = new Date(currentWeek + 'T20:00:00.000Z');
+  const runnerUser = (key, timezone) => ({
+    id: users[key].id,
+    user_metadata: { timezone, prefs: { weekly_recap: true } }
+  });
+  const proRunnerUser = runnerUser('pro', TEST_TIMEZONE);
+  const expectedProWindow = recapWindowFor(proRunnerUser, runnerNow);
+
+  const cleared = await admin.from('weekly_recaps').delete().eq('user_id', users.pro.id);
+  check('weekly recap verifier clears only its tracked fixture recap rows', !cleared.error,
+    cleared.error && cleared.error.message);
+  if (cleared.error) return;
+
+  const providerCountBeforeRunner = captured.length;
+  const runner = await runWeeklyRecap({
+    supabase: admin,
+    service: runnerService,
+    user: proRunnerUser,
+    now: runnerNow,
+    dryRun: false,
+    logger: () => {}
+  });
+  const recapContext = contexts.get(users.pro.id);
+  const runnerProviderRecord = captured[captured.length - 1];
+  const runnerStored = runner && runner.stored;
+  check('weekly recap runner uses the AI Insights recap contract and persists validated output',
+    runner.status === 'generated' && !!runnerStored && !!runner.validated?.ok &&
+      serviceCalls.length === 1 && serviceCalls[0].userId === users.pro.id &&
+      serviceCalls[0].asOf === expectedProWindow.contextAsOf.toISOString() &&
+      recapContext?.asOfDate === currentWeek &&
+      captured.length === providerCountBeforeRunner + 1 &&
+      runnerProviderRecord?.envelope?.question === aiInsights.WEEKLY_RECAP_QUESTION &&
+      Array.isArray(runnerProviderRecord?.envelope?.history) && runnerProviderRecord.envelope.history.length === 0 &&
+      runnerProviderRecord.body.system.some((block) => /WEEKLY_RECAP_MODE v1/.test(block.text)),
+    JSON.stringify({ status: runner.status, stored: runnerStored && runnerStored.id, validated: runner.validated,
+      serviceCalls, provider: runnerProviderRecord && runnerProviderRecord.envelope }));
+  const lowHistoryProviderCount = captured.length;
+  const lowHistoryUser = runnerUser('noGoals', 'UTC');
+  const expectedLowHistoryWindow = recapWindowFor(lowHistoryUser, runnerNow);
+  const lowHistoryRunner = await runWeeklyRecap({
+    supabase: admin,
+    service: runnerService,
+    user: lowHistoryUser,
+    now: runnerNow,
+    dryRun: false,
+    logger: () => {}
+  });
+  const lowHistoryContext = contexts.get(users.noGoals.id);
+  const lowHistoryProviderRecord = captured[captured.length - 1];
+  check('low-history Pro opt-in recap rechecks persisted entitlement and stores its required limitation',
+    lowHistoryRunner.status === 'generated' && !!lowHistoryRunner.stored && !!lowHistoryRunner.validated?.ok &&
+      lowHistoryContext?.dataQuality?.trendEligible === false &&
+      lowHistoryRunner.validated.limitations.includes(
+        'There is not enough logged history to establish a reliable trend or usual training pattern.'
+      ) &&
+      lowHistoryProviderRecord?.output?.limitations?.includes('INSUFFICIENT_TREND_DATA') &&
+      serviceCalls.some((call) => call.userId === users.noGoals.id &&
+        call.asOf === expectedLowHistoryWindow.contextAsOf.toISOString()) &&
+      captured.length === lowHistoryProviderCount + 1 &&
+      lowHistoryProviderRecord?.envelope?.question === aiInsights.WEEKLY_RECAP_QUESTION,
+    JSON.stringify({ status: lowHistoryRunner.status, validated: lowHistoryRunner.validated,
+      context: lowHistoryContext && { asOfDate: lowHistoryContext.asOfDate, dataQuality: lowHistoryContext.dataQuality },
+      provider: lowHistoryProviderRecord && lowHistoryProviderRecord.envelope }));
+  if (!(runner.status === 'generated' && runnerStored && runner.validated?.ok)) return;
+
+  const runnerRow = await admin.from('weekly_recaps')
+    .select('id,user_id,week_start,status,findings,prose,chart,context_schema_version,contract_version')
+    .eq('id', runnerStored.id).maybeSingle();
+  check('runner-generated recap row contains its validated result under the tracked user',
+    !runnerRow.error && runnerRow.data?.user_id === users.pro.id && runnerRow.data?.status === 'generated' &&
+      Array.isArray(runnerRow.data?.findings?.findings) &&
+      Array.isArray(runnerRow.data?.findings?.limitations) &&
+      Array.isArray(runnerRow.data?.findings?.evidence) && !!runnerRow.data?.prose &&
+      runnerRow.data?.context_schema_version === recapContext.schemaVersion &&
+      runnerRow.data?.contract_version === aiInsights.WEEKLY_RECAP_CONTRACT_VERSION,
+    JSON.stringify(runnerRow.error || runnerRow.data));
+
+  // Two real concurrent RPC calls verify the database winner semantics rather
+  // than just the in-memory unit-test mock. PostgreSQL can encode the losing
+  // composite row as an object with every field null, so only a truthy id is a
+  // claim; object truthiness is deliberately never used here.
+  const leaseUntil = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  const claimArgs = {
+    p_user_id: users.pro.id,
+    p_week_start: concurrentWeek,
+    p_timezone: TEST_TIMEZONE,
+    p_window_start_utc: new Date(Date.now() - 14 * 86400000).toISOString(),
+    p_window_end_utc: new Date(Date.now() - 7 * 86400000).toISOString(),
+    p_lease_until: leaseUntil
+  };
+  const claimResults = await Promise.all([
+    admin.rpc('claim_weekly_recap', claimArgs),
+    admin.rpc('claim_weekly_recap', claimArgs)
+  ]);
+  const claimRows = claimResults.map(recapRpcRow);
+  const winners = claimRows.filter((row) => row && row.id);
+  const loser = claimRows.find((row) => !row || !row.id);
+  const claimErrors = claimResults.map((result) => result.error).filter(Boolean);
+  check('real weekly recap claim RPC is callable and has exactly one concurrent winner',
+    claimErrors.length === 0 && winners.length === 1 && !!loser,
+    JSON.stringify({ errors: claimErrors.map((error) => error.message), rows: claimRows }));
+  const winningClaim = winners[0];
+  check('winning claim echoes the exact requested lease instant',
+    !!winningClaim && new Date(winningClaim.lease_until).toISOString() === leaseUntil,
+    JSON.stringify({ requested: leaseUntil, returned: winningClaim && winningClaim.lease_until }));
+  if (!winningClaim) return;
+
+  const finishArgs = {
+    p_id: winningClaim.id,
+    p_findings: runnerStored.findings,
+    p_prose: runner.validated.answer,
+    p_chart: runner.validated.chart || null,
+    p_context_schema_version: recapContext.schemaVersion,
+    p_contract_version: aiInsights.WEEKLY_RECAP_CONTRACT_VERSION
+  };
+  const staleLease = new Date(new Date(winningClaim.lease_until).getTime() - 1).toISOString();
+  const staleFinish = await admin.rpc('finish_weekly_recap', { ...finishArgs, p_lease_until: staleLease });
+  const staleRow = recapRpcRow(staleFinish);
+  check('stale weekly recap lease cannot finish the claimed row',
+    !staleFinish.error && !(staleRow && staleRow.id),
+    JSON.stringify({ error: staleFinish.error && staleFinish.error.message, row: staleRow }));
+  const correctFinish = await admin.rpc('finish_weekly_recap', {
+    ...finishArgs,
+    p_lease_until: winningClaim.lease_until
+  });
+  const finished = recapRpcRow(correctFinish);
+  check('current weekly recap lease finishes and stores validated output',
+    !correctFinish.error && !!finished?.id && finished.status === 'generated' &&
+      Array.isArray(finished.findings?.findings) && finished.prose === runner.validated.answer &&
+      finished.context_schema_version === recapContext.schemaVersion &&
+      finished.contract_version === aiInsights.WEEKLY_RECAP_CONTRACT_VERSION,
+    JSON.stringify({ error: correctFinish.error && correctFinish.error.message, row: finished }));
+
+  await createRecapNotification(admin, users.pro.id, concurrentWeek);
+  await createRecapNotification(admin, users.pro.id, concurrentWeek);
+  const notifications = await admin.from('notifications').select('id,source_key')
+    .eq('user_id', users.pro.id).eq('source_key', `weekly-recap:${concurrentWeek}`);
+  check('weekly recap notification remains unique when repeated',
+    !notifications.error && notifications.data.length === 1,
+    JSON.stringify(notifications.error || notifications.data));
+
+  if (!process.env.SUPABASE_ANON_KEY) {
+    check('weekly recap RLS owner/cross-user/write checks are skipped without user tokens', true,
+      'SUPABASE_ANON_KEY is unavailable');
+    return;
+  }
+  const userClient = async (key) => {
+    const client = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
+    const { error } = await client.auth.signInWithPassword({ email: users[key].email, password: PASSWORD });
+    if (error) throw error;
+    return client;
+  };
+  try {
+    const owner = await userClient('pro');
+    const other = await userClient('free');
+    const ownerRead = await owner.from('weekly_recaps').select('id,user_id').eq('id', finished.id);
+    const crossRead = await other.from('weekly_recaps').select('id,user_id').eq('id', finished.id);
+    const blockedWrite = await other.from('weekly_recaps').insert({
+      user_id: users.free.id,
+      week_start: shiftDay(concurrentWeek, -7),
+      timezone: 'UTC',
+      window_start_utc: new Date(Date.now() - 21 * 86400000).toISOString(),
+      window_end_utc: new Date(Date.now() - 14 * 86400000).toISOString(),
+      status: 'pending',
+      attempts: 1,
+      lease_until: new Date(Date.now() + 60000).toISOString()
+    });
+    check('weekly recap RLS permits owner reads, hides cross-user rows, and blocks client writes',
+      !ownerRead.error && ownerRead.data.length === 1 && ownerRead.data[0].user_id === users.pro.id &&
+        !crossRead.error && crossRead.data.length === 0 && !!blockedWrite.error,
+      JSON.stringify({
+        owner: ownerRead.error ? ownerRead.error.message : ownerRead.data,
+        cross: crossRead.error ? crossRead.error.message : crossRead.data,
+        write: blockedWrite.error && blockedWrite.error.message
+      }));
+  } catch (error) {
+    check('weekly recap RLS owner/cross-user/write checks complete with available user tokens', false, error.message);
+  }
+}
+
 function findingForNotAnswerableCase(item, data) {
   const finding = {
     type: 'not_answerable',
@@ -311,7 +544,35 @@ function responseFor(envelope) {
   let output;
   const policyCase = POLICY_REFUSAL_CASES.find((item) => item.question === question);
   const notAnswerableCase = NOT_ANSWERABLE_CASES.find((item) => item.question === question);
-  if (notAnswerableCase) {
+  if (question === aiInsights.WEEKLY_RECAP_QUESTION) {
+    const weekly = envelope.data.last12Weeks && envelope.data.last12Weeks.weekly;
+    const feelings = envelope.data.last12Weeks && envelope.data.last12Weeks.feelingsTotal;
+    const lastIndex = Array.isArray(weekly) ? weekly.findIndex((row) => row.relative === 'last_week') : -1;
+    const previousIndex = Array.isArray(weekly) ? weekly.findIndex((row) => row.relative === '2_weeks_ago') : -1;
+    if (lastIndex < 0 || previousIndex < 0) throw new Error('Weekly recap fixture needs last_week and 2_weeks_ago buckets');
+    const lastPath = `last12Weeks.weekly.${lastIndex}`;
+    const findings = [
+      metricFinding(envelope.data, `${lastPath}.activityCount`),
+      metricFinding(envelope.data, `${lastPath}.durationHours`)
+    ];
+    if (Number(weekly[lastIndex].distanceKm) > 0) findings.push(metricFinding(envelope.data, `${lastPath}.distanceKm`));
+    if (envelope.data.dataQuality && envelope.data.dataQuality.trendEligible) {
+      findings.push({
+        type: 'comparison',
+        leftPath: `${lastPath}.durationHours`,
+        leftValue: weekly[lastIndex].durationHours,
+        rightPath: `last12Weeks.weekly.${previousIndex}.durationHours`,
+        rightValue: weekly[previousIndex].durationHours
+      });
+    }
+    if (feelings && Object.values(feelings).some((value) => Number(value) > 0)) {
+      findings.push({ type: 'chart', metric: 'feelings', period: 'weekly', evidence: 'last12Weeks.feelings' });
+    }
+    output = {
+      findings,
+      limitations: envelope.data.dataQuality && envelope.data.dataQuality.trendEligible ? [] : ['INSUFFICIENT_TREND_DATA']
+    };
+  } else if (notAnswerableCase) {
     output = {
       findings: [findingForNotAnswerableCase(notAnswerableCase, envelope.data)],
       limitations: []
@@ -1002,6 +1263,7 @@ function startApp() {
 
 async function cleanupFixtureRoots(ids, clubIds) {
   if (ids.length) {
+    await must('cleanup weekly recaps', admin.from('weekly_recaps').delete().in('user_id', ids));
     await must('cleanup activities', admin.from('activities').delete().in('user_id', ids));
     await must('cleanup plans', admin.from('planned_sessions').delete().in('user_id', ids));
     await must('cleanup goals', admin.from('goals').delete().in('user_id', ids));
@@ -1310,6 +1572,23 @@ async function verifyNoFixtureResidue(ids, clubIds) {
     const proLogin = await login('pro');
     const freeLogin = await login('free');
     const noGoalsLogin = await login('noGoals');
+    // Run through the authenticated preference endpoint rather than only
+    // decorating the local runOne user object: runOne rechecks auth metadata
+    // and the active Pro subscription before generation, storage, and notify.
+    const proRecapOptIn = await api(proLogin, 'POST', '/api/profile/prefs', {
+      key: 'weekly_recap', value: true
+    });
+    const lowHistoryRecapOptIn = await api(noGoalsLogin, 'POST', '/api/profile/prefs', {
+      key: 'weekly_recap', value: true
+    });
+    check('active Pro fixture can persist the weekly recap opt-in before runner verification',
+      proRecapOptIn.status === 200 && proRecapOptIn.body.ok === true &&
+        proRecapOptIn.body.prefs?.weekly_recap === true,
+      JSON.stringify(proRecapOptIn));
+    check('low-history active Pro fixture can persist the weekly recap opt-in before runner verification',
+      lowHistoryRecapOptIn.status === 200 && lowHistoryRecapOptIn.body.ok === true &&
+        lowHistoryRecapOptIn.body.prefs?.weekly_recap === true,
+      JSON.stringify(lowHistoryRecapOptIn));
 
     const providerCountBeforeFree = captured.length;
     const freeResult = await api(freeLogin, 'POST', '/api/profile/ai-insights', { question: 'How am I doing?', history: [] });
@@ -1322,6 +1601,8 @@ async function verifyNoFixtureResidue(ids, clubIds) {
     });
     check('Pro comparison request succeeds through captured provider', privacyResult.status === 200 && !!privacyResult.body.historyTurn, JSON.stringify(privacyResult));
     const privacyCapture = captured[captured.length - 1];
+    await verifyWeeklyRecapRunnerAndStorage();
+    if (!RECAP_ONLY) {
     const serializedPayload = JSON.stringify(privacyCapture.body);
     const requestWithoutFeelings = JSON.stringify(providerRequestWithoutFeelings(privacyCapture.body));
     const requestWithoutCharts = providerRequestWithoutCharts(privacyCapture.body);
@@ -2577,6 +2858,7 @@ async function verifyNoFixtureResidue(ids, clubIds) {
     browser = null;
 
     check('fixture manifest exists during verification', fs.existsSync(MANIFEST));
+    }
   } catch (error) {
     failures++;
     console.error('FATAL', error && error.stack ? error.stack : error);

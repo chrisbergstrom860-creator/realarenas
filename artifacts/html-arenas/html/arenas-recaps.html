@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script>
+    window.BASE = window.location.pathname.startsWith('/html') ? '/html' : '';
+    window.nav = function(path){ window.location.href = window.BASE + path; };
+    document.addEventListener('DOMContentLoaded', function(){
+      if (window.BASE === '') document.querySelectorAll('[href^="/html/"]').forEach(function(el){ el.setAttribute('href', el.getAttribute('href').slice(5)); });
+    });
+  </script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/html/manifest.webmanifest">
+  <meta name="theme-color" content="#FFD21E">
+  <link rel="icon" href="/html/favicon.ico" sizes="48x48">
+  <link rel="icon" href="/html/arenas-icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/html/icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Arenas">
+  <script src="/html/arenas-pwa.js" defer></script>
+  <title>Arenas — Weekly AI recap</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Color+Emoji&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/html/arenas.css">
+  <script src="/html/arenas-insights.js"></script>
+  <script src="/html/arenas-recaps.js" defer></script>
+</head>
+<body class="recap-page">
+  <header class="topbar">
+    <a class="topbar-logo" href="/html/feed" aria-label="Arenas home">
+      <img class="logo-icon" src="/html/arenas-icon.svg" alt="">
+      <span class="logo-text">Arenas</span>
+    </a>
+    <a class="recap-profile-link" href="/html/profile">My profile</a>
+  </header>
+  <main class="recap-page-main">
+    <a class="recap-back-link" href="/html/profile#insights">← Back to profile</a>
+    <section class="recap-page-heading">
+      <div class="recap-kicker">✦ AI INSIGHTS</div>
+      <h1>Your weekly recap</h1>
+      <p id="weekly-recap-range">Weekly recap</p>
+      <p id="weekly-recap-timezone" class="recap-timezone"></p>
+    </section>
+    <section class="recap-page-note">
+      This recap was generated automatically from your own training data.
+    </section>
+    <div id="weekly-recap-answer" aria-live="polite"></div>
+  </main>
+</body>
+</html>

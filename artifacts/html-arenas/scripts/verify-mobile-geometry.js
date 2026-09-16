@@ -147,6 +147,43 @@ const insightResponseStub = (chart) => ({
   evidence: [{ path: chart.period === 'daily' ? 'last12Weeks.daily' : 'last12Weeks.weekly', value: null }],
   usage: { used: 1, remaining: 29, limit: 30, resetDate: '2026-10-01' }
 });
+// This is stored as a generated weekly_recap row for the creator during the
+// regular geometry seed. Loading the real owner-scoped route verifies the
+// page's server injection, shared renderer, navigation, and CSS together.
+const storedRecapFixture = {
+  weekStart: '2026-09-07',
+  timezone: 'America/Los_Angeles',
+  prose: 'You logged 4 sessions and 5.5 hours last week. Your recorded training data shows a steady week-over-week rhythm.',
+  findings: {
+    findings: [
+      { type: 'metric', path: 'last12Weeks.weekly.10.activityCount', value: 4 },
+      { type: 'metric', path: 'last12Weeks.weekly.10.durationHours', value: 5.5 },
+      { type: 'chart', metric: 'feelings', period: 'weekly', evidence: 'last12Weeks.feelings' }
+    ],
+    limitations: ['Day-by-day and week-by-week detail is limited to the last 12 weeks.'],
+    evidence: [
+      { path: 'last12Weeks.weekly.10.activityCount', value: 4 },
+      { path: 'last12Weeks.weekly.10.durationHours', value: 5.5 },
+      { path: 'last12Weeks.feelings', value: null }
+    ]
+  },
+  chart: {
+    title: 'Feelings per week — last 12 weeks',
+    metric: 'feelings',
+    period: 'weekly',
+    unit: 'count',
+    caption: '',
+    evidence: [{ path: 'last12Weeks.feelings', value: null }],
+    labels: Array.from({ length: 12 }, (_, index) => chartDate('2026-06-22', index * 7)),
+    relative: Array.from({ length: 12 }, (_, index) => `${11 - index}_weeks_ago`),
+    series: [
+      { key: 'strong', label: 'Strong', color: '#16A34A', values: [0, 1, 0, 1, 2, 0, 1, 0, 1, 1, 2, 1] },
+      { key: 'tired', label: 'Tired', color: '#DC2626', values: [1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0] }
+    ]
+  }
+};
+storedRecapFixture.chart.totals = storedRecapFixture.chart.labels.map((_, index) =>
+  storedRecapFixture.chart.series.reduce((sum, series) => sum + series.values[index], 0));
 const setupInsightsStubs = async (page) => {
   await page.route(/\/html\/api\/profile\/ai-insights\/status(?:[?#]|$)/, async (route) => {
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({
@@ -255,6 +292,29 @@ const insightsHeroTextVisibilityCheck = {
       ok: text.every((entry) => entry.rect.left >= mainRect.left - 1 && entry.rect.right <= mainRect.right + 1 &&
         entry.rect.width > 0 && entry.rect.height > 0),
       main: mainRect.toJSON(), text
+    };
+  })()`
+};
+const recapCardGeometryCheck = {
+  name: 'stored recap shows generated copy, limitation, evidence, and a fitting chart',
+  js: `(() => {
+    const card = document.querySelector('.recap-answer-card');
+    const prose = card && card.querySelector('.recap-prose');
+    const limitation = card && card.querySelector('.recap-limitations li');
+    const evidence = card ? [...card.querySelectorAll('.recap-evidence-badge')] : [];
+    const svg = card && card.querySelector('.recap-chart svg[role="img"]');
+    if (!card || !prose || !limitation || !svg) {
+      return { ok: false, card: !!card, prose: !!prose, limitation: !!limitation, chart: !!svg, evidence: evidence.length };
+    }
+    const cr = card.getBoundingClientRect(), sr = svg.getBoundingClientRect();
+    return {
+      ok: prose.textContent.includes(${JSON.stringify(storedRecapFixture.prose)}) &&
+        limitation.textContent.includes(${JSON.stringify(storedRecapFixture.findings.limitations[0])}) &&
+        evidence.length === ${storedRecapFixture.findings.evidence.length} &&
+        sr.width > 0 && sr.left >= cr.left - 1 && sr.right <= cr.right + 1 &&
+        document.documentElement.scrollWidth <= innerWidth + 1,
+      prose: prose.textContent, limitation: limitation.textContent, evidence: evidence.map((item) => item.textContent),
+      card: cr.toJSON(), chart: sr.toJSON(), overflow: document.documentElement.scrollWidth - innerWidth
     };
   })()`
 };
@@ -424,6 +484,21 @@ const makeProSubscription = (ownerId, label) => {
 const proSubscription = await ins('subscriptions', makeProSubscription(C, 'creator'));
 const memberProSubscription = await ins('subscriptions', makeProSubscription(M, 'member'));
 console.log('MANIFEST Pro subscriptions:', proSubscription?.id, memberProSubscription?.id);
+await ins('weekly_recaps', {
+  user_id: C,
+  week_start: storedRecapFixture.weekStart,
+  timezone: storedRecapFixture.timezone,
+  window_start_utc: '2026-09-07T07:00:00.000Z',
+  window_end_utc: '2026-09-14T07:00:00.000Z',
+  status: 'generated',
+  attempts: 1,
+  findings: storedRecapFixture.findings,
+  prose: storedRecapFixture.prose,
+  chart: storedRecapFixture.chart,
+  context_schema_version: 8,
+  contract_version: 1,
+  generated_at: new Date().toISOString()
+});
 
 const LONG = 'Late Autumn Ultra-Distance Trail Running Consistency and Elevation Gain Challenge';
 const club = await ins('clubs', {
@@ -642,6 +717,16 @@ const heroFullBleedState = (selector = '.ch-hero') => ({
   })()`
 });
 const PAGES = [
+  { user: 'creator', name: 'weekly-recap', path: '/recaps', waitFor: '.recap-answer-card', root: 'body',
+    surfaces: [
+      { name: 'stored recap answer card', sel: '#weekly-recap-answer', min: 1 },
+      // The shared renderer's .recap-evidence container includes its
+      // "Verified data" label plus one .recap-evidence-badge per evidence row.
+      { name: 'stored recap evidence', sel: '.recap-evidence',
+        min: storedRecapFixture.findings.evidence.length + 1,
+        max: storedRecapFixture.findings.evidence.length + 1 }
+    ],
+    checks: [recapCardGeometryCheck] },
   { user: 'creator', name: 'feed', path: '/feed', waitFor: '.feed-item-wrap', root: 'body', bottomNav: athleteNav('Feed'),
     setup: setupInsightsStubs,
     screenshot: { path: '/tmp/ask-ai-feed-both-fab-{width}.png', widths: [360, 414] },

@@ -44,6 +44,8 @@ const CACHE_READ_PER_MTOK = 0.10;
 const MAX_HISTORY_TURNS = 3;
 const MAX_CALENDAR_LIST_ITEMS = 10;
 const HISTORY_TTL_MS = 12 * 60 * 60 * 1000;
+const WEEKLY_RECAP_QUESTION = 'Produce the scheduled weekly recap for the completed previous week.';
+const WEEKLY_RECAP_CONTRACT_VERSION = 1;
 const POLICY_REFUSAL_REASONS = new Set([
   'prescriptive',
   'diet_weight_body',
@@ -1443,6 +1445,190 @@ function buildAiInsightsRequest(context, question, history) {
   };
 }
 
+function weeklyRecapCalendarListCandidates(context) {
+  const asOfDate = context && context.asOfDate;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(asOfDate || ''))) return [];
+  const start = new Date(`${asOfDate}T00:00:00.000Z`);
+  if (!Number.isFinite(start.getTime())) return [];
+  const end = new Date(start.getTime());
+  end.setUTCDate(end.getUTCDate() + 7);
+  const endExclusive = end.toISOString().slice(0, 10);
+  const candidates = [];
+  for (const [type, parentKey, isPlan] of [
+    ['calendar_plan_list', 'plannedSessions', true],
+    ['calendar_event_list', 'events', false]
+  ]) {
+    const parent = context && context.calendar && context.calendar[parentKey];
+    if (!parent || !Array.isArray(parent.items) || !Array.isArray(parent.byMonth)) continue;
+    for (const summary of parent.byMonth) {
+      if (!summary || !/^\d{4}-\d{2}$/.test(String(summary.month || ''))) continue;
+      const matching = parent.items.filter((item) => {
+        const itemDate = dateKeyForValue(item && item.date, context.timezone);
+        return itemDate && itemDate.slice(0, 7) === summary.month && (!isPlan || item.status === 'planned');
+      });
+      if (!matching.length) continue;
+      const allWithinComingWeek = matching.every((item) => {
+        const itemDate = dateKeyForValue(item.date, context.timezone);
+        return itemDate >= asOfDate && itemDate < endExclusive;
+      });
+      if (!allWithinComingWeek) continue;
+      candidates.push({
+        finding: {
+          type,
+          path: isPlan ? 'calendar.plannedSessions.items' : 'calendar.events.items',
+          filter: { month: summary.month }
+        },
+        matchingStatus: isPlan ? 'planned' : 'all',
+        matchingRecordCount: matching.length,
+        dateRange: { startInclusive: asOfDate, endExclusive }
+      });
+    }
+  }
+  return candidates;
+}
+
+// Weekly recaps deliberately reuse the ordinary request shape and validator.
+// This is separate from buildAiInsightsRequest so browser asks retain byte-for-
+// byte request behaviour (including their system prompt and cache key).
+function buildWeeklyRecapRequest(context) {
+  const weekly = context && context.last12Weeks && context.last12Weeks.weekly;
+  const lastIndex = Array.isArray(weekly) ? weekly.findIndex((item) => item && item.relative === 'last_week') : -1;
+  const previousIndex = Array.isArray(weekly) ? weekly.findIndex((item) => item && item.relative === '2_weeks_ago') : -1;
+  const lastPath = `last12Weeks.weekly.${lastIndex}`;
+  const previousPath = `last12Weeks.weekly.${previousIndex}`;
+  const hasFeelings = !!(context && context.last12Weeks && context.last12Weeks.feelingsTotal &&
+    Object.values(context.last12Weeks.feelingsTotal).some((value) => Number(value) > 0));
+  const distance = lastIndex >= 0 && Number(weekly[lastIndex].distanceKm) > 0;
+  const trendEligible = !!(context && context.dataQuality && context.dataQuality.trendEligible);
+  const calendarCandidates = weeklyRecapCalendarListCandidates(context);
+  const calendarRequirement = calendarCandidates.length
+    ? `Calendar list findings are permitted ONLY by copying one "finding" object from this server-computed JSON. ` +
+      `The matchingStatus/matchingRecordCount rule is the exact existing list definition; do not guess another month or list. ` +
+      `At most one calendar list finding total: ${JSON.stringify(calendarCandidates)}`
+    : 'FORBID ALL calendar_plan_list and calendar_event_list findings for this recap. No existing non-empty month-filtered calendar list is wholly within the coming 7-day window.';
+  const requirements = [
+    `Return metric findings for ${lastPath}.activityCount and ${lastPath}.durationHours.`,
+    distance ? `Also return a metric finding for ${lastPath}.distanceKm.` : 'Do not return a distance metric because last-week distance is zero.',
+    trendEligible
+      ? `Return exactly one comparison of ${lastPath}.durationHours with ${previousPath}.durationHours.`
+      : 'Do not return a comparison, and include the limitation INSUFFICIENT_TREND_DATA.',
+    hasFeelings
+      ? 'Return one chart: {"type":"chart","metric":"feelings","period":"weekly","evidence":"last12Weeks.feelings"}. Its title is the existing 12-week weekly feelings series.'
+      : 'Do not return a chart because no recorded feeling count is non-zero.',
+    'Optionally include at most one goal_projection.',
+    calendarRequirement,
+    'Do not claim a personal best unless an existing dated personalRecords item has a date within the completed last-week window.',
+    'Return no more than 8 findings and only existing limitation codes.'
+  ].join('\n');
+  const request = buildAiInsightsRequest(context, WEEKLY_RECAP_QUESTION, []);
+  request.system = [{ type: 'text', text: `${buildSystemPrompt()}\n\nWEEKLY_RECAP_MODE v${WEEKLY_RECAP_CONTRACT_VERSION}\n${requirements}` }];
+  return request;
+}
+
+function validateWeeklyRecapCompleteness(raw, context, ordinary = validateInsightResponse(raw, context)) {
+  if (!ordinary.ok) return ordinary;
+  const parsed = parseModelJson(raw);
+  if (!parsed || !Array.isArray(parsed.findings) || !Array.isArray(parsed.limitations)) {
+    return { ok: false, answer: FALLBACK_COPY, reason: 'recap_invalid_shape' };
+  }
+  const weekly = context && context.last12Weeks && context.last12Weeks.weekly;
+  const lastIndex = Array.isArray(weekly) ? weekly.findIndex((item) => item && item.relative === 'last_week') : -1;
+  const previousIndex = Array.isArray(weekly) ? weekly.findIndex((item) => item && item.relative === '2_weeks_ago') : -1;
+  if (lastIndex < 0 || previousIndex < 0) return { ok: false, answer: FALLBACK_COPY, reason: 'recap_missing_week' };
+  const asOfDate = context && context.asOfDate;
+  const isDateKey = (value) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return false;
+    const date = new Date(`${value}T00:00:00.000Z`);
+    return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  };
+  if (!isDateKey(asOfDate) || new Date(`${asOfDate}T00:00:00.000Z`).getUTCDay() !== 1) {
+    return { ok: false, answer: FALLBACK_COPY, reason: 'recap_invalid_as_of_date' };
+  }
+  const expectedLastWeekStart = new Date(`${asOfDate}T00:00:00.000Z`);
+  expectedLastWeekStart.setUTCDate(expectedLastWeekStart.getUTCDate() - 7);
+  if (!weekly[lastIndex] || weekly[lastIndex].weekStart !== expectedLastWeekStart.toISOString().slice(0, 10)) {
+    return { ok: false, answer: FALLBACK_COPY, reason: 'recap_invalid_last_week_boundary' };
+  }
+  const lastPath = `last12Weeks.weekly.${lastIndex}`;
+  const previousPath = `last12Weeks.weekly.${previousIndex}`;
+  const fail = (reason, offendingPath) => ({
+    ok: false, answer: FALLBACK_COPY, reason, ...(offendingPath ? { offendingPath } : {})
+  });
+  const metrics = parsed.findings.filter((finding) => finding && finding.type === 'metric');
+  const metricPaths = metrics.map((finding) => normalizePath(finding.path));
+  const requiredMetricPaths = [`${lastPath}.activityCount`, `${lastPath}.durationHours`];
+  const distanceRequired = Number(weekly[lastIndex].distanceKm) > 0;
+  if (distanceRequired) requiredMetricPaths.push(`${lastPath}.distanceKm`);
+  for (const path of requiredMetricPaths) {
+    if (metricPaths.filter((candidate) => candidate === path).length !== 1) {
+      return fail('recap_missing_required_metric', path);
+    }
+  }
+  if (metrics.length !== requiredMetricPaths.length ||
+      metricPaths.some((path) => !requiredMetricPaths.includes(path))) {
+    return fail(distanceRequired ? 'recap_unexpected_metric' : 'recap_zero_distance_metric');
+  }
+  const comparisons = parsed.findings.filter((finding) => finding && finding.type === 'comparison');
+  const comparisonMatches = (finding) => normalizePath(finding.leftPath) === `${lastPath}.durationHours` &&
+    normalizePath(finding.rightPath) === `${previousPath}.durationHours`;
+  const trendEligible = !!(context && context.dataQuality && context.dataQuality.trendEligible);
+  if (trendEligible && (comparisons.length !== 1 || !comparisonMatches(comparisons[0]))) {
+    return fail(comparisons.length ? 'recap_unexpected_comparison' : 'recap_missing_required_comparison');
+  }
+  if (!trendEligible && (comparisons.length || !parsed.limitations.includes('INSUFFICIENT_TREND_DATA'))) {
+    return fail(comparisons.length ? 'recap_comparison_not_allowed' : 'recap_missing_trend_limitation');
+  }
+  const hasFeelings = !!(context && context.last12Weeks && context.last12Weeks.feelingsTotal &&
+    Object.values(context.last12Weeks.feelingsTotal).some((value) => Number(value) > 0));
+  const charts = parsed.findings.filter((finding) => finding && finding.type === 'chart');
+  const hasFeelingsChart = charts.length === 1 &&
+    charts[0].metric === 'feelings' && charts[0].period === 'weekly' && normalizePath(charts[0].evidence) === 'last12Weeks.feelings';
+  if ((hasFeelings && !hasFeelingsChart) || (!hasFeelings && charts.length !== 0)) {
+    return fail(hasFeelings ? 'recap_missing_feelings_chart' : 'recap_unexpected_feelings_chart');
+  }
+  const goals = parsed.findings.filter((finding) => finding && finding.type === 'goal_projection');
+  if (goals.length > 1) return fail('recap_goal_limit');
+  const calendarLists = parsed.findings.filter((finding) => finding &&
+    (finding.type === 'calendar_plan_list' || finding.type === 'calendar_event_list'));
+  if (calendarLists.length > 1) return fail('recap_calendar_list_limit');
+  const addDays = (key, days) => {
+    const [year, month, day] = String(key).split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day + days));
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+  };
+  for (const finding of calendarLists) {
+    const collection = finding.type === 'calendar_plan_list'
+      ? context && context.calendar && context.calendar.plannedSessions
+      : context && context.calendar && context.calendar.events;
+    const filterMonth = finding.filter && finding.filter.month;
+    const items = collection && Array.isArray(collection.items) ? collection.items
+      .filter((item) => {
+        const itemDate = dateKeyForValue(item && item.date, context.timezone);
+        return itemDate && itemDate.slice(0, 7) === filterMonth &&
+          (finding.type !== 'calendar_plan_list' || item.status === 'planned');
+      }) : [];
+    const endExclusive = addDays(asOfDate, 7);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(asOfDate)) || !items.length ||
+        items.some((item) => {
+          const date = dateKeyForValue(item.date, context.timezone);
+          return date < asOfDate || date >= endExclusive;
+        })) return fail('recap_calendar_outside_coming_week');
+  }
+  const personalRecords = parsed.findings.filter((finding) => finding && finding.type === 'personal_record');
+  const lastWeekEnd = addDays(weekly[lastIndex].weekStart, 7);
+  for (const finding of personalRecords) {
+    const record = valueAtPath(context, normalizePath(finding.path));
+    if (!record.found || !record.value || String(record.value.date) < weekly[lastIndex].weekStart ||
+        String(record.value.date) >= lastWeekEnd) return fail('recap_personal_record_outside_week');
+  }
+  const allowedTypes = new Set(['metric', 'comparison', 'chart', 'goal_projection',
+    'calendar_plan_list', 'calendar_event_list', 'personal_record']);
+  if (parsed.findings.some((finding) => !finding || !allowedTypes.has(finding.type))) {
+    return fail('recap_unexpected_finding');
+  }
+  return { ...ordinary, recap: { contractVersion: WEEKLY_RECAP_CONTRACT_VERSION, lastWeekPath: lastPath } };
+}
+
 function buildAiInsightsUsageLog(userId, questionLength, usage) {
   const count = (key) => {
     const value = usage && usage[key];
@@ -1475,14 +1661,19 @@ module.exports = {
   MODEL,
   MAX_HISTORY_TURNS,
   MAX_CALENDAR_LIST_ITEMS,
+  WEEKLY_RECAP_QUESTION,
+  WEEKLY_RECAP_CONTRACT_VERSION,
   AiProviderConfigurationError,
   resolveAnthropicProvider,
   makeSignedHistoryTurn,
   verifyHistoryTurns,
   validateInsightResponse,
+  parseModelJson,
   safeFindingDiagnostics,
   buildSystemPrompt,
   buildAiInsightsRequest,
+  buildWeeklyRecapRequest,
+  validateWeeklyRecapCompleteness,
   buildAiInsightsUsageLog,
   valueAtPath,
   resolveChartSeries,

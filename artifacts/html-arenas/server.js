@@ -42,6 +42,8 @@ const {
   buildAiInsightsRequest,
   buildAiInsightsUsageLog
 } = require('./ai-insights');
+const { configureAiInsightsService } = require('./ai-insights-service');
+const { createAiInsightsRuntime } = require('./ai-insights-runtime');
 const {
   createRequestAuthMemo,
   challengeWindowFor,
@@ -586,6 +588,9 @@ app.get(['/html/arenas-time.js', '/arenas-time.js'], (req, res) => {
 // express.static so it follows the existing dual-path shared-asset convention.
 app.get(['/html/arenas-insights.js', '/arenas-insights.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-insights.js'));
+});
+app.get(['/html/arenas-recaps.js', '/arenas-recaps.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-recaps.js'));
 });
 // Mobile Ask AI sheet controller. It is injected only alongside an eligible
 // athlete-page AI FAB (the profile's module is statically loaded by its page).
@@ -1356,8 +1361,8 @@ function displayFromUser(user) {
 }
 
 // ── USER PREFERENCES (Settings toggles) ────────────────────────────────────
-// Stored as an object under user_metadata.prefs. A missing key means TRUE
-// (default-on): nobody's experience changes until they explicitly opt out.
+// Stored as an object under user_metadata.prefs. Existing preference keys are
+// default-on; weekly recap is deliberately opt-in and defaults false.
 // NOTE: updateUserById merges top-level metadata keys but replaces nested
 // objects wholesale — writers must read-merge-write the prefs object.
 const PREF_KEYS = [
@@ -1368,8 +1373,10 @@ const PREF_KEYS = [
   'notify_comments',       // gates type 'comment'
   'notify_followers',      // gates type 'follow'
   'notify_challenges',     // gates type 'challenge' (invites + reminders)
-  'notify_events'          // gates type 'event' (invites, RSVPs, friend-going)
+  'notify_events',         // gates type 'event' (invites, RSVPs, friend-going)
+  'weekly_recap'           // opt-in Individual Pro scheduled recap generation
 ];
+const PREF_DEFAULTS = { weekly_recap: false };
 
 // Profile tabs whose header badges show "new since last viewed" counts.
 // Per-tab last-seen timestamps live server-side in user_metadata.tab_seen
@@ -1379,7 +1386,9 @@ const TAB_SEEN_KEYS = ['activities', 'achievements', 'clubs', 'following'];
 function prefsFromMeta(meta) {
   const stored = (meta && meta.prefs) || {};
   const out = {};
-  PREF_KEYS.forEach((k) => { out[k] = stored[k] !== false; });
+  PREF_KEYS.forEach((k) => {
+    out[k] = typeof stored[k] === 'boolean' ? stored[k] : (PREF_DEFAULTS[k] !== false);
+  });
   return out;
 }
 // Which recipient preference gates each notification type. Types not listed
@@ -8558,6 +8567,64 @@ app.get(BASE + '/profile', requirePageAuth, async (req, res) => {
     sendPageError(res);
   }
 });
+// Stored weekly recap pages are strictly self-scoped. The runner writes only
+// generated rows; pending/failed rows never become user-visible.
+function recapPagePayload(row) {
+  const saved = row && row.findings;
+  const envelope = saved && !Array.isArray(saved) && typeof saved === 'object' ? saved : {};
+  const typedFindings = Array.isArray(saved) ? saved : (Array.isArray(envelope.findings) ? envelope.findings : []);
+  const storedEvidence = Array.isArray(envelope.evidence) ? envelope.evidence : [];
+  const evidence = storedEvidence.length ? storedEvidence : typedFindings.flatMap((finding) => {
+    if (!finding || typeof finding !== 'object') return [];
+    if (finding.type === 'comparison') return [finding.leftPath, finding.rightPath];
+    return [finding.path || finding.evidence];
+  }).filter((path) => typeof path === 'string').map((path) => ({ path }));
+  const weekStart = String(row.week_start || '').slice(0, 10);
+  return {
+    weekStart,
+    weekEnd: /^\d{4}-\d{2}-\d{2}$/.test(weekStart) ? addDaysToKey(weekStart, 6) : null,
+    timezone: row.timezone || 'UTC',
+    prose: row.prose || '',
+    chart: row.chart || null,
+    evidence,
+    limitations: Array.isArray(envelope.limitations) ? envelope.limitations : []
+  };
+}
+
+async function sendWeeklyRecapPage(req, res, weekStart) {
+  if (!supabaseAdmin) return res.status(503).send('Service unavailable');
+  try {
+    let query = supabaseAdmin.from('weekly_recaps')
+      .select('week_start, timezone, findings, prose, chart')
+      .eq('user_id', req.user.id)
+      .eq('status', 'generated');
+    if (weekStart) query = query.eq('week_start', weekStart);
+    else query = query.order('week_start', { ascending: false }).limit(1);
+    const { data, error } = await query;
+    if (error) throw error;
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) return res.status(404).send('Weekly recap not found.');
+    const recap = recapPagePayload(row);
+    let html = injectArenasData(fs.readFileSync(path.join(HTML, 'arenas-recaps.html'), 'utf8'), {});
+    html = html.replace('</head>', '<script>window.ARENAS_RECAP = ' +
+      JSON.stringify(recap).replace(/</g, '\\u003c') + ';</script></head>');
+    // This page has the athlete navigation and its ordinary Log FAB, but it
+    // deliberately never adds Ask AI or opens a live Insights sheet.
+    html = injectBottomNav(html, 'profile', { showAiFab: false });
+    res.type('html').send(html);
+  } catch (err) {
+    console.log('Weekly recap page error:', err.message);
+    sendPageError(res);
+  }
+}
+
+app.get(BASE + '/recaps', requirePageAuth, async (req, res) => sendWeeklyRecapPage(req, res, null));
+app.get(BASE + '/recaps/:weekStart', requirePageAuth, async (req, res) => {
+  const weekStart = String(req.params.weekStart || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) return res.status(404).send('Weekly recap not found.');
+  return sendWeeklyRecapPage(req, res, weekStart);
+});
+
 // Profile stats & PRs computed from the signed-in user's own `activities`.
 // Hero stats and the sport breakdown respect the `period` filter; streaks,
 // the 12-week chart, and personal records are always all-time (per spec).
@@ -8828,7 +8895,12 @@ async function releaseAiUsageClaim(userId, sourceKey) {
   throw lastError || new Error('Could not refund AI Insights usage');
 }
 
-function buildAiPersonalRecords(acts, tz) {
+/*
+ * Retired pre-service context implementation. Kept non-executable only until
+ * the endpoint-equivalence fixture has moved its frozen baseline out of this
+ * source file; all production context construction is below via
+ * ai-insights-service and ai-insights-runtime.
+function retiredAiPersonalRecordsReference(acts, tz) {
   const km = (a) => parseDistanceKmUnitAware(a.distance);
   const records = [];
   // Equal records prefer the earlier date, then sport id, so database return
@@ -8861,7 +8933,10 @@ function buildAiPersonalRecords(acts, tz) {
   return records;
 }
 
-async function buildAiInsightsContext(user) {
+// Retained temporarily as a frozen implementation reference for
+// scripts/verify-ai-insights-ask-equivalence.js. Production calls are bound to
+// ai-insights-service below; do not add new callers here.
+async function retiredAiInsightsContextReference(user) {
   const { ACTIVITY_FEELING_LABELS } = require('./html/arenas-activity-card.js');
   const feelingKeys = Object.keys(ACTIVITY_FEELING_LABELS);
   const tz = getUserTimezone(user);
@@ -9040,7 +9115,7 @@ async function buildAiInsightsContext(user) {
       ...withAverages(acts, allTimeObservedDays),
       sports,
       streaks: { currentDays: currentStreak, longestDays: longestStreak },
-      personalRecords: buildAiPersonalRecords(acts, tz)
+      personalRecords: retiredAiPersonalRecordsReference(acts, tz)
     },
     last12Weeks: {
       ...withAverages(detailedActs, detailedObservedDays),
@@ -9318,6 +9393,26 @@ async function buildAiInsightsContext(user) {
   return context;
 }
 
+async function retiredAiInsightsUserReference(userId) {
+  const { data, error } = await supabaseAdmin.auth.admin.getUserById(userId);
+  if (error) throw error;
+  return data && data.user;
+}
+*/
+
+// Both request-time Insights and the standalone recap runner resolve through
+// this canonical dependency factory.  The server supplies its existing client
+// so instrumentation remains unchanged; jobs create the equivalent client
+// without importing this Express module.
+const aiInsightsService = configureAiInsightsService({
+  ...createAiInsightsRuntime({ supabaseAdmin }),
+  createAnthropicClient: getAnthropicClient
+});
+
+async function buildAiInsightsContext(user, asOf) {
+  return aiInsightsService.buildContextForAuthenticatedUser(user, asOf);
+}
+
 app.get(BASE + '/api/profile/ai-insights/status', requireAuth, requireActivePro('ai_insights'), async (req, res) => {
   try {
     resolveAnthropicProvider(process.env);
@@ -9470,11 +9565,16 @@ app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_in
       message: `You’ve used all ${AI_INSIGHTS_MONTHLY_LIMIT} AI Insights questions for this month. Your limit resets on ${new Date(usage.resetDate + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })}.`
     });
   }
+  let output;
   let response;
   try {
-    response = await getAnthropicClient(providerConfig).messages.create(
-      buildAiInsightsRequest(context, question, verifiedHistory)
-    );
+    output = await aiInsightsService.runValidatedRequest(context, 'ask', {
+      question,
+      history: verifiedHistory,
+      providerConfig,
+      correlationId
+    });
+    response = output.response;
     console.log(JSON.stringify({ ...buildAiInsightsUsageLog(req.user.id, question.length, response.usage), correlationId }));
   } catch (err) {
     console.log(JSON.stringify({ ...buildAiInsightsUsageLog(req.user.id, question.length, null), correlationId }));
@@ -9494,8 +9594,8 @@ app.post(BASE + '/api/profile/ai-insights', requireAuth, requireActivePro('ai_in
     });
   }
   try {
-    const text = (response.content || []).filter((block) => block.type === 'text').map((block) => block.text).join('');
-    const validated = validateInsightResponse(text, context);
+    const text = output.text;
+    const validated = output.validated;
     if (!validated.ok) {
       console.warn('AI Insights validation rejection:', JSON.stringify({
         rejectedReason: validated.reason,
@@ -10549,6 +10649,11 @@ app.post(BASE + '/api/profile/prefs', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Invalid preference' });
   }
   try {
+    // Opt-in is entitlement-protected server-side. Turning it off is always
+    // allowed, including after a subscription ends, so users retain control.
+    if (key === 'weekly_recap' && value === true && (await getUserPlan(req.user.id)) !== 'pro') {
+      return res.status(403).json({ error: 'pro_required', message: 'Weekly AI recap is available with Individual Pro.' });
+    }
     const current = (req.user.user_metadata && req.user.user_metadata.prefs) || {};
     const prefs = Object.assign({}, current, { [key]: value });
     const { error } = await supabaseAdmin.auth.admin.updateUserById(req.user.id, {
@@ -10754,7 +10859,7 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
       following, followers, goals, plannedSessions, planSeries, achievements,
       notificationsReceived, notificationsTriggered,
       eventRsvps, eventsCreated, challengesCreated, challengeParticipations,
-      memberships, clubInvitesSent, userSubs
+       memberships, clubInvitesSent, userSubs, weeklyRecaps
     ] = await Promise.all([
       fetchAllRows('activities', q => q.eq('user_id', uid),
         'sport, title, date, duration, notes, feeling, distance, pace, avg_hr, elevation, cadence, run_type, avg_power, avg_speed, ride_type, top_grade, project_grade, problems_count, climbing_style, climb_location, swim_pace, pool_type, stroke, session_type, position, session_focus, total_volume, top_lift, sets_completed, rpe, trail, terrain, pack_weight, yoga_style, yoga_format, focus_area, instructor, created_at, golf_strokes, golf_course'),
@@ -10786,7 +10891,10 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
       fetchAllRows('club_invites', q => q.eq('invited_by', uid),
         'club_id, email, role, status, expires_at, accepted_at, created_at'),
       fetchAllRows('subscriptions', q => q.eq('owner_type', 'user').eq('owner_id', uid),
-        'plan, stripe_customer_id, stripe_subscription_id, status, current_period_end, cancel_at_period_end, created_at, updated_at')
+         'plan, stripe_customer_id, stripe_subscription_id, status, current_period_end, cancel_at_period_end, created_at, updated_at'),
+       // Include all of the account's recap records, including failed attempts.
+       fetchAllRows('weekly_recaps', q => q.eq('user_id', uid),
+         'id, week_start, timezone, window_start_utc, window_end_utc, status, attempts, failure_reason, findings, prose, chart, context_schema_version, contract_version, generated_at, created_at')
     ]);
     const clubInvitesReceived = email
       ? await fetchAllRows('club_invites', q => q.eq('email', email),
@@ -10987,7 +11095,8 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
       subscriptions: {
         user: userSubs,
         owned_clubs: clubSubs.map(({ owner_id, ...rest }) => ({ club: clubRef(owner_id), ...rest }))
-      }
+      },
+      weekly_recaps: weeklyRecaps
     };
     const fname = 'arenas-export-' + new Date().toISOString().slice(0, 10) + '.json';
     res.setHeader('Content-Disposition', 'attachment; filename="' + fname + '"');
@@ -11267,6 +11376,7 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
     }
     await del('notifications', q => q.eq('user_id', uid));
     await del('notifications', q => q.eq('actor_id', uid));
+    await del('weekly_recaps', q => q.eq('user_id', uid));
     await del('follows', q => q.eq('follower_id', uid));
     await del('follows', q => q.eq('following_id', uid));
     await del('activities', q => q.eq('user_id', uid));

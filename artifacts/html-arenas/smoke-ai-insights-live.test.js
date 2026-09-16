@@ -39,13 +39,30 @@ test('manual smoke blocks all database writes before network access', async () =
   }
 });
 
-test('manual smoke extraction omits startup and requires the real context entrypoint', () => {
-  const source = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
-  const program = smoke.extractContextProgram(source + '\nthrow new Error("startup ran");');
-  assert.ok(program.includes('async function buildAiInsightsContext(user)'));
-  assert.equal(program.includes('app.listen('), false);
-  assert.equal(program.includes('startup ran'), false);
-  assert.throws(() => smoke.extractContextProgram(''), /constants missing/);
+test('manual smoke builds context through the importable runtime without server startup', async () => {
+  const calls = [];
+  const admin = { sentinel: 'read-only-client' };
+  const buildContextForUser = async (userId) => ({ userId, source: 'service' });
+  const buildContext = smoke.makeReadOnlyContextBuilder(admin, {
+    runtimeFactory(options) {
+      calls.push(['runtime', options]);
+      return { runtime: true };
+    },
+    serviceFactory(runtime) {
+      calls.push(['service', runtime]);
+      return { buildContextForUser };
+    }
+  });
+  assert.deepEqual(await buildContext(USER_ID), { userId: USER_ID, source: 'service' });
+  assert.deepEqual(calls, [
+    ['runtime', { supabaseAdmin: admin }],
+    ['service', { runtime: true }]
+  ]);
+  const smokeSource = fs.readFileSync(path.join(__dirname, 'scripts/smoke-ai-insights-live.js'), 'utf8');
+  assert.match(smokeSource, /createAiInsightsRuntime/);
+  assert.match(smokeSource, /createAiInsightsService/);
+  assert.doesNotMatch(smokeSource, /require\(['"]\.\.\/server/);
+  assert.doesNotMatch(smokeSource, /app\.listen/);
 });
 
 test('manual smoke enforces feelings chart and single-count no-chart expectations', () => {

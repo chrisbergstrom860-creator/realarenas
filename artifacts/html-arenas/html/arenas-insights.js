@@ -246,6 +246,63 @@
     conversation.turns.forEach(function (turn) { renderTurn(instance, turn.question, turn.response); });
   }
 
+  // A saved weekly recap has already passed the server-side Insights validator.
+  // Keep its presentation in this module so its chart remains exactly the same
+  // verified renderer used for live Insights answers. This deliberately has no
+  // composer, status request, or provider request.
+  function mountStoredRecap(container, recap) {
+    if (!container || !container.querySelector) throw new Error('ArenasInsights.mountStoredRecap requires a container element');
+    unmount(container);
+    recap = recap || {};
+    var instance = {
+      container: container, active: true, cleanups: [], refs: {}
+    };
+    var limitations = Array.isArray(recap.limitations) ? recap.limitations : [];
+    var evidence = Array.isArray(recap.evidence) ? recap.evidence : [];
+    var limitationsHtml = limitations.map(function (line) {
+      return '<li>' + escapeAiHtml(line) + '</li>';
+    }).join('');
+    var evidenceHtml = evidence.map(function (item) {
+      return '<span class="recap-evidence-badge">' + escapeAiHtml(item && item.path) + '</span>';
+    }).join('');
+    container.innerHTML =
+      '<article class="recap-answer-card">' +
+        '<div class="recap-answer-label">✦ Weekly AI recap</div>' +
+        '<div class="recap-prose">' + escapeAiHtml(recap.prose) + '</div>' +
+        (recap.chart ? '<div class="ai-chart recap-chart" data-ai-chart-pending="1"></div>' : '') +
+        (limitationsHtml ? '<ul class="recap-limitations">' + limitationsHtml + '</ul>' : '') +
+        (evidenceHtml ? '<div class="recap-evidence"><div>Verified data</div>' + evidenceHtml + '</div>' : '') +
+      '</article>';
+    mounts.push(instance);
+    var chartHost = container.querySelector('.recap-chart');
+    if (!chartHost || !recap.chart) return instance;
+    var lastWidth = 0;
+    var lastHeight = 0;
+    var redraw = function () {
+      if (!instance.active) return;
+      var measured = chartHost.getBoundingClientRect ? chartHost.getBoundingClientRect().width : chartHost.clientWidth;
+      if (!(measured > 0)) measured = container.getBoundingClientRect().width;
+      if (!(measured > 0)) return;
+      var roundedWidth = Math.round(measured);
+      var expectedHeight = window.innerWidth <= 768 ? 160 : 180;
+      if (roundedWidth === lastWidth && expectedHeight === lastHeight && chartHost.innerHTML) return;
+      chartHost.innerHTML = renderInsightsChart(recap.chart, roundedWidth);
+      chartHost.removeAttribute('data-ai-chart-pending');
+      lastWidth = roundedWidth;
+      lastHeight = expectedHeight;
+    };
+    redraw();
+    if (typeof ResizeObserver === 'function') {
+      var observer = new ResizeObserver(redraw);
+      observer.observe(chartHost);
+      instance.cleanups.push(function () { observer.disconnect(); });
+    } else {
+      window.addEventListener('resize', redraw);
+      instance.cleanups.push(function () { window.removeEventListener('resize', redraw); });
+    }
+    return instance;
+  }
+
   function listen(instance, node, event, handler) {
     node.addEventListener(event, handler);
     instance.cleanups.push(function () { node.removeEventListener(event, handler); });
@@ -409,5 +466,5 @@
     });
   }
 
-  window.ArenasInsights = { mount: mount, unmount: unmount };
+  window.ArenasInsights = { mount: mount, mountStoredRecap: mountStoredRecap, unmount: unmount };
 })(window);

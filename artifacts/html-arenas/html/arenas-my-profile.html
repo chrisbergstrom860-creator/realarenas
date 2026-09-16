@@ -284,6 +284,7 @@ button,select,input,textarea{font-family:var(--font)}
 .toggle-wrap{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--gray-700)}
 .toggle{width:36px;height:20px;border-radius:10px;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0}
 .toggle.on{background:var(--green)}.toggle.off{background:var(--gray-300)}
+.toggle.disabled{cursor:not-allowed;opacity:.55}
 .toggle::after{content:'';position:absolute;top:2px;width:16px;height:16px;border-radius:50%;background:white;transition:left .2s;box-shadow:var(--shadow)}
 .toggle.on::after{left:18px}.toggle.off::after{left:2px}
 .privacy-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:var(--border)}
@@ -658,6 +659,12 @@ button,select,input,textarea{font-family:var(--font)}
             <div class="privacy-row" style="border-bottom:none"><div><div class="pr-text">Event invites &amp; RSVPs</div></div><div class="toggle on" data-pref="notify_events" onclick="prefToggle(this)"></div></div>
           </div>
         </div>
+         <div class="card" id="weekly-recap-settings">
+           <div class="card-hdr"><span class="card-title">✦ AI Insights</span><span class="pref-saved" aria-live="polite"></span></div>
+           <div class="settings-section">
+             <div class="privacy-row" style="border-bottom:none"><div><div class="pr-text">Weekly AI recap</div><div class="pr-sub">Every Monday morning, Arenas generates a summary of your previous week's training using AI Insights and notifies you in the app. Only your own training data is used.</div><div id="weekly-recap-pro-hint" class="pr-sub" style="display:none;margin-top:6px">Weekly AI recap is available with Individual Pro.</div></div><div class="toggle" data-pref="weekly_recap" onclick="prefToggle(this)" role="switch" aria-label="Weekly AI recap"></div></div>
+           </div>
+         </div>
         <!-- Legal & support reference links. These replaced the marketing
              footer that used to sit at the bottom of /challenges and
              /leaderboards (removed 2026-07) — Settings is now the in-app
@@ -868,11 +875,13 @@ function toggleLike(btn) {
 // card's indicator says so. Initial state is hydrated from ARENAS_DATA.prefs
 // (see the hydration IIFE below), so a reload always shows the stored truth.
 function prefToggle(el) {
+  if (!el || el.getAttribute('aria-disabled') === 'true') return;
   var key = el.getAttribute('data-pref');
   var wasOn = el.classList.contains('on');
   var next = !wasOn;
   el.classList.toggle('on', next);
   el.classList.toggle('off', !next);
+  el.setAttribute('aria-checked', next ? 'true' : 'false');
   var card = el.closest('.card');
   var ind = card ? card.querySelector('.pref-saved') : null;
   if (ind) { ind.textContent = 'Saving…'; ind.classList.remove('err'); ind.style.opacity = '1'; clearTimeout(ind._t); }
@@ -889,16 +898,27 @@ function prefToggle(el) {
     .catch(function () {
       el.classList.toggle('on', wasOn);
       el.classList.toggle('off', !wasOn);
+      el.setAttribute('aria-checked', wasOn ? 'true' : 'false');
       if (ind) { ind.textContent = "Couldn't save — reverted"; ind.classList.add('err'); ind._t = setTimeout(function () { ind.style.opacity = '0'; }, 3000); }
     });
 }
 // Hydrate the toggles from the server-injected preferences (missing key = on).
 (function () {
   var prefs = (window.ARENAS_DATA && window.ARENAS_DATA.prefs) || {};
+  var pro = !!(window.ARENAS_DATA && window.ARENAS_DATA.gating && window.ARENAS_DATA.gating.aiInsightsPro);
   document.querySelectorAll('.toggle[data-pref]').forEach(function (el) {
-    var on = prefs[el.getAttribute('data-pref')] !== false;
+    var key = el.getAttribute('data-pref');
+    var on = key === 'weekly_recap' ? prefs[key] === true : prefs[key] !== false;
     el.classList.toggle('on', on);
     el.classList.toggle('off', !on);
+    el.setAttribute('aria-checked', on ? 'true' : 'false');
+    if (key === 'weekly_recap' && !pro) {
+      el.classList.remove('on');
+      el.classList.add('off', 'disabled');
+      el.setAttribute('aria-disabled', 'true');
+      var hint = document.getElementById('weekly-recap-pro-hint');
+      if (hint) hint.style.display = 'block';
+    }
   });
 })();
 // Batch C2: both photo modals ride window.arenasOverlay — the legacy

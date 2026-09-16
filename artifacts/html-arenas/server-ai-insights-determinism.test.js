@@ -15,6 +15,11 @@ const {
 
 const source = fs.readFileSync(require.resolve('./server.js'), 'utf8');
 const profileSource = fs.readFileSync(require.resolve('./html/arenas-my-profile.html'), 'utf8');
+const aiInsightsServiceSource = fs.readFileSync(require.resolve('./ai-insights-service.js'), 'utf8');
+const {
+  parseDistanceKmUnitAware,
+  parseDurationHours
+} = require('./ai-insights-runtime');
 
 function functionSourceFrom(text, name) {
   let start = text.indexOf(`function ${name}(`);
@@ -39,9 +44,9 @@ function functionSourceFrom(text, name) {
   throw new Error(`unterminated ${name}`);
 }
 
-function loadFunctions(names, globals) {
+function loadFunctions(names, globals, text = source) {
   const context = vm.createContext({ ...globals });
-  vm.runInContext(`${names.map((name) => functionSourceFrom(source, name)).join('\n')}\nthis.result = { ${names.join(',')} };`, context);
+  vm.runInContext(`${names.map((name) => functionSourceFrom(text, name)).join('\n')}\nthis.result = { ${names.join(',')} };`, context);
   return context.result;
 }
 
@@ -337,22 +342,25 @@ test('real Goals card and Overview mini-card render the day-rounded pace label',
 });
 
 test('personal-record ties prefer earlier date and then sport id', () => {
+  // Personal-record calculation now belongs to the importable Insights
+  // service. Exercise that exact helper with the canonical runtime parsers;
+  // restoring a duplicate server declaration would hide extraction drift.
   const { buildAiPersonalRecords } = loadFunctions(['buildAiPersonalRecords'], {
-    parseDistanceKmUnitAware: (value) => Number(value) || 0,
-    parseDurationHours: (value) => Number(value) || 0,
+    parseDistanceKmUnitAware,
+    parseDurationHours,
     round1: (value) => Math.round(value * 10) / 10,
     dayKey
-  });
+  }, aiInsightsServiceSource);
   const earlierWins = buildAiPersonalRecords([
     { sport: 'cycling', duration: 2, distance: 0, date: '2026-04-02T12:00:00Z' },
     { sport: 'running', duration: 2, distance: 0, date: '2026-04-01T12:00:00Z' }
-  ], 'UTC').find((record) => record.type === 'longest_activity');
+  ], 'UTC', { parseDistanceKmUnitAware, parseDurationHours, dayKey }).find((record) => record.type === 'longest_activity');
   assert.equal(earlierWins.sport, 'running');
 
   const sportWins = buildAiPersonalRecords([
     { sport: 'running', duration: 2, distance: 0, date: '2026-04-01T12:00:00Z' },
     { sport: 'cycling', duration: 2, distance: 0, date: '2026-04-01T12:00:00Z' }
-  ], 'UTC').find((record) => record.type === 'longest_activity');
+  ], 'UTC', { parseDistanceKmUnitAware, parseDurationHours, dayKey }).find((record) => record.type === 'longest_activity');
   assert.equal(sportWins.sport, 'cycling');
 });
 

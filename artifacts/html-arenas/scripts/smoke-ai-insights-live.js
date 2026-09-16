@@ -10,8 +10,8 @@
  *     --question "How many sessions did I do last week?"
  *
  * This deliberately does not start server.js or call an application route.  It
- * extracts only server function declarations, builds the production context
- * through those functions, and gives Supabase a GET/HEAD-only fetch.  Any
+ * uses the importable production Insights runtime, builds the production
+ * context through that service, and gives Supabase a GET/HEAD-only fetch. Any
  * database or auth write therefore throws before it can reach the network.
  * No quota, history, usage, or other application rows are created.
  * Calls are sequential with 10 seconds between questions. HTTP 429 responses
@@ -19,24 +19,12 @@
  * This manual tool is never invoked by the automated test suite.
  */
 
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
-const ts = require('typescript');
-const { createRequire } = require('module');
 const { createClient } = require('@supabase/supabase-js');
 const Anthropic = require('@anthropic-ai/sdk');
 const aiInsights = require('../ai-insights');
+const { createAiInsightsService } = require('../ai-insights-service');
+const { createAiInsightsRuntime } = require('../ai-insights-runtime');
 
-const SERVER_FILE = path.resolve(__dirname, '..', 'server.js');
-const REQUIRED_CONTEXT_CONSTANTS = [
-  'PREF_KEYS',
-  'MI_TO_KM',
-  'GOAL_TYPES',
-  'GOAL_PERIODS',
-  'GOAL_UNITS',
-  'MAX_ACTIVE_GOALS'
-];
 const CHART_QUESTIONS = [
   'Show me how I\'ve been training day by day for the last three months',
   'Chart my distance by week',
@@ -98,98 +86,20 @@ function readOnlyFetch(input, init) {
 }
 
 /*
- * Do not require server.js: its module body starts the HTTP server.  Instead
- * compile the top-level declarations in a VM.  The function declarations are
- * the production functions, not a second implementation of context logic.
+ * Do not require server.js: its module body starts an HTTP listener. This
+ * builds the same service/runtime dependency closure used by the one-shot
+ * recap runner, retaining the caller's read-only Supabase client.
  */
-function extractContextProgram(source) {
-  const sourceFile = ts.createSourceFile(
-    SERVER_FILE,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.JS
-  );
-  const functionNodes = sourceFile.statements.filter((statement) =>
-    ts.isFunctionDeclaration(statement) && statement.name
-  );
-  const functionNames = new Set(functionNodes.map((node) => node.name.text));
-  const constantNodes = [];
-  const foundConstants = new Set();
-  for (const statement of sourceFile.statements) {
-    if (!ts.isVariableStatement(statement)) continue;
-    for (const declaration of statement.declarationList.declarations) {
-      if (!ts.isIdentifier(declaration.name) ||
-          !REQUIRED_CONTEXT_CONSTANTS.includes(declaration.name.text)) continue;
-      constantNodes.push(`const ${declaration.getText(sourceFile)};`);
-      foundConstants.add(declaration.name.text);
-    }
+function makeReadOnlyContextBuilder(supabaseAdmin, {
+  runtimeFactory = createAiInsightsRuntime,
+  serviceFactory = createAiInsightsService
+} = {}) {
+  const runtime = runtimeFactory({ supabaseAdmin });
+  const service = serviceFactory(runtime);
+  if (!service || typeof service.buildContextForUser !== 'function') {
+    throw new Error('Production AI Insights service has no context entrypoint');
   }
-  const missing = REQUIRED_CONTEXT_CONSTANTS.filter((name) => !foundConstants.has(name));
-  if (missing.length) {
-    throw new Error(`Production context constants missing from server.js: ${missing.join(', ')}`);
-  }
-  if (!functionNames.has('buildAiInsightsContext')) {
-    throw new Error('Production buildAiInsightsContext declaration was not found');
-  }
-
-  // Only declarations are evaluated.  Route registration, app construction,
-  // dotenv loading, and every other module-startup statement are excluded.
-  return [
-    ...constantNodes,
-    ...functionNodes.map((node) => node.getText(sourceFile)),
-    'this.__buildAiInsightsContext = buildAiInsightsContext;'
-  ].join('\n\n');
-}
-
-function makeExtractedContextBuilder(supabaseAdmin) {
-  const source = fs.readFileSync(SERVER_FILE, 'utf8');
-  const program = extractContextProgram(source);
-  const localRequire = createRequire(SERVER_FILE);
-  const tzdate = localRequire('./tzdate');
-  const sports = localRequire('./sports');
-  const countries = localRequire('./countries');
-  const activityCard = localRequire('./html/arenas-activity-card.js');
-
-  /*
-   * The server's imports are not evaluated with the rest of server.js.  Give
-   * the extracted functions the same module exports they use, while retaining
-   * a local require for the activity-label module used inside the context
-   * builder.  These are module objects, never user/context data.
-   */
-  const injectedRequire = (request) => {
-    if (request === './tzdate') return tzdate;
-    if (request === './sports') return sports;
-    if (request === './countries') return countries;
-    if (request === './html/arenas-activity-card.js') return activityCard;
-    return localRequire(request);
-  };
-  const quietConsole = {
-    log() {},
-    info() {},
-    warn() {},
-    error() {}
-  };
-  const sandbox = {
-    require: injectedRequire,
-    supabaseAdmin,
-    tzdate,
-    sports,
-    countries,
-    ...tzdate,
-    ...sports,
-    ...countries,
-    console: quietConsole
-  };
-  vm.createContext(sandbox);
-  vm.runInContext(program, sandbox, {
-    filename: SERVER_FILE,
-    displayErrors: true
-  });
-  if (typeof sandbox.__buildAiInsightsContext !== 'function') {
-    throw new Error('Could not initialize production buildAiInsightsContext');
-  }
-  return sandbox.__buildAiInsightsContext;
+  return service.buildContextForUser.bind(service);
 }
 
 function finiteUsageNumber(usage, key) {
@@ -332,8 +242,8 @@ async function main() {
     if (error) throw error;
     user = data && data.user;
     if (!user) throw new Error('user was not found');
-    const buildContext = makeExtractedContextBuilder(supabaseAdmin);
-    context = await buildContext(user);
+    const buildContext = makeReadOnlyContextBuilder(supabaseAdmin);
+    context = await buildContext(user.id);
   } catch (error) {
     console.error(`Read-only context error: ${sanitizeError(error)}`);
     process.exitCode = 1;
@@ -441,7 +351,7 @@ module.exports = {
   SINGLE_COUNT_QUESTION,
   parseArgs,
   readOnlyFetch,
-  extractContextProgram,
+  makeReadOnlyContextBuilder,
   chartSummary,
   sanitizeError,
   rateLimitDelay,
