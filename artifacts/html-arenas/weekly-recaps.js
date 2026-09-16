@@ -116,8 +116,15 @@ async function createRecapNotification(supabase, userId, weekStart) {
 }
 
 async function sweepExpiredWeeklyRecaps(supabase) {
-  const { error } = await supabase.rpc('delete_expired_weekly_recaps');
+  const { data, error } = await supabase.rpc('delete_expired_weekly_recaps');
   if (error) throw new Error(`weekly recap retention sweep failed: ${error.message}`);
+  // The SQL function returns its DELETE row count. A missing or malformed
+  // scalar is an infrastructure contract failure, not an empty sweep.
+  const count = typeof data === 'number' ? data : NaN;
+  if (!Number.isInteger(count) || count < 0) {
+    throw new Error('weekly recap retention sweep returned an invalid deletion count');
+  }
+  return count;
 }
 
 module.exports = {

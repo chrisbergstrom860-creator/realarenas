@@ -464,7 +464,7 @@ test('entitlement reads require current opt-in and Pro, and retention RPC has ze
   };
   assert.equal((await recheckRecapEntitlement(supabase, 'u')).eligible, true);
   const rpcArgs = [];
-  await sweepExpiredWeeklyRecaps({ rpc: async (name, args) => { rpcArgs.push({ name, args }); return { error: null }; } });
+  await sweepExpiredWeeklyRecaps({ rpc: async (name, args) => { rpcArgs.push({ name, args }); return { data: 0, error: null }; } });
   assert.deepEqual(rpcArgs, [{ name: 'delete_expired_weekly_recaps', args: undefined }]);
 });
 
@@ -607,7 +607,7 @@ test('a recovered generated recap is not processed again as a default eligible-u
     } },
     rpc: async (name) => {
       assert.equal(name, 'delete_expired_weekly_recaps');
-      return { error: null };
+      return { data: 0, error: null };
     },
     from: (table) => {
       if (table === 'subscriptions') {

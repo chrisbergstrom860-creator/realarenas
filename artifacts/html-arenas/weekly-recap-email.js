@@ -244,7 +244,11 @@ async function deliverWeeklyRecapEmail({
       const expired = await expireRetryWindow(supabase, stored.id);
       deliveryLog(logger, correlationId, stored.id, expired && expired.email_status || 'failed',
         null, RECAP_EMAIL_RETRY_WINDOW_REASON);
-      return { status: 'failed', attempted: false, reason: RECAP_EMAIL_RETRY_WINDOW_REASON };
+      return {
+        status: 'failed', attempted: false, reason: RECAP_EMAIL_RETRY_WINDOW_REASON,
+        terminal: !!(expired && expired.email_status === 'failed'),
+        attempts: expired && Number(expired.email_attempts)
+      };
     }
     return { status: 'not_pending', attempted: false };
   }
@@ -258,7 +262,11 @@ async function deliverWeeklyRecapEmail({
     const expired = await expireRetryWindow(supabase, stored.id);
     deliveryLog(logger, correlationId, stored.id, expired && expired.email_status || 'failed',
       null, RECAP_EMAIL_RETRY_WINDOW_REASON);
-    return { status: 'failed', attempted: false, reason: RECAP_EMAIL_RETRY_WINDOW_REASON };
+    return {
+      status: 'failed', attempted: false, reason: RECAP_EMAIL_RETRY_WINDOW_REASON,
+      terminal: !!(expired && expired.email_status === 'failed'),
+      attempts: expired && Number(expired.email_attempts)
+    };
   }
   let result;
   try {
@@ -267,7 +275,12 @@ async function deliverWeeklyRecapEmail({
     const marked = await markWeeklyRecapEmail(supabase, stored.id, 'failed', null, 'email_send_failed');
     deliveryLog(logger, correlationId, stored.id, marked && marked.email_status || 'failed',
       null, 'email_send_failed');
-    return { status: 'failed', attempted: true, reason: 'email_send_failed' };
+    return {
+      status: 'failed', attempted: true, reason: 'email_send_failed',
+      terminal: marked ? marked.email_status === 'failed' :
+        Number(recap.email_attempts) + 1 >= 3,
+      attempts: marked && Number(marked.email_attempts)
+    };
   }
   if (result && result.ok && result.id) {
     const marked = await markWeeklyRecapEmail(supabase, stored.id, 'sent', result.id, null);
@@ -288,7 +301,12 @@ async function deliverWeeklyRecapEmail({
   const reason = result && result.skipped ? 'email_provider_unavailable' : 'email_send_failed';
   const marked = await markWeeklyRecapEmail(supabase, stored.id, 'failed', null, reason);
   deliveryLog(logger, correlationId, stored.id, marked && marked.email_status || 'failed', null, reason);
-  return { status: 'failed', attempted: true, reason };
+  return {
+    status: 'failed', attempted: true, reason,
+    terminal: marked ? marked.email_status === 'failed' :
+      Number(recap.email_attempts) + 1 >= 3,
+    attempts: marked && Number(marked.email_attempts)
+  };
 }
 
 module.exports = {
