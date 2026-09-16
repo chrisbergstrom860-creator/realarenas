@@ -47,6 +47,7 @@ const { createAiInsightsRuntime } = require('./ai-insights-runtime');
 const { escapeHtml, sendEmail } = require('./email-transport');
 const { unsubscribeRecapEmail } = require('./recap-email-unsubscribe');
 const { shouldInjectAnalytics } = require('./analytics-injection-policy');
+const { renderRecapProse } = require('./recap-prose');
 const {
   createRequestAuthMemo,
   challengeWindowFor,
@@ -8560,7 +8561,12 @@ function recapPagePayload(row) {
     weekStart,
     weekEnd: /^\d{4}-\d{2}-\d{2}$/.test(weekStart) ? addDaysToKey(weekStart, 6) : null,
     timezone: row.timezone || 'UTC',
-    prose: row.prose || '',
+    prose: renderRecapProse(saved, {
+      weekStart,
+      timezone: row.timezone || 'UTC',
+      chart: row.chart || null,
+      storedProse: row.prose
+    }),
     chart: row.chart || null,
     evidence,
     limitations: Array.isArray(envelope.limitations) ? envelope.limitations : []

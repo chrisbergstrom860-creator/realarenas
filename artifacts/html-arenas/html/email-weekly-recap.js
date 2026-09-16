@@ -1,6 +1,7 @@
 'use strict';
 
 const { escapeHtml } = require('../email-transport');
+const { renderRecapProse } = require('../recap-prose');
 
 // Email rendering deliberately reads only the immutable stored recap snapshot.
 // `user` is accepted for the delivery template contract but intentionally is
@@ -8,6 +9,7 @@ const { escapeHtml } = require('../email-transport');
 const DEFAULT_LOGO_URL = 'https://www.realarenas.com/icons/icon-192.png';
 
 function safeNumber(value) {
+  if (value == null || value === '' || typeof value === 'boolean') return null;
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
 }
@@ -101,7 +103,12 @@ function renderRecapEmail(recapRow, user, links) { // eslint-disable-line no-unu
   const privacyUrl = requireLink(links, 'privacyUrl');
   const logoUrl = requireLink(links, 'logoUrl', DEFAULT_LOGO_URL);
   const timezone = String(recapRow.timezone || 'UTC');
-  const prose = String(recapRow.prose || '').trim();
+  const prose = renderRecapProse(recapRow.findings, {
+    weekStart: recapRow.week_start,
+    timezone,
+    chart: recapRow.chart,
+    storedProse: recapRow.prose
+  });
   if (!prose) throw new Error('Weekly recap email requires stored prose');
 
   const metrics = [
@@ -111,7 +118,6 @@ function renderRecapEmail(recapRow, user, links) { // eslint-disable-line no-unu
     // Old rows intentionally omit points. Never recompute from current data.
     ['Points', metricFromStoredRecap(recapRow, 'points'), ' pts']
   ].filter(([, value]) => value != null);
-  const feeling = feelingsSummary(recapRow.chart);
   const subject = `Your week in training — ${range.short}`;
   const escaped = {
     subject: escapeHtml(subject), range: escapeHtml(range.full),
@@ -123,11 +129,9 @@ function renderRecapEmail(recapRow, user, links) { // eslint-disable-line no-unu
     ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 24px"><tr>${
       metrics.map(([label, value, unit]) => `<td style="width:${(100 / metrics.length).toFixed(2)}%;padding:12px 6px;border:1px solid #d4d4d8;background:#f8fafc;text-align:center"><div style="font:700 20px/1.2 Arial,sans-serif;color:#18181b">${escapeHtml(formatNumber(value) + unit)}</div><div style="margin-top:4px;font:12px/1.3 Arial,sans-serif;color:#52525b">${escapeHtml(label)}</div></td>`).join('')
     }</tr></table>` : '';
-  const feelingHtml = feeling
-    ? `<p style="margin:0 0 20px;font:14px/1.5 Arial,sans-serif;color:#3f3f46">${escapeHtml(feeling)}</p>` : '';
-  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f4f4f5;color:#18181b"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#f4f4f5"><tr><td align="center" style="padding:20px 10px"><table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;border-collapse:collapse;background:#ffffff;border:1px solid #d4d4d8"><tr><td style="padding:24px 24px 8px"><img src="${escaped.logoUrl}" alt="Arenas" width="116" style="display:block;width:116px;height:auto;border:0"></td></tr><tr><td style="padding:16px 24px 28px"><div style="font:700 12px/1.3 Arial,sans-serif;letter-spacing:.08em;color:#a16207">WEEKLY AI RECAP</div><h1 style="margin:8px 0 4px;font:700 26px/1.2 Arial,sans-serif;color:#18181b">${escaped.range}</h1><p style="margin:0 0 22px;font:13px/1.4 Arial,sans-serif;color:#52525b">Timezone: ${escaped.timezone}</p>${metricHtml}<p style="margin:0 0 20px;font:16px/1.6 Arial,sans-serif;color:#27272a;white-space:pre-line">${escaped.prose}</p>${feelingHtml}<table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 26px"><tr><td style="background:#facc15"><a href="${escaped.recapUrl}" style="display:inline-block;padding:13px 20px;font:700 14px/1 Arial,sans-serif;color:#18181b;text-decoration:none">See your full recap</a></td></tr></table><div style="padding-top:18px;border-top:1px solid #d4d4d8;font:12px/1.5 Arial,sans-serif;color:#52525b">You’re receiving this because you turned on Weekly AI recap email in Arenas. <a href="${escaped.unsubscribeUrl}" style="color:#27272a;text-decoration:underline">Unsubscribe from recap emails</a> or manage this in <a href="${escaped.settingsUrl}" style="color:#27272a;text-decoration:underline">Settings</a>. Read our <a href="${escaped.privacyUrl}" style="color:#27272a;text-decoration:underline">Privacy Policy</a>.</div></td></tr></table></td></tr></table></body></html>`;
+  const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f4f4f5;color:#18181b"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;background:#f4f4f5"><tr><td align="center" style="padding:20px 10px"><table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;border-collapse:collapse;background:#ffffff;border:1px solid #d4d4d8"><tr><td style="padding:24px 24px 8px"><img src="${escaped.logoUrl}" alt="Arenas" width="116" style="display:block;width:116px;height:auto;border:0"></td></tr><tr><td style="padding:16px 24px 28px"><div style="font:700 12px/1.3 Arial,sans-serif;letter-spacing:.08em;color:#a16207">WEEKLY AI RECAP</div><h1 style="margin:8px 0 4px;font:700 26px/1.2 Arial,sans-serif;color:#18181b">${escaped.range}</h1><p style="margin:0 0 22px;font:13px/1.4 Arial,sans-serif;color:#52525b">Timezone: ${escaped.timezone}</p>${metricHtml}<p style="margin:0 0 20px;font:16px/1.6 Arial,sans-serif;color:#27272a;white-space:pre-line">${escaped.prose}</p><table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:0 0 26px"><tr><td style="background:#facc15"><a href="${escaped.recapUrl}" style="display:inline-block;padding:13px 20px;font:700 14px/1 Arial,sans-serif;color:#18181b;text-decoration:none">See your full recap</a></td></tr></table><div style="padding-top:18px;border-top:1px solid #d4d4d8;font:12px/1.5 Arial,sans-serif;color:#52525b">You’re receiving this because you turned on Weekly AI recap email in Arenas. <a href="${escaped.unsubscribeUrl}" style="color:#27272a;text-decoration:underline">Unsubscribe from recap emails</a> or manage this in <a href="${escaped.settingsUrl}" style="color:#27272a;text-decoration:underline">Settings</a>. Read our <a href="${escaped.privacyUrl}" style="color:#27272a;text-decoration:underline">Privacy Policy</a>.</div></td></tr></table></td></tr></table></body></html>`;
   const metricText = metrics.map(([label, value, unit]) => `${label}: ${formatNumber(value)}${unit}`).join('\n');
-  const text = `${subject}\n${range.full}\nTimezone: ${timezone}\n\n${metricText}${metricText ? '\n\n' : ''}${prose}${feeling ? `\n\n${feeling}` : ''}\n\nSee your full recap: ${recapUrl}\n\nYou’re receiving this because you turned on Weekly AI recap email in Arenas.\nUnsubscribe from recap emails: ${unsubscribeUrl}\nSettings: ${settingsUrl}\nPrivacy Policy: ${privacyUrl}`;
+  const text = `${subject}\n${range.full}\nTimezone: ${timezone}\n\n${metricText}${metricText ? '\n\n' : ''}${prose}\n\nSee your full recap: ${recapUrl}\n\nYou’re receiving this because you turned on Weekly AI recap email in Arenas.\nUnsubscribe from recap emails: ${unsubscribeUrl}\nSettings: ${settingsUrl}\nPrivacy Policy: ${privacyUrl}`;
   return { subject, html, text };
 }
 

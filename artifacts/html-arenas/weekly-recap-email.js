@@ -178,7 +178,7 @@ async function deliverWeeklyRecapEmail({
   signToken = signRecapEmailToken, origin = RECAP_EMAIL_ORIGIN,
   now = () => new Date()
 }) {
-  if (!recap || recap.status !== 'generated' || recap.email_status !== 'pending') {
+  if (!recap || recap.status !== 'generated') {
     return { status: 'not_pending', attempted: false };
   }
   const entitlement = await entitlementCheck(supabase, recap.user_id);
@@ -189,6 +189,18 @@ async function deliverWeeklyRecapEmail({
     return { status: 'skipped', attempted: false, reason };
   }
   const user = entitlement.user;
+  // A dry run is an operator preview, not a retry. It intentionally renders
+  // today’s deterministic template from the stored recap even when delivery is
+  // already sent and its immutable provider payload must never be changed.
+  if (dryRun) {
+    const preview = makeDeliverySnapshot(recap, user, { render, signToken, origin });
+    const body = JSON.parse(preview.payload);
+    deliveryLog(logger, correlationId, recap.id, 'dry_run', null);
+    return { status: 'dry_run', attempted: false, subject: body.subject, text: body.text };
+  }
+  if (recap.email_status !== 'pending') {
+    return { status: 'not_pending', attempted: false };
+  }
   let snapshot = deliverySnapshot(recap);
   let stored = recap;
   const expectedKey = `weekly-recap-email:${recap.id}`;
@@ -203,11 +215,6 @@ async function deliverWeeklyRecapEmail({
   if (!snapshot) {
     snapshot = makeDeliverySnapshot(recap, user, { render, signToken, origin });
     if (!dryRun) ({ row: stored, snapshot } = await persistDeliverySnapshot(supabase, recap, snapshot));
-  }
-  if (dryRun) {
-    const body = JSON.parse(snapshot.payload);
-    deliveryLog(logger, correlationId, recap.id, 'dry_run', null);
-    return { status: 'dry_run', attempted: false, subject: body.subject, text: body.text, snapshot };
   }
   // Persisting the snapshot can take long enough for plan, preference, or
   // address changes. Recheck immediately before claiming the provider attempt.

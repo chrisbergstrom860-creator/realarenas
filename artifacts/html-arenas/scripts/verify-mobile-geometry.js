@@ -159,10 +159,14 @@ const insightResponseStub = (chart) => ({
 // This is stored as a generated weekly_recap row for the creator during the
 // regular geometry seed. Loading the real owner-scoped route verifies the
 // page's server injection, shared renderer, navigation, and CSS together.
+const storedRecapFixtureColumnProse =
+  'You logged 4 sessions and 5.5 hours last week. Your recorded training data shows a steady week-over-week rhythm.';
+const expectedStoredRecapDerivedProse =
+  'Last week (Sep 7–13) you logged 4 sessions, 5.5 hours. Most of your sessions felt strong or tired.';
 const storedRecapFixture = {
   weekStart: '2026-09-07',
   timezone: 'America/Los_Angeles',
-  prose: 'You logged 4 sessions and 5.5 hours last week. Your recorded training data shows a steady week-over-week rhythm.',
+  prose: storedRecapFixtureColumnProse,
   findings: {
     findings: [
       { type: 'metric', path: 'last12Weeks.weekly.10.activityCount', value: 4 },
@@ -191,6 +195,10 @@ const storedRecapFixture = {
     ]
   }
 };
+if (storedRecapFixture.prose !== storedRecapFixtureColumnProse ||
+    storedRecapFixture.prose === expectedStoredRecapDerivedProse) {
+  throw new Error('weekly recap geometry fixture must preserve its legacy stored prose column');
+}
 storedRecapFixture.chart.totals = storedRecapFixture.chart.labels.map((_, index) =>
   storedRecapFixture.chart.series.reduce((sum, series) => sum + series.values[index], 0));
 const setupInsightsStubs = async (page) => {
@@ -305,7 +313,7 @@ const insightsHeroTextVisibilityCheck = {
   })()`
 };
 const recapCardGeometryCheck = {
-  name: 'stored recap shows generated copy, limitation, evidence, and a fitting chart',
+  name: 'stored recap renders deterministic copy, limitation, evidence, and a fitting chart',
   js: `(() => {
     const card = document.querySelector('.recap-answer-card');
     const prose = card && card.querySelector('.recap-prose');
@@ -317,7 +325,7 @@ const recapCardGeometryCheck = {
     }
     const cr = card.getBoundingClientRect(), sr = svg.getBoundingClientRect();
     return {
-      ok: prose.textContent.includes(${JSON.stringify(storedRecapFixture.prose)}) &&
+      ok: prose.textContent.trim() === ${JSON.stringify(expectedStoredRecapDerivedProse)} &&
         limitation.textContent.includes(${JSON.stringify(storedRecapFixture.findings.limitations[0])}) &&
         evidence.length === ${storedRecapFixture.findings.evidence.length} &&
         sr.width > 0 && sr.left >= cr.left - 1 && sr.right <= cr.right + 1 &&

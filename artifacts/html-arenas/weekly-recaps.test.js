@@ -302,6 +302,44 @@ test('runner uses wall-clock lease, echoes the exact returned lease, and rejects
   assert.equal(noop, null, 'composite {id:null} is not mistaken for a stored row');
 });
 
+test('runner stores recap prose rendered from the validated finding snapshot', async () => {
+  const rpcCalls = [];
+  const findings = [
+    { type: 'metric', path: 'last12Weeks.weekly.10.activityCount', value: 3 },
+    { type: 'metric', path: 'last12Weeks.weekly.10.durationHours', value: 1.9 },
+    { type: 'metric', path: 'last12Weeks.weekly.10.distanceKm', value: 13.4 },
+    { type: 'metric', path: 'last12Weeks.weekly.10.points', value: 47 },
+    { type: 'comparison', leftPath: 'last12Weeks.weekly.10.durationHours', leftValue: 1.9, rightPath: 'last12Weeks.weekly.9.durationHours', rightValue: 2.9 }
+  ];
+  const result = await runOne({
+    supabase: {
+      rpc: async (name, args) => {
+        rpcCalls.push({ name, args });
+        if (name === 'claim_weekly_recap') return { data: { id: 'claim', attempts: 1, lease_until: 'lease' }, error: null };
+        if (name === 'finish_weekly_recap') return { data: { id: 'stored' }, error: null };
+        throw new Error(`unexpected RPC ${name}`);
+      },
+      from: () => ({ upsert: async () => ({ error: null }) })
+    },
+    service: {
+      buildContextForUser: async () => ({ schemaVersion: 8 }),
+      runValidatedRequest: async () => ({
+        findings,
+        answer: 'Model wording must not be stored.',
+        chart: null,
+        usage: {},
+        validated: { ok: true, limitations: [], evidence: [] }
+      })
+    },
+    user: { id: 'u', user_metadata: { prefs: { weekly_recap: true } } },
+    now: new Date('2026-09-14T08:01:00Z'), leaseNow: new Date('2026-09-14T08:01:00Z'),
+    dryRun: false, entitlementCheck: async () => ({ eligible: true }), logger: () => {}
+  });
+  assert.equal(result.status, 'generated');
+  assert.equal(rpcCalls.find((call) => call.name === 'finish_weekly_recap').args.p_prose,
+    'Last week (Sep 7–13) you logged 3 sessions, 1.9 hours and 13.4 km for 47 points — about an hour less than the week before.');
+});
+
 test('runner marks only model/validation failures and stops before storage when entitlement changes', async () => {
   const calls = [];
   let entitlementChecks = 0;

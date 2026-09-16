@@ -15,7 +15,7 @@ const {
   deliverWeeklyRecapEmail
 } = require('./weekly-recap-email');
 const {
-  processPendingRecapEmails, recheckRecapEmailEntitlement, main,
+  listPendingRecapEmails, processPendingRecapEmails, recheckRecapEmailEntitlement, main,
   redactRecapEmailDryRunText
 } = require('./jobs/recaps');
 
@@ -392,4 +392,43 @@ test('dry-run redaction removes only unsubscribe token values', () => {
     redactRecapEmailDryRunText('x /email/unsubscribe/recap?t=abc_123\ny'),
     'x /email/unsubscribe/recap?t=[redacted]\ny'
   );
+});
+
+test('email-only dry preview renders a sent recap from findings without reading its frozen provider payload', async () => {
+  const sent = {
+    ...recap,
+    email_status: 'sent',
+    prose: 'Old model prose.',
+    findings: {
+      findings: [
+        { type: 'metric', path: 'last12Weeks.weekly.10.activityCount', value: 1 },
+        { type: 'metric', path: 'last12Weeks.weekly.10.durationHours', value: 1 },
+        { type: 'metric', path: 'last12Weeks.weekly.10.points', value: 5 }
+      ],
+      evidence: [],
+      limitations: [],
+      emailDelivery: { payload: '{"subject":"FROZEN OLD","text":"FROZEN OLD"}', idempotencyKey: `weekly-recap-email:${recap.id}`, recipient: user.email }
+    }
+  };
+  const result = await deliverWeeklyRecapEmail({
+    supabase: {}, recap: sent, correlationId: 'preview',
+    entitlementCheck: async () => ({ eligible: true, user }),
+    dryRun: true, signToken, logger: () => {}
+  });
+  assert.equal(result.status, 'dry_run');
+  assert.match(result.text, /Last week \(Sep 7–13\) you logged 1 session, 1 hour for 5 points\./);
+  assert.equal(result.text.includes('FROZEN OLD'), false);
+});
+
+test('dry preview query includes generated sent rows while live delivery remains pending-only', async () => {
+  const filters = [];
+  const query = {
+    select() { return this; },
+    eq(column, value) { filters.push([column, value]); return this; },
+    lt(column, value) { filters.push([column, value]); return this; },
+    order() { return this; },
+    range: async () => ({ data: [], error: null })
+  };
+  await listPendingRecapEmails({ from: () => query }, recap.user_id, 50, true);
+  assert.deepEqual(filters, [['status', 'generated'], ['user_id', recap.user_id]]);
 });

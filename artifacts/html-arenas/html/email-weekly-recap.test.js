@@ -33,7 +33,7 @@ test('weekly recap email renders stored full snapshot and a cross-month subject'
   assert.match(email.html, /1\.9 h/);
   assert.match(email.html, /13\.4 km/);
   assert.match(email.html, /47 pts/);
-  assert.match(email.text, /most recorded feelings were motivated \(6\) and strong \(1\)/);
+  assert.match(email.text, /Most of your sessions felt motivated or strong\./);
   assert.match(email.html, /width="600"/);
   assert.doesNotMatch(email.html, /<svg|data:image/i, 'does not embed chart images');
 });
@@ -68,10 +68,16 @@ test('weekly recap email uses the selected current-week metric, never a comparis
 
 test('weekly recap email escapes stored prose, chart labels, and supplied URLs', () => {
   const maliciousLinks = { ...links, recapUrl: 'https://realarenas.com/recaps/2026-09-28?x=<script>' };
-  const email = renderRecapEmail(recap({
+  const row = recap({
     prose: '<script>alert("x")</script>',
     chart: { metric: 'feelings', title: '<script>', series: [{ label: 'Motivated', values: [3] }] }
-  }), {}, maliciousLinks);
+  });
+  row.findings.findings.push({
+    type: 'goal_projection',
+    value: { sport: '<script>alert("x")</script>', type: 'frequency', period: 'weekly',
+      target: { value: 1, unit: 'session' }, onTrack: true }
+  });
+  const email = renderRecapEmail(row, {}, maliciousLinks);
   assert.match(email.html, /&lt;script&gt;alert\(&quot;x&quot;\)&lt;\/script&gt;/);
   assert.match(email.html, /&lt;script&gt;/);
   assert.doesNotMatch(email.html, /<script>/);

@@ -81,12 +81,12 @@ test('runner findings envelope round-trips a low-history limitation into the sto
     async runValidatedRequest() {
       return {
         answer: 'You logged one session last week. Keep logging to unlock week-over-week comparisons.',
-        findings: [{ type: 'metric', path: 'last12Weeks.weekly.10.activityCount' }],
+        findings: [{ type: 'metric', path: 'last12Weeks.weekly.10.activityCount', value: 1 }],
         chart: null,
         validated: {
           ok: true,
           limitations: [lowHistoryLimitation],
-          evidence: [{ path: 'last12Weeks.weekly.10.activityCount' }]
+          evidence: [{ path: 'last12Weeks.weekly.10.activityCount', value: 1 }]
         },
         usage: null
       };
@@ -109,10 +109,11 @@ test('runner findings envelope round-trips a low-history limitation into the sto
   // runner, not a separately hand-authored browser fixture.
   const stored = storedCalls[0];
   assert.deepEqual(stored.p_findings, {
-    findings: [{ type: 'metric', path: 'last12Weeks.weekly.10.activityCount' }],
+    findings: [{ type: 'metric', path: 'last12Weeks.weekly.10.activityCount', value: 1 }],
     limitations: [lowHistoryLimitation],
-    evidence: [{ path: 'last12Weeks.weekly.10.activityCount' }]
+    evidence: [{ path: 'last12Weeks.weekly.10.activityCount', value: 1 }]
   });
+  assert.equal(stored.p_prose, 'Last week (Sep 7–13) you logged 1 session.');
 
   let browser;
   try {

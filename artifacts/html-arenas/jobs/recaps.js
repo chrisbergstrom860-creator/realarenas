@@ -14,6 +14,7 @@ const {
   RECAP_EMAIL_BATCH_LIMIT, RECAP_EMAIL_DELAY_MS, recapEmailEnabled,
   deliverWeeklyRecapEmail
 } = require('../weekly-recap-email');
+const { renderRecapProse } = require('../recap-prose');
 
 function parseArgs(argv) {
   const args = { dryRun: false, userId: null, now: null, sendEmailsOnly: false };
@@ -132,13 +133,13 @@ async function recheckRecapEmailEntitlement(supabase, userId) {
   return { eligible: true, user };
 }
 
-async function listPendingRecapEmails(supabase, userId = null, batchLimit = RECAP_EMAIL_BATCH_LIMIT) {
+async function listPendingRecapEmails(supabase, userId = null, batchLimit = RECAP_EMAIL_BATCH_LIMIT, previewAll = false) {
   const rows = [];
   // Fetch short pages rather than a single unbounded REST response. We retain
   // at most one invocation's worth of candidates; future runs continue below.
   for (let offset = 0; rows.length < batchLimit; offset += 100) {
-    let query = supabase.from('weekly_recaps').select('*')
-      .eq('status', 'generated').eq('email_status', 'pending').lt('email_attempts', 3);
+    let query = supabase.from('weekly_recaps').select('*').eq('status', 'generated');
+    if (!previewAll) query = query.eq('email_status', 'pending').lt('email_attempts', 3);
     if (userId) query = query.eq('user_id', userId);
     const { data, error } = await query.order('generated_at', { ascending: true }).range(offset, offset + 99);
     if (error) throw new Error(`read pending weekly recap emails failed: ${error.message}`);
@@ -166,7 +167,7 @@ async function processPendingRecapEmails(supabase, {
   emailDelivery = deliverWeeklyRecapEmail,
   wait = sleep
 } = {}) {
-  const recaps = await listPendingRecapEmails(supabase, userId);
+  const recaps = await listPendingRecapEmails(supabase, userId, RECAP_EMAIL_BATCH_LIMIT, dryRun);
   const results = [];
   let sends = 0;
   for (const recap of recaps) {
@@ -336,13 +337,20 @@ async function runOne({
   }
   let stored;
   try {
-    stored = await storeGeneratedRecap(supabase, claim, {
-      answer: output.answer,
-      findings: {
-        findings: output.findings,
+    const recapFindings = {
+      findings: output.findings,
       limitations: validated.limitations,
       evidence: validated.evidence
-      },
+    };
+    const deterministicProse = renderRecapProse(recapFindings, {
+      weekStart: window.weekStart,
+      timezone: window.timezone,
+      chart: output.chart || validated.chart || null,
+      storedProse: output.answer
+    });
+    stored = await storeGeneratedRecap(supabase, claim, {
+      answer: deterministicProse,
+      findings: recapFindings,
       chart: output.chart || validated.chart || null,
       contextSchemaVersion: context.schemaVersion
     });
