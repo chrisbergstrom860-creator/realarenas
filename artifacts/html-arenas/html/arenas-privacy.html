@@ -187,7 +187,7 @@ a{color:inherit}
         <li>Display your activities, posts, profile, and community participation to you and to other members as described in Section 4;</li>
         <li>Provide club-management features, including training summaries, reports, inactivity monitoring, and check-in messages;</li>
         <li>Calculate leaderboards, rankings, streaks, challenges, and similar features;</li>
-        <li>Communicate with you about your account, security, and important Service updates (transactional communications);</li>
+        <li>Communicate with you about your account, security, important Service updates, and, if you enable it, your weekly recap email;</li>
         <li>Respond to your support requests;</li>
         <li>Maintain the security, integrity, and proper functioning of the Service, and detect and prevent fraud or abuse;</li>
         <li>Improve and develop the Service;</li>
@@ -209,7 +209,7 @@ a{color:inherit}
           <ul>
             <li>Supabase — authentication and database hosting;</li>
             <li>Railway — application hosting;</li>
-            <li>Resend — transactional email delivery for account notices, club invitations, contact-form messages, and subscription confirmations. Depending on the message, Resend receives the recipient’s email address, subject, and email content; contact-form messages also include the sender’s email as the reply-to address.</li>
+            <li>Resend — transactional email delivery for account notices, club invitations, contact-form messages, subscription confirmations, and, if enabled, weekly recap emails. A weekly recap email includes your training summary (sessions, hours, distance, points, and a feelings summary). Depending on the message, Resend receives the recipient’s email address, subject, and email content; contact-form messages also include the sender’s email as the reply-to address.</li>
             <li>Stripe — payment processing and subscription billing. Arenas provides Stripe with your email address, selected plan, and internal account or club identifiers. Stripe may collect your name, billing information, and payment details directly through its hosted checkout and stores that payment information; Arenas stores subscription identifiers and status but not card or bank details.</li>
           </ul>
           These providers process data only on our instructions and as needed to provide their services.</li>
@@ -224,8 +224,8 @@ a{color:inherit}
       <p>If you use training plans, events, or goals, the summary also includes your upcoming planned sessions (date, sport, title, planned duration, and status), events you've RSVP'd to or that belong to clubs you're a member of (date, title, sport, type, club name, and your own RSVP), a monthly count of past planned sessions marked done, skipped, or still planned, and your active goals (type, sport, target, period, progress, whether each is complete and on track, and the dates of its current period and its recent past periods). It does not include session notes, event descriptions or locations, other attendees, or other members' RSVPs.</p>
       <p>The summary also includes how many items of each kind were sent and whether any were left out because of a limit.</p>
       <p>When you ask an AI Insights question, your question is sent with the summary, along with up to three of your previous questions and answers from the same session so the conversation can continue. Anthropic processes this data to generate a response and handles it under its own terms and <a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener noreferrer">privacy policy</a>.</p>
-      <p>If you are an Individual Pro subscriber and turn on Weekly AI recap in Settings, Arenas also sends the same training summary to Anthropic once per week on a schedule to generate a recap of your previous week's training. Weekly recap is optional and can be turned off in Settings at any time.</p>
-      <p>Weekly recaps are stored for 90 days, included in your account export, and deleted when you delete your account. Arenas keeps a count of how many questions you've asked each month. It does not store your AI Insights questions or answers.</p>
+      <p>If you are an Individual Pro subscriber and turn on Weekly AI recap in Settings, Arenas also sends the same training summary to Anthropic once per week on a schedule to generate a recap of your previous week's training. Weekly recap is optional and can be turned off in Settings at any time. You can separately turn its optional email delivery on or off in Settings or unsubscribe with the one-click link in a recap email.</p>
+      <p>Weekly recaps are stored for 90 days, included in your account export, and deleted when you delete your account. If email delivery is enabled, the stored recap is sent through Resend with the training-summary details described above. Arenas keeps a count of how many questions you've asked each month. It does not store your AI Insights questions or answers.</p>
       <p>AI Insights is used when you ask a question, or when you have opted in to Weekly AI recap. No training data is sent to Anthropic otherwise.</p>
     </section>
 

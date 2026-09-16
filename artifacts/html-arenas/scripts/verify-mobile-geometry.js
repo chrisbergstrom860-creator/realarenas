@@ -12,6 +12,8 @@
 //
 // The full 6-width run exceeds a 5-minute shell window — run in halves:
 //   GEO_WIDTHS=mobile | desktop | <comma list, e.g. 360,380>.
+// To audit an exact comma-separated subset of named page specs:
+//   GEO_PAGES=profile,weekly-recap-email-unsubscribe
 //   - no element overflows its clipping container (overflow:hidden clip)
 //   - no two text leaves' bounding boxes overlap
 //   - every button inside the viewport AND hit-testable
@@ -23,9 +25,12 @@
 // after any change to shell CSS, card renderers, or page templates.
 import { createClient } from '@supabase/supabase-js';
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { launchBrowser, auditPage } from './lib/mobile-geometry.js';
 import { mustWrite, makeCleanup } from './lib/checked-writes.js';
 
+const require = createRequire(import.meta.url);
+const { signRecapEmailToken } = require('../recap-email-token.js');
 const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const DOMAIN = process.env.REPLIT_DEV_DOMAIN;
 const BASE = `https://${DOMAIN}/html`;
@@ -50,11 +55,15 @@ for (let i = 0; i < 8; i++) userDefs['f' + i] = LONGNAMES[i % LONGNAMES.length] 
 const emails = Object.fromEntries(Object.keys(userDefs).map((k) => [k, `geo-${k}@arenas-test.dev`]));
 
 const users = {};
+let recapUnsubscribeToken = null;
 async function mkUser(key) {
   const { data, error } = await admin.auth.admin.createUser({
     email: emails[key], password: PW, email_confirm: true,
     user_metadata: { name: userDefs[key], handle: 'geo_' + key, country: 'NO', state: 'Vestland',
-      sports: ['running', 'cycling'] }
+      sports: ['running', 'cycling'],
+      // Phase 2 geometry covers the dependent email control on an opted-in
+      // Pro account. This guard never invokes the runner or email transport.
+      prefs: key === 'creator' ? { weekly_recap: true, weekly_recap_email: true } : {} }
   });
   if (error) throw new Error(key + ': ' + error.message);
   users[key] = { id: data.user.id };
@@ -318,6 +327,35 @@ const recapCardGeometryCheck = {
     };
   })()`
 };
+const recapEmailSettingsCheck = {
+  name: 'Weekly recap email control is visible while weekly recap is enabled',
+  js: `(() => {
+    const control = document.querySelector('[data-pref="weekly_recap_email"], input[name="weekly_recap_email"], #weekly-recap-email');
+    const copy = document.querySelector('#tab-settings')?.textContent || '';
+    const rect = control && control.getBoundingClientRect();
+    const style = control && getComputedStyle(control);
+    return {
+      ok: !!control && control.checked === true && !!rect && rect.width > 0 && rect.height > 0 &&
+        style.display !== 'none' && style.visibility !== 'hidden' &&
+        copy.includes('Also email me the recap every Monday') &&
+        copy.includes('Emails come from noreply@send.realarenas.com'),
+      control: control && { tag: control.tagName, checked: control.checked, rect: rect && rect.toJSON(), display: style && style.display },
+      copyPresent: copy.includes('Also email me the recap every Monday'),
+      senderCopyPresent: copy.includes('Emails come from noreply@send.realarenas.com')
+    };
+  })()`
+};
+const recapEmailUnsubscribeCheck = {
+  name: 'public weekly recap email unsubscribe page confirms the change',
+  js: `(() => {
+    const card = document.querySelector('.card');
+    const link = card && [...card.querySelectorAll('a')].find((item) => item.textContent.trim() === 'Settings');
+    return {
+      ok: !!card && card.textContent.includes("You'll no longer receive weekly recap emails") && !!link,
+      card: !!card, text: card && card.textContent.trim(), settingsLink: link && link.getAttribute('href')
+    };
+  })()`
+};
 const AI_SHEET_ROOT = '.ai-sheet-backdrop > .ai-sheet';
 const AI_SHEET_THREAD = `${AI_SHEET_ROOT} [data-ai-role="thread"]`;
 const AI_SHEET_DAILY_CHART = `${AI_SHEET_THREAD} svg[aria-label*="Sessions per day"]`;
@@ -464,6 +502,7 @@ try {
 for (const k of Object.keys(userDefs)) await mkUser(k);
 await login('creator'); await login('member'); await login('f6');
 const C = users.creator.id, M = users.member.id;
+recapUnsubscribeToken = signRecapEmailToken(C, '2026-01-05T00:00:00.000Z', process.env.SESSION_SECRET);
 const F = [...Array(8)].map((_, i) => users['f' + i].id);
 console.log('MANIFEST users:', JSON.stringify(Object.fromEntries(Object.entries(users).map(([k, v]) => [k, v.id]))));
 
@@ -978,6 +1017,9 @@ const PAGES = [
       })()` }
     ],
     steps: [
+      { name: 'settings-weekly-recap-email', js: htab('settings'), waitFor: '#tab-settings',
+        surfaces: [{ name: 'settings tab', sel: '#tab-settings', min: 1 }],
+        checks: [recapEmailSettingsCheck] },
       { name: 'activities', js: htab('activities'), surfaces: [{ name: 'activities list', sel: '#tab-activities', min: 1 }] },
       // waitFor the goals-vs-actual bars: they arrive in the same innerHTML
       // assignment as the by-sport svgs, and the render now awaits the goals
@@ -1043,6 +1085,11 @@ const PAGES = [
       { name: 'modal-goal', js: `window.arenasOverlay.close('modal-delete-account'); ` + closeModals + `window.openGoalForm()`,
         waitFor: '#modal-goal .modal-close', root: '#modal-goal' }
     ] },
+  { user: 'public', name: 'weekly-recap-email-unsubscribe',
+    path: '/email/unsubscribe/recap?t=' + encodeURIComponent(recapUnsubscribeToken || ''),
+    waitFor: '.card', root: 'body',
+    surfaces: [{ name: 'unsubscribe confirmation card', sel: '.card', min: 1 }],
+    checks: [recapEmailUnsubscribeCheck] },
   { user: 'f6', name: 'profile-free-no-ai', path: '/profile',
     waitFor: '.owner-activity-grid .activity-grid-row', root: 'body',
     bottomNav: athleteNav('Profile', true, false),
@@ -1197,15 +1244,33 @@ const PAGES = [
 
 // ── measure ──
 const only = process.argv.includes('--page') ? process.argv[process.argv.indexOf('--page') + 1] : null;
+const geoPagesSpecified = Object.prototype.hasOwnProperty.call(process.env, 'GEO_PAGES');
+const geoPageNames = geoPagesSpecified
+  ? String(process.env.GEO_PAGES).split(',').map((name) => name.trim())
+  : null;
+if (geoPagesSpecified && (!geoPageNames.length || geoPageNames.some((name) => !name))) {
+  throw new Error('GEO_PAGES must name at least one exact page spec');
+}
+if (geoPageNames) {
+  const knownPageNames = new Set(PAGES.map((cfg) => cfg.name));
+  const unknown = geoPageNames.filter((name) => !knownPageNames.has(name));
+  if (unknown.length) throw new Error(`GEO_PAGES contains unknown page spec(s): ${unknown.join(', ')}`);
+  if (only && !geoPageNames.includes(only)) {
+    throw new Error(`--page ${only} is not selected by GEO_PAGES`);
+  }
+}
+const geoPageFilter = geoPageNames && new Set(geoPageNames);
 browser = await launchBrowser();
 const contexts = {};
 for (const key of ['creator', 'member', 'f6']) {
   contexts[key] = await browser.newContext({ ignoreHTTPSErrors: true });
   await contexts[key].addCookies(users[key].cookies);
 }
+contexts.public = await browser.newContext({ ignoreHTTPSErrors: true });
 const summary = [];
 for (const cfg of PAGES) {
   if (only && cfg.name !== only) continue;
+  if (geoPageFilter && !geoPageFilter.has(cfg.name)) continue;
   let out;
   try {
     out = await auditPage(contexts[cfg.user], BASE, cfg);

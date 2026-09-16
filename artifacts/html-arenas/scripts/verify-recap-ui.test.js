@@ -139,10 +139,12 @@ test('runner findings envelope round-trips a low-history limitation into the sto
 });
 
 test('weekly recap preference is opt-in and server-enforced for enabling', () => {
-  assert.match(server, /'weekly_recap'\s*\/\/ opt-in Individual Pro scheduled recap generation/);
-  assert.match(server, /const PREF_DEFAULTS = \{ weekly_recap: false \}/);
-  assert.match(server, /key === 'weekly_recap' && value === true && \(await getUserPlan\(req\.user\.id\)\) !== 'pro'/);
+  assert.match(server, /'weekly_recap',\s*\/\/ opt-in Individual Pro scheduled recap generation/);
+  assert.match(server, /const PREF_DEFAULTS = \{ weekly_recap: false,\s*weekly_recap_email: true \}/);
+  assert.match(server, /async function writeUserPreference\(userId, key, value\)/);
+  assert.match(server, /key === 'weekly_recap' && value === true && \(await getUserPlan\(userId\)\) !== 'pro'/);
   assert.match(server, /status\(403\)\.json\(\{ error: 'pro_required'/);
+  assert.match(server, /await writeUserPreference\(req\.user\.id, key, value\)/);
   assert.match(profile, /Weekly AI recap/);
   assert.match(profile, /Every Monday morning, Arenas generates a summary of your previous week's training using AI Insights and notifies you in the app\. Only your own training data is used\./);
   assert.match(profile, /key === 'weekly_recap' \? prefs\[key\] === true/);

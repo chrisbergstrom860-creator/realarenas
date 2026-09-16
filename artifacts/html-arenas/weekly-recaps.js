@@ -4,7 +4,6 @@
 // provider imports, so it can be unit-tested and used by a short-lived job.
 const crypto = require('crypto');
 const { getUserTimezone, dateParts, weekStartKey, zoneMidnightUtc } = require('./tzdate');
-const { buildAiInsightsUsageLog, WEEKLY_RECAP_CONTRACT_VERSION } = require('./ai-insights');
 
 const RECAP_LEASE_SECONDS = 10 * 60;
 const RECAP_MAX_ATTEMPTS = 3;
@@ -46,6 +45,9 @@ function recapCorrelationId() {
 }
 
 function recapUsageLog(userId, usage, correlationId) {
+  // A send-emails-only invocation imports this module for dates and database
+  // helpers but must not load the AI request/validator module.
+  const { buildAiInsightsUsageLog } = require('./ai-insights');
   return {
     ...buildAiInsightsUsageLog(userId, 0, usage),
     kind: 'recap',
@@ -76,6 +78,7 @@ async function claimWeeklyRecap(supabase, window, now = new Date()) {
 }
 
 async function storeGeneratedRecap(supabase, claim, result) {
+  const { WEEKLY_RECAP_CONTRACT_VERSION } = require('./ai-insights');
   const { data, error } = await supabase.rpc('finish_weekly_recap', {
     p_id: claim.id,
     p_lease_until: claim.lease_until,

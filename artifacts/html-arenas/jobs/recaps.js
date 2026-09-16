@@ -10,12 +10,16 @@ const {
   storeGeneratedRecap, markRecapFailed, createRecapNotification,
   sweepExpiredWeeklyRecaps
 } = require('../weekly-recaps');
-const { AiProviderConfigurationError } = require('../ai-insights');
+const {
+  RECAP_EMAIL_BATCH_LIMIT, RECAP_EMAIL_DELAY_MS, recapEmailEnabled,
+  deliverWeeklyRecapEmail
+} = require('../weekly-recap-email');
 
 function parseArgs(argv) {
-  const args = { dryRun: false, userId: null, now: null };
+  const args = { dryRun: false, userId: null, now: null, sendEmailsOnly: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--dry-run') args.dryRun = true;
+    else if (argv[i] === '--send-emails-only') args.sendEmailsOnly = true;
     else if (argv[i] === '--user-id') args.userId = argv[++i] || null;
     else if (argv[i] === '--now') args.now = argv[++i] || null;
     else throw new Error(`Unknown or incomplete argument: ${argv[i]}`);
@@ -108,6 +112,78 @@ async function recheckRecapEntitlement(supabase, userId) {
   if (!user || !weeklyRecapEnabled(user)) return { eligible: false, user: null };
   const subscriptions = await listIndividualProSubscriptions(supabase, userId);
   return { eligible: subscriptions.length > 0, user };
+}
+
+async function recheckRecapEmailEntitlement(supabase, userId) {
+  const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
+  if (userError && (Number(userError.status) === 404 || /not found/i.test(String(userError.message || '')))) {
+    return { eligible: false, reason: 'account_missing', user: null };
+  }
+  if (userError) throw new Error(`recheck email user failed: ${userError.message}`);
+  const user = userData && userData.user;
+  if (!user) return { eligible: false, reason: 'account_missing', user: null };
+  if (!weeklyRecapEnabled(user)) return { eligible: false, reason: 'recap_preference_disabled', user };
+  if (!recapEmailEnabled(user)) return { eligible: false, reason: 'email_preference_disabled', user };
+  if (typeof user.email !== 'string' || !user.email.trim()) {
+    return { eligible: false, reason: 'account_email_missing', user };
+  }
+  const subscriptions = await listIndividualProSubscriptions(supabase, userId);
+  if (!subscriptions.length) return { eligible: false, reason: 'pro_required', user };
+  return { eligible: true, user };
+}
+
+async function listPendingRecapEmails(supabase, userId = null, batchLimit = RECAP_EMAIL_BATCH_LIMIT) {
+  const rows = [];
+  // Fetch short pages rather than a single unbounded REST response. We retain
+  // at most one invocation's worth of candidates; future runs continue below.
+  for (let offset = 0; rows.length < batchLimit; offset += 100) {
+    let query = supabase.from('weekly_recaps').select('*')
+      .eq('status', 'generated').eq('email_status', 'pending').lt('email_attempts', 3);
+    if (userId) query = query.eq('user_id', userId);
+    const { data, error } = await query.order('generated_at', { ascending: true }).range(offset, offset + 99);
+    if (error) throw new Error(`read pending weekly recap emails failed: ${error.message}`);
+    rows.push(...(data || []));
+    if ((data || []).length < 100) break;
+  }
+  return rows.slice(0, batchLimit);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function redactRecapEmailDryRunText(value) {
+  // The body is intentionally printed for an operator to review, but an
+  // unsubscribe token is an authentication credential and must not reach logs.
+  return typeof value === 'string'
+    ? value.replace(/(\/email\/unsubscribe\/recap\?t=)[^\s<]+/g, '$1[redacted]')
+    : null;
+}
+
+async function processPendingRecapEmails(supabase, {
+  userId = null, dryRun = false, logger = console.log,
+  emailEntitlementCheck = recheckRecapEmailEntitlement,
+  emailDelivery = deliverWeeklyRecapEmail,
+  wait = sleep
+} = {}) {
+  const recaps = await listPendingRecapEmails(supabase, userId);
+  const results = [];
+  let sends = 0;
+  for (const recap of recaps) {
+    if (sends >= RECAP_EMAIL_BATCH_LIMIT) break;
+    const result = await emailDelivery({
+      supabase, recap, correlationId: recapCorrelationId(), dryRun, logger,
+      entitlementCheck: emailEntitlementCheck
+    });
+    results.push({ recapId: recap.id, ...result });
+    if (result.attempted) {
+      sends++;
+      // Include failed sends; this is a provider request pacing limit, not a
+      // successful-delivery limit. No sleep follows the last eligible send.
+      if (sends < RECAP_EMAIL_BATCH_LIMIT) await wait(RECAP_EMAIL_DELAY_MS);
+    }
+  }
+  return results;
 }
 
 function logRun(logger, correlationId, status, usage, reason = null) {
@@ -204,6 +280,8 @@ async function runOne({
   try {
     output = await service.runValidatedRequest(context, 'recap', { correlationId });
   } catch (error) {
+    // Keep this lazy: --send-emails-only must not import any AI module.
+    const { AiProviderConfigurationError } = require('../ai-insights');
     const configurationFailure = error instanceof AiProviderConfigurationError ||
       (error && error.name === 'AiProviderConfigurationError');
     if (configurationFailure) {
@@ -348,16 +426,38 @@ async function main(argv = process.argv.slice(2), dependencies = {}) {
   const supabase = dependencies.supabase || createClient(process.env.SUPABASE_URL || '', process.env.SUPABASE_SERVICE_ROLE_KEY || '', {
     auth: { persistSession: false, autoRefreshToken: false }
   });
-  // Kept lazy so unit tests can import this runner before the service-boundary
-  // work has been wired into a branch.
-  const service = dependencies.service || require('../ai-insights-service');
   const logger = dependencies.logger || console.log;
+  const emailOptions = {
+    userId: options.userId, dryRun: options.dryRun, logger,
+    emailEntitlementCheck: dependencies.emailEntitlementCheck || recheckRecapEmailEntitlement,
+    emailDelivery: dependencies.emailDelivery || deliverWeeklyRecapEmail,
+    wait: dependencies.wait || sleep
+  };
+  if (options.sendEmailsOnly) {
+    // Do not load the AI service or build context in email-only mode.
+    const emails = await processPendingRecapEmails(supabase, emailOptions);
+    if (options.dryRun) {
+      logger(JSON.stringify({
+        event: 'weekly_recap_email_dry_run_result', kind: 'recap',
+        results: emails.map(({ recapId, status, subject, text, reason }) => ({
+          recap_id: recapId, status, subject: subject || null,
+          text: redactRecapEmailDryRunText(text), reason: reason || null
+        }))
+      }));
+    }
+    return { results: [], recoveries: [], emails };
+  }
+  // Kept lazy so --send-emails-only never imports or calls AI generation.
+  const service = dependencies.service || require('../ai-insights-service');
   const recoveries = options.dryRun ? [] : await recoverGeneratedNotifications(supabase, logger, recheckRecapEntitlement, options.userId);
   const users = await eligibleUsers(supabase, options, now);
   const results = [];
   for (const user of users) {
     results.push(await runOne({ supabase, service, user, now, dryRun: options.dryRun, logger }));
   }
+  // Includes rows created in this invocation plus older generated/pending rows.
+  // A dry run only renders the stored template and cannot mutate or send.
+  const emails = options.dryRun ? [] : await processPendingRecapEmails(supabase, emailOptions);
   if (!options.dryRun) await sweepExpiredWeeklyRecaps(supabase);
   // Provider/validation failures are recorded per user and do not make the
   // batch itself an infrastructure failure. An uncaught auth/database/config
@@ -366,7 +466,7 @@ async function main(argv = process.argv.slice(2), dependencies = {}) {
       recoveries.some((result) => result.status === 'notification_failed')) {
     throw new Error('weekly recap notification delivery failed; generated recap will be retried');
   }
-  const summary = { results, recoveries };
+  const summary = { results, recoveries, emails };
   if (options.dryRun) {
     logger(JSON.stringify({
       event: 'weekly_recap_dry_run_result', kind: 'recap',
@@ -388,6 +488,7 @@ if (require.main === module) {
 
 module.exports = {
   parseArgs, listAuthUsers, listIndividualProSubscriptions, recapRowsForUsers,
-  eligibleUsers, recheckRecapEntitlement,
+  eligibleUsers, recheckRecapEntitlement, recheckRecapEmailEntitlement,
+  listPendingRecapEmails, processPendingRecapEmails, sleep, redactRecapEmailDryRunText,
   recoverGeneratedNotifications, runOne, main
 };

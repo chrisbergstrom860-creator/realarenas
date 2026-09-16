@@ -79,7 +79,8 @@ test('recap mode uses the fixed contract and completes ordinary validation', asy
   const responseText = JSON.stringify({
     findings: [
       { type: 'metric', path: 'last12Weeks.weekly.10.activityCount', value: 0 },
-      { type: 'metric', path: 'last12Weeks.weekly.10.durationHours', value: 0 }
+      { type: 'metric', path: 'last12Weeks.weekly.10.durationHours', value: 0 },
+      { type: 'metric', path: 'last12Weeks.weekly.10.points', value: 0 }
     ],
     limitations: ['INSUFFICIENT_TREND_DATA']
   });
@@ -95,7 +96,7 @@ test('recap mode uses the fixed contract and completes ordinary validation', asy
     providerConfig: { provider: 'test', apiKey: 'not-a-secret' }
   });
   assert.equal(output.validated.ok, true);
-  assert.equal(output.validated.recap.contractVersion, 1);
+  assert.equal(output.validated.recap.contractVersion, 2);
   assert.deepEqual(output.findings, JSON.parse(responseText).findings);
   assert.equal(output.usage.output_tokens, 2);
 });

@@ -44,6 +44,9 @@ const {
 } = require('./ai-insights');
 const { configureAiInsightsService } = require('./ai-insights-service');
 const { createAiInsightsRuntime } = require('./ai-insights-runtime');
+const { escapeHtml, sendEmail } = require('./email-transport');
+const { unsubscribeRecapEmail } = require('./recap-email-unsubscribe');
+const { shouldInjectAnalytics } = require('./analytics-injection-policy');
 const {
   createRequestAuthMemo,
   challengeWindowFor,
@@ -157,61 +160,6 @@ if (process.env.STRIPE_SECRET_KEY) {
   stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 } else {
   console.log('[stripe skipped: no STRIPE_SECRET_KEY] Billing features disabled');
-}
-
-// ── EMAIL (Resend) ──
-// Sender identity uses the verified Resend domain (send.realarenas.com).
-const EMAIL_FROM = 'Arenas <noreply@send.realarenas.com>';
-
-// Minimal HTML escape for values interpolated into email markup. Club names and
-// inviter names are user-controlled, so they must be escaped.
-function escapeHtml(s) {
-  return String(s == null ? '' : s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-// One shared email sender. Uses global fetch (Node 24, no SDK) to POST Resend's
-// REST API. Degrades gracefully: with no RESEND_API_KEY it logs instead of
-// sending, so dev works without a key. It NEVER throws or rejects — it returns
-// { ok, skipped?, status?, error? } so callers can fire-and-forget and a failed
-// email can never break the surrounding request (e.g. invite-row creation).
-async function sendEmail({ to, subject, html, text, replyTo }) {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) {
-    console.log('[email skipped: no RESEND_API_KEY] To:', to, '| Subject:', subject);
-    return { ok: false, skipped: true };
-  }
-  try {
-    const resp = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: EMAIL_FROM,
-        to: Array.isArray(to) ? to : [to],
-        subject,
-        html,
-        ...(text ? { text } : {}),
-        ...(replyTo ? { reply_to: replyTo } : {})
-      })
-    });
-    if (!resp.ok) {
-      let detail = '';
-      try { detail = await resp.text(); } catch (e) { /* ignore */ }
-      console.error('[email failed]', resp.status, '| To:', to, '| Subject:', subject, '|', detail.slice(0, 500));
-      return { ok: false, status: resp.status, error: detail };
-    }
-    let id = null;
-    try { const j = await resp.json(); id = j && j.id; } catch (e) { /* ignore */ }
-    console.log('[email sent]', id || '(no id)', '| To:', to, '| Subject:', subject);
-    return { ok: true, id };
-  } catch (err) {
-    console.error('[email error]', (err && err.message) || err, '| To:', to, '| Subject:', subject);
-    return { ok: false, error: (err && err.message) || String(err) };
-  }
 }
 
 const CLUB_MANAGER_VISIBILITY_LINK = '/privacy#club-manager-visibility';
@@ -479,9 +427,10 @@ function consumeSignupMarker(req, res) {
 }
 
 app.use((req, res, next) => {
+  const injectForRequest = shouldInjectAnalytics(req.path, BASE);
   const origSend = res.send.bind(res);
   res.send = (body) => {
-    if (typeof body === 'string' && /<\/head>/i.test(body)) {
+    if (injectForRequest && typeof body === 'string' && /<\/head>/i.test(body)) {
       body = injectAnalytics(body);
     }
     return origSend(body);
@@ -489,7 +438,7 @@ app.use((req, res, next) => {
   const origSendFile = res.sendFile.bind(res);
   res.sendFile = (filePath, ...rest) => {
     // Only page HTML goes through injection; assets keep the streaming path.
-    if (typeof filePath === 'string' && filePath.endsWith('.html')) {
+    if (injectForRequest && typeof filePath === 'string' && filePath.endsWith('.html')) {
       try {
         const html = fs.readFileSync(filePath, 'utf8');
         res.type('html');
@@ -1374,9 +1323,10 @@ const PREF_KEYS = [
   'notify_followers',      // gates type 'follow'
   'notify_challenges',     // gates type 'challenge' (invites + reminders)
   'notify_events',         // gates type 'event' (invites, RSVPs, friend-going)
-  'weekly_recap'           // opt-in Individual Pro scheduled recap generation
+  'weekly_recap',          // opt-in Individual Pro scheduled recap generation
+  'weekly_recap_email'     // dependent opt-in default for recap email delivery
 ];
-const PREF_DEFAULTS = { weekly_recap: false };
+const PREF_DEFAULTS = { weekly_recap: false, weekly_recap_email: true };
 
 // Profile tabs whose header badges show "new since last viewed" counts.
 // Per-tab last-seen timestamps live server-side in user_metadata.tab_seen
@@ -1390,6 +1340,32 @@ function prefsFromMeta(meta) {
     out[k] = typeof stored[k] === 'boolean' ? stored[k] : (PREF_DEFAULTS[k] !== false);
   });
   return out;
+}
+
+// The authenticated Settings endpoint and capability-token unsubscribe route
+// deliberately share this writer: each reads current metadata before replacing
+// the nested prefs object, so neither path can erase another preference.
+async function writeUserPreference(userId, key, value) {
+  if (!supabaseAdmin) return { ok: false, status: 503, error: 'Service unavailable' };
+  if (!PREF_KEYS.includes(key) || typeof value !== 'boolean') {
+    return { ok: false, status: 400, error: 'Invalid preference' };
+  }
+  if (key === 'weekly_recap' && value === true && (await getUserPlan(userId)) !== 'pro') {
+    return {
+      ok: false, status: 403, error: 'pro_required',
+      message: 'Weekly AI recap is available with Individual Pro.'
+    };
+  }
+  const { data, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId);
+  const user = data && data.user;
+  if (userError || !user) return { ok: false, status: 400, error: 'Account not found' };
+  const current = (user.user_metadata && user.user_metadata.prefs) || {};
+  const prefs = Object.assign({}, current, { [key]: value });
+  const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+    user_metadata: { prefs }
+  });
+  if (error) return { ok: false, status: 500, error: 'Could not save your setting' };
+  return { ok: true, prefs: prefsFromMeta({ prefs }) };
 }
 // Which recipient preference gates each notification type. Types not listed
 // ('club', 'achievement', 'activity') have no toggle and are never gated here
@@ -10642,30 +10618,64 @@ app.get(BASE + '/log', requirePageAuth, async (req, res) => {
 // object is read (fresh via requireAuth's getUser) and merged here before the
 // write — a key missing from this request keeps its stored value.
 app.post(BASE + '/api/profile/prefs', requireAuth, async (req, res) => {
-  if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
   const key = req.body && req.body.key;
   const value = req.body && req.body.value;
-  if (!PREF_KEYS.includes(key) || typeof value !== 'boolean') {
-    return res.status(400).json({ error: 'Invalid preference' });
-  }
   try {
-    // Opt-in is entitlement-protected server-side. Turning it off is always
-    // allowed, including after a subscription ends, so users retain control.
-    if (key === 'weekly_recap' && value === true && (await getUserPlan(req.user.id)) !== 'pro') {
-      return res.status(403).json({ error: 'pro_required', message: 'Weekly AI recap is available with Individual Pro.' });
-    }
-    const current = (req.user.user_metadata && req.user.user_metadata.prefs) || {};
-    const prefs = Object.assign({}, current, { [key]: value });
-    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.user.id, {
-      user_metadata: { prefs }
+    const result = await writeUserPreference(req.user.id, key, value);
+    if (!result.ok) return res.status(result.status).json({
+      error: result.error,
+      ...(result.message ? { message: result.message } : {})
     });
-    if (error) return res.status(500).json({ error: 'Could not save your setting' });
-    res.json({ ok: true, prefs: prefsFromMeta({ prefs }) });
+    res.json({ ok: true, prefs: result.prefs });
   } catch (err) {
     console.log('Prefs update error:', err.message);
     res.status(500).json({ error: 'Could not save your setting' });
   }
 });
+
+function recapEmailUnsubscribePage(ok) {
+  const message = ok
+    ? "You'll no longer receive weekly recap emails."
+    : 'This unsubscribe link is invalid or could not be used.';
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="${BASE}/manifest.webmanifest">
+<meta name="theme-color" content="#FFD21E">
+<link rel="icon" href="${BASE}/favicon.ico" sizes="48x48">
+<link rel="icon" href="${BASE}/arenas-icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="${BASE}/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Arenas">
+<script src="${BASE}/arenas-pwa.js" defer></script>
+<title>Arenas — Weekly recap email</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7f7f5;color:#111827;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{max-width:440px;margin:24px;padding:32px 28px;background:#fff;border:1px solid #e5e7eb;border-radius:14px;box-shadow:0 2px 12px #11182712}h1{margin:0 0 12px;font-size:22px}p{line-height:1.55;color:#4b5563}.button{display:inline-block;margin-top:8px;padding:10px 16px;background:#ffd21e;color:#111827;text-decoration:none;font-weight:700;border-radius:8px}</style>
+</head><body><main class="card"><h1>Weekly recap email</h1><p>${message}</p>${ok ? `<a class="button" href="${BASE}/profile?tab=settings">Settings</a>` : ''}</main></body></html>`;
+}
+
+async function unsubscribeWeeklyRecapEmail(req, res) {
+  // `t` is a signed bearer capability in the URL. Do not permit browser or
+  // intermediary storage, referrer propagation, or analytics injection.
+  res.set('Cache-Control', 'no-store');
+  res.set('Referrer-Policy', 'no-referrer');
+  const candidate = (req.query && req.query.t) || (req.body && req.body.t);
+  const token = typeof candidate === 'string' ? candidate : '';
+  try {
+    // This changes ONLY the email preference. Weekly in-app recap remains on.
+    const result = await unsubscribeRecapEmail(token, {
+      secret: SESSION_SECRET, writePreference: writeUserPreference
+    });
+    if (!result.ok) return res.status(result.status === 400 ? 400 : 503).type('html').send(recapEmailUnsubscribePage(false));
+    return res.type('html').send(recapEmailUnsubscribePage(true));
+  } catch (error) {
+    console.log('Weekly recap email unsubscribe error:', error.message);
+    return res.status(503).type('html').send(recapEmailUnsubscribePage(false));
+  }
+}
+
+app.get(BASE + '/email/unsubscribe/recap', unsubscribeWeeklyRecapEmail);
+app.post(BASE + '/email/unsubscribe/recap', unsubscribeWeeklyRecapEmail);
 
 // Lightweight mark-seen for the profile tab badges: opening a counted tab
 // stamps that tab's last-seen to NOW in user_metadata.tab_seen (read-merge-
@@ -10894,7 +10904,7 @@ app.get(BASE + '/api/account/export', requireAuth, async (req, res) => {
          'plan, stripe_customer_id, stripe_subscription_id, status, current_period_end, cancel_at_period_end, created_at, updated_at'),
        // Include all of the account's recap records, including failed attempts.
        fetchAllRows('weekly_recaps', q => q.eq('user_id', uid),
-         'id, week_start, timezone, window_start_utc, window_end_utc, status, attempts, failure_reason, findings, prose, chart, context_schema_version, contract_version, generated_at, created_at')
+          'id, week_start, timezone, window_start_utc, window_end_utc, status, attempts, failure_reason, findings, prose, chart, context_schema_version, contract_version, generated_at, created_at, email_status, email_attempts, email_sent_at, email_message_id, email_failure_reason, email_first_attempt_at')
     ]);
     const clubInvitesReceived = email
       ? await fetchAllRows('club_invites', q => q.eq('email', email),

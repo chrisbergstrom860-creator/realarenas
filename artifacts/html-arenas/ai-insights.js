@@ -45,7 +45,7 @@ const MAX_HISTORY_TURNS = 3;
 const MAX_CALENDAR_LIST_ITEMS = 10;
 const HISTORY_TTL_MS = 12 * 60 * 60 * 1000;
 const WEEKLY_RECAP_QUESTION = 'Produce the scheduled weekly recap for the completed previous week.';
-const WEEKLY_RECAP_CONTRACT_VERSION = 1;
+const WEEKLY_RECAP_CONTRACT_VERSION = 2;
 const POLICY_REFUSAL_REASONS = new Set([
   'prescriptive',
   'diet_weight_body',
@@ -1507,7 +1507,7 @@ function buildWeeklyRecapRequest(context) {
       `At most one calendar list finding total: ${JSON.stringify(calendarCandidates)}`
     : 'FORBID ALL calendar_plan_list and calendar_event_list findings for this recap. No existing non-empty month-filtered calendar list is wholly within the coming 7-day window.';
   const requirements = [
-    `Return metric findings for ${lastPath}.activityCount and ${lastPath}.durationHours.`,
+    `Return metric findings for ${lastPath}.activityCount, ${lastPath}.durationHours, and ${lastPath}.points.`,
     distance ? `Also return a metric finding for ${lastPath}.distanceKm.` : 'Do not return a distance metric because last-week distance is zero.',
     trendEligible
       ? `Return exactly one comparison of ${lastPath}.durationHours with ${previousPath}.durationHours.`
@@ -1556,7 +1556,11 @@ function validateWeeklyRecapCompleteness(raw, context, ordinary = validateInsigh
   });
   const metrics = parsed.findings.filter((finding) => finding && finding.type === 'metric');
   const metricPaths = metrics.map((finding) => normalizePath(finding.path));
-  const requiredMetricPaths = [`${lastPath}.activityCount`, `${lastPath}.durationHours`];
+  const requiredMetricPaths = [
+    `${lastPath}.activityCount`,
+    `${lastPath}.durationHours`,
+    `${lastPath}.points`
+  ];
   const distanceRequired = Number(weekly[lastIndex].distanceKm) > 0;
   if (distanceRequired) requiredMetricPaths.push(`${lastPath}.distanceKm`);
   for (const path of requiredMetricPaths) {

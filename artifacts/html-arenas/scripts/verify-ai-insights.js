@@ -255,7 +255,11 @@ async function makeUser(key, name, prefs) {
       name,
       handle: `ai_${key}_${nonce}`.slice(0, 20),
       timezone: key === 'pro' ? TEST_TIMEZONE : 'UTC',
-      prefs: prefs || {}
+      // This verifier must never send fixture data through the real email
+      // transport when exercising generated recap rows. Phase 2's default is
+      // opt-in for email, so every fixture explicitly opts out unless a test
+      // is specifically about delivery (which this verifier is not).
+      prefs: { weekly_recap_email: false, ...(prefs || {}) }
     }
   }));
   users[key] = { id: data.user.id, email, name };
@@ -373,7 +377,7 @@ async function verifyWeeklyRecapRunnerAndStorage() {
       captured.length === providerCountBeforeRunner + 1 &&
       runnerProviderRecord?.envelope?.question === aiInsights.WEEKLY_RECAP_QUESTION &&
       Array.isArray(runnerProviderRecord?.envelope?.history) && runnerProviderRecord.envelope.history.length === 0 &&
-      runnerProviderRecord.body.system.some((block) => /WEEKLY_RECAP_MODE v1/.test(block.text)),
+      runnerProviderRecord.body.system.some((block) => /WEEKLY_RECAP_MODE v2/.test(block.text)),
     JSON.stringify({ status: runner.status, stored: runnerStored && runnerStored.id, validated: runner.validated,
       serviceCalls, provider: runnerProviderRecord && runnerProviderRecord.envelope }));
   const lowHistoryProviderCount = captured.length;
@@ -553,7 +557,8 @@ function responseFor(envelope) {
     const lastPath = `last12Weeks.weekly.${lastIndex}`;
     const findings = [
       metricFinding(envelope.data, `${lastPath}.activityCount`),
-      metricFinding(envelope.data, `${lastPath}.durationHours`)
+      metricFinding(envelope.data, `${lastPath}.durationHours`),
+      metricFinding(envelope.data, `${lastPath}.points`)
     ];
     if (Number(weekly[lastIndex].distanceKm) > 0) findings.push(metricFinding(envelope.data, `${lastPath}.distanceKm`));
     if (envelope.data.dataQuality && envelope.data.dataQuality.trendEligible) {

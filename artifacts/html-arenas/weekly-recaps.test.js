@@ -38,7 +38,8 @@ function requiredPayload(context, { includeDistance = true, includeChart = true 
   const last = context.last12Weeks.weekly[10], previous = context.last12Weeks.weekly[9];
   const findings = [
     { type: 'metric', path: 'last12Weeks.weekly.10.activityCount', value: last.activityCount },
-    { type: 'metric', path: 'last12Weeks.weekly.10.durationHours', value: last.durationHours }
+    { type: 'metric', path: 'last12Weeks.weekly.10.durationHours', value: last.durationHours },
+    { type: 'metric', path: 'last12Weeks.weekly.10.points', value: last.points }
   ];
   if (includeDistance && last.distanceKm > 0) findings.push({ type: 'metric', path: 'last12Weeks.weekly.10.distanceKm', value: last.distanceKm });
   if (context.dataQuality.trendEligible) findings.push({
@@ -55,8 +56,9 @@ test('weekly recap request is a synthetic empty-history request with fixed requi
   const request = buildWeeklyRecapRequest(recapContext());
   assert.equal(JSON.parse(request.messages[0].content[1].text).question, WEEKLY_RECAP_QUESTION);
   assert.deepEqual(JSON.parse(request.messages[0].content[1].text).history, []);
-  assert.match(request.system[0].text, /WEEKLY_RECAP_MODE v1/);
+  assert.match(request.system[0].text, /WEEKLY_RECAP_MODE v2/);
   assert.match(request.system[0].text, /last12Weeks\.weekly\.10\.activityCount/);
+  assert.match(request.system[0].text, /last12Weeks\.weekly\.10\.points/);
   assert.match(request.system[0].text, /FORBID ALL calendar_plan_list and calendar_event_list/);
 });
 
@@ -87,6 +89,9 @@ test('recap completeness accepts the standard required finding set and rejects a
   const missing = requiredPayload(context);
   missing.findings = missing.findings.filter((finding) => finding.path !== 'last12Weeks.weekly.10.durationHours');
   assert.equal(validateWeeklyRecapCompleteness(missing, context).reason, 'recap_missing_required_metric');
+  const missingPoints = requiredPayload(context);
+  missingPoints.findings = missingPoints.findings.filter((finding) => finding.path !== 'last12Weeks.weekly.10.points');
+  assert.equal(validateWeeklyRecapCompleteness(missingPoints, context).reason, 'recap_missing_required_metric');
 
   const invalidAsOf = recapContext();
   invalidAsOf.asOfDate = '2026-09-15';
@@ -575,7 +580,14 @@ test('a recovered generated recap is not processed again as a default eligible-u
       }
       if (table === 'weekly_recaps') {
         return {
-          select() { return this; }, eq() { return this; },
+          select() { return this; },
+          eq(column, value) {
+            if (column === 'email_status' && value === 'pending') this.emailQuery = true;
+            return this;
+          },
+          lt() { return this; },
+          order() { return this; },
+          range: async () => this.emailQuery ? ({ data: [], error: null }) : ({ data: [], error: null }),
           in(column) {
             if (!this.ids) {
               assert.equal(column, 'user_id');
