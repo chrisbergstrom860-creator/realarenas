@@ -1487,10 +1487,9 @@ function weeklyRecapCalendarListCandidates(context) {
   return candidates;
 }
 
-// Weekly recaps deliberately reuse the ordinary request shape and validator.
-// This is separate from buildAiInsightsRequest so browser asks retain byte-for-
-// byte request behaviour (including their system prompt and cache key).
-function buildWeeklyRecapRequest(context) {
+// Recaps share the request shape, but not the ask endpoint's copy-value prompt.
+// The ask prompt and its cache key remain byte-for-byte unchanged.
+function buildWeeklyRecapRequest(context, opts = {}) {
   const weekly = context && context.last12Weeks && context.last12Weeks.weekly;
   const lastIndex = Array.isArray(weekly) ? weekly.findIndex((item) => item && item.relative === 'last_week') : -1;
   const previousIndex = Array.isArray(weekly) ? weekly.findIndex((item) => item && item.relative === '2_weeks_ago') : -1;
@@ -1507,6 +1506,13 @@ function buildWeeklyRecapRequest(context) {
       `At most one calendar list finding total: ${JSON.stringify(calendarCandidates)}`
     : 'FORBID ALL calendar_plan_list and calendar_event_list findings for this recap. No existing non-empty month-filtered calendar list is wholly within the coming 7-day window.';
   const requirements = [
+    'Never write answer prose. Return only typed findings and limitation codes grounded in DATA_JSON.',
+    'RECAP ONLY: for metric findings emit exactly type and path; for comparison emit exactly type, leftPath, and rightPath. Do NOT emit value, leftValue, or rightValue. The server fills every metric and comparison value from DATA_JSON before validation. Ignore any earlier instruction to copy scalar values for these two finding types.',
+    `The complete, exclusive metric set for this recap is ${JSON.stringify([
+      `${lastPath}.activityCount`, `${lastPath}.durationHours`, `${lastPath}.points`,
+      ...(distance ? [`${lastPath}.distanceKm`] : [])
+    ])}. Emit each of these metric paths exactly once and NO OTHER metric findings. In particular, never emit a zero-distance metric or any feeling-count metric as a chart companion. The required metrics already satisfy the chart's never-alone rule.`,
+    `Worked recap example (paths only, NO values): {"findings":[{"type":"metric","path":"${lastPath}.activityCount"},{"type":"metric","path":"${lastPath}.durationHours"},{"type":"metric","path":"${lastPath}.points"}${distance ? `,{"type":"metric","path":"${lastPath}.distanceKm"}` : ''}${trendEligible ? `,{"type":"comparison","leftPath":"${lastPath}.durationHours","rightPath":"${previousPath}.durationHours"}` : ''}${hasFeelings ? ',{"type":"chart","metric":"feelings","period":"weekly","evidence":"last12Weeks.feelings"}' : ''}],"limitations":${trendEligible ? '[]' : '["INSUFFICIENT_TREND_DATA"]'}}. Select only supported paths that exist in DATA_JSON.`,
     `Return metric findings for ${lastPath}.activityCount, ${lastPath}.durationHours, and ${lastPath}.points.`,
     distance ? `Also return a metric finding for ${lastPath}.distanceKm.` : 'Do not return a distance metric because last-week distance is zero.',
     trendEligible
@@ -1521,13 +1527,60 @@ function buildWeeklyRecapRequest(context) {
     'Return no more than 8 findings and only existing limitation codes.'
   ].join('\n');
   const request = buildAiInsightsRequest(context, WEEKLY_RECAP_QUESTION, []);
-  request.system = [{ type: 'text', text: `${buildSystemPrompt()}\n\nWEEKLY_RECAP_MODE v${WEEKLY_RECAP_CONTRACT_VERSION}\n${requirements}` }];
+  const recapPrompt = buildSystemPrompt().split('\n').filter((line) =>
+    !line.startsWith('Never write answer prose. Select only typed findings') &&
+    !line.startsWith('Metric values must always be scalar leaves') &&
+    !line.startsWith('{"type":"metric","path":') &&
+    !line.startsWith('{"type":"comparison","leftPath":') &&
+    !line.startsWith('CHARTS: worked feelings example') &&
+    !line.startsWith('CHARTS: “week by week”') &&
+    !line.startsWith('CHARTS: “by sport”') &&
+    !line.startsWith('FEELINGS: use metric findings')
+  ).join('\n');
+  request.system = [{ type: 'text', text: `${recapPrompt}\n\nWEEKLY_RECAP_MODE v${WEEKLY_RECAP_CONTRACT_VERSION}\n${requirements}` }];
+  if (opts.previousRejection) {
+    request.messages[0].content[1].text = JSON.stringify({
+      question: `${WEEKLY_RECAP_QUESTION}\nPrevious attempt was rejected: ${opts.previousRejection}. Return only types and paths; values are filled by the server.`,
+      history: []
+    });
+  }
   return request;
 }
 
-function validateWeeklyRecapCompleteness(raw, context, ordinary = validateInsightResponse(raw, context)) {
-  if (!ordinary.ok) return ordinary;
+// Only the two scalar finding types are hydrated. Unknown keys survive so the
+// ordinary validator still rejects extra prose or unexpected fields.
+function hydrateWeeklyRecapFindings(raw, context) {
   const parsed = parseModelJson(raw);
+  if (!parsed || !Array.isArray(parsed.findings)) return parsed;
+  return {
+    ...parsed,
+    findings: parsed.findings.map((finding) => {
+      if (!finding || typeof finding !== 'object' || Array.isArray(finding)) return finding;
+      const keys = Object.keys(finding);
+      if (finding.type === 'metric' && keys.every((key) => ['type', 'path', 'value'].includes(key))) {
+        const actual = valueAtPath(context, normalizePath(finding.path));
+        return { ...finding, value: actual.found ? actual.value : undefined };
+      }
+      if (finding.type === 'comparison' && keys.every((key) =>
+        ['type', 'leftPath', 'rightPath', 'leftValue', 'rightValue'].includes(key))) {
+        const left = valueAtPath(context, normalizePath(finding.leftPath));
+        const right = valueAtPath(context, normalizePath(finding.rightPath));
+        return {
+          ...finding,
+          leftValue: left.found ? left.value : undefined,
+          rightValue: right.found ? right.value : undefined
+        };
+      }
+      return finding;
+    })
+  };
+}
+
+function validateWeeklyRecapCompleteness(raw, context, ordinary) {
+  const hydrated = hydrateWeeklyRecapFindings(raw, context);
+  if (!ordinary) ordinary = validateInsightResponse(hydrated, context);
+  if (!ordinary.ok) return ordinary;
+  const parsed = hydrated;
   if (!parsed || !Array.isArray(parsed.findings) || !Array.isArray(parsed.limitations)) {
     return { ok: false, answer: FALLBACK_COPY, reason: 'recap_invalid_shape' };
   }
@@ -1570,7 +1623,9 @@ function validateWeeklyRecapCompleteness(raw, context, ordinary = validateInsigh
   }
   if (metrics.length !== requiredMetricPaths.length ||
       metricPaths.some((path) => !requiredMetricPaths.includes(path))) {
-    return fail(distanceRequired ? 'recap_unexpected_metric' : 'recap_zero_distance_metric');
+    const extraPath = metricPaths.find((path) => !requiredMetricPaths.includes(path)) ||
+      metricPaths.find((path, index) => metricPaths.indexOf(path) !== index);
+    return fail(distanceRequired ? 'recap_unexpected_metric' : 'recap_zero_distance_metric', extraPath);
   }
   const comparisons = parsed.findings.filter((finding) => finding && finding.type === 'comparison');
   const comparisonMatches = (finding) => normalizePath(finding.leftPath) === `${lastPath}.durationHours` &&
@@ -1677,6 +1732,7 @@ module.exports = {
   buildSystemPrompt,
   buildAiInsightsRequest,
   buildWeeklyRecapRequest,
+  hydrateWeeklyRecapFindings,
   validateWeeklyRecapCompleteness,
   buildAiInsightsUsageLog,
   valueAtPath,

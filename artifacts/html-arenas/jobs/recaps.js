@@ -15,6 +15,7 @@ const {
   deliverWeeklyRecapEmail, RECAP_EMAIL_ORIGIN
 } = require('../weekly-recap-email');
 const { renderRecapProse } = require('../recap-prose');
+const { sendRecapFailureAlert, recoverRecapFailureAlerts } = require('../recap-failure-alert');
 
 const SOFT_RUNTIME_LIMIT_MS = 4 * 60 * 1000;
 const HARD_RUNTIME_LIMIT_MS = 5 * 60 * 1000;
@@ -42,7 +43,7 @@ function createRuntimeBudget({
     tickId,
     counters: {
       eligible: 0, generated: 0, generation_failed: 0,
-      emails_sent: 0, emails_skipped: 0, emails_failed: 0,
+      emails_sent: 0, emails_skipped: 0, emails_failed: 0, alerts_sent: 0,
       retention_deleted: 0, provider_cost_usd: 0
     },
     summaryLogged: false,
@@ -168,6 +169,26 @@ function summarizeEmail(runtime, result) {
   if (result.status === 'sent' || result.status === 'already_sent') runtime.counters.emails_sent++;
   else if (result.status === 'skipped') runtime.counters.emails_skipped++;
   else if (result.status === 'failed') runtime.counters.emails_failed++;
+}
+
+function summarizeAlert(runtime, result) {
+  if (result && result.status === 'sent') runtime.counters.alerts_sent++;
+}
+
+function failureDetail(reason, offendingPath) {
+  return JSON.stringify({
+    reason: String(reason || 'generation_failed').slice(0, 200),
+    offendingPath: String(offendingPath || 'unknown').slice(0, 200)
+  });
+}
+
+function correctiveNote(previousReason) {
+  if (!previousReason) return null;
+  let detail;
+  try { detail = JSON.parse(previousReason); } catch (_) {
+    detail = { reason: previousReason, offendingPath: 'unknown' };
+  }
+  return `${detail.reason || 'generation_failed'} at ${detail.offendingPath || 'unknown'}`;
 }
 
 function summarizeUsage(runtime, usage) {
@@ -359,7 +380,8 @@ async function processPendingRecapEmails(supabase, {
   emailEntitlementCheck = recheckRecapEmailEntitlement,
   emailDelivery = deliverWeeklyRecapEmail,
   wait = sleep, shouldContinue = null, origin = RECAP_EMAIL_ORIGIN,
-  onEmailResult = null
+  onEmailResult = null, onAlertResult = null,
+  failureAlert = sendRecapFailureAlert
 } = {}) {
   const recaps = await listPendingRecapEmails(
     supabase, userId, RECAP_EMAIL_BATCH_LIMIT, dryRun, { shouldContinue }
@@ -385,6 +407,11 @@ async function processPendingRecapEmails(supabase, {
     if (result.terminal) {
       logWarning(logger, correlationId, 'weekly_recap_terminal_failure',
         result.reason || 'email_delivery_failed', { recap_id: recap.id });
+      const alert = await failureAlert(supabase, {
+        userId: recap.user_id, weekStart: recap.week_start, kind: 'email',
+        reason: result.reason || 'email_delivery_failed'
+      });
+      if (onAlertResult) onAlertResult(alert);
     }
     if (result.attempted) {
       sends++;
@@ -409,11 +436,12 @@ function logRun(logger, correlationId, status, usage, reason = null) {
   return safeUsage;
 }
 
-async function recordModelFailure(supabase, claim, error, usage, logger, correlationId, reason) {
+async function recordModelFailure(supabase, claim, error, usage, logger, correlationId, reason,
+  offendingPath = null, failureAlert = sendRecapFailureAlert, onAlertResult = null) {
   // This deliberately records only provider/validation failures. Database,
   // auth, claim, finish, and notification errors remain command failures.
   try {
-    await markRecapFailed(supabase, claim, String(error && error.message || error));
+    await markRecapFailed(supabase, claim, failureDetail(reason, offendingPath));
   } catch (recordError) {
     logRun(logger, correlationId, 'infrastructure_failure', usage);
     throw recordError;
@@ -422,18 +450,23 @@ async function recordModelFailure(supabase, claim, error, usage, logger, correla
     logWarning(logger, correlationId, 'weekly_recap_generation_terminal_failure', reason, {
       attempts: Number(claim.attempts)
     });
+    const alert = await failureAlert(supabase, {
+      userId: claim.user_id, weekStart: claim.week_start, kind: 'generation', reason
+    });
+    if (onAlertResult) onAlertResult(alert);
   }
   const usageLog = logRun(logger, correlationId, 'model_or_validation_failed', usage, reason);
   return { status: 'failed', correlationId, error, reason, usage: usageLog };
 }
 
-async function failClaimAfterInfrastructure(supabase, claim, originalError, usage, logger, correlationId, reason) {
+async function failClaimAfterInfrastructure(supabase, claim, originalError, usage, logger, correlationId, reason,
+  failureAlert = sendRecapFailureAlert, onAlertResult = null) {
   // A claim exists but no generated recap has been stored yet. Best-effort
   // failure recording keeps retry state truthful; the original infrastructure
   // error remains the command failure even if the fail RPC also has trouble.
   let terminalReason = reason;
   try {
-    await markRecapFailed(supabase, claim, reason);
+    await markRecapFailed(supabase, claim, failureDetail(reason, null));
   } catch (failureError) {
     terminalReason = `${reason}_fail_recording_failed`;
   }
@@ -441,6 +474,14 @@ async function failClaimAfterInfrastructure(supabase, claim, originalError, usag
     logWarning(logger, correlationId, 'weekly_recap_generation_terminal_failure', reason, {
       attempts: Number(claim.attempts)
     });
+    if (terminalReason === reason) {
+      // A failed notification/provider request is an explicit infrastructure
+      // failure. The durable failed recap is picked up by recovery next tick.
+      const alert = await failureAlert(supabase, {
+        userId: claim.user_id, weekStart: claim.week_start, kind: 'generation', reason
+      });
+      if (onAlertResult) onAlertResult(alert);
+    }
   }
   logRun(logger, correlationId, 'infrastructure_failure', usage, terminalReason);
   throw originalError;
@@ -449,7 +490,8 @@ async function failClaimAfterInfrastructure(supabase, claim, originalError, usag
 async function runOne({
   supabase, service, user, now, dryRun, logger = console.log,
   leaseNow = null, entitlementCheck = recheckRecapEntitlement,
-  providerConfig = null, onUsage = null, onGenerated = null
+  providerConfig = null, onUsage = null, onGenerated = null,
+  failureAlert = sendRecapFailureAlert, onAlertResult = null
 }) {
   const correlationId = recapCorrelationId();
   const window = { userId: user.id, ...recapWindowFor(user, now) };
@@ -465,6 +507,9 @@ async function runOne({
     generatedReported = true;
     if (onGenerated) onGenerated(stored);
   };
+  const failInfrastructure = (claim, error, usage, reason) =>
+    failClaimAfterInfrastructure(supabase, claim, error, usage, logger, correlationId,
+      reason, failureAlert, onAlertResult);
   // A dry run must not claim, finish/fail, notify, or run retention. It still
   // exercises the same current-entitlement, context, provider, and validation
   // path as a real invocation.
@@ -480,7 +525,12 @@ async function runOne({
     return { status: 'skipped_ineligible', correlationId };
   }
   let claim;
+  let previousReason = null;
   if (!dryRun) {
+    const { data: previous, error: readError } = await supabase.from('weekly_recaps')
+      .select('failure_reason').eq('user_id', window.userId).eq('week_start', window.weekStart).limit(1);
+    if (readError) throw new Error(`read recap retry reason failed: ${readError.message}`);
+    previousReason = previous && previous[0] && previous[0].failure_reason;
     // --now is solely a deterministic control for eligibility/context. The
     // lease must be tied to actual wall clock because SQL verifies it against
     // now(), and the precise returned value is echoed to finish/fail.
@@ -504,7 +554,7 @@ async function runOne({
     context = await service.buildContextForUser(user.id, window.contextAsOf);
   } catch (error) {
     if (!dryRun && claim) {
-      return failClaimAfterInfrastructure(supabase, claim, error, null, logger, correlationId, 'context_build_failed');
+      return failInfrastructure(claim, error, null, 'context_build_failed');
     }
     logRun(logger, correlationId, 'infrastructure_failure', null, 'context_build_failed');
     throw error;
@@ -512,7 +562,9 @@ async function runOne({
   let output;
   try {
     output = await service.runValidatedRequest(context, 'recap', {
-      correlationId, ...(providerConfig ? { providerConfig } : {})
+      correlationId, ...(providerConfig ? { providerConfig } : {}),
+      ...(claim && Number(claim.attempts) > 1 && previousReason
+        ? { previousRejection: correctiveNote(previousReason) } : {})
     });
   } catch (error) {
     // Keep this lazy: --send-emails-only must not import any AI module.
@@ -521,8 +573,7 @@ async function runOne({
       (error && error.name === 'AiProviderConfigurationError');
     if (configurationFailure) {
       if (!dryRun && claim) {
-        return failClaimAfterInfrastructure(supabase, claim, error, null, logger, correlationId,
-          'provider_configuration_failed');
+        return failInfrastructure(claim, error, null, 'provider_configuration_failed');
       }
       logRun(logger, correlationId, 'infrastructure_failure', null, 'provider_configuration_failed');
       throw error;
@@ -531,7 +582,8 @@ async function runOne({
       logRun(logger, correlationId, 'dry_run_model_or_validation_failed', null);
       return { status: 'failed', correlationId, error };
     }
-    return recordModelFailure(supabase, claim, error, null, logger, correlationId, 'provider_request_failed');
+    return recordModelFailure(supabase, claim, error, null, logger, correlationId,
+      'provider_request_failed', null, failureAlert, onAlertResult);
   }
   // Account provider usage before validation or any post-provider database
   // work. A later store/entitlement/notification failure must not erase the
@@ -549,7 +601,8 @@ async function runOne({
       logRun(logger, correlationId, 'dry_run_model_or_validation_failed', output && output.usage, reason);
       return { status: 'failed', correlationId, error, reason };
     }
-    return recordModelFailure(supabase, claim, error, output && output.usage, logger, correlationId, reason);
+    return recordModelFailure(supabase, claim, error, output && output.usage, logger, correlationId,
+      reason, validated && validated.offendingPath, failureAlert, onAlertResult);
   }
   if (dryRun) {
     logRun(logger, correlationId, 'dry_run_validated', output.usage);
@@ -560,12 +613,11 @@ async function runOne({
   try {
     beforeStore = await entitlementCheck(supabase, user.id);
   } catch (error) {
-    return failClaimAfterInfrastructure(supabase, claim, error, output.usage, logger, correlationId,
-      'prestore_entitlement_recheck_failed');
+    return failInfrastructure(claim, error, output.usage, 'prestore_entitlement_recheck_failed');
   }
   if (!beforeStore.eligible) {
     try {
-      await markRecapFailed(supabase, claim, 'weekly recap entitlement changed before storage');
+      await markRecapFailed(supabase, claim, failureDetail('entitlement_changed_before_storage', null));
     } catch (error) {
       logRun(logger, correlationId, 'infrastructure_failure', output.usage);
       throw error;
@@ -576,6 +628,11 @@ async function runOne({
         'weekly recap entitlement changed before storage', {
           attempts: Number(claim.attempts)
         });
+      const alert = await failureAlert(supabase, {
+        userId: claim.user_id, weekStart: claim.week_start, kind: 'generation',
+        reason: 'entitlement_changed_before_storage'
+      });
+      if (onAlertResult) onAlertResult(alert);
     }
     return { status: 'skipped_ineligible', correlationId, usage: usageLog };
   }
@@ -599,7 +656,7 @@ async function runOne({
       contextSchemaVersion: context.schemaVersion
     });
   } catch (error) {
-    return failClaimAfterInfrastructure(supabase, claim, error, output.usage, logger, correlationId, 'finish_rpc_failed');
+    return failInfrastructure(claim, error, output.usage, 'finish_rpc_failed');
   }
   if (!stored) {
     logRun(logger, correlationId, 'lost_lease_before_store', output.usage);
@@ -711,11 +768,20 @@ async function main(argv = process.argv.slice(2), dependencies = {}) {
     wait: dependencies.wait || sleep,
     shouldContinue,
     origin,
-    onEmailResult: (result) => summarizeEmail(runtime, result)
+    onEmailResult: (result) => summarizeEmail(runtime, result),
+    onAlertResult: (result) => summarizeAlert(runtime, result),
+    failureAlert: dependencies.failureAlert || sendRecapFailureAlert
   };
   try {
     if (options.sendEmailsOnly) {
       // Do not load the AI service or build context in email-only mode.
+      if (!options.dryRun) {
+        await (dependencies.recoverFailureAlerts || recoverRecapFailureAlerts)(supabase, {
+          userId: options.userId,
+          onResult: (result) => summarizeAlert(runtime, result),
+          sender: dependencies.alertSender, shouldContinue
+        });
+      }
       const emails = await processPendingRecapEmails(supabase, emailOptions);
       if (options.dryRun) {
         logger(JSON.stringify({
@@ -733,6 +799,11 @@ async function main(argv = process.argv.slice(2), dependencies = {}) {
     // generation or provider work in this tick.
     if (!options.dryRun) {
       runtime.counters.retention_deleted = await sweepExpiredWeeklyRecaps(supabase);
+      await (dependencies.recoverFailureAlerts || recoverRecapFailureAlerts)(supabase, {
+        userId: options.userId,
+        onResult: (result) => summarizeAlert(runtime, result),
+        sender: dependencies.alertSender, shouldContinue
+      });
     }
 
     // Kept lazy so --send-emails-only never imports or calls AI generation.
@@ -752,7 +823,9 @@ async function main(argv = process.argv.slice(2), dependencies = {}) {
       const result = await runOne({
         supabase, service, user, now, dryRun: options.dryRun, logger, providerConfig,
         onUsage: (usage) => summarizeUsage(runtime, usage),
-        onGenerated: () => { runtime.counters.generated++; }
+        onGenerated: () => { runtime.counters.generated++; },
+        failureAlert: dependencies.failureAlert || sendRecapFailureAlert,
+        onAlertResult: (alert) => summarizeAlert(runtime, alert)
       });
       results.push(result);
       summarizeResult(runtime, result);
@@ -866,5 +939,5 @@ module.exports = {
   parseArgs, listAuthUsers, listIndividualProSubscriptions, recapRowsForUsers,
   eligibleUsers, recheckRecapEntitlement, recheckRecapEmailEntitlement,
   listPendingRecapEmails, processPendingRecapEmails, sleep, redactRecapEmailDryRunText,
-  recoverGeneratedNotifications, runOne, main, runCli
+  recoverGeneratedNotifications, runOne, main, runCli, correctiveNote, failureDetail
 };

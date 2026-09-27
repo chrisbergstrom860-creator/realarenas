@@ -6,6 +6,7 @@ const {
   validateInsightResponse,
   parseModelJson,
   buildWeeklyRecapRequest,
+  hydrateWeeklyRecapFindings,
   validateWeeklyRecapCompleteness,
   resolveAnthropicProvider,
   buildAiInsightsRequest
@@ -398,7 +399,7 @@ function createAiInsightsService(deps) {
     if (mode === 'recap') {
       // Recaps use the contract's fixed synthetic question and intentionally
       // have no browser-supplied history. They do not consume ask quota here.
-      request = buildWeeklyRecapRequest(context);
+      request = buildWeeklyRecapRequest(context, { previousRejection: opts.previousRejection });
     } else if (mode === 'ask') {
       const question = opts.question;
       const history = Array.isArray(opts.history) ? opts.history : [];
@@ -411,11 +412,12 @@ function createAiInsightsService(deps) {
       request
     );
     const text = (response.content || []).filter((block) => block.type === 'text').map((block) => block.text).join('');
-    const ordinary = validateInsightResponse(text, context);
+    const hydrated = mode === 'recap' ? hydrateWeeklyRecapFindings(text, context) : text;
+    const ordinary = validateInsightResponse(hydrated, context);
     const validated = mode === 'recap'
-      ? validateWeeklyRecapCompleteness(text, context, ordinary)
+      ? validateWeeklyRecapCompleteness(hydrated, context, ordinary)
       : ordinary;
-    const parsed = parseModelJson(text);
+    const parsed = parseModelJson(hydrated);
     const findings = validated.ok && parsed && Array.isArray(parsed.findings) ? parsed.findings : null;
     return {
       response,

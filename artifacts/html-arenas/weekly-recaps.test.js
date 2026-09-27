@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   buildWeeklyRecapRequest, validateWeeklyRecapCompleteness, WEEKLY_RECAP_QUESTION,
-  AiProviderConfigurationError
+  AiProviderConfigurationError, hydrateWeeklyRecapFindings, validateInsightResponse
 } = require('./ai-insights');
 const {
   weeklyRecapEnabled, isWeeklyRecapDue, recapWindowFor, claimWeeklyRecap,
@@ -60,6 +60,58 @@ test('weekly recap request is a synthetic empty-history request with fixed requi
   assert.match(request.system[0].text, /last12Weeks\.weekly\.10\.activityCount/);
   assert.match(request.system[0].text, /last12Weeks\.weekly\.10\.points/);
   assert.match(request.system[0].text, /FORBID ALL calendar_plan_list and calendar_event_list/);
+  assert.match(request.system[0].text, /Worked recap example \(paths only, NO values\)/);
+  assert.doesNotMatch(request.system[0].text, /"leftValue":|"rightValue":|"value":24/);
+  assert.match(request.system[0].text, /Do NOT emit value, leftValue, or rightValue/);
+  assert.match(request.system[0].text, /complete, exclusive metric set/);
+  assert.match(request.system[0].text, /required metrics already satisfy the chart's never-alone rule/);
+  assert.doesNotMatch(request.system[0].text, /CHARTS: worked feelings example|include one scalar data metric alongside the chart|FEELINGS: use metric findings/);
+  assert.doesNotMatch(request.system[0].text, /last12Weeks\.feelingsTotal\.motivated/);
+  const retry = buildWeeklyRecapRequest(recapContext(), {
+    previousRejection: 'unsupported_path at last12Weeks.weekly.99.durationHours'
+  });
+  assert.deepEqual(retry.system, request.system);
+  assert.deepEqual(retry.messages[0].content[0], request.messages[0].content[0]);
+  assert.match(JSON.parse(retry.messages[0].content[1].text).question,
+    /Previous attempt was rejected: unsupported_path at last12Weeks\.weekly\.99\.durationHours\. Return only types and paths; values are filled by the server\./);
+});
+
+test('recap hydrates wrong or absent metric and comparison values before ordinary validation', () => {
+  const context = recapContext();
+  const incorrect = requiredPayload(context);
+  for (const finding of incorrect.findings) {
+    if (finding.type === 'metric') finding.value = 999;
+    if (finding.type === 'comparison') {
+      finding.leftValue = 999;
+      finding.rightValue = -999;
+    }
+  }
+  const original = JSON.stringify(incorrect);
+  const hydrated = hydrateWeeklyRecapFindings(original, context);
+  assert.equal(validateWeeklyRecapCompleteness(original, context).ok, true);
+  assert.equal(validateInsightResponse(original, context).reason, 'mismatched_value', 'ask stays strict');
+  assert.deepEqual(hydrated.findings.slice(0, 4).map(({ value }) => value), [3, 4.5, 1, 12]);
+  assert.deepEqual([hydrated.findings[4].leftValue, hydrated.findings[4].rightValue], [4.5, 2]);
+  assert.equal(incorrect.findings[0].value, 999, 'source findings are not mutated');
+
+  const withoutValues = requiredPayload(context);
+  for (const finding of withoutValues.findings) {
+    if (finding.type === 'metric') delete finding.value;
+    if (finding.type === 'comparison') {
+      delete finding.leftValue;
+      delete finding.rightValue;
+    }
+  }
+  assert.equal(validateWeeklyRecapCompleteness(withoutValues, context).ok, true);
+  const badPath = requiredPayload(context);
+  badPath.findings[0].path = 'last12Weeks.weekly.10.weekStart';
+  const rejected = validateWeeklyRecapCompleteness(badPath, context);
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.reason, 'unsupported_path');
+  assert.equal(rejected.offendingPath, 'last12Weeks.weekly.10.weekStart');
+  const extra = requiredPayload(context);
+  extra.findings[0].displayValue = 999;
+  assert.equal(validateWeeklyRecapCompleteness(extra, context).reason, 'invalid_finding');
 });
 
 test('recap prompt permits calendar lists only from full matching records inside the seven-day range', () => {
@@ -111,13 +163,27 @@ test('low-history recap requires its limitation and feelings chart is omitted wh
 
 test('recap completeness rejects zero-distance metrics, extra findings, and all chart variants when feelings are absent', () => {
   const context = recapContext({ feelings: false, distance: 0 });
+  const prompt = buildWeeklyRecapRequest(context).system[0].text;
+  assert.match(prompt, /complete, exclusive metric set.*"last12Weeks\.weekly\.10\.points"/);
+  assert.doesNotMatch(prompt, /"last12Weeks\.weekly\.10\.distanceKm"/);
+  assert.match(prompt, /never emit a zero-distance metric/);
   const payload = requiredPayload(context, { includeDistance: false, includeChart: false });
   payload.findings.push({ type: 'metric', path: 'last12Weeks.weekly.10.distanceKm', value: 0 });
-  assert.equal(validateWeeklyRecapCompleteness(payload, context).reason, 'recap_zero_distance_metric');
+  const zeroDistance = validateWeeklyRecapCompleteness(payload, context);
+  assert.equal(zeroDistance.reason, 'recap_zero_distance_metric');
+  assert.equal(zeroDistance.offendingPath, 'last12Weeks.weekly.10.distanceKm');
 
   const extra = requiredPayload(recapContext());
   extra.findings.push({ type: 'metric', path: 'last12Weeks.weekly.9.activityCount', value: 2 });
-  assert.equal(validateWeeklyRecapCompleteness(extra, recapContext()).reason, 'recap_unexpected_metric');
+  const unexpected = validateWeeklyRecapCompleteness(extra, recapContext());
+  assert.equal(unexpected.reason, 'recap_unexpected_metric');
+  assert.equal(unexpected.offendingPath, 'last12Weeks.weekly.9.activityCount');
+
+  const duplicate = requiredPayload(context, { includeDistance: false, includeChart: false });
+  duplicate.findings.push({ type: 'metric', path: 'last12Weeks.weekly.10.points', value: 1 });
+  const repeated = validateWeeklyRecapCompleteness(duplicate, context);
+  assert.equal(repeated.reason, 'recap_missing_required_metric');
+  assert.equal(repeated.offendingPath, 'last12Weeks.weekly.10.points');
 
   const absent = recapContext({ feelings: false });
   const unexpectedChart = requiredPayload(absent, { includeChart: false });
@@ -245,6 +311,15 @@ function validRunnerOutput() {
   };
 }
 
+function runnerNotificationAndRetryFrom(table) {
+  if (table === 'weekly_recaps') return {
+    select() { return this; }, eq() { return this; },
+    limit: async () => ({ data: [], error: null })
+  };
+  assert.equal(table, 'notifications');
+  return { upsert: async () => ({ error: null }) };
+}
+
 test('runner uses wall-clock lease, echoes the exact returned lease, and rejects composite RPC no-ops', async () => {
   const rpcCalls = [];
   const leaseReturnedByDb = '2026-03-09T08:11:37.123+00:00';
@@ -255,7 +330,7 @@ test('runner uses wall-clock lease, echoes the exact returned lease, and rejects
       if (name === 'finish_weekly_recap') return { data: { id: 'stored-id' }, error: null };
       throw new Error(`unexpected rpc ${name}`);
     },
-    from: () => ({ upsert: async () => ({ error: null }) })
+    from: runnerNotificationAndRetryFrom
   };
   const contextDates = [];
   const successLogs = [];
@@ -319,7 +394,7 @@ test('runner stores recap prose rendered from the validated finding snapshot', a
         if (name === 'finish_weekly_recap') return { data: { id: 'stored' }, error: null };
         throw new Error(`unexpected RPC ${name}`);
       },
-      from: () => ({ upsert: async () => ({ error: null }) })
+      from: runnerNotificationAndRetryFrom
     },
     service: {
       buildContextForUser: async () => ({ schemaVersion: 8 }),
@@ -351,7 +426,7 @@ test('runner marks only model/validation failures and stops before storage when 
         if (name === 'fail_weekly_recap') return { data: null, error: null };
         throw new Error(`store must not happen: ${name}`);
       },
-      from: () => ({ upsert: async () => ({ error: null }) })
+      from: runnerNotificationAndRetryFrom
     },
     service: {
       buildContextForUser: async () => ({ schemaVersion: 8 }),
@@ -367,6 +442,9 @@ test('runner marks only model/validation failures and stops before storage when 
   assert.equal(result.status, 'skipped_ineligible');
   assert.deepEqual(calls.map((call) => call.name), ['claim_weekly_recap', 'fail_weekly_recap']);
   assert.equal(calls[1].args.p_lease_until, 'db-lease-exact');
+  assert.deepEqual(JSON.parse(calls[1].args.p_failure_reason), {
+    reason: 'entitlement_changed_before_storage', offendingPath: 'unknown'
+  });
 
   const failedCalls = [];
   const failureLogs = [];
@@ -378,7 +456,7 @@ test('runner marks only model/validation failures and stops before storage when 
           ? { data: { id: 'claim', attempts: 1, lease_until: 'exact-lease' }, error: null }
           : { data: null, error: null };
       },
-      from: () => ({ upsert: async () => ({ error: null }) })
+      from: runnerNotificationAndRetryFrom
     },
     service: {
       buildContextForUser: async () => ({ schemaVersion: 8 }),
@@ -394,6 +472,9 @@ test('runner marks only model/validation failures and stops before storage when 
   assert.equal(modelFailed.status, 'failed');
   assert.deepEqual(failedCalls.map((call) => call.name), ['claim_weekly_recap', 'fail_weekly_recap']);
   assert.equal(failedCalls[1].args.p_lease_until, 'exact-lease');
+  assert.deepEqual(JSON.parse(failedCalls[1].args.p_failure_reason), {
+    reason: 'recap_missing_required_metric', offendingPath: 'unknown'
+  });
   assert.equal(failureLogs.length, 1, 'each user has one terminal usage line');
   assert.equal(failureLogs[0].event, 'ai_insights_usage');
   assert.equal(failureLogs[0].kind, 'recap');
@@ -408,8 +489,9 @@ test('generated notification failure is recovered idempotently without another m
   const from = (table) => {
     if (table === 'weekly_recaps') {
       return {
-        select() { return this; }, eq() { return this; },
-        limit: async () => ({ data: [{ user_id: 'u', week_start: '2026-03-02' }], error: null })
+        select(columns) { this.columns = columns; return this; }, eq() { return this; },
+        limit: async () => ({ data: this.columns === 'failure_reason'
+          ? [] : [{ user_id: 'u', week_start: '2026-03-02' }], error: null })
       };
     }
     if (table === 'notifications') {
@@ -619,13 +701,14 @@ test('a recovered generated recap is not processed again as a default eligible-u
       if (table === 'weekly_recaps') {
         return {
           select() { return this; },
+          or() { this.alertQuery = true; return this; },
           eq(column, value) {
             if (column === 'email_status' && value === 'pending') this.emailQuery = true;
             return this;
           },
           lt() { return this; },
           order() { return this; },
-          range: async () => this.emailQuery ? ({ data: [], error: null }) : ({ data: [], error: null }),
+          range: async () => ({ data: [], error: null }),
           in(column) {
             if (!this.ids) {
               assert.equal(column, 'user_id');
@@ -639,6 +722,12 @@ test('a recovered generated recap is not processed again as a default eligible-u
             });
           },
           limit: async () => ({ data: [{ user_id: user.id, week_start: weekStart }], error: null })
+        };
+      }
+      if (table === 'recap_failure_alerts') {
+        return {
+          select() { return this; }, is() { return this; }, or() { return this; },
+          limit: async () => ({ data: [], error: null })
         };
       }
       if (table === 'notifications') {
@@ -714,7 +803,7 @@ test('claimed infrastructure failures best-effort fail with the exact lease and 
         if (name === 'fail_weekly_recap') return { data: null, error: scenario.failRpcError ? { message: 'fail RPC outage' } : null };
         throw new Error(`unexpected rpc ${name}`);
       },
-      from: () => ({ upsert: async () => ({ error: null }) })
+      from: runnerNotificationAndRetryFrom
     };
     await assert.rejects(
       runOne({
@@ -729,7 +818,10 @@ test('claimed infrastructure failures best-effort fail with the exact lease and 
     assert.deepEqual(calls.map((call) => call.name), scenario.expectedCalls, scenario.name);
     const failureCall = calls.at(-1);
     assert.equal(failureCall.args.p_lease_until, 'lease-returned-by-db', scenario.name);
-    assert.equal(failureCall.args.p_failure_reason, scenario.failureReason || scenario.reason, scenario.name);
+    assert.deepEqual(JSON.parse(failureCall.args.p_failure_reason), {
+      reason: scenario.failureReason || scenario.reason.replace(/_fail_recording_failed$/, ''),
+      offendingPath: 'unknown'
+    }, scenario.name);
     assert.equal(logs.length, 1, scenario.name);
     assert.deepEqual(
       { event: logs[0].event, status: logs[0].status, reason: logs[0].reason },
@@ -754,7 +846,7 @@ test('provider configuration failures are infrastructure failures, not per-user 
           if (name === 'fail_weekly_recap') return { data: null, error: null };
           throw new Error(`unexpected rpc ${name}`);
         },
-        from: () => ({ upsert: async () => ({ error: null }) })
+      from: runnerNotificationAndRetryFrom
       },
       service: {
         buildContextForUser: async () => ({ schemaVersion: 8 }),
@@ -769,7 +861,9 @@ test('provider configuration failures are infrastructure failures, not per-user 
   );
   assert.deepEqual(calls.map((call) => call.name), ['claim_weekly_recap', 'fail_weekly_recap']);
   assert.equal(calls[1].args.p_lease_until, 'lease-returned-by-db');
-  assert.equal(calls[1].args.p_failure_reason, 'provider_configuration_failed');
+  assert.deepEqual(JSON.parse(calls[1].args.p_failure_reason), {
+    reason: 'provider_configuration_failed', offendingPath: 'unknown'
+  });
   assert.deepEqual(
     { event: logs[0].event, status: logs[0].status, reason: logs[0].reason },
     { event: 'ai_insights_usage', status: 'infrastructure_failure', reason: 'provider_configuration_failed' }

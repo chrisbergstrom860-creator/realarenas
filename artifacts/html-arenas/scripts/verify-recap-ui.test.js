@@ -70,6 +70,10 @@ test('runner findings envelope round-trips a low-history limitation into the sto
       throw new Error(`unexpected RPC: ${name}`);
     },
     from(table) {
+      if (table === 'weekly_recaps') return {
+        select() { return this; }, eq() { return this; },
+        limit: async () => ({ data: [], error: null })
+      };
       assert.equal(table, 'notifications');
       return { upsert: async () => ({ error: null }) };
     }

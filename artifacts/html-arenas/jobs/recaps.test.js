@@ -26,10 +26,11 @@ function configuredEnvironment(overrides = {}) {
 
 function pendingEmailSupabase(rows) {
   return {
-    from: () => ({
+    from: (table) => ({
       select() { return this; }, eq() { return this; }, lt() { return this; },
+      or() { return this; }, is() { return this; }, limit: async () => ({ data: [], error: null }),
       order() { return this; },
-      range: async () => ({ data: rows, error: null })
+      range: async () => ({ data: table === 'weekly_recaps' ? rows : [], error: null })
     })
   };
 }
@@ -52,6 +53,10 @@ function validRecapOutput(usage = { input_tokens: 1000, output_tokens: 500 }) {
 
 function generationSupabase({ storeError = false } = {}) {
   return {
+    from: () => ({
+      select() { return this; }, eq() { return this; },
+      limit: async () => ({ data: [], error: null })
+    }),
     rpc: async (name) => {
       if (name === 'claim_weekly_recap') {
         return {
@@ -349,9 +354,116 @@ test('summary line has the complete aggregate shape and provider cost total', ()
     emails_sent: 1,
     emails_skipped: 1,
     emails_failed: 0,
+    alerts_sent: 0,
     retention_deleted: 3,
     provider_cost_usd: 0.0042
   });
+});
+
+test('a third rejected generation saves reason and path, notifies founder once, and adds retry note only to recap request', async () => {
+  const user = recapUser();
+  let recorded;
+  let alert;
+  let previousRejection;
+  const supabase = {
+    from: () => ({
+      select() { return this; }, eq() { return this; },
+      limit: async () => ({ data: [{ failure_reason: JSON.stringify({
+        reason: 'unsupported_path', offendingPath: 'last12Weeks.weekly.0.points'
+      }) }], error: null })
+    }),
+    rpc: async (name, args) => {
+      if (name === 'claim_weekly_recap') return { data: {
+        id: 'claim-id', user_id: user.id, week_start: '2026-09-07',
+        lease_until: '2030-01-01T00:10:00.000Z', attempts: 3
+      }, error: null };
+      if (name === 'fail_weekly_recap') {
+        recorded = JSON.parse(args.p_failure_reason);
+        return { data: null, error: null };
+      }
+      throw new Error(`unexpected ${name}`);
+    }
+  };
+  const result = await runOne({
+    supabase, service: {
+      buildContextForUser: async () => ({}),
+      runValidatedRequest: async (_context, _mode, opts) => {
+        previousRejection = opts.previousRejection;
+        return { validated: { ok: false, reason: 'unsupported_path', offendingPath: 'bad.path' },
+          usage: {}, findings: [] };
+      }
+    }, user, now: new Date('2026-09-14T12:00:00Z'), dryRun: false,
+    entitlementCheck: async () => ({ eligible: true, user }),
+    failureAlert: async (_db, failure) => {
+      alert = failure;
+      return { status: 'sent' };
+    }, logger: () => {}
+  });
+  assert.equal(result.status, 'failed');
+  assert.deepEqual(recorded, { reason: 'unsupported_path', offendingPath: 'bad.path' });
+  assert.equal(previousRejection, 'unsupported_path at last12Weeks.weekly.0.points');
+  assert.deepEqual(alert, { userId: user.id, weekStart: '2026-09-07',
+    kind: 'generation', reason: 'unsupported_path' });
+});
+
+test('terminal email failure triggers affected-user/week alert and reports completed alert', async () => {
+  const user = recapUser();
+  const alerts = [];
+  const counted = [];
+  const results = await processPendingRecapEmails(pendingEmailSupabase([
+    { id: 'recap-1', user_id: user.id, week_start: '2026-09-07',
+      status: 'generated', email_status: 'pending' }
+  ]), {
+    emailDelivery: async () => ({ status: 'failed', reason: 'email_send_failed',
+      terminal: true, attempted: false }),
+    failureAlert: async (_db, failure) => {
+      alerts.push(failure);
+      return { status: 'sent' };
+    },
+    onAlertResult: (result) => counted.push(result.status),
+    logger: () => {}
+  });
+  assert.equal(results[0].terminal, true);
+  assert.deepEqual(alerts, [{ userId: user.id, weekStart: '2026-09-07',
+    kind: 'email', reason: 'email_send_failed' }]);
+  assert.deepEqual(counted, ['sent']);
+});
+
+test('third attempt context infrastructure failure is recorded and founder alerted', async () => {
+  const user = recapUser();
+  const failures = [];
+  const supabase = {
+    from: () => ({
+      select() { return this; }, eq() { return this; },
+      limit: async () => ({ data: [], error: null })
+    }),
+    rpc: async (name, args) => {
+      if (name === 'claim_weekly_recap') return { data: {
+        id: 'claim-id', user_id: user.id, week_start: '2026-09-07',
+        attempts: 3, lease_until: '2030-01-01T00:10:00.000Z'
+      }, error: null };
+      if (name === 'fail_weekly_recap') {
+        failures.push(args.p_failure_reason);
+        return { error: null };
+      }
+      throw new Error(`unexpected ${name}`);
+    }
+  };
+  const alerts = [];
+  await assert.rejects(runOne({
+    supabase, user, now: new Date('2026-09-14T12:00:00Z'), dryRun: false,
+    service: { buildContextForUser: async () => { throw new Error('context unavailable'); } },
+    entitlementCheck: async () => ({ eligible: true, user }),
+    failureAlert: async (_db, detail) => {
+      alerts.push(detail);
+      return { status: 'sent' };
+    }, logger: () => {}
+  }), /context unavailable/);
+  assert.deepEqual(failures.map(JSON.parse), [{
+    reason: 'context_build_failed', offendingPath: 'unknown'
+  }]);
+  assert.deepEqual(alerts, [{ userId: user.id, weekStart: '2026-09-07',
+    kind: 'generation', reason: 'context_build_failed' }]);
 });
 
 test('retention count contract rejects missing or malformed RPC counts', async () => {

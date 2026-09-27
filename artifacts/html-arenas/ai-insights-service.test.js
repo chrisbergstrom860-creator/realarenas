@@ -10,7 +10,7 @@ function resolved(value) {
   return chain;
 }
 
-function serviceForFrozenContext(providerResponse = null) {
+function serviceForFrozenContext(providerResponse = null, captureRequest = () => {}) {
   const emptyRows = { data: [], error: null };
   const supabaseAdmin = {
     from(table) {
@@ -43,7 +43,8 @@ function serviceForFrozenContext(providerResponse = null) {
     goalNaturalUnit: () => '',
     createAnthropicClient: () => ({
       messages: {
-        create: async () => {
+        create: async (request) => {
+          captureRequest(request);
           if (!providerResponse) throw new Error('not used');
           return providerResponse;
         }
@@ -99,4 +100,38 @@ test('recap mode uses the fixed contract and completes ordinary validation', asy
   assert.equal(output.validated.recap.contractVersion, 2);
   assert.deepEqual(output.findings, JSON.parse(responseText).findings);
   assert.equal(output.usage.output_tokens, 2);
+});
+
+test('service stores server-hydrated recap findings, but rejects the same wrong value in ask mode', async () => {
+  const responseText = JSON.stringify({
+    findings: [
+      { type: 'metric', path: 'last12Weeks.weekly.10.activityCount', value: 999 },
+      { type: 'metric', path: 'last12Weeks.weekly.10.durationHours' },
+      { type: 'metric', path: 'last12Weeks.weekly.10.points', value: -1 }
+    ],
+    limitations: ['INSUFFICIENT_TREND_DATA']
+  });
+  const requests = [];
+  const service = serviceForFrozenContext({
+    content: [{ type: 'text', text: responseText }]
+  }, (request) => requests.push(request));
+  const context = await service.buildContextForUser(
+    '00000000-0000-4000-8000-000000000001', '2026-09-14T12:00:00.000Z'
+  );
+  const opts = { providerConfig: { provider: 'test', apiKey: 'not-a-secret' } };
+  const recap = await service.runValidatedRequest(context, 'recap', {
+    ...opts, previousRejection: 'mismatched_value at last12Weeks.weekly.10.points'
+  });
+  assert.equal(recap.validated.ok, true);
+  assert.equal(recap.text, responseText, 'raw provider text remains diagnostic-only');
+  assert.deepEqual(recap.findings.map((finding) => finding.value), [0, 0, 0]);
+  assert.equal(service.renderProse(recap.findings, context).ok, true);
+  assert.match(JSON.parse(requests[0].messages[0].content[1].text).question,
+    /Previous attempt was rejected: mismatched_value at last12Weeks\.weekly\.10\.points/);
+
+  const ask = await service.runValidatedRequest(context, 'ask', { ...opts, question: 'How many?' });
+  assert.equal(ask.validated.ok, false);
+  assert.equal(ask.validated.reason, 'mismatched_value');
+  assert.equal(ask.findings, null);
+  assert.equal(JSON.parse(requests[1].messages[0].content[1].text).question, 'How many?');
 });
