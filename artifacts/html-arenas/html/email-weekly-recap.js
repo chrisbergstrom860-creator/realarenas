@@ -138,13 +138,16 @@ function renderSportSplit(extras) {
   };
 }
 
-function renderHoursChart(extras) {
+function renderHoursChart(extras, weekStart) {
   if (!extras || !extras.hoursBySport) return { html: '', text: '' };
   const chart = extras.hoursBySport;
-  if (!Array.isArray(chart.labels) || chart.labels.length !== 12 ||
-      !Array.isArray(chart.totals) || chart.totals.length !== 12 ||
+  if (!Array.isArray(chart.labels) || chart.labels.length !== 11 ||
+      !Array.isArray(chart.relative) || chart.relative.length !== 11 ||
+      chart.relative[10] !== 'last_week' || chart.relative.includes('this_week') ||
+      chart.labels[10] !== weekStart ||
+      !Array.isArray(chart.totals) || chart.totals.length !== 11 ||
       !Array.isArray(chart.series)) {
-    throw new Error('Weekly recap email requires 12 stored hours-by-sport weeks');
+    throw new Error('Weekly recap email requires 11 stored hours-by-sport weeks ending at the recap week');
   }
   const dates = chart.labels.map((key) => {
     const date = dateFromKey(key);
@@ -155,8 +158,8 @@ function renderHoursChart(extras) {
   });
   const totals = chart.totals.map((value) => storedAmount(value, 'weekly total'));
   const series = chart.series.map((item) => {
-    if (!item || !Array.isArray(item.values) || item.values.length !== 12) {
-      throw new Error('Weekly recap email requires 12 stored sport values');
+    if (!item || !Array.isArray(item.values) || item.values.length !== 11) {
+      throw new Error('Weekly recap email requires 11 stored sport values');
     }
     return {
       color: storedColor(item.color),
@@ -175,17 +178,20 @@ function renderHoursChart(extras) {
         ? `<div style="height:${Math.max(2, Math.round(96 * hours / max))}px;background-color:${item.color};font-size:0;line-height:0"></div>`
         : '';
     }).join('');
-    return `<td width="8.33%" valign="bottom" style="width:8.33%;height:96px;padding:0 1px;vertical-align:bottom;border-bottom:1px solid #d4d4d8" title="${escapeHtml(`${date}: ${formatHours(totals[index])} h`)}">${segments}</td>`;
+    return `<td width="9.09%" valign="bottom" style="width:9.09%;height:96px;padding:0 1px;vertical-align:bottom;border-bottom:1px solid #d4d4d8" title="${escapeHtml(`${date}: ${formatHours(totals[index])} h`)}">${segments}</td>`;
   }).join('');
   const labels = dates.map((date, index) =>
-    `<td width="8.33%" style="width:8.33%;padding:5px 0 0;text-align:center;vertical-align:top;font:9px/1.2 Arial,sans-serif;color:#71717a"><span${index % 2 ? ' class="recap-week-label-odd" style="display:none"' : ''}>${escapeHtml(date)}</span></td>`
+    `<td width="9.09%" style="width:9.09%;padding:5px 0 0;text-align:center;vertical-align:top;font:9px/1.2 Arial,sans-serif;color:#71717a"><span${index % 2 ? ' class="recap-week-label-odd" style="display:none"' : ''}>${escapeHtml(date)}</span></td>`
   ).join('');
   const legend = series.map(({ color, label }) =>
     `<span style="display:inline-block;margin:0 12px 5px 0;font:11px/1.4 Arial,sans-serif;color:#52525b;overflow-wrap:anywhere"><span style="display:inline-block;width:9px;height:9px;margin-right:4px;background-color:${color}"></span>${escapeHtml(label)}</span>`
   ).join('');
+  const end = dateFromKey(weekStart);
+  end.setUTCDate(end.getUTCDate() + 6);
+  const title = `Hours per week — 11 weeks to ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}`;
   return {
-    html: `<div style="margin:0 0 24px"><div style="font:700 14px/1.4 Arial,sans-serif;color:#18181b;margin-bottom:12px">Hours per week — last 12 weeks</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;table-layout:fixed;border-collapse:collapse"><tr>${cells}</tr><tr>${labels}</tr></table><div style="padding-top:12px">${legend}</div></div>`,
-    text: `Hours per week — last 12 weeks\n${dates.map((date, index) => `${date}: ${formatHours(totals[index])} h`).join('\n')}`
+    html: `<div style="margin:0 0 24px"><div style="font:700 14px/1.4 Arial,sans-serif;color:#18181b;margin-bottom:12px">${title}</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;table-layout:fixed;border-collapse:collapse"><tr>${cells}</tr><tr>${labels}</tr></table><div style="padding-top:12px">${legend}</div></div>`,
+    text: `${title}\n${dates.map((date, index) => `${date}: ${formatHours(totals[index])} h`).join('\n')}`
   };
 }
 
@@ -217,7 +223,7 @@ function renderRecapEmail(recapRow, user, links) { // eslint-disable-line no-unu
   ].filter(([, value]) => value != null);
   const extras = storedExtras(recapRow.chart);
   const sportSplit = renderSportSplit(extras);
-  const hoursChart = renderHoursChart(extras);
+  const hoursChart = renderHoursChart(extras, recapRow.week_start);
   const subject = `Your week in training — ${range.short}`;
   const escaped = {
     subject: escapeHtml(subject), range: escapeHtml(range.full),

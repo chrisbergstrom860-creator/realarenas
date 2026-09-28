@@ -43,6 +43,9 @@ function buildSyntheticRecap(context, user, now = new Date()) {
   const parsed = typeof hydrated === 'string' ? JSON.parse(hydrated) : hydrated;
   const envelope = { findings: parsed.findings, limitations: validated.limitations, evidence: validated.evidence };
   const chart = { ...(validated.chart || {}), extras: resolveRecapExtras(context) };
+  if (chart.extras.hoursBySport.labels.at(-1) !== last.weekStart) {
+    throw new Error('Synthetic recap hours must end at the recap week');
+  }
   return {
     id: 'synthetic-read-only-preview', user_id: user.id, status: 'generated',
     email_status: 'pending', week_start: last.weekStart, timezone: context.timezone,

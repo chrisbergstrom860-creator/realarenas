@@ -139,18 +139,18 @@ const fixtures = {
 // Stored recap extras use sport (not key) and decimal durationHours. Adapt
 // only the envelope here, exactly as mountStoredRecap does in the browser.
 const recapHours = (() => {
-  const labels = Array.from({ length: 12 }, (_, index) => dateAt('2026-07-06', index * 7));
+  const labels = Array.from({ length: 11 }, (_, index) => dateAt('2026-07-06', index * 7));
   const storedSeries = [
     { sport: 'running', label: 'Running <unsafe>', color: SPORT_BY_ID.get('running').colors.text,
-      values: [1.2, 0, 2.5, 0, 1.1, 0, 0.8, 2.2, 0, 1, 0, 1.4] },
+      values: [1.2, 0, 2.5, 0, 1.1, 0, 0.8, 2.2, 0, 1, 1.4] },
     { sport: 'cycling', label: 'Cycling & gravel', color: SPORT_BY_ID.get('cycling').colors.text,
-      values: [0.7, 0, 0, 0, 2.3, 0, 0.5, 0, 0, 0, 1.8, 0.2] }
+      values: [0.7, 0, 0, 0, 2.3, 0, 0.5, 0, 0, 0, 0.2] }
   ];
   const series = storedSeries.map((item) => ({ ...item, key: item.sport }));
   return {
     metric: 'hours', unit: 'hours', period: 'weekly',
-    title: 'Hours per week — last 12 weeks', caption: 'Includes <cycling> & running',
-    labels, relative: labels.map((_, index) => `${11 - index}_weeks_ago`),
+    title: 'Hours per week — 11 weeks to Sep 20', caption: 'Includes <cycling> & running',
+    labels, relative: labels.map((_, index) => index === 10 ? 'last_week' : `${11 - index}_weeks_ago`),
     series, totals: totals(series, labels), zeroSlot: 1, expectWrap: false
   };
 })();
@@ -310,7 +310,7 @@ async function assertStoredRecap(page, width, css, moduleSource) {
         })) }
     } };
     const extras = chart.extras;
-    const recap = { prose: '3 sessions last week.', chart };
+    const recap = { weekStart: '2026-09-14', prose: '3 sessions last week.', chart };
     window.ArenasInsights.mountStoredRecap(host, recap);
     const split = host.querySelector('.recap-sport-split');
     const hoursSvg = host.querySelector('.recap-hours-chart svg');
@@ -320,6 +320,10 @@ async function assertStoredRecap(page, width, css, moduleSource) {
     const hoursRect = hoursSvg.getBoundingClientRect();
     const oldRect = oldSvg.getBoundingClientRect();
     const saved = {
+      completedWeeks: extras.hoursBySport.labels.length === 11 &&
+        extras.hoursBySport.labels.at(-1) === recap.weekStart &&
+        extras.hoursBySport.relative.at(-1) === 'last_week' &&
+        !extras.hoursBySport.relative.includes('this_week'),
       splitText: split.textContent, unsafe: !!split.querySelector('unsafe'),
       swatches: [...split.querySelectorAll('.recap-sport-swatch')].map((node) => node.style.backgroundColor),
       hoursTitle: host.querySelector('.recap-hours-chart .ai-chart-title').textContent,
@@ -337,14 +341,14 @@ async function assertStoredRecap(page, width, css, moduleSource) {
       host.querySelectorAll('.recap-chart svg').length === 1;
     // The runner stores { extras } when validation returns no feelings chart.
     // It must draw the hours chart without an empty/base feelings SVG.
-    window.ArenasInsights.mountStoredRecap(host, { prose: '3 sessions last week.', chart: { extras } });
+    window.ArenasInsights.mountStoredRecap(host, { ...recap, chart: { extras } });
     const onlyHours = host.querySelector('.recap-hours-chart svg');
     const onlyCard = host.querySelector('.recap-answer-card').getBoundingClientRect();
     const onlyRect = onlyHours && onlyHours.getBoundingClientRect();
     saved.extrasOnly = host.querySelectorAll('.recap-chart, .recap-chart svg').length === 0 &&
       host.querySelectorAll('.recap-hours-chart svg').length === 1 &&
       host.querySelectorAll('.recap-sport-split li').length === 2 &&
-      onlyHours.getAttribute('aria-label').includes('Hours per week — last 12 weeks') &&
+      onlyHours.getAttribute('aria-label').includes('Hours per week — 11 weeks to Sep 20') &&
       onlyRect.left >= onlyCard.left - 1 && onlyRect.right <= onlyCard.right + 1 &&
       document.documentElement.scrollWidth <= innerWidth + 1;
     return saved;
@@ -354,8 +358,8 @@ async function assertStoredRecap(page, width, css, moduleSource) {
     result.splitText.includes('Cycling & gravel — 1 session, 0.7 h') &&
     !result.splitText.includes('0 km') && !result.unsafe, result);
   check(`storedRecap@${width.viewport}: stacked SVG precedes and fits feelings chart`,
-    result.hoursTitle === 'Hours per week — last 12 weeks' &&
-    result.legends === 2 && result.bars === 24 && result.zeroBars && result.fits, result);
+    result.hoursTitle === 'Hours per week — 11 weeks to Sep 20' &&
+    result.completedWeeks && result.legends === 2 && result.bars === 22 && result.zeroBars && result.fits, result);
   check(`storedRecap@${width.viewport}: legacy row does not gain extras`, result.legacy, result);
   check(`storedRecap@${width.viewport}: extras-only row renders hours without feelings`, result.extrasOnly, result);
 }

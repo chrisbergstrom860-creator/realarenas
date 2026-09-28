@@ -270,9 +270,13 @@
     var extras = recap.chart && recap.chart.extras;
     var split = extras && Array.isArray(extras.sportSplit) ? extras.sportSplit : null;
     var hours = extras && extras.hoursBySport;
-    var hasHours = hours && Array.isArray(hours.labels) && hours.labels.length === 12 &&
+    var hasHours = hours && Array.isArray(hours.labels) && hours.labels.length === 11 &&
+      hours.labels[10] === recap.weekStart &&
+      Array.isArray(hours.relative) && hours.relative.length === 11 &&
+      hours.relative[10] === 'last_week' && hours.relative.indexOf('this_week') === -1 &&
+      Array.isArray(hours.totals) && hours.totals.length === 11 &&
       Array.isArray(hours.series) && hours.series.every(function (item) {
-        return item && Array.isArray(item.values) && item.values.length === 12;
+        return item && Array.isArray(item.values) && item.values.length === 11;
       });
     var baseChart = recap.chart && typeof recap.chart.metric === 'string' &&
       ['daily', 'weekly', 'monthly'].indexOf(recap.chart.period) !== -1 &&
@@ -306,8 +310,10 @@
     var chartHost = container.querySelector('.recap-chart');
     var hoursHost = container.querySelector('.recap-hours-chart');
     if (!chartHost && !hoursHost) return instance;
+    var weekEnd = new Date(recap.weekStart + 'T00:00:00.000Z');
+    weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
     var hoursChart = hasHours ? {
-      title: 'Hours per week — last 12 weeks',
+      title: 'Hours per week — 11 weeks to ' + weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
       metric: 'hours', unit: 'hours', period: 'weekly',
       labels: hours.labels, relative: hours.relative,
       series: hours.series.map(function (item) {

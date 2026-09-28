@@ -36,46 +36,70 @@ function recapWithExtras() {
       { sport: 'yoga', label: 'Yoga', color: '#7462b6', sessions: 1, hours: 0.5, km: 0 }
     ],
     hoursBySport: {
-      labels: Array.from({ length: 12 }, (_, index) => {
-        const date = new Date(Date.UTC(2026, 6, 13 + index * 7));
+      labels: Array.from({ length: 11 }, (_, index) => {
+        const date = new Date(Date.UTC(2026, 6, 20 + index * 7));
         return date.toISOString().slice(0, 10);
       }),
-      relative: [],
+      relative: Array.from({ length: 11 }, (_, index) => index === 10 ? 'last_week' : `${11 - index}_weeks_ago`),
       series: [
-        { sport: 'running', label: 'Running', color: '#e85d04', values: [0, 0.01, 0.4, 0, 0.8, 0, 0, 1, 0, 0, 0, 1.4] },
-        { sport: 'yoga', label: 'Yoga', color: '#7462b6', values: [0, 0, 0.1, 0, 0.2, 0, 0, 0, 0, 0, 0, 0.5] }
+        { sport: 'running', label: 'Running', color: '#e85d04', values: [0, 0.01, 0.4, 0, 0.8, 0, 0, 1, 0, 0, 1.4] },
+        { sport: 'yoga', label: 'Yoga', color: '#7462b6', values: [0, 0, 0.1, 0, 0.2, 0, 0, 0, 0, 0, 0.5] }
       ],
-      totals: [0, 0.01, 0.5, 0, 1, 0, 0, 1, 0, 0, 0, 1.9]
+      totals: [0, 0.01, 0.5, 0, 1, 0, 0, 1, 0, 0, 1.9]
     }
   };
   return row;
 }
 
-test('stored extras render split after metrics and 12-week chart after prose, including text totals', () => {
+test('stored extras render split after metrics and 11-week chart after prose, including text totals', () => {
   const email = renderRecapEmail(recapWithExtras(), {}, links);
   assert.ok(email.html.indexOf('Sessions') < email.html.indexOf('Last week by sport'));
   assert.ok(email.html.indexOf('Last week by sport') < email.html.indexOf('white-space:pre-line'));
-  assert.ok(email.html.indexOf('white-space:pre-line') < email.html.indexOf('Hours per week — last 12 weeks'));
+  assert.ok(email.html.indexOf('white-space:pre-line') < email.html.indexOf('Hours per week — 11 weeks to Oct 4'));
+  assert.match(email.text, /Hours per week — 11 weeks to Oct 4/);
   assert.match(email.text, /Running — 2 sessions, 1\.4 h, 13\.4 km/);
   assert.match(email.text, /Yoga — 1 session, 0\.5 h\n/);
-  assert.match(email.text, /Jul 13: 0 h\nJul 20: 0\.01 h/);
+  assert.match(email.text, /Jul 20: 0 h\nJul 27: 0\.01 h/);
   assert.doesNotMatch(email.html, /<svg|<canvas|data:image/i);
-  assert.equal((email.text.match(/^... \d{1,2}: [\d.]+ h$/gm) || []).length, 12);
-  const cells = email.html.match(/<td width="8\.33%" valign="bottom"[^>]*>.*?<\/td>/g) || [];
-  assert.equal(cells.length, 12);
+  assert.equal((email.text.match(/^... \d{1,2}: [\d.]+ h$/gm) || []).length, 11);
+  const cells = email.html.match(/<td width="9\.09%" valign="bottom"[^>]*>.*?<\/td>/g) || [];
+  assert.equal(cells.length, 11);
   assert.doesNotMatch(cells[0], /background-color:/, 'zero week is an empty slot');
   assert.match(cells[1], /height:2px;background-color:#e85d04/, 'tiny nonzero segment has a two-pixel minimum');
-  assert.match(cells[11], /background-color:#e85d04.*background-color:#7462b6/);
+  assert.match(cells[10], /background-color:#e85d04.*background-color:#7462b6/);
 });
 
 test('legacy rows and empty stored split add no new sections', () => {
   const old = renderRecapEmail(recap(), {}, links);
-  assert.doesNotMatch(old.html + old.text, /Last week by sport|Hours per week — last 12 weeks/);
+  assert.doesNotMatch(old.html + old.text, /Last week by sport|Hours per week/);
   const row = recapWithExtras();
   row.chart.extras.sportSplit = [];
   const email = renderRecapEmail(row, {}, links);
   assert.doesNotMatch(email.html + email.text, /Last week by sport/);
-  assert.match(email.html, /Hours per week — last 12 weeks/);
+  assert.match(email.html, /Hours per week — 11 weeks to Oct 4/);
+});
+
+test('hours title uses recap week end, independent of timezone, and rejects incomplete contracts', () => {
+  const row = recapWithExtras();
+  row.week_start = '2026-09-21';
+  row.chart.extras.hoursBySport.labels = row.chart.extras.hoursBySport.labels.map((key) => {
+    const date = new Date(`${key}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - 7);
+    return date.toISOString().slice(0, 10);
+  });
+  for (const timezone of ['America/Los_Angeles', 'Pacific/Kiritimati']) {
+    row.timezone = timezone;
+    const before = JSON.stringify(row);
+    const email = renderRecapEmail(row, {}, links);
+    assert.match(email.html, /Hours per week — 11 weeks to Sep 27/);
+    assert.match(email.text, /Hours per week — 11 weeks to Sep 27/);
+    assert.equal(JSON.stringify(row), before);
+  }
+  row.chart.extras.hoursBySport.relative[10] = 'this_week';
+  assert.throws(() => renderRecapEmail(row, {}, links), /11 stored hours-by-sport weeks/);
+  row.chart.extras.hoursBySport.relative[10] = 'last_week';
+  row.week_start = '2026-09-28';
+  assert.throws(() => renderRecapEmail(row, {}, links), /11 stored hours-by-sport weeks/);
 });
 
 test('stored sport labels are escaped in text nodes and invalid colors cannot enter CSS', () => {
@@ -104,7 +128,7 @@ test('email chart stays within 320px and 600px widths with alternate dates on na
       await page.setContent(html);
       const geometry = await page.evaluate(() => {
         const chart = [...document.querySelectorAll('table')].find((table) =>
-          table.querySelectorAll('td[title]').length === 12);
+          table.querySelectorAll('td[title]').length === 11);
         const box = chart.getBoundingClientRect();
         return {
           scrollWidth: document.documentElement.scrollWidth,
@@ -116,8 +140,8 @@ test('email chart stays within 320px and 600px widths with alternate dates on na
       });
       assert.ok(geometry.scrollWidth <= width, `${width}px document overflow: ${JSON.stringify(geometry)}`);
       assert.ok(geometry.chartLeft >= 0 && geometry.chartRight <= width, `${width}px chart overflow`);
-      assert.equal(geometry.visibleDates, width === 320 ? 0 : 6);
-      assert.equal(geometry.slots, 12);
+      assert.equal(geometry.visibleDates, width === 320 ? 0 : 5);
+      assert.equal(geometry.slots, 11);
     }
     const malicious = recapWithExtras();
     malicious.chart.extras.sportSplit[0].label = '<img src=x onerror=alert(1)>';

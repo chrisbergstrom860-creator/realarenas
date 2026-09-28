@@ -126,7 +126,9 @@ test('runner findings envelope round-trips a low-history limitation into the sto
   // runner, not a separately hand-authored browser fixture.
   const stored = storedCalls[0];
   assert.equal(stored.p_contract_version, 3);
-  assert.equal(stored.p_chart.extras.hoursBySport.totals.length, 12);
+  assert.equal(stored.p_chart.extras.hoursBySport.totals.length, 11);
+  assert.equal(stored.p_chart.extras.hoursBySport.relative.at(-1), 'last_week');
+  assert.ok(!stored.p_chart.extras.hoursBySport.relative.includes('this_week'));
   assert.equal(stored.p_chart.extras.sportSplit[0].km, 0);
   assert.deepEqual(stored.p_findings, {
     findings: [{ type: 'metric', path: 'last12Weeks.weekly.10.activityCount', value: 1 }],

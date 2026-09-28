@@ -27,12 +27,16 @@ test('extras snapshot mixed sports by hours, using the shared registry and resol
   assert.equal(extras.sportSplit[1].km, 10);
   assert.equal(extras.hoursBySport.totals[10], 3.2);
   assert.equal(extras.hoursBySport.totals[9], 0);
-  assert.equal(extras.hoursBySport.labels.length, 12);
+  assert.equal(extras.hoursBySport.labels.length, 11);
+  assert.equal(extras.hoursBySport.labels.at(-1), context.last12Weeks.weekly[10].weekStart);
+  assert.equal(extras.hoursBySport.relative.length, 11);
+  assert.equal(extras.hoursBySport.relative.at(-1), 'last_week');
+  assert.ok(!extras.hoursBySport.relative.includes('this_week'));
   for (const series of extras.hoursBySport.series) {
     const sport = require('./sports').SPORTS.find((item) => item.id === series.sport);
     assert.equal(series.color, sport.colors.text);
     assert.equal(series.label, sport.label);
-    assert.equal(series.values.length, 12);
+    assert.equal(series.values.length, 11);
   }
   assert.equal(JSON.stringify(context), before);
 });
@@ -47,10 +51,28 @@ test('extras support a single sport and preserve raw precision', () => {
   assert.equal(extras.hoursBySport.series[0].values[10], 1.234);
 });
 
-test('no activities retains twelve zero slots and empty split; malformed snapshots fail explicitly', () => {
+test('current-week activity is excluded without changing the shared 12-week resolver', () => {
+  const context = extrasContext([{ sport: 'running', sessions: 1, durationHours: 2, distanceKm: 10 }]);
+  context.last12Weeks.weekly[11].sports = [{ sport: 'running', sessions: 1, durationHours: 99, distanceKm: 99 }];
+  context.last12Weeks.weekly[11].durationHours = 99;
+  const extras = resolveRecapExtras(context).hoursBySport;
+  assert.equal(extras.labels.length, 11);
+  assert.equal(extras.labels.at(-1), context.last12Weeks.weekly[10].weekStart);
+  assert.equal(extras.totals.at(-1), 2);
+  assert.ok(!extras.totals.includes(99));
+  assert.ok(!extras.relative.includes('this_week'));
+  const shared = require('./ai-insights').resolveChartSeries({
+    type: 'chart', metric: 'durationHours', period: 'weekly',
+    evidence: 'last12Weeks.weekly', stackBySport: true
+  }, context);
+  assert.equal(shared.labels.length, 12);
+  assert.equal(shared.totals.at(-1), 99);
+});
+
+test('no activities retains eleven completed zero slots and empty split; malformed snapshots fail explicitly', () => {
   const extras = resolveRecapExtras(extrasContext());
   assert.deepEqual(extras.sportSplit, []);
-  assert.deepEqual(extras.hoursBySport.totals, Array(12).fill(0));
+  assert.deepEqual(extras.hoursBySport.totals, Array(11).fill(0));
   assert.deepEqual(extras.hoursBySport.series, []);
   const context = extrasContext([{ sport: 'running', sessions: 1, durationHours: NaN, distanceKm: 0 }]);
   assert.throws(() => resolveRecapExtras(context), /invalid sport data/);

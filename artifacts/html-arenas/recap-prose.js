@@ -9,7 +9,8 @@ function resolveRecapExtras(context) {
   const weeks = context && context.last12Weeks && context.last12Weeks.weekly;
   const registry = new Map(SPORTS.map((sport) => [sport.id, sport]));
   if (!Array.isArray(weeks) || weeks.length !== 12 ||
-      weeks.filter((week) => week.relative === 'last_week').length !== 1) {
+      weeks.filter((week) => week.relative === 'last_week').length !== 1 ||
+      weeks[10].relative !== 'last_week' || weeks[11].relative !== 'this_week') {
     throw new Error('Weekly recap extras require twelve weeks and one last_week bucket');
   }
   for (const week of weeks) {
@@ -45,15 +46,16 @@ function resolveRecapExtras(context) {
       sport, label: registry.get(sport).label, color: registry.get(sport).colors.text,
       values: weeks.map(() => 0)
     }));
+  const completedWeeks = weeks.slice(0, -1);
   return {
     sportSplit,
     hoursBySport: {
-      labels: weeks.map((week) => week.weekStart),
-      relative: weeks.map((week) => week.relative || ''),
-      series: chart.error ? emptySeries : chart.series.map(({ key, label, color, values }) => ({
+      labels: completedWeeks.map((week) => week.weekStart),
+      relative: completedWeeks.map((week) => week.relative || ''),
+      series: (chart.error ? emptySeries : chart.series.map(({ key, label, color, values }) => ({
         sport: key, label, color, values
-      })),
-      totals: chart.error ? weeks.map(() => 0) : chart.totals
+      }))).map((item) => ({ ...item, values: item.values.slice(0, -1) })),
+      totals: chart.error ? completedWeeks.map(() => 0) : chart.totals.slice(0, -1)
     }
   };
 }

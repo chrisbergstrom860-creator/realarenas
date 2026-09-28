@@ -27,7 +27,11 @@ test('synthetic email uses validated context without model, writes, sends or sig
   assert.equal(result.status, 'dry_run');
   assert.equal(result.attempted, false);
   assert.equal(result.row.contract_version, 3);
-  assert.equal(result.row.chart.extras.hoursBySport.totals.length, 12);
+  assert.equal(result.row.chart.extras.hoursBySport.totals.length, 11);
+  assert.equal(result.row.chart.extras.hoursBySport.labels.at(-1), result.row.week_start);
+  assert.equal(result.row.chart.extras.hoursBySport.relative.at(-1), 'last_week');
+  assert.ok(!result.row.chart.extras.hoursBySport.relative.includes('this_week'));
+  assert.match(result.text, /Hours per week — 11 weeks to Sep 13/);
   assert.match(result.text, /1\.9 hours/);
   assert.match(result.text, /REDACTED_UNSUBSCRIBE_CAPABILITY/);
   assert.match(result.text, /Yoga — 1 session, 0\.5 h(?:\n|$)/);

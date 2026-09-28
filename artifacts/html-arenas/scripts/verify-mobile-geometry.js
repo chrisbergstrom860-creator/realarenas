@@ -207,13 +207,13 @@ storedRecapFixture.chart.extras = {
     { sport: 'weightlifting', label: 'Weightlifting', color: '#713F12', sessions: 2, hours: 3, km: 0 }
   ],
   hoursBySport: {
-    labels: storedRecapFixture.chart.labels.slice(),
-    relative: storedRecapFixture.chart.relative.slice(),
+    labels: Array.from({ length: 11 }, (_, index) => chartDate(storedRecapFixture.weekStart, (index - 10) * 7)),
+    relative: Array.from({ length: 11 }, (_, index) => index === 10 ? 'last_week' : `${11 - index}_weeks_ago`),
     series: [
-      { sport: 'running', label: 'Running', color: '#C2410C', values: [1.2, 0, 2, 2, 0, 1, 2, 0, 1.5, 0, 1.8, 2.5] },
-      { sport: 'weightlifting', label: 'Weightlifting', color: '#713F12', values: [0.8, 0, 1, 0, 1.5, 2, 0, 0, 1, 2, 0, 3] }
+      { sport: 'running', label: 'Running', color: '#C2410C', values: [1.2, 0, 2, 2, 0, 1, 2, 0, 1.5, 0, 2.5] },
+      { sport: 'weightlifting', label: 'Weightlifting', color: '#713F12', values: [0.8, 0, 1, 0, 1.5, 2, 0, 0, 1, 2, 3] }
     ],
-    totals: [2, 0, 3, 2, 1.5, 3, 2, 0, 2.5, 2, 1.8, 5.5]
+    totals: [2, 0, 3, 2, 1.5, 3, 2, 0, 2.5, 2, 5.5]
   }
 };
 const setupInsightsStubs = async (page) => {
@@ -348,8 +348,8 @@ const recapCardGeometryCheck = {
         split.textContent.includes('Running — 2 sessions, 2.5 h, 18 km') &&
         split.textContent.includes('Weightlifting — 2 sessions, 3 h') &&
         !split.textContent.includes('0 km') &&
-        hoursSvg.getAttribute('aria-label').includes('Hours per week — last 12 weeks') &&
-        card.querySelectorAll('.recap-hours-chart .ai-chart-segment').length === 24 &&
+        hoursSvg.getAttribute('aria-label').includes('Hours per week — 11 weeks to Sep 13') &&
+        card.querySelectorAll('.recap-hours-chart .ai-chart-segment').length === 22 &&
         hr.width > 0 && hr.left >= cr.left - 1 && hr.right <= cr.right + 1 &&
         hr.bottom <= sr.top &&
         sr.width > 0 && sr.left >= cr.left - 1 && sr.right <= cr.right + 1 &&
