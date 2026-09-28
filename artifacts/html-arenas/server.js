@@ -8567,6 +8567,8 @@ function recapPagePayload(row) {
       chart: row.chart || null,
       storedProse: row.prose
     }),
+    // Includes chart.extras exactly as stored at generation; legacy rows
+    // without extras are passed through unchanged (no request-time resolution).
     chart: row.chart || null,
     evidence,
     limitations: Array.isArray(envelope.limitations) ? envelope.limitations : []

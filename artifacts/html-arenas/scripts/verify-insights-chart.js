@@ -136,6 +136,26 @@ const fixtures = {
   })()
 };
 
+// Stored recap extras use sport (not key) and decimal durationHours. Adapt
+// only the envelope here, exactly as mountStoredRecap does in the browser.
+const recapHours = (() => {
+  const labels = Array.from({ length: 12 }, (_, index) => dateAt('2026-07-06', index * 7));
+  const storedSeries = [
+    { sport: 'running', label: 'Running <unsafe>', color: SPORT_BY_ID.get('running').colors.text,
+      values: [1.2, 0, 2.5, 0, 1.1, 0, 0.8, 2.2, 0, 1, 0, 1.4] },
+    { sport: 'cycling', label: 'Cycling & gravel', color: SPORT_BY_ID.get('cycling').colors.text,
+      values: [0.7, 0, 0, 0, 2.3, 0, 0.5, 0, 0, 0, 1.8, 0.2] }
+  ];
+  const series = storedSeries.map((item) => ({ ...item, key: item.sport }));
+  return {
+    metric: 'hours', unit: 'hours', period: 'weekly',
+    title: 'Hours per week — last 12 weeks', caption: 'Includes <cycling> & running',
+    labels, relative: labels.map((_, index) => `${11 - index}_weeks_ago`),
+    series, totals: totals(series, labels), zeroSlot: 1, expectWrap: false
+  };
+})();
+fixtures.recapHours = recapHours;
+
 // Founder-shaped synthetic feelings data: six series over twelve weeks,
 // with a stacked peak of 11 (no account reads or durable fixtures).
 fixtures.feelingsMax11 = {
@@ -184,6 +204,9 @@ async function renderFixture(page, fixture, width, css, moduleSource) {
       yLabels: [...svg.querySelectorAll('.ai-chart-axis-label')].map((node) => node.textContent),
       plotHeight,
       barCount: bars.length,
+      emptySlotHeights: fixture.zeroSlot == null ? null :
+        bars.slice(fixture.zeroSlot * fixture.series.length, (fixture.zeroSlot + 1) * fixture.series.length)
+          .map((node) => Number(node.getAttribute('height'))),
       tallestBarHeight: baseline - Math.min(baseline, ...barTops),
       html: host.innerHTML,
       svgCount: host.querySelectorAll('svg[role="img"]').length,
@@ -229,6 +252,11 @@ function assertFixture(name, fixture, result, width) {
   check(`${name}@${width.viewport}: tallest stacked bar fits the plot`,
     result.barCount === fixture.labels.length * fixture.series.length &&
     result.plotHeight > 0 && result.tallestBarHeight <= result.plotHeight + 0.01, result);
+  if (fixture.zeroSlot != null) {
+    check(`${name}@${width.viewport}: zero week is an empty slot`,
+      result.emptySlotHeights.length === fixture.series.length &&
+      result.emptySlotHeights.every((height) => height === 0), result.emptySlotHeights);
+  }
   if (fixture.expectedTicks) {
     check(`${name}@${width.viewport}: exact nice ticks`,
       JSON.stringify(tickValues) === JSON.stringify(fixture.expectedTicks), tickValues);
@@ -259,12 +287,77 @@ function assertFixture(name, fixture, result, width) {
   check(`${name}@${width.viewport}: stacked legends expose every series and multi-series legends wrap on mobile`,
     !(fixture.expectLegend || fixture.series.length > 1) ||
     (result.legendRole === 'list' && result.legendItems.length === fixture.series.length &&
-      (fixture.series.length === 1 || width.viewport > 768 || result.legendRows >= 2)),
+       (fixture.series.length === 1 || width.viewport > 768 || fixture.expectWrap === false || result.legendRows >= 2)),
     { role: result.legendRole, items: result.legendItems, rows: result.legendRows });
   check(`${name}@${width.viewport}: SVG does not overflow its measured container`,
     result.svg && result.svg.width <= result.host.width + 1 &&
     result.svg.left >= result.host.left - 1 && result.svg.right <= result.host.right + 1 &&
     result.pageOverflow <= 1, { host: result.host, svg: result.svg, overflow: result.pageOverflow });
+}
+
+async function assertStoredRecap(page, width, css, moduleSource) {
+  await setProofPage(page, { css, moduleSource, width: width.viewport });
+  const result = await page.evaluate((hours) => {
+    const host = document.getElementById('tab-insights');
+    const chart = { ...hours, extras: {
+      sportSplit: [
+        { sport: 'running', label: 'Running <unsafe>', color: hours.series[0].color, sessions: 2, hours: 1.2, km: 8 },
+        { sport: 'cycling', label: 'Cycling & gravel', color: hours.series[1].color, sessions: 1, hours: 0.7, km: 0 }
+      ],
+      hoursBySport: { labels: hours.labels, relative: hours.relative, totals: hours.totals,
+        series: hours.series.map((item) => ({
+          sport: item.key, label: item.label, color: item.color, values: item.values
+        })) }
+    } };
+    const extras = chart.extras;
+    const recap = { prose: '3 sessions last week.', chart };
+    window.ArenasInsights.mountStoredRecap(host, recap);
+    const split = host.querySelector('.recap-sport-split');
+    const hoursSvg = host.querySelector('.recap-hours-chart svg');
+    const oldSvg = host.querySelector('.recap-chart svg');
+    const card = host.querySelector('.recap-answer-card');
+    const cardRect = card.getBoundingClientRect();
+    const hoursRect = hoursSvg.getBoundingClientRect();
+    const oldRect = oldSvg.getBoundingClientRect();
+    const saved = {
+      splitText: split.textContent, unsafe: !!split.querySelector('unsafe'),
+      swatches: [...split.querySelectorAll('.recap-sport-swatch')].map((node) => node.style.backgroundColor),
+      hoursTitle: host.querySelector('.recap-hours-chart .ai-chart-title').textContent,
+      legends: host.querySelectorAll('.recap-hours-chart .ai-chart-legend-item').length,
+      bars: hoursSvg.querySelectorAll('.ai-chart-segment').length,
+      zeroBars: [...hoursSvg.querySelectorAll('.ai-chart-segment')].slice(2, 4)
+        .every((node) => Number(node.getAttribute('height')) === 0),
+      fits: [hoursRect, oldRect].every((rect) => rect.left >= cardRect.left - 1 &&
+        rect.right <= cardRect.right + 1) && hoursRect.bottom <= oldRect.top &&
+        document.documentElement.scrollWidth <= innerWidth + 1
+    };
+    delete chart.extras;
+    window.ArenasInsights.mountStoredRecap(host, recap);
+    saved.legacy = host.querySelectorAll('.recap-sport-split, .recap-hours-chart').length === 0 &&
+      host.querySelectorAll('.recap-chart svg').length === 1;
+    // The runner stores { extras } when validation returns no feelings chart.
+    // It must draw the hours chart without an empty/base feelings SVG.
+    window.ArenasInsights.mountStoredRecap(host, { prose: '3 sessions last week.', chart: { extras } });
+    const onlyHours = host.querySelector('.recap-hours-chart svg');
+    const onlyCard = host.querySelector('.recap-answer-card').getBoundingClientRect();
+    const onlyRect = onlyHours && onlyHours.getBoundingClientRect();
+    saved.extrasOnly = host.querySelectorAll('.recap-chart, .recap-chart svg').length === 0 &&
+      host.querySelectorAll('.recap-hours-chart svg').length === 1 &&
+      host.querySelectorAll('.recap-sport-split li').length === 2 &&
+      onlyHours.getAttribute('aria-label').includes('Hours per week — last 12 weeks') &&
+      onlyRect.left >= onlyCard.left - 1 && onlyRect.right <= onlyCard.right + 1 &&
+      document.documentElement.scrollWidth <= innerWidth + 1;
+    return saved;
+  }, recapHours);
+  check(`storedRecap@${width.viewport}: split is escaped, ordered, and omits zero km`,
+    result.splitText.includes('Running <unsafe> — 2 sessions, 1.2 h, 8 km') &&
+    result.splitText.includes('Cycling & gravel — 1 session, 0.7 h') &&
+    !result.splitText.includes('0 km') && !result.unsafe, result);
+  check(`storedRecap@${width.viewport}: stacked SVG precedes and fits feelings chart`,
+    result.hoursTitle === 'Hours per week — last 12 weeks' &&
+    result.legends === 2 && result.bars === 24 && result.zeroBars && result.fits, result);
+  check(`storedRecap@${width.viewport}: legacy row does not gain extras`, result.legacy, result);
+  check(`storedRecap@${width.viewport}: extras-only row renders hours without feelings`, result.extrasOnly, result);
 }
 
 let browser;
@@ -282,6 +375,7 @@ try {
         await page.screenshot({ path: `/tmp/verify-insights-chart-${name}-${width.viewport}.png` });
       }
     }
+    await assertStoredRecap(page, width, css, moduleSource);
   }
   await page.close();
 } catch (error) {

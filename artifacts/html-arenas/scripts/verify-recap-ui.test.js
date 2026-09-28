@@ -80,7 +80,20 @@ test('runner findings envelope round-trips a low-history limitation into the sto
   };
   const service = {
     async buildContextForUser() {
-      return { schemaVersion: 'insights-context-v1' };
+      return {
+        schemaVersion: 'insights-context-v1',
+        last12Weeks: {
+          weekly: Array.from({ length: 12 }, (_, index) => ({
+            weekStart: new Date(Date.UTC(2026, 5, 29 + index * 7)).toISOString().slice(0, 10),
+            relative: index === 10 ? 'last_week' : index === 11 ? 'this_week' : `${11 - index}_weeks_ago`,
+            activityCount: index === 10 ? 1 : 0,
+            durationHours: index === 10 ? 0.5 : 0,
+            sports: index === 10
+              ? [{ sport: 'yoga', sessions: 1, durationHours: 0.5, distanceKm: 0 }]
+              : []
+          }))
+        }
+      };
     },
     async runValidatedRequest() {
       return {
@@ -112,6 +125,9 @@ test('runner findings envelope round-trips a low-history limitation into the sto
   // This is the precise JSON payload sent to finish_weekly_recap by the real
   // runner, not a separately hand-authored browser fixture.
   const stored = storedCalls[0];
+  assert.equal(stored.p_contract_version, 3);
+  assert.equal(stored.p_chart.extras.hoursBySport.totals.length, 12);
+  assert.equal(stored.p_chart.extras.sportSplit[0].km, 0);
   assert.deepEqual(stored.p_findings, {
     findings: [{ type: 'metric', path: 'last12Weeks.weekly.10.activityCount', value: 1 }],
     limitations: [lowHistoryLimitation],

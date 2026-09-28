@@ -201,6 +201,21 @@ if (storedRecapFixture.prose !== storedRecapFixtureColumnProse ||
 }
 storedRecapFixture.chart.totals = storedRecapFixture.chart.labels.map((_, index) =>
   storedRecapFixture.chart.series.reduce((sum, series) => sum + series.values[index], 0));
+storedRecapFixture.chart.extras = {
+  sportSplit: [
+    { sport: 'running', label: 'Running', color: '#C2410C', sessions: 2, hours: 2.5, km: 18 },
+    { sport: 'weightlifting', label: 'Weightlifting', color: '#713F12', sessions: 2, hours: 3, km: 0 }
+  ],
+  hoursBySport: {
+    labels: storedRecapFixture.chart.labels.slice(),
+    relative: storedRecapFixture.chart.relative.slice(),
+    series: [
+      { sport: 'running', label: 'Running', color: '#C2410C', values: [1.2, 0, 2, 2, 0, 1, 2, 0, 1.5, 0, 1.8, 2.5] },
+      { sport: 'weightlifting', label: 'Weightlifting', color: '#713F12', values: [0.8, 0, 1, 0, 1.5, 2, 0, 0, 1, 2, 0, 3] }
+    ],
+    totals: [2, 0, 3, 2, 1.5, 3, 2, 0, 2.5, 2, 1.8, 5.5]
+  }
+};
 const setupInsightsStubs = async (page) => {
   await page.route(/\/html\/api\/profile\/ai-insights\/status(?:[?#]|$)/, async (route) => {
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({
@@ -313,25 +328,34 @@ const insightsHeroTextVisibilityCheck = {
   })()`
 };
 const recapCardGeometryCheck = {
-  name: 'stored recap renders deterministic copy, limitation, evidence, and a fitting chart',
+  name: 'stored recap renders split and both fitting charts above feelings',
   js: `(() => {
     const card = document.querySelector('.recap-answer-card');
     const prose = card && card.querySelector('.recap-prose');
     const limitation = card && card.querySelector('.recap-limitations li');
     const evidence = card ? [...card.querySelectorAll('.recap-evidence-badge')] : [];
     const svg = card && card.querySelector('.recap-chart svg[role="img"]');
-    if (!card || !prose || !limitation || !svg) {
-      return { ok: false, card: !!card, prose: !!prose, limitation: !!limitation, chart: !!svg, evidence: evidence.length };
+    const hoursSvg = card && card.querySelector('.recap-hours-chart svg[role="img"]');
+    const split = card && card.querySelector('.recap-sport-split');
+    if (!card || !prose || !limitation || !svg || !hoursSvg || !split) {
+      return { ok: false, card: !!card, prose: !!prose, limitation: !!limitation, chart: !!svg, hoursChart: !!hoursSvg, split: !!split, evidence: evidence.length };
     }
-    const cr = card.getBoundingClientRect(), sr = svg.getBoundingClientRect();
+    const cr = card.getBoundingClientRect(), sr = svg.getBoundingClientRect(), hr = hoursSvg.getBoundingClientRect();
     return {
       ok: prose.textContent.trim() === ${JSON.stringify(expectedStoredRecapDerivedProse)} &&
         limitation.textContent.includes(${JSON.stringify(storedRecapFixture.findings.limitations[0])}) &&
         evidence.length === ${storedRecapFixture.findings.evidence.length} &&
+        split.textContent.includes('Running — 2 sessions, 2.5 h, 18 km') &&
+        split.textContent.includes('Weightlifting — 2 sessions, 3 h') &&
+        !split.textContent.includes('0 km') &&
+        hoursSvg.getAttribute('aria-label').includes('Hours per week — last 12 weeks') &&
+        card.querySelectorAll('.recap-hours-chart .ai-chart-segment').length === 24 &&
+        hr.width > 0 && hr.left >= cr.left - 1 && hr.right <= cr.right + 1 &&
+        hr.bottom <= sr.top &&
         sr.width > 0 && sr.left >= cr.left - 1 && sr.right <= cr.right + 1 &&
         document.documentElement.scrollWidth <= innerWidth + 1,
       prose: prose.textContent, limitation: limitation.textContent, evidence: evidence.map((item) => item.textContent),
-      card: cr.toJSON(), chart: sr.toJSON(), overflow: document.documentElement.scrollWidth - innerWidth
+      card: cr.toJSON(), chart: sr.toJSON(), hoursChart: hr.toJSON(), overflow: document.documentElement.scrollWidth - innerWidth
     };
   })()`
 };

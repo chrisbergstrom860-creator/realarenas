@@ -51,6 +51,14 @@ function validRecapOutput(usage = { input_tokens: 1000, output_tokens: 500 }) {
   };
 }
 
+function recapContext() {
+  return { schemaVersion: 'test', last12Weeks: { weekly: Array.from({ length: 12 }, (_, i) => ({
+    weekStart: new Date(Date.UTC(2026, 6, 6 + i * 7)).toISOString().slice(0, 10),
+    relative: i === 10 ? 'last_week' : i === 11 ? 'this_week' : `${11 - i}_weeks_ago`,
+    durationHours: 0, sports: []
+  })) } };
+}
+
 function generationSupabase({ storeError = false } = {}) {
   return {
     from: () => ({
@@ -272,7 +280,7 @@ test('provider usage is counted before a durable store failure', async () => {
     runOne({
       supabase: generationSupabase({ storeError: true }),
       service: {
-        buildContextForUser: async () => ({ schemaVersion: 'test' }),
+        buildContextForUser: async () => recapContext(),
         runValidatedRequest: async () => validRecapOutput()
       },
       user: recapUser(),
@@ -301,7 +309,7 @@ test('generated summary counts a durable row before post-store entitlement failu
     runOne({
       supabase: generationSupabase(),
       service: {
-        buildContextForUser: async () => ({ schemaVersion: 'test' }),
+        buildContextForUser: async () => recapContext(),
         runValidatedRequest: async () => validRecapOutput()
       },
       user: recapUser(),
@@ -386,7 +394,7 @@ test('a third rejected generation saves reason and path, notifies founder once, 
   };
   const result = await runOne({
     supabase, service: {
-      buildContextForUser: async () => ({}),
+      buildContextForUser: async () => recapContext(),
       runValidatedRequest: async (_context, _mode, opts) => {
         previousRejection = opts.previousRejection;
         return { validated: { ok: false, reason: 'unsupported_path', offendingPath: 'bad.path' },

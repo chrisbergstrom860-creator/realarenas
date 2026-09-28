@@ -45,7 +45,7 @@ const MAX_HISTORY_TURNS = 3;
 const MAX_CALENDAR_LIST_ITEMS = 10;
 const HISTORY_TTL_MS = 12 * 60 * 60 * 1000;
 const WEEKLY_RECAP_QUESTION = 'Produce the scheduled weekly recap for the completed previous week.';
-const WEEKLY_RECAP_CONTRACT_VERSION = 2;
+const WEEKLY_RECAP_CONTRACT_VERSION = 3;
 const POLICY_REFUSAL_REASONS = new Set([
   'prescriptive',
   'diet_weight_body',

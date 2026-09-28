@@ -97,7 +97,7 @@ test('recap mode uses the fixed contract and completes ordinary validation', asy
     providerConfig: { provider: 'test', apiKey: 'not-a-secret' }
   });
   assert.equal(output.validated.ok, true);
-  assert.equal(output.validated.recap.contractVersion, 2);
+  assert.equal(output.validated.recap.contractVersion, 3);
   assert.deepEqual(output.findings, JSON.parse(responseText).findings);
   assert.equal(output.usage.output_tokens, 2);
 });

@@ -265,36 +265,82 @@
     var evidenceHtml = evidence.map(function (item) {
       return '<span class="recap-evidence-badge">' + escapeAiHtml(item && item.path) + '</span>';
     }).join('');
+    // Extras belong to the saved chart snapshot. Never derive missing extras
+    // from current activities: older recaps keep their original presentation.
+    var extras = recap.chart && recap.chart.extras;
+    var split = extras && Array.isArray(extras.sportSplit) ? extras.sportSplit : null;
+    var hours = extras && extras.hoursBySport;
+    var hasHours = hours && Array.isArray(hours.labels) && hours.labels.length === 12 &&
+      Array.isArray(hours.series) && hours.series.every(function (item) {
+        return item && Array.isArray(item.values) && item.values.length === 12;
+      });
+    var baseChart = recap.chart && typeof recap.chart.metric === 'string' &&
+      ['daily', 'weekly', 'monthly'].indexOf(recap.chart.period) !== -1 &&
+      Array.isArray(recap.chart.labels) && recap.chart.labels.length > 0 &&
+      Array.isArray(recap.chart.series) && recap.chart.series.length > 0 &&
+      recap.chart.series.every(function (item) {
+        return item && Array.isArray(item.values) && item.values.length === recap.chart.labels.length;
+      });
+    var splitHtml = split && split.length ? '<div class="recap-sport-split"><div class="recap-sport-split-title">Last week by sport</div><ul>' +
+      split.map(function (item) {
+        var sessions = Number(item && item.sessions) || 0;
+        var distance = Number(item && item.km) || 0;
+        return '<li><span class="recap-sport-swatch" style="background-color:' +
+          escapeAiHtml(/^#[0-9a-fA-F]{6}$/.test(String(item && item.color)) ? item.color : 'transparent') +
+          '"></span><span>' + escapeAiHtml(item && item.label) + ' — ' +
+          escapeAiHtml(sessions) + ' ' + (sessions === 1 ? 'session' : 'sessions') + ', ' +
+          escapeAiHtml(item && item.hours) + ' h' + (distance > 0 ? ', ' + escapeAiHtml(item.km) + ' km' : '') +
+          '</span></li>';
+      }).join('') + '</ul></div>' : '';
     container.innerHTML =
       '<article class="recap-answer-card">' +
         '<div class="recap-answer-label">✦ Weekly AI recap</div>' +
         '<div class="recap-prose">' + escapeAiHtml(recap.prose) + '</div>' +
-        (recap.chart ? '<div class="ai-chart recap-chart" data-ai-chart-pending="1"></div>' : '') +
+        splitHtml +
+        (hasHours ? '<div class="ai-chart recap-hours-chart" data-ai-chart-pending="1"></div>' : '') +
+        (baseChart ? '<div class="ai-chart recap-chart" data-ai-chart-pending="1"></div>' : '') +
         (limitationsHtml ? '<ul class="recap-limitations">' + limitationsHtml + '</ul>' : '') +
         (evidenceHtml ? '<div class="recap-evidence"><div>Verified data</div>' + evidenceHtml + '</div>' : '') +
       '</article>';
     mounts.push(instance);
     var chartHost = container.querySelector('.recap-chart');
-    if (!chartHost || !recap.chart) return instance;
+    var hoursHost = container.querySelector('.recap-hours-chart');
+    if (!chartHost && !hoursHost) return instance;
+    var hoursChart = hasHours ? {
+      title: 'Hours per week — last 12 weeks',
+      metric: 'hours', unit: 'hours', period: 'weekly',
+      labels: hours.labels, relative: hours.relative,
+      series: hours.series.map(function (item) {
+        return { key: item.sport, label: item.label, color: item.color, values: item.values };
+      }),
+      totals: hours.totals
+    } : null;
     var lastWidth = 0;
+    var lastHoursWidth = 0;
     var lastHeight = 0;
     var redraw = function () {
       if (!instance.active) return;
-      var measured = chartHost.getBoundingClientRect ? chartHost.getBoundingClientRect().width : chartHost.clientWidth;
-      if (!(measured > 0)) measured = container.getBoundingClientRect().width;
-      if (!(measured > 0)) return;
-      var roundedWidth = Math.round(measured);
       var expectedHeight = window.innerWidth <= 768 ? 160 : 180;
-      if (roundedWidth === lastWidth && expectedHeight === lastHeight && chartHost.innerHTML) return;
-      chartHost.innerHTML = renderInsightsChart(recap.chart, roundedWidth);
-      chartHost.removeAttribute('data-ai-chart-pending');
-      lastWidth = roundedWidth;
+      function draw(host, chart, previousWidth) {
+        var measured = host.getBoundingClientRect ? host.getBoundingClientRect().width : host.clientWidth;
+        if (!(measured > 0)) measured = container.getBoundingClientRect().width;
+        if (!(measured > 0)) return previousWidth;
+        var roundedWidth = Math.round(measured);
+        if (roundedWidth !== previousWidth || expectedHeight !== lastHeight || !host.innerHTML) {
+          host.innerHTML = renderInsightsChart(chart, roundedWidth);
+          host.removeAttribute('data-ai-chart-pending');
+        }
+        return roundedWidth;
+      }
+      if (hoursHost) lastHoursWidth = draw(hoursHost, hoursChart, lastHoursWidth);
+      if (chartHost) lastWidth = draw(chartHost, recap.chart, lastWidth);
       lastHeight = expectedHeight;
     };
     redraw();
     if (typeof ResizeObserver === 'function') {
       var observer = new ResizeObserver(redraw);
-      observer.observe(chartHost);
+      if (chartHost) observer.observe(chartHost);
+      if (hoursHost) observer.observe(hoursHost);
       instance.cleanups.push(function () { observer.disconnect(); });
     } else {
       window.addEventListener('resize', redraw);

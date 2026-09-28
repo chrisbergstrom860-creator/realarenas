@@ -2,8 +2,60 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { renderRecapProse } = require('./recap-prose');
+const { renderRecapProse, resolveRecapExtras } = require('./recap-prose');
 const { escapeHtml } = require('./email-transport');
+
+function extrasContext(sports = []) {
+  return { last12Weeks: { weekly: Array.from({ length: 12 }, (_, i) => ({
+    weekStart: new Date(Date.UTC(2026, 6, 6 + i * 7)).toISOString().slice(0, 10),
+    relative: i === 10 ? 'last_week' : i === 11 ? 'this_week' : `${11 - i}_weeks_ago`,
+    durationHours: i === 10 ? sports.reduce((sum, sport) => sum + sport.durationHours, 0) : 0,
+    sports: i === 10 ? sports : []
+  })) } };
+}
+
+test('extras snapshot mixed sports by hours, using the shared registry and resolver', () => {
+  const context = extrasContext([
+    { sport: 'running', sessions: 2, durationHours: 1.2, distanceKm: 10 },
+    { sport: 'yoga', sessions: 1, durationHours: 2, distanceKm: 0 }
+  ]);
+  const before = JSON.stringify(context);
+  const extras = resolveRecapExtras(context);
+  assert.deepEqual(extras.sportSplit.map((item) => item.sport), ['yoga', 'running']);
+  assert.equal(extras.sportSplit[0].hours, 2);
+  assert.equal(extras.sportSplit[0].km, 0);
+  assert.equal(extras.sportSplit[1].km, 10);
+  assert.equal(extras.hoursBySport.totals[10], 3.2);
+  assert.equal(extras.hoursBySport.totals[9], 0);
+  assert.equal(extras.hoursBySport.labels.length, 12);
+  for (const series of extras.hoursBySport.series) {
+    const sport = require('./sports').SPORTS.find((item) => item.id === series.sport);
+    assert.equal(series.color, sport.colors.text);
+    assert.equal(series.label, sport.label);
+    assert.equal(series.values.length, 12);
+  }
+  assert.equal(JSON.stringify(context), before);
+});
+
+test('extras support a single sport and preserve raw precision', () => {
+  const extras = resolveRecapExtras(extrasContext([
+    { sport: 'cycling', sessions: 1, durationHours: 1.234, distanceKm: 23.456 }
+  ]));
+  assert.equal(extras.sportSplit[0].hours, 1.234);
+  assert.equal(extras.sportSplit[0].km, 23.456);
+  assert.equal(extras.hoursBySport.series.length, 1);
+  assert.equal(extras.hoursBySport.series[0].values[10], 1.234);
+});
+
+test('no activities retains twelve zero slots and empty split; malformed snapshots fail explicitly', () => {
+  const extras = resolveRecapExtras(extrasContext());
+  assert.deepEqual(extras.sportSplit, []);
+  assert.deepEqual(extras.hoursBySport.totals, Array(12).fill(0));
+  assert.deepEqual(extras.hoursBySport.series, []);
+  const context = extrasContext([{ sport: 'running', sessions: 1, durationHours: NaN, distanceKm: 0 }]);
+  assert.throws(() => resolveRecapExtras(context), /invalid sport data/);
+  assert.throws(() => resolveRecapExtras({}), /twelve weeks/);
+});
 
 function envelope({
   sessions = 3, hours = 2.4, distance = 8.6, points = 42,

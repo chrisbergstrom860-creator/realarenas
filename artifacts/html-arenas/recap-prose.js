@@ -1,6 +1,62 @@
 'use strict';
 
 const { dayKey } = require('./tzdate');
+const { SPORTS } = require('./sports');
+
+// Generation-only snapshot. Never call this when reading an existing recap.
+function resolveRecapExtras(context) {
+  const { resolveChartSeries } = require('./ai-insights');
+  const weeks = context && context.last12Weeks && context.last12Weeks.weekly;
+  const registry = new Map(SPORTS.map((sport) => [sport.id, sport]));
+  if (!Array.isArray(weeks) || weeks.length !== 12 ||
+      weeks.filter((week) => week.relative === 'last_week').length !== 1) {
+    throw new Error('Weekly recap extras require twelve weeks and one last_week bucket');
+  }
+  for (const week of weeks) {
+    const seen = new Set();
+    if (!Array.isArray(week.sports)) throw new Error('Weekly recap extras require sport rows');
+    for (const item of week.sports) {
+      if (!item || !registry.has(item.sport) || seen.has(item.sport) ||
+          !Number.isInteger(item.sessions) || item.sessions < 0 ||
+          !Number.isFinite(item.durationHours) || item.durationHours < 0 ||
+          !Number.isFinite(item.distanceKm) || item.distanceKm < 0) {
+        throw new Error('Weekly recap extras contain invalid sport data');
+      }
+      seen.add(item.sport);
+    }
+  }
+  const chart = resolveChartSeries({
+    type: 'chart', metric: 'durationHours', period: 'weekly',
+    evidence: 'last12Weeks.weekly', stackBySport: true
+  }, context);
+  if (chart.error && chart.error !== 'chart_no_data') {
+    throw new Error(`Weekly recap extras: ${chart.error}`);
+  }
+  const sportSplit = weeks.find((week) => week.relative === 'last_week').sports
+    .filter((item) => item.sessions > 0)
+    .map((item) => ({
+      sport: item.sport, label: registry.get(item.sport).label,
+      color: registry.get(item.sport).colors.text,
+      sessions: item.sessions, hours: item.durationHours, km: item.distanceKm
+    })).sort((a, b) => b.hours - a.hours || a.sport.localeCompare(b.sport));
+  // Insights intentionally rejects all-zero charts; recaps retain empty slots.
+  const emptySeries = [...new Set(weeks.flatMap((week) => week.sports.map((item) => item.sport)))]
+    .sort().map((sport) => ({
+      sport, label: registry.get(sport).label, color: registry.get(sport).colors.text,
+      values: weeks.map(() => 0)
+    }));
+  return {
+    sportSplit,
+    hoursBySport: {
+      labels: weeks.map((week) => week.weekStart),
+      relative: weeks.map((week) => week.relative || ''),
+      series: chart.error ? emptySeries : chart.series.map(({ key, label, color, values }) => ({
+        sport: key, label, color, values
+      })),
+      totals: chart.error ? weeks.map(() => 0) : chart.totals
+    }
+  };
+}
 
 // Weekly recap prose is deliberately derived only from the validated finding
 // snapshot and its stored chart. It never consults current activities, goals,
@@ -221,6 +277,7 @@ function renderRecapProse(findings, recapMeta = {}) {
 }
 
 module.exports = {
+  resolveRecapExtras,
   renderRecapProse, formatWeekRange, formatDeltaHours, metricValue,
   comparisonDelta, feelingLabels, goalSentence, calendarSentence
 };

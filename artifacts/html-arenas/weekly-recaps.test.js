@@ -56,7 +56,7 @@ test('weekly recap request is a synthetic empty-history request with fixed requi
   const request = buildWeeklyRecapRequest(recapContext());
   assert.equal(JSON.parse(request.messages[0].content[1].text).question, WEEKLY_RECAP_QUESTION);
   assert.deepEqual(JSON.parse(request.messages[0].content[1].text).history, []);
-  assert.match(request.system[0].text, /WEEKLY_RECAP_MODE v2/);
+  assert.match(request.system[0].text, /WEEKLY_RECAP_MODE v3/);
   assert.match(request.system[0].text, /last12Weeks\.weekly\.10\.activityCount/);
   assert.match(request.system[0].text, /last12Weeks\.weekly\.10\.points/);
   assert.match(request.system[0].text, /FORBID ALL calendar_plan_list and calendar_event_list/);
@@ -338,7 +338,7 @@ test('runner uses wall-clock lease, echoes the exact returned lease, and rejects
   const result = await runOne({
     supabase,
     service: {
-      buildContextForUser: async (id, asOf) => { contextDates.push(asOf.toISOString()); return { schemaVersion: 8 }; },
+      buildContextForUser: async (id, asOf) => { contextDates.push(asOf.toISOString()); return recapContext(); },
       runValidatedRequest: async () => ({
         ...validRunnerOutput(),
         validated: {
@@ -357,7 +357,10 @@ test('runner uses wall-clock lease, echoes the exact returned lease, and rejects
   assert.equal(result.status, 'generated');
   assert.equal(rpcCalls[0].args.p_lease_until, '2026-03-09T08:11:37.123Z', '--now does not create a stale SQL lease');
   assert.equal(rpcCalls[1].args.p_lease_until, leaseReturnedByDb, 'finish echoes SQL return verbatim');
-  assert.deepEqual(rpcCalls[1].args.p_chart, expectedChart, 'verified chart output is stored with the recap');
+  assert.deepEqual(rpcCalls[1].args.p_chart, {
+    ...expectedChart, extras: require('./recap-prose').resolveRecapExtras(recapContext())
+  }, 'verified chart and server extras are stored with the recap');
+  assert.equal(rpcCalls[1].args.p_contract_version, 3);
   assert.deepEqual(rpcCalls[1].args.p_findings, {
     findings: validRunnerOutput().findings,
     limitations: ['INSUFFICIENT_TREND_DATA'],
@@ -397,7 +400,7 @@ test('runner stores recap prose rendered from the validated finding snapshot', a
       from: runnerNotificationAndRetryFrom
     },
     service: {
-      buildContextForUser: async () => ({ schemaVersion: 8 }),
+      buildContextForUser: async () => recapContext(),
       runValidatedRequest: async () => ({
         findings,
         answer: 'Model wording must not be stored.',
@@ -429,7 +432,7 @@ test('runner marks only model/validation failures and stops before storage when 
       from: runnerNotificationAndRetryFrom
     },
     service: {
-      buildContextForUser: async () => ({ schemaVersion: 8 }),
+      buildContextForUser: async () => recapContext(),
       runValidatedRequest: async () => validRunnerOutput()
     },
     user: { id: 'u', user_metadata: { prefs: { weekly_recap: true } } },
@@ -459,7 +462,7 @@ test('runner marks only model/validation failures and stops before storage when 
       from: runnerNotificationAndRetryFrom
     },
     service: {
-      buildContextForUser: async () => ({ schemaVersion: 8 }),
+      buildContextForUser: async () => recapContext(),
       runValidatedRequest: async () => ({
         validated: { ok: false, reason: 'recap_missing_required_metric' },
         findings: [], answer: '', usage: { input_tokens: 47, output_tokens: 4 }
@@ -517,7 +520,7 @@ test('generated notification failure is recovered idempotently without another m
   const one = await runOne({
     supabase,
     service: {
-      buildContextForUser: async () => ({ schemaVersion: 8 }),
+      buildContextForUser: async () => recapContext(),
       runValidatedRequest: async () => { serviceCalls++; return validRunnerOutput(); }
     },
     user: { id: 'u', user_metadata: { prefs: { weekly_recap: true } } },
@@ -574,7 +577,7 @@ test('runner dry-run has no claim, notification, recap, or retention writes', as
       rpc: async () => { rpcCalls++; return { error: null }; }
     },
     service: {
-      buildContextForUser: async () => ({ schemaVersion: 8 }),
+      buildContextForUser: async () => recapContext(),
       runValidatedRequest: async () => validRunnerOutput()
     },
     logger: (line) => output.push(JSON.parse(line))
@@ -761,7 +764,7 @@ test('claimed infrastructure failures best-effort fail with the exact lease and 
       name: 'prestore entitlement',
       expectedCalls: ['claim_weekly_recap', 'fail_weekly_recap'],
       reason: 'prestore_entitlement_recheck_failed',
-      service: { buildContextForUser: async () => ({ schemaVersion: 8 }), runValidatedRequest: async () => validRunnerOutput() },
+      service: { buildContextForUser: async () => recapContext(), runValidatedRequest: async () => validRunnerOutput() },
       entitlementCheck: (() => {
         let checks = 0;
         return async () => {
@@ -775,7 +778,7 @@ test('claimed infrastructure failures best-effort fail with the exact lease and 
       name: 'finish',
       expectedCalls: ['claim_weekly_recap', 'finish_weekly_recap', 'fail_weekly_recap'],
       reason: 'finish_rpc_failed',
-      service: { buildContextForUser: async () => ({ schemaVersion: 8 }), runValidatedRequest: async () => validRunnerOutput() },
+      service: { buildContextForUser: async () => recapContext(), runValidatedRequest: async () => validRunnerOutput() },
       entitlementCheck: async () => ({ eligible: true })
     },
     {

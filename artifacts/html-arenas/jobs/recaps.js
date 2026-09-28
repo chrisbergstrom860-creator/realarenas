@@ -14,7 +14,7 @@ const {
   RECAP_EMAIL_BATCH_LIMIT, RECAP_EMAIL_DELAY_MS, recapEmailEnabled,
   deliverWeeklyRecapEmail, RECAP_EMAIL_ORIGIN
 } = require('../weekly-recap-email');
-const { renderRecapProse } = require('../recap-prose');
+const { renderRecapProse, resolveRecapExtras } = require('../recap-prose');
 const { sendRecapFailureAlert, recoverRecapFailureAlerts } = require('../recap-failure-alert');
 
 const SOFT_RUNTIME_LIMIT_MS = 4 * 60 * 1000;
@@ -652,7 +652,7 @@ async function runOne({
     stored = await storeGeneratedRecap(supabase, claim, {
       answer: deterministicProse,
       findings: recapFindings,
-      chart: output.chart || validated.chart || null,
+      chart: { ...(output.chart || validated.chart || {}), extras: resolveRecapExtras(context) },
       contextSchemaVersion: context.schemaVersion
     });
   } catch (error) {
