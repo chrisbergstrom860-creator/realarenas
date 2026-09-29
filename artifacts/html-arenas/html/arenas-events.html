@@ -992,12 +992,48 @@ function showToast(msg){
   }
 
   initTabs();
+  // ?event=<id> deep link (calendar day panel "View event"). Resolves ONLY
+  // against events the viewer's own /api/events payload already returned —
+  // the same visibility gate as the page itself; denied/missing ids add no row.
+  // Handled once per page load, then the param is dropped from the URL.
+  var targetEventHandled = false;
+  function focusTargetEvent() {
+    if (targetEventHandled) return;
+    targetEventHandled = true;
+    var m = /[?&]event=([^&#]+)/.exec(window.location.search || '');
+    if (!m) return;
+    var id = decodeURIComponent(m[1]);
+    try {
+      var qs = window.location.search.replace(/([?&])event=[^&#]*&?/, '$1').replace(/[?&]$/, '');
+      history.replaceState(null, '', window.location.pathname + qs + window.location.hash);
+    } catch (e) {}
+    if (!evById[id]) {
+      if (typeof showToast === 'function') showToast('That event isn\u2019t listed on the Events page right now.');
+      else console.log('Target event not visible:', id);
+      return;
+    }
+    // Clear filters that could hide the card; scrollToEv picks upcoming/past tab.
+    evState.search = ''; evState.sport = '';
+    var si = document.getElementById('ev-search'); if (si) si.value = '';
+    var ss = document.getElementById('ev-sport-select'); if (ss) ss.value = '';
+    var sl = document.getElementById('ev-sport-label'); if (sl && ss && ss.options[0]) sl.textContent = ss.options[0].textContent;
+    window.scrollToEv(id);
+    setTimeout(function () {
+      var el = document.getElementById('event-card-' + id);
+      if (!el) return;
+      el.setAttribute('data-deeplinked', 'true');
+      if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+      try { el.focus({ preventScroll: true }); } catch (e) {}
+    }, 80);
+  }
   function loadEvents() {
-    return fetch(B + '/api/events', { credentials:'same-origin' })
+    var focusedId = new URLSearchParams(window.location.search).get('event');
+    return fetch(B + '/api/events' + (focusedId ? '?event=' + encodeURIComponent(focusedId) : ''), { credentials:'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data && data.error) { console.log('Events load error:', data.error); return; }
         renderEvents(data || {});
+        focusTargetEvent();
       })
       .catch(function (e) { console.log('Events fetch failed:', e.message); });
   }

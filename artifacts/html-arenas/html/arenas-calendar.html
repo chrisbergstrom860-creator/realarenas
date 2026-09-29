@@ -29,148 +29,200 @@ document.addEventListener('DOMContentLoaded', function(){
 <link rel="stylesheet" href="/html/arenas.css">
 <script src="/html/arenas-club-create.js"></script>
 <style>
+/* Calendar gets a wider shell than the 1176px default: the docked day panel
+   (360px) needs room beside a readable 7-column grid. Page-local override. */
+:root{--shell-max:1600px}
 button{font-family:var(--font)}
 .notif-btn:hover{background:var(--gray-50)}
-.main{display:block;padding:28px 32px 60px}
-/* Centered composition: title/controls/grid share one max-width column. 1040px
-   keeps the 7-column grid at the exact cell width it had beside the old side
-   panel (1340 − 280 panel − 20 gap), now standing alone and centered. */
-.cal-shell{max-width:1040px;margin:0 auto}
-.page-title{font-size:22px;font-weight:700;color:var(--gray-900);letter-spacing:-.01em;margin-bottom:4px}
-.page-sub{font-size:13px;color:var(--gray-500);margin-bottom:20px}
+.main{display:block;padding:26px 32px 60px}
+.cal-shell{max-width:1440px;margin:0 auto}
 
-/* ── Header controls ── */
-.cal-controls{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
-.cal-monthnav{display:flex;align-items:center;gap:8px}
-.cal-month-label{font-size:16px;font-weight:700;color:var(--gray-900);min-width:150px;text-align:center}
-.cal-nav-btn{width:32px;height:32px;border-radius:7px;border:var(--border);background:white;cursor:pointer;font-size:14px;color:var(--gray-700);display:flex;align-items:center;justify-content:center;transition:background .1s}
+/* ── Header ── */
+.cal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+.cal-head-left{min-width:0}
+.cal-title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.cal-month-label{font-size:26px;font-weight:700;color:var(--gray-900);letter-spacing:-.015em;line-height:1.15;margin:0;min-width:0}
+.page-sub{font-size:13px;color:var(--gray-500);margin-top:4px}
+.cal-monthnav{display:flex;align-items:center;gap:6px}
+.cal-nav-btn{width:34px;height:34px;border-radius:8px;border:var(--border);background:white;cursor:pointer;font-size:16px;color:var(--gray-700);display:flex;align-items:center;justify-content:center;transition:background .1s}
 .cal-nav-btn:hover{background:var(--gray-50)}
-.cal-today-btn{padding:7px 13px;border-radius:7px;border:var(--border);background:white;cursor:pointer;font-size:12px;font-weight:600;color:var(--gray-700);transition:background .1s}
+.cal-today-btn{height:34px;padding:0 14px;border-radius:8px;border:var(--border);background:white;cursor:pointer;font-size:13px;font-weight:600;color:var(--gray-700);transition:background .1s}
 .cal-today-btn:hover{background:var(--gray-50)}
-.view-toggle{display:flex;border:var(--border);border-radius:8px;overflow:hidden}
-.view-toggle button{padding:7px 14px;border:none;background:white;font-size:12px;font-weight:600;color:var(--gray-500);cursor:pointer}
+.cal-nav-btn:focus-visible,.cal-today-btn:focus-visible,.view-toggle button:focus-visible,.add-btn:focus-visible,.add-menu button:focus-visible,.dp-btn:focus-visible,.dp-navbtn:focus-visible,.cal-day:focus-visible,.wk-day:focus-visible,.ag-head:focus-visible{outline:2px solid var(--gray-900);outline-offset:2px}
+.cal-head-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.view-toggle{display:flex;border:var(--border);border-radius:9px;overflow:hidden;background:white}
+.view-toggle button{height:34px;padding:0 16px;border:none;background:white;font-size:13px;font-weight:600;color:var(--gray-600);cursor:pointer}
+.view-toggle button+button{border-left:var(--border)}
 .view-toggle button.on{background:var(--gray-900);color:white}
 
-/* ── Legend ── */
-.cal-legend{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px;font-size:11px;color:var(--gray-500)}
-.cal-legend span{display:inline-flex;align-items:center;gap:5px}
-.lg-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
-.lg-ev{background:var(--yellow)}
-.lg-nr{background:transparent;border:1.5px solid var(--gray-400)}
-.lg-plan{background:#8B5CF6}
-.lg-act{background:#10B981}
+/* ── + Add dropdown ── */
+.add-wrap{position:relative}
+.add-btn{height:34px;padding:0 12px 0 14px;border-radius:9px;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.add-btn:hover{filter:brightness(.97)}
+.add-caret{font-size:10px;border-left:1px solid rgba(17,24,39,.2);padding-left:8px}
+.add-menu{display:none;position:absolute;right:0;top:calc(100% + 6px);min-width:220px;background:white;border:var(--border);border-radius:10px;box-shadow:var(--shadow-lg);padding:5px;z-index:320}
+.add-menu.open{display:block}
+.add-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border:none;background:none;border-radius:7px;font-size:13px;font-weight:600;color:var(--gray-800);cursor:pointer;text-align:left}
+.add-menu button:hover,.add-menu button:focus{background:var(--gray-50)}
+.add-menu .am-sub{display:block;font-size:11px;font-weight:400;color:var(--gray-500)}
 
-/* ── MONTH GRID (dormant my-profile .cal-grid CSS as the base, sized up for a
-     full-page calendar: real tap targets, auto rows instead of 1:1 heat cells) ── */
-.cal-labels{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:10px 4px 4px;font-size:11px;color:var(--gray-400);text-align:center;text-transform:uppercase;letter-spacing:.05em;font-family:var(--mono)}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;padding:0 0 14px}
-.cal-day{min-height:170px;border-radius:10px;border:var(--border);background:white;padding:8px 9px;cursor:pointer;display:flex;flex-direction:column;gap:5px;overflow:hidden;transition:border-color .1s,background .1s}
-.cal-day:hover{border-color:var(--gray-400);background:var(--gray-50)}
-.cd-empty{background:transparent;border:none;cursor:default;min-height:0}
-.cd-empty:hover{background:transparent;border:none}
-.cd-num{font-size:15px;font-weight:600;color:var(--gray-500);font-family:var(--mono);line-height:1}
-.cd-today{border:2px solid var(--gray-900)}
-.cd-today .cd-num{color:var(--gray-900);background:var(--yellow);border-radius:5px;padding:2px 6px;align-self:flex-start}
+/* ── Stats row (Challenges tinted-emoji tile language) ── */
+.cal-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:18px}
+.cs-tile{display:flex;align-items:center;gap:12px;background:white;border:var(--border);border-radius:var(--radius-lg);padding:14px 16px;min-width:0}
+.cs-icon{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0}
+.cs-text{display:flex;flex-direction:column;gap:1px;min-width:0}
+.cs-label{font-size:12px;color:var(--gray-600);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cs-val{font-family:var(--mono);font-size:19px;font-weight:600;color:var(--gray-900);line-height:1.15;white-space:nowrap}
+.cs-val small{font-family:var(--font);font-size:12px;font-weight:500;color:var(--gray-500)}
+.cs-sub{font-size:11px;color:var(--gray-500);white-space:nowrap}
+.sk{background:linear-gradient(90deg,var(--gray-100),var(--gray-50),var(--gray-100));background-size:200% 100%;animation:sk 1.2s ease-in-out infinite;border-radius:6px}
+@keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* ── Two-column layout: views left, docked day panel right (>1024px) ── */
+.cal-layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:20px;align-items:start}
+.cal-left{min-width:0}
+
+/* ── MONTH GRID ── */
+.cal-labels{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;padding:2px 0 6px;font-size:11px;color:var(--gray-500);text-align:center;text-transform:uppercase;letter-spacing:.06em;font-family:var(--mono)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;padding:0 0 14px}
+.cal-day{min-height:128px;min-width:0;border-radius:10px;border:var(--border);background:white;padding:7px 6px;cursor:pointer;display:flex;flex-direction:column;gap:5px;overflow:hidden;transition:border-color .1s,background .1s}
+.cal-day:hover{border-color:var(--gray-400)}
+.cd-empty{background:transparent;border:1px dashed var(--gray-100);cursor:default}
+.cd-empty:hover{border-color:var(--gray-100)}
+.cd-num{font-size:13px;font-weight:600;color:var(--gray-600);font-family:var(--mono);line-height:1;padding:3px 5px;border-radius:5px;align-self:flex-start}
+.cd-today .cd-num{color:var(--gray-900);background:var(--yellow)}
+.cal-day.is-sel{border-color:var(--gray-900);box-shadow:0 0 0 2px var(--gray-900)}
+.cal-day.is-sel .cd-num{background:var(--gray-900);color:white}
 .cd-pills{display:flex;flex-direction:column;gap:3px;min-width:0}
-.cd-pill{font-size:12px;line-height:1.35;padding:2px 7px;border-radius:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
-.cd-pill.ev{background:var(--yellow-light);color:#7a5c00}
-.cd-pill.nr{background:transparent;border:1px dashed var(--gray-300);color:var(--gray-400);font-weight:500}
-.cd-pill.plan{background:#F5F3FF;color:#5B21B6}
-.cd-pill.plan.done{text-decoration:line-through;opacity:.7}
-.cd-pill.plan.skipped{text-decoration:line-through;opacity:.5}
-.cd-pill.act{background:#ECFDF5;color:#065F46}
-.cd-dots{display:none;align-items:center;gap:4px;flex-wrap:wrap}
-.cd-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
-.cd-dot.ev{background:var(--yellow)}
-.cd-dot.nr{background:transparent;border:1.5px solid var(--gray-400)}
-.cd-dot.plan{background:#8B5CF6}
-.cd-dot.act{background:#10B981}
-.cd-more{font-size:11px;color:var(--gray-400);font-family:var(--mono)}
+.cd-more{font-size:11px;color:var(--gray-600);font-family:var(--mono);padding-left:4px}
+.cd-dots{display:none;align-items:center;gap:3px;flex-wrap:wrap}
+.cd-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.cd-dot.ev{background:var(--yellow-dark)}
+.cd-dot.nr{background:transparent;border:1.5px solid var(--gray-500)}
+.cd-dot.plan{background:#7C3AED}
 
-/* ── WEEK VIEW (the agenda's card language, always exactly seven days) ── */
-.wk-day{cursor:pointer}
-.wk-day:not(.today):hover{border-color:var(--gray-400)}
-.wk-rest{padding:11px 16px;font-size:12px;color:var(--gray-400);font-style:italic}
+/* ── Pill component (month cells, week, agenda) — explicit states, no opacity ── */
+.cp{display:flex;flex-direction:column;gap:1px;min-width:0;padding:4px 6px;border-radius:6px;background:var(--pbg,#F3F4F6);color:var(--ptx,#374151);border:1px solid var(--pbd,transparent);line-height:1.25}
+.cp-l1{display:flex;align-items:center;gap:4px;min-width:0;font-size:12px;font-weight:600}
+.cp-ic{flex-shrink:0;font-size:12px}
+.cp-t,.cp-l2{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp-l2{font-size:11px;font-weight:500;font-family:var(--mono);letter-spacing:-.01em}
+.cp.ev{--pbg:var(--yellow-light);--ptx:#6B5000;--pbd:#F7E3A1}
+.cp.nr{--pbg:white;--ptx:#4B5563;--pbd:#9CA3AF;border-style:dashed}
+.cp.plan{--pbg:#F5F3FF;--ptx:#5B21B6;--pbd:#DDD6FE}
+.cp.plan.done{--pbg:#6D28D9;--ptx:#FFFFFF;--pbd:#6D28D9}
+.cp.plan.skipped{--pbg:#F3F4F6;--ptx:#4B5563;--pbd:#E5E7EB}
+.cp.plan.skipped .cp-t{text-decoration:line-through}
+.cp-lg{padding:7px 10px;border-radius:8px;flex:0 1 220px}
+.cp-lg .cp-l1{font-size:13px}
+.cp-lg .cp-l2{font-size:12px}
 
-/* ── AGENDA VIEW ── */
-.agenda{display:flex;flex-direction:column;gap:10px}
+/* ── WEEK + AGENDA (same pill component, day cards) ── */
+.agenda{display:flex;flex-direction:column;gap:8px}
 .ag-day{background:white;border:var(--border);border-radius:10px;overflow:hidden}
-.ag-day.today{border:2px solid var(--gray-900)}
-.ag-head{display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:var(--border);background:var(--gray-50);cursor:pointer}
-.ag-head:hover{background:var(--gray-100)}
+.ag-day.today .ag-date::after{content:''}
+.wk-day{cursor:pointer}
+.wk-day:hover{border-color:var(--gray-400)}
+.ag-day.is-sel{border-color:var(--gray-900);box-shadow:0 0 0 2px var(--gray-900)}
+.ag-head{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:var(--border);background:var(--gray-50);cursor:pointer}
 .ag-date{font-size:13px;font-weight:700;color:var(--gray-900)}
 .ag-today-tag{font-size:10px;font-weight:700;background:var(--yellow);color:var(--gray-900);border-radius:4px;padding:2px 6px;text-transform:uppercase;letter-spacing:.04em}
-.ag-items{display:flex;flex-direction:column}
-.ag-item{display:flex;align-items:flex-start;gap:10px;padding:10px 16px;border-bottom:var(--border);font-size:13px}
-.ag-item:last-child{border-bottom:none}
-.ag-ic{font-size:16px;flex-shrink:0;line-height:1.3}
-.ag-body{min-width:0;flex:1}
-.ag-title{font-weight:600;color:var(--gray-900);overflow:hidden;text-overflow:ellipsis}
-.ag-meta{font-size:12px;color:var(--gray-500);margin-top:1px}
-.ag-item.nr .ag-title{color:var(--gray-500);font-weight:500}
-.ag-item.nr{background:var(--gray-50)}
+.ag-pills{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px}
+.wk-rest{padding:11px 14px;font-size:12px;color:var(--gray-500)}
 
-/* ── Status chips (shared: agenda + day panel) ── */
-.chip{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;flex-shrink:0;white-space:nowrap;align-self:center}
+/* ── Status chips ── */
+.chip{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;flex-shrink:0;white-space:nowrap}
 .chip.going{background:var(--yellow);color:var(--gray-900);border:1px solid var(--yellow-dark)}
-.chip.interested{background:var(--yellow-light);color:#7a5c00;border:1px solid #fde68a}
-.chip.nr{background:transparent;color:var(--gray-400);border:1px dashed var(--gray-300)}
+.chip.interested{background:var(--yellow-light);color:#6B5000;border:1px solid #F7E3A1}
+.chip.nr{background:white;color:#4B5563;border:1px dashed #9CA3AF}
 .chip.planned{background:#F5F3FF;color:#5B21B6;border:1px solid #DDD6FE}
-.chip.done{background:#ECFDF5;color:#065F46;border:1px solid #A7F3D0}
-.chip.skipped{background:var(--gray-50);color:var(--gray-400);border:1px solid var(--gray-200)}
+.chip.done{background:#6D28D9;color:white;border:1px solid #6D28D9}
+.chip.skipped{background:#F3F4F6;color:#4B5563;border:1px solid #E5E7EB}
 
-/* ── DAY PANEL (modal on desktop, bottom sheet ≤768px) ── */
-/* Modal cluster is canonical in arenas.css (Batch 3); below are the day
-   panel's deliberate overrides: 14px radius pairs with the 14px 14px 0 0
-   mobile bottom-sheet radius (--radius-lg is 12px); the lighter shadow and
-   82vh cap are part of the same day-panel treatment; the sticky header keeps
-   the date visible while the day's activities scroll. */
-.modal{max-width:480px;border-radius:14px;max-height:82vh;box-shadow:0 12px 40px rgba(0,0,0,.18)}
-.modal-header{padding:18px 22px 14px;position:sticky;top:0;background:white}
-.modal-title{font-size:15px;font-weight:700;color:var(--gray-900)}
-/* display:block is explicit: the day panel body is a plain flow column, not
-   the canonical flex column — without this the canonical flex+gap relayouts. */
-.modal-body{display:block;padding:16px 22px 22px}
-.dp-section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--gray-400);margin:14px 0 8px}
-.dp-section-label:first-child{margin-top:0}
-.dp-empty{font-size:12px;color:var(--gray-400)}
-.dp-item{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--gray-100);font-size:13px}
-.dp-item:last-child{border-bottom:none}
-.dp-item.nr{opacity:.75}
-
-/* ── Day-panel actions (Session ②): per-item buttons + compact plan form ── */
-.dp-act-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
-.dp-btn{padding:6px 11px;border-radius:7px;border:var(--border);background:white;font-size:11px;font-weight:600;color:var(--gray-700);cursor:pointer;transition:background .1s}
+/* ── DAY PANEL: docked sticky column >1024px, bottom sheet ≤1024px ── */
+.dp-wrap{position:sticky;top:calc(var(--topbar-h) + 16px);max-height:calc(100vh - var(--topbar-h) - 32px);display:flex}
+.dp-sheet{background:white;border:var(--border);border-radius:14px;display:flex;flex-direction:column;width:100%;max-height:inherit;overflow:hidden}
+.dp-header{display:flex;align-items:center;gap:8px;padding:14px 16px 12px;border-bottom:var(--border);flex-shrink:0}
+.dp-title{font-size:15px;font-weight:700;color:var(--gray-900);flex:1;min-width:0;margin:0}
+.dp-navbtn{width:30px;height:30px;border-radius:7px;border:var(--border);background:white;cursor:pointer;font-size:15px;color:var(--gray-700);display:flex;align-items:center;justify-content:center}
+.dp-navbtn:hover{background:var(--gray-50)}
+.dp-close{display:none}
+.dp-body{padding:14px 16px 18px;overflow-y:auto;flex:1}
+.dp-section{margin-bottom:18px}
+.dp-section:last-child{margin-bottom:0}
+.dp-section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.dp-section-label{font-size:13px;font-weight:700;color:var(--gray-900);margin:0}
+.dp-link{background:none;border:none;padding:0;font-size:12px;font-weight:600;color:var(--gray-700);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.dp-empty{font-size:12px;color:var(--gray-500)}
+.dp-nothing{text-align:center;padding:26px 10px 8px}
+.dp-nothing-ic{font-size:26px;margin-bottom:6px}
+.dp-nothing-t{font-size:14px;font-weight:700;color:var(--gray-900);margin-bottom:4px}
+.dp-nothing-s{font-size:12px;color:var(--gray-500);margin-bottom:14px}
+.dp-nothing .dp-act-row{justify-content:center}
+.dp-card{border:var(--border);border-radius:11px;padding:12px;margin-bottom:8px;background:white}
+.dp-card:last-child{margin-bottom:0}
+.dc-top{display:flex;align-items:center;gap:10px;min-width:0}
+.dc-ic{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;background:var(--pbg,#F3F4F6);color:var(--ptx,#374151)}
+.dc-main{min-width:0;flex:1}
+.dc-title{font-size:14px;font-weight:700;color:var(--gray-900);overflow-wrap:anywhere}
+.dc-sub{font-size:12px;color:var(--gray-500)}
+.dc-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--gray-100)}
+.dc-stat b{display:block;font-family:var(--mono);font-size:15px;font-weight:600;color:var(--gray-900);line-height:1.2}
+.dc-stat span{font-size:11px;color:var(--gray-500)}
+.dc-notes{margin-top:10px;font-size:13px;color:var(--gray-700);background:var(--gray-50);border-radius:8px;padding:8px 10px;white-space:pre-wrap;overflow-wrap:anywhere}
+.dc-notes-l{display:block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gray-500);margin-bottom:2px}
+.dp-card.plan{border-left:3px solid #7C3AED}
+.dp-card.plan.done{border-left-color:#6D28D9}
+.dp-card.plan.skipped{border-left-color:#9CA3AF}
+.dp-card.plan.skipped .dc-title{text-decoration:line-through;color:var(--gray-600)}
+.dp-card.ev{border-left:3px solid var(--yellow-dark)}
+.dp-card.ev.nr{border-left:3px dashed #9CA3AF}
+.dc-meta{font-size:12px;color:var(--gray-600);margin-top:6px}
+.dc-openlink{display:inline-block;margin-top:8px;font-size:12px;font-weight:600;color:var(--gray-800);text-decoration:underline;text-underline-offset:2px}
+.dp-act-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.dp-btn{padding:6px 11px;border-radius:7px;border:var(--border);background:white;font-size:12px;font-weight:600;color:var(--gray-700);cursor:pointer;transition:background .1s}
 .dp-btn:hover{background:var(--gray-50)}
 .dp-btn.primary{background:var(--yellow);border-color:var(--yellow-dark);color:var(--gray-900)}
-.dp-btn.primary:hover{background:var(--yellow)}
 .dp-btn.danger{color:#A32D2D;border-color:#FECACA}
 .dp-btn:disabled{opacity:.5;cursor:default}
+.ag-meta{font-size:12px;color:var(--gray-500)}
 .dp-form{background:var(--gray-50);border:var(--border);border-radius:10px;padding:12px;margin:8px 0}
 .dp-form .fi{margin-bottom:9px}
 .dp-form label{font-size:11px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:3px}
-.dp-form label .opt{font-weight:400;color:var(--gray-400)}
+.dp-form label .opt{font-weight:400;color:var(--gray-500)}
 .dp-form input,.dp-form select,.dp-form textarea{width:100%;padding:8px 10px;border:var(--border);border-radius:7px;font-size:13px;font-family:var(--font);background:white;color:var(--gray-900)}
 .dp-form textarea{resize:vertical;min-height:44px}
 .dp-form-err{display:none;background:var(--red-light);border:1px solid #FECACA;border-radius:7px;padding:7px 10px;font-size:12px;color:#A32D2D;margin-bottom:9px}
 #cal-toast{display:none;position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:var(--gray-900);color:white;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:500;z-index:700;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:90vw;text-align:center}
-
 .empty-state{background:white;border:var(--border);border-radius:12px;padding:36px 24px;text-align:center;color:var(--gray-500);font-size:13px}
-.muted-line{font-size:13px;color:var(--gray-400)}
+.empty-state .dp-act-row{justify-content:center;margin-top:14px}
 
+@media (max-width:1024px){
+  .cal-layout{grid-template-columns:minmax(0,1fr)}
+  .cal-stats{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .cal-stats .cs-tile{grid-column:span 2}
+  .cal-stats .cs-tile:nth-child(4),.cal-stats .cs-tile:nth-child(5){grid-column:span 3}
+  /* Bottom sheet — same content as the docked panel */
+  .dp-wrap{display:none;position:fixed;inset:0;top:0;max-height:none;background:rgba(0,0,0,.45);z-index:500;align-items:flex-end;backdrop-filter:blur(3px)}
+  .dp-wrap.open{display:flex}
+  .dp-sheet{border-radius:14px 14px 0 0;max-height:78vh;border:none;box-shadow:0 -8px 30px rgba(0,0,0,.18)}
+  .dp-close{display:flex;border-radius:50%}
+}
 @media (max-width:768px){
-  .main{padding:20px 14px 90px}
-  /* ~2× cells; the grid may exceed the viewport height — vertical scroll is fine.
-     Dots (not pills) stay the mobile content markers: a 7-col grid at 380px gives
-     ~47px-wide cells where text pills would be pure ellipsis. */
-  .cal-day{min-height:104px;padding:6px 6px}
-  .cd-num{font-size:13px}
+  .main{padding:18px 14px 90px}
+  .cal-month-label{font-size:21px}
+  .cal-head-right{width:100%;justify-content:space-between}
+  .cal-stats{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .cal-stats .cs-tile,.cal-stats .cs-tile:nth-child(4){grid-column:span 1}
+  .cal-stats .cs-tile:nth-child(5){grid-column:1 / -1}
+  .cs-tile{padding:11px 12px;gap:10px}
+  .cs-icon{width:36px;height:36px;font-size:16px}
+  .cs-val{font-size:17px}
+  .cal-day{min-height:64px;padding:5px 4px}
+  .cd-num{font-size:12px;padding:2px 4px}
   .cd-pills{display:none}
   .cd-dots{display:flex}
-  .cal-month-label{min-width:120px;font-size:14px}
-  /* Bottom sheet treatment for the day panel */
-  .modal-overlay{padding:0;align-items:flex-end}
-  .modal{max-width:none;border-radius:14px 14px 0 0;max-height:78vh}
+  .cp-lg{flex:1 1 140px}
 }
 </style>
 </head>
@@ -226,47 +278,60 @@ button{font-family:var(--font)}
 </aside>
 
 <!-- MAIN -->
+<!-- MAIN -->
 <div class="main">
 <div class="cal-shell">
-  <div class="page-title">Calendar</div>
-  <div class="page-sub">Your events, planned training and logged activities in one place.</div>
-
-  <div class="cal-controls">
-    <div class="cal-monthnav">
-      <button class="cal-nav-btn" id="cal-prev" aria-label="Previous month">‹</button>
-      <div class="cal-month-label" id="cal-month-label">…</div>
-      <button class="cal-nav-btn" id="cal-next" aria-label="Next month">›</button>
-      <button class="cal-today-btn" id="cal-today-btn">Today</button>
+  <div class="cal-head">
+    <div class="cal-head-left">
+      <div class="cal-title-row">
+        <h1 class="cal-month-label" id="cal-month-label" aria-live="polite">…</h1>
+        <div class="cal-monthnav">
+          <button class="cal-nav-btn" id="cal-prev" aria-label="Previous month">‹</button>
+          <button class="cal-nav-btn" id="cal-next" aria-label="Next month">›</button>
+          <button class="cal-today-btn" id="cal-today-btn">Today</button>
+        </div>
+      </div>
+      <div class="page-sub">Your training, events and activities — all in one place.</div>
     </div>
-    <div class="view-toggle" role="tablist">
-      <button id="vt-month" role="tab">Month</button>
-      <button id="vt-week" role="tab">Week</button>
-      <button id="vt-agenda" role="tab">Agenda</button>
+    <div class="cal-head-right">
+      <div class="view-toggle" role="tablist" aria-label="Calendar view">
+        <button id="vt-month" role="tab">Month</button>
+        <button id="vt-week" role="tab">Week</button>
+        <button id="vt-agenda" role="tab">Agenda</button>
+      </div>
+      <div class="add-wrap">
+        <button class="add-btn" id="add-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="add-menu">+ Add <span class="add-caret" aria-hidden="true">▾</span></button>
+        <div class="add-menu" id="add-menu" role="menu" aria-labelledby="add-btn">
+          <button role="menuitem" tabindex="-1" data-add="log"><span aria-hidden="true">➕</span><span>Log activity<span class="am-sub" id="am-log-sub"></span></span></button>
+          <button role="menuitem" tabindex="-1" data-add="plan"><span aria-hidden="true">🗓️</span><span>Plan a session<span class="am-sub" id="am-plan-sub"></span></span></button>
+          <button role="menuitem" tabindex="-1" data-add="event"><span aria-hidden="true">🎟️</span><span>Create event<span class="am-sub">On the Events page</span></span></button>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="cal-legend">
-    <span><span class="lg-dot lg-ev"></span> Event (going / interested)</span>
-    <span><span class="lg-dot lg-nr"></span> Club event — not responded</span>
-    <span><span class="lg-dot lg-plan"></span> Planned training</span>
-    <span><span class="lg-dot lg-act"></span> Logged activity</span>
-  </div>
+  <section class="cal-stats" id="cal-stats" aria-label="Month stats"></section>
 
-  <div id="cal-root"><div class="muted-line">Loading…</div></div>
-</div>
-</div>
-
-</div>
-
-<!-- DAY PANEL -->
-<div class="modal-overlay" id="day-panel" onclick="if(event.target===this)closeDayPanel()">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="dp-title">
-    <div class="modal-header">
-      <div class="modal-title" id="dp-title">…</div>
-      <button class="modal-close" onclick="closeDayPanel()" aria-label="Close">✕</button>
+  <div class="cal-layout">
+    <div class="cal-left">
+      <div id="cal-root"></div>
     </div>
-    <div class="modal-body" id="dp-body"></div>
+    <!-- DAY PANEL: docked (complementary) >1024px; bottom sheet (dialog) ≤1024px -->
+    <div class="dp-wrap" id="day-panel">
+      <div class="dp-sheet" id="dp-sheet">
+        <div class="dp-header">
+          <h2 class="dp-title" id="dp-title">…</h2>
+          <button class="dp-navbtn" id="dp-prev" aria-label="Previous day">‹</button>
+          <button class="dp-navbtn" id="dp-next" aria-label="Next day">›</button>
+          <button class="dp-navbtn dp-close" id="dp-close" aria-label="Close">✕</button>
+        </div>
+        <div class="dp-body" id="dp-body"></div>
+      </div>
+    </div>
   </div>
+</div>
+</div>
+
 </div>
 
 <div id="cal-toast" role="status"></div>
@@ -278,11 +343,19 @@ button{font-family:var(--font)}
 (function () {
   var root = document.getElementById('cal-root');
   var monthLabel = document.getElementById('cal-month-label');
+  var statsEl = document.getElementById('cal-stats');
+  var panelWrap = document.getElementById('day-panel');
+  var panelSheet = document.getElementById('dp-sheet');
   var VIEW_KEY = 'arenas_calendar_view'; // notifications-panel key precedent
   var HASH_RE = /^#(\d{4})-(\d{2})$/;
   // Week view is date-anchored: #YYYY-MM-DD is the displayed week's MONDAY.
-  // Any valid date deep-links to the week containing it (snapped to Monday).
   var WEEK_HASH_RE = /^#(\d{4})-(\d{2})-(\d{2})$/;
+  // >1024px: the day panel is a docked column that always shows the selected
+  // day. ≤1024px: the same content renders in a bottom sheet opened on demand.
+  var dockMq = window.matchMedia('(min-width: 1025px)');
+  function docked() { return dockMq.matches; }
+  var FEELING_FALLBACK = { strong: 'Strong', tired: 'Tired', motivated: 'Motivated', struggled: 'Struggled', sore: 'Sore', easy: 'Easy' };
+  var FEELING_EMOJI = { strong: '💪', tired: '😴', motivated: '🔥', struggled: '😤', sore: '🤕', easy: '😊' };
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -293,18 +366,48 @@ button{font-family:var(--font)}
     var icons = window.ARENAS_SPORT_ICONS || {};
     return icons[id] || '🏅';
   }
-  function sportName(id) {
+  function sportEntry(id) {
     var reg = window.ARENAS_SPORTS || [];
-    for (var i = 0; i < reg.length; i++) if (reg[i].id === id) return reg[i].label;
+    for (var i = 0; i < reg.length; i++) if (reg[i].id === id) return reg[i];
+    return null;
+  }
+  function sportName(id) {
+    var s = sportEntry(id);
+    if (s) return s.label;
     return id ? (String(id).charAt(0).toUpperCase() + String(id).slice(1)) : 'Activity';
+  }
+  // Registry bg/text pair (verify-sport-colors.js guarantees ≥4.5:1). Unknown
+  // sports fall back to a neutral pair that also clears AA.
+  function sportColors(id) {
+    var s = sportEntry(id);
+    var c = s && s.colors;
+    return c ? { bg: c.bg, text: c.text, border: c.border || c.bg } : { bg: '#F3F4F6', text: '#374151', border: '#E5E7EB' };
+  }
+  function sportVars(id) {
+    var c = sportColors(id);
+    return '--pbg:' + esc(c.bg) + ';--ptx:' + esc(c.text) + ';--pbd:' + esc(c.border);
+  }
+  function feelingLabel(f) {
+    var labels = window.ARENAS_ACTIVITY_FEELING_LABELS || FEELING_FALLBACK;
+    return labels[f] || FEELING_FALLBACK[f] || (f ? String(f).charAt(0).toUpperCase() + String(f).slice(1) : '');
+  }
+  // "1h 42m" / "45m" / "2h"
+  function fmtMinutes(mins) {
+    var m = Math.round(Number(mins) || 0);
+    if (m <= 0) return '0m';
+    var h = Math.floor(m / 60), r = m % 60;
+    if (!h) return r + 'm';
+    return r ? h + 'h ' + r + 'm' : h + 'h';
+  }
+  function fmtKm(km) {
+    var n = Number(km);
+    if (km == null || isNaN(n)) return null;
+    return (Math.round(n * 10) / 10).toFixed(1) + ' km';
   }
   function pad2(n) { return String(n).padStart(2, '0'); }
   function ymdOf(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
   // TEST HOOK: ?_today=YYYY-MM-DD overrides the client's idea of "today" so the
-  // week view's boundary math can be exercised deterministically (a Monday-start
-  // week that spans two months only exists on certain real dates). Display-only:
-  // it never touches writes, and every consumer of "today" (cd-today marker,
-  // week anchoring, Today button) shifts consistently.
+  // week view's boundary math can be exercised deterministically. Display-only.
   var TODAY_OVERRIDE = (function () {
     var m = /[?&]_today=(\d{4}-\d{2}-\d{2})(?:&|$)/.exec(window.location.search);
     return m ? m[1] : null;
@@ -312,32 +415,33 @@ button{font-family:var(--font)}
   // Day bucketing uses browser-local Date getters; server month stats use account timezone, which may differ.
   function nowLocal() { return TODAY_OVERRIDE ? parseLocalYmd(TODAY_OVERRIDE) : new Date(); }
   function todayYmd() { return TODAY_OVERRIDE || ymdOf(new Date()); }
-  // Parse YYYY-MM-DD as a LOCAL date (parseLocalDate rule — new Date('YYYY-MM-DD')
-  // is UTC midnight and shifts the day in non-UTC locales).
   function parseLocalYmd(s) {
     var p = String(s).split('-').map(Number);
     return new Date(p[0], (p[1] || 1) - 1, p[2] || 1);
   }
-  // Monday of the local week containing d (Monday-start — the app convention).
   function mondayOf(d) {
     return new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
   }
+  function ymdAddDays(ymd, days) {
+    var p = ymd.split('-').map(Number);
+    return ymdOf(new Date(p[0], p[1] - 1, p[2] + days));
+  }
+  var EMPTY_DAY = function () { return { events: [], plans: [], activities: [] }; };
 
   // ── State ──
   var state = {
     year: 0, month: 0,           // month is 1-12
     view: 'month',
-    data: null,                  // raw API payload
-    byDay: {},                   // ymd -> { events:[], plans:[], activities:[] } (month-trimmed)
-    byDayWide: {},               // same shape, UNTRIMMED — read by the week view and the
-                                 // day panel: both can reach days outside the displayed month
-    openYmd: null,               // day panel currently open for this day
-    weekStart: null              // week view: ymd of the displayed week's Monday
+    data: null,
+    byDay: {},                   // month-trimmed buckets (grid, agenda)
+    byDayWide: {},               // untrimmed (week view, day panel)
+    openYmd: null,               // selected day (docked) / open sheet day
+    weekStart: null
   };
-  // Locked = gates on AND viewer on the free plan (server-computed, injected).
   var proLocked = !!(window.ARENAS_DATA && window.ARENAS_DATA.gating && window.ARENAS_DATA.gating.proLocked);
-  // Plan form state inside the day panel: null | {mode:'create'} | {mode:'edit', planId}
-  var panelForm = null;
+  var panelForm = null;          // null | {mode:'create'} | {mode:'edit', planId}
+  var panelDeleteId = null;      // plan id showing the series delete choice row
+  var sheetReturnFocus = null;
 
   function toast(msg) {
     var t = document.getElementById('cal-toast');
@@ -366,15 +470,12 @@ button{font-family:var(--font)}
 
   function currentYm() { return state.year + '-' + pad2(state.month); }
 
-  // Returns true when the hash was a week deep link (#YYYY-MM-DD) — the caller
-  // then forces week view for this load WITHOUT touching the stored preference
-  // (a shared link should not silently rewrite someone's default view).
   function initFromHash() {
     var h = window.location.hash || '';
     var wm = WEEK_HASH_RE.exec(h);
     if (wm) {
       var d = new Date(Number(wm[1]), Number(wm[2]) - 1, Number(wm[3]));
-      if (d.getMonth() + 1 === Number(wm[2])) { // rejects impossible dates (2026-02-31)
+      if (d.getMonth() + 1 === Number(wm[2])) {
         var ws = mondayOf(d);
         state.weekStart = ymdOf(ws);
         state.year = ws.getFullYear(); state.month = ws.getMonth() + 1;
@@ -385,7 +486,6 @@ button{font-family:var(--font)}
     if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12) {
       state.year = Number(m[1]); state.month = Number(m[2]);
     } else {
-      // nowLocal (not new Date) so ?_today opens on the overridden month.
       var n = nowLocal();
       state.year = n.getFullYear(); state.month = n.getMonth() + 1;
     }
@@ -395,17 +495,9 @@ button{font-family:var(--font)}
     var stored = null;
     try { stored = localStorage.getItem(VIEW_KEY); } catch (e) {}
     if (stored === 'month' || stored === 'week' || stored === 'agenda') { state.view = stored; return; }
-    // Mobile default is WEEK — the bounded Mon–Sun frame is the daily driver
-    // (the app thinks in Monday weeks everywhere: leaderboards, stats, goals);
-    // Agenda stays one tap away as the long-scroll. Desktop default stays month.
+    // Mobile default is WEEK (Monday weeks everywhere in the app); desktop month.
     state.view = (window.innerWidth <= 768) ? 'week' : 'month';
   }
-  // Anchor the week view: today's week when the displayed month IS the current
-  // month, otherwise the week containing the 1st of the displayed month. The
-  // fetched month is ALWAYS the month containing the week's Monday — a Monday
-  // in month M puts the week's Sunday at most 6 days past M's end, inside the
-  // server's widened window (7+ days). Returns true when the anchor moved the
-  // month and the caller must refetch.
   function ensureWeek() {
     var n = nowLocal();
     var anchor = currentYm() === (n.getFullYear() + '-' + pad2(n.getMonth() + 1))
@@ -420,7 +512,7 @@ button{font-family:var(--font)}
     state.view = v;
     try { localStorage.setItem(VIEW_KEY, v); } catch (e) {}
     if (v === 'week' && ensureWeek()) {
-      renderToggle(); syncHash(); load(); // week anchored into a neighbouring month
+      renderToggle(); syncHash(); load();
       return;
     }
     renderToggle(); syncHash(); updateLabel(); render();
@@ -431,13 +523,13 @@ button{font-family:var(--font)}
       var on = state.view === pair[1];
       btn.className = on ? 'on' : '';
       btn.setAttribute('aria-selected', on ? 'true' : 'false');
+      btn.setAttribute('tabindex', on ? '0' : '-1');
     });
     var unit = state.view === 'week' ? 'week' : 'month';
     document.getElementById('cal-prev').setAttribute('aria-label', 'Previous ' + unit);
     document.getElementById('cal-next').setAttribute('aria-label', 'Next ' + unit);
   }
 
-  // Integer month math only (reports-tab rule) — never Date→ISO for month keys.
   function shiftMonth(delta) {
     var m = state.month + delta;
     var y = state.year;
@@ -446,10 +538,6 @@ button{font-family:var(--font)}
     state.year = y; state.month = m;
     syncHash(); load();
   }
-  // Week stepping: ±7 local days. The fetched month follows the week's MONDAY
-  // (ensureWeek rule) — crossing a month boundary refetches exactly once, at
-  // the step where the Monday changes month; a week merely ENDING in the next
-  // month renders from the already-fetched widened window without a refetch.
   function shiftWeek(delta) {
     var ws = parseLocalYmd(state.weekStart);
     ws = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + delta * 7);
@@ -463,7 +551,6 @@ button{font-family:var(--font)}
     }
   }
   function goToday() {
-    // nowLocal (not new Date) so the ?_today test hook shifts this too.
     var n = nowLocal();
     if (state.view === 'week') {
       var ws = mondayOf(n);
@@ -472,20 +559,15 @@ button{font-family:var(--font)}
     } else {
       state.year = n.getFullYear(); state.month = n.getMonth() + 1;
     }
+    if (docked()) { state.openYmd = todayYmd(); panelForm = null; panelDeleteId = null; }
     syncHash(); load();
   }
-  // replace=true canonicalises the CURRENT history entry (deep-link
-  // normalisation, initial load, unrecognised hashes) via replaceState —
-  // assigning location.hash there would PUSH, and Back would then bounce
-  // between the raw and canonical forms forever. In-app navigation
-  // (prev/next/today/toggle) omits it so Back walks the trail as expected.
   function syncHash(replace) {
     var want = (state.view === 'week' && state.weekStart)
       ? '#' + state.weekStart
       : '#' + currentYm();
     if (window.location.hash === want) return;
     if (replace) {
-      // replaceState fires no hashchange — no suppress flag needed.
       history.replaceState(null, '', window.location.pathname + window.location.search + want);
     } else {
       suppressHash = true;
@@ -500,46 +582,38 @@ button{font-family:var(--font)}
     if (wm) {
       var d = new Date(Number(wm[1]), Number(wm[2]) - 1, Number(wm[3]));
       if (d.getMonth() + 1 === Number(wm[2])) {
-        state.view = 'week'; // a week address implies the view (not persisted)
+        state.view = 'week';
         var ws = mondayOf(d);
         state.weekStart = ymdOf(ws);
         state.year = ws.getFullYear(); state.month = ws.getMonth() + 1;
-        renderToggle(); syncHash(true); load(); // normalise to Monday form IN PLACE
+        renderToggle(); syncHash(true); load();
       } else {
-        syncHash(true); // impossible date (2026-02-31): restore canonical hash, keep state
+        syncHash(true);
       }
       return;
     }
     var m = HASH_RE.exec(h);
     if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12) {
       state.year = Number(m[1]); state.month = Number(m[2]);
-      // Month address while in week view: re-anchor the week and canonicalise
-      // this entry to the week form WITHOUT pushing (a push here loops Back
-      // whenever an old #YYYY-MM entry is revisited from week view).
       if (state.view === 'week') { ensureWeek(); syncHash(true); }
       load();
       return;
     }
-    syncHash(true); // unrecognised hash — restore canonical form in place
+    syncHash(true);
   });
 
   // ── Data ──
-  // ymPrefix (e.g. "2026-07-") trims to the displayed local month — that bucket
-  // drives the grid and agenda. Pass null for the UNTRIMMED bucket: the server
-  // widens its fetch window past the month edges so the WEEK VIEW (and the day
-  // panel, which can be opened from a week row) still has real data on days
-  // where the week reaches into a neighbouring month.
   function bucket(data, ymPrefix) {
     var byDay = {};
     function push(ymd, kind, item) {
       if (ymPrefix && ymd.indexOf(ymPrefix) !== 0) return;
-      if (!byDay[ymd]) byDay[ymd] = { events: [], plans: [], activities: [] };
+      if (!byDay[ymd]) byDay[ymd] = EMPTY_DAY();
       byDay[ymd][kind].push(item);
     }
     (data.events || []).forEach(function (ev) {
       var d = new Date(ev.date);
       if (isNaN(d)) return;
-      push(ymdOf(d), 'events', ev); // LOCAL day
+      push(ymdOf(d), 'events', ev);
     });
     (data.activities || []).forEach(function (a) {
       var d = new Date(a.date);
@@ -555,8 +629,7 @@ button{font-family:var(--font)}
     return byDay;
   }
 
-  // Header label: month name in month/agenda; the week's exact date range in
-  // week view ("20–26 Jul 2026", "29 Jun – 5 Jul 2026", "29 Dec 2026 – 4 Jan 2027").
+  // Title: "September 2026" in month/agenda; the week's range in week view.
   function updateLabel() {
     if (state.view === 'week' && state.weekStart) {
       var ws = parseLocalYmd(state.weekStart);
@@ -573,63 +646,269 @@ button{font-family:var(--font)}
       return;
     }
     monthLabel.textContent = parseLocalYmd(currentYm() + '-01')
-      .toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+      .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }
+
+  function skeleton() {
+    var tiles = '';
+    for (var i = 0; i < 5; i++) {
+      tiles += '<div class="cs-tile" aria-hidden="true"><div class="cs-icon sk"></div><div class="cs-text" style="flex:1"><div class="sk" style="height:10px;width:60%"></div><div class="sk" style="height:18px;width:45%;margin-top:6px"></div></div></div>';
+    }
+    statsEl.innerHTML = tiles;
+    statsEl.setAttribute('aria-busy', 'true');
+    var cells = '';
+    for (var j = 0; j < 35; j++) cells += '<div class="cal-day cd-empty sk" style="border:none"></div>';
+    root.innerHTML = '<div role="status" aria-label="Loading calendar"><div class="cal-grid" style="padding-top:22px">' + cells + '</div></div>';
+  }
+  function showLoadError() {
+    statsEl.innerHTML = '';
+    statsEl.removeAttribute('aria-busy');
+    root.innerHTML = '<div class="empty-state">The calendar could not be loaded right now.<div class="dp-act-row"><button class="dp-btn primary" id="cal-retry">Try again</button></div></div>';
+    document.getElementById('cal-retry').addEventListener('click', load);
+  }
+  function applyData(data) {
+    state.data = data;
+    state.byDay = bucket(data, currentYm() + '-');
+    state.byDayWide = bucket(data, null);
   }
   function load() {
     updateLabel();
-    root.innerHTML = '<div class="muted-line">Loading…</div>';
-    fetch(window.BASE + '/api/calendar/month?month=' + currentYm())
+    skeleton();
+    var ym = currentYm();
+    fetch(window.BASE + '/api/calendar/month?month=' + ym, { credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
-        if (!data) {
-          root.innerHTML = '<div class="empty-state">The calendar could not be loaded right now — please refresh to try again.</div>';
-          return;
-        }
-        state.data = data;
-        state.byDay = bucket(data, currentYm() + '-');
-        state.byDayWide = bucket(data, null);
+        if (ym !== currentYm()) return; // a newer navigation superseded this load
+        if (!data) { showLoadError(); return; }
+        applyData(data);
         render();
       })
-      .catch(function () {
-        root.innerHTML = '<div class="empty-state">The calendar could not be loaded right now — please refresh to try again.</div>';
-      });
+      .catch(function () { if (ym === currentYm()) showLoadError(); });
   }
-
-  // In-place update after any panel action: re-fetch the month (the server is
-  // the source of truth — no client-side state patching to drift), re-render
-  // the current view, and re-render the open day panel without closing it.
+  // In-place update after any panel action: server is the source of truth.
   function refresh() {
-    fetch(window.BASE + '/api/calendar/month?month=' + currentYm())
+    fetch(window.BASE + '/api/calendar/month?month=' + currentYm(), { credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
         if (!data) return;
-        state.data = data;
-        state.byDay = bucket(data, currentYm() + '-');
-        state.byDayWide = bucket(data, null);
+        applyData(data);
         render();
-        if (state.openYmd) renderDayPanel();
       })
       .catch(function () {});
   }
 
-  // ── Shared item renderers ──
+  // ── Stats row (server-computed for the DISPLAYED month, account timezone) ──
+  function renderStats() {
+    statsEl.removeAttribute('aria-busy');
+    var s = (state.data && state.data.stats) || {};
+    var n = nowLocal();
+    var isCurrent = currentYm() === (n.getFullYear() + '-' + pad2(n.getMonth() + 1));
+    var monthShort = parseLocalYmd(currentYm() + '-01').toLocaleDateString('en-US', { month: 'long' });
+    var period = isCurrent ? 'this month' : 'in ' + monthShort;
+    var tiles = [
+      { ic: '👟', bg: '#ECFDF5', label: 'Workouts', val: String(Number(s.sessions) || 0), sub: period },
+      { ic: '⏱️', bg: '#F5F3FF', label: 'Total time', val: fmtMinutes((Number(s.hours) || 0) * 60), sub: period },
+      { ic: '📍', bg: '#EFF6FF', label: 'Total distance', val: (Math.round((Number(s.distanceKm) || 0) * 10) / 10).toFixed(1) + ' <small>km</small>', sub: period },
+      { ic: '🔥', bg: '#FFF7ED', label: 'Active days', val: String(Number(s.activeDays) || 0) + ' <small>of ' + (Number(s.observedDays) || 0) + '</small>', sub: 'days so far' },
+      { ic: '🌙', bg: '#F3F4F6', label: 'Rest days', val: String(Number(s.restDays) || 0), sub: period }
+    ];
+    if (!isCurrent) tiles[3].sub = period;
+    statsEl.innerHTML = tiles.map(function (t) {
+      return '<div class="cs-tile"><div class="cs-icon" style="background:' + t.bg + '" aria-hidden="true">' + t.ic + '</div>' +
+        '<div class="cs-text"><span class="cs-label">' + t.label + '</span><span class="cs-val">' + t.val + '</span><span class="cs-sub">' + t.sub + '</span></div></div>';
+    }).join('');
+  }
+
+  // ── Shared formatting ──
   function timeOf(iso) {
     var d = new Date(iso);
     if (isNaN(d)) return '';
     return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
   }
+  function activityLine2(a) {
+    return [fmtKm(a.distanceKm), a.durationMinutes ? fmtMinutes(a.durationMinutes) : null].filter(Boolean).join(' · ');
+  }
+
+  // ── Pill component (month cells + week + agenda) ──
+  function pillHtml(cls, style, icon, title, line2, lg, ariaExtra) {
+    return '<span class="cp ' + cls + (lg ? ' cp-lg' : '') + '"' + (style ? ' style="' + style + '"' : '') +
+      ' title="' + esc(title + (line2 ? ' — ' + line2 : '') + (ariaExtra ? ' (' + ariaExtra + ')' : '')) + '">' +
+      '<span class="cp-l1"><span class="cp-ic" aria-hidden="true">' + icon + '</span><span class="cp-t">' + esc(title) + '</span></span>' +
+      (line2 ? '<span class="cp-l2">' + esc(line2) + '</span>' : '') + '</span>';
+  }
+  function eventPill(ev, lg) {
+    var line2 = [timeOf(ev.date), ev.club_name || null].filter(Boolean).join(' · ');
+    return pillHtml(ev.myStatus === 'none' ? 'ev nr' : 'ev', '', sportIcon(ev.sport), ev.title || 'Event', line2, lg,
+      ev.myStatus === 'none' ? 'not responded' : ev.myStatus);
+  }
+  function planPill(p, lg) {
+    var title = p.title || sportName(p.sport);
+    var icon = p.status === 'done' ? '✓' : sportIcon(p.sport);
+    return pillHtml('plan ' + esc(p.status || 'planned'), '', icon, title, p.planned_duration || '', lg,
+      p.status === 'done' ? 'plan done' : p.status === 'skipped' ? 'plan skipped' : 'planned');
+  }
+  function activityPill(a, lg) {
+    return pillHtml('act', sportVars(a.sport), sportIcon(a.sport), a.title || sportName(a.sport), activityLine2(a), lg, 'logged');
+  }
+  function dayPills(day, lg) {
+    var out = [];
+    day.events.forEach(function (ev) { out.push(eventPill(ev, lg)); });
+    day.plans.forEach(function (p) { out.push(planPill(p, lg)); });
+    day.activities.forEach(function (a) { out.push(activityPill(a, lg)); });
+    return out;
+  }
+  function dayAria(ymd, day) {
+    var n = day.events.length + day.plans.length + day.activities.length;
+    var label = parseLocalYmd(ymd).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+    if (ymd === todayYmd()) label += ', today';
+    return label + ', ' + (n ? n + ' item' + (n === 1 ? '' : 's') : 'nothing scheduled');
+  }
+
+  // ── MONTH GRID ──
+  function renderMonth() {
+    var y = state.year, m = state.month;
+    var first = new Date(y, m - 1, 1);
+    var daysInMonth = new Date(y, m, 0).getDate();
+    var lead = (first.getDay() + 6) % 7;
+    var today = todayYmd();
+    var html = '<div class="cal-labels" aria-hidden="true"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>';
+    html += '<div class="cal-grid">';
+    for (var i = 0; i < lead; i++) html += '<div class="cal-day cd-empty" aria-hidden="true"></div>';
+    for (var d = 1; d <= daysInMonth; d++) {
+      var ymd = y + '-' + pad2(m) + '-' + pad2(d);
+      var day = state.byDay[ymd] || EMPTY_DAY();
+      var cls = 'cal-day' + (ymd === today ? ' cd-today' : '');
+      html += '<div class="' + cls + '" data-ymd="' + ymd + '" role="button" tabindex="0" aria-label="' + esc(dayAria(ymd, day)) + '">';
+      html += '<span class="cd-num" aria-hidden="true">' + d + '</span>';
+      var pills = dayPills(day, false);
+      if (pills.length) {
+        html += '<span class="cd-pills" aria-hidden="true">' + pills.slice(0, 5).join('') +
+          (pills.length > 5 ? '<span class="cd-more">+' + (pills.length - 5) + ' more</span>' : '') + '</span>';
+      }
+      // Mobile (≤768px): dots per content type.
+      var dots = '';
+      if (day.events.some(function (ev) { return ev.myStatus !== 'none'; })) dots += '<span class="cd-dot ev"></span>';
+      if (day.events.some(function (ev) { return ev.myStatus === 'none'; })) dots += '<span class="cd-dot nr"></span>';
+      if (day.plans.length) dots += '<span class="cd-dot plan"></span>';
+      var seen = {};
+      day.activities.forEach(function (a) {
+        if (seen[a.sport]) return; seen[a.sport] = 1;
+        dots += '<span class="cd-dot act" style="background:' + esc(sportColors(a.sport).text) + '"></span>';
+      });
+      if (dots) html += '<span class="cd-dots" aria-hidden="true">' + dots + '</span>';
+      html += '</div>';
+    }
+    html += '</div>';
+    root.innerHTML = html;
+    wireDayTargets('.cal-day[data-ymd]');
+  }
+  function wireDayTargets(sel) {
+    root.querySelectorAll(sel).forEach(function (el) {
+      el.addEventListener('click', function () { openDayPanel(el.getAttribute('data-ymd'), el); });
+      el.addEventListener('keydown', function (e) {
+        if (e.target !== el) return;
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDayPanel(el.getAttribute('data-ymd'), el); }
+        // Arrow keys move focus across the month grid (7-column spatial nav).
+        if (el.classList.contains('cal-day')) {
+          var step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
+          if (step) {
+            var target = root.querySelector('.cal-day[data-ymd="' + ymdAddDays(el.getAttribute('data-ymd'), step) + '"]');
+            if (target) { e.preventDefault(); target.focus(); }
+          }
+        }
+      });
+    });
+    markSelection();
+  }
+
+  // ── WEEK + AGENDA (same pills, day cards) ──
+  function dayCardHtml(ymd, day, isWeek) {
+    var today = todayYmd();
+    var label = parseLocalYmd(ymd).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+    var pills = dayPills(day, true);
+    var html = '<div class="ag-day wk-day' + (ymd === today ? ' today' : '') + '" data-ymd="' + ymd + '"' + (ymd === today && !isWeek ? ' id="ag-today"' : '') +
+      ' role="button" tabindex="0" aria-label="' + esc(dayAria(ymd, day)) + '">';
+    html += '<div class="ag-head" aria-hidden="true"><span class="ag-date">' + label + '</span>' +
+      (ymd === today ? '<span class="ag-today-tag">Today</span>' : '') + '</div>';
+    html += pills.length
+      ? '<div class="ag-pills" aria-hidden="true">' + pills.join('') + '</div>'
+      : '<div class="wk-rest" aria-hidden="true">Nothing scheduled</div>';
+    return html + '</div>';
+  }
+  function renderAgenda() {
+    var days = Object.keys(state.byDay).sort();
+    if (!days.length) {
+      root.innerHTML = '<div class="empty-state"><div style="font-size:26px;margin-bottom:6px" aria-hidden="true">🗓️</div>Nothing on the calendar this month yet.<br>RSVP to an event, plan a session or log an activity and it shows up here.' +
+        '<div class="dp-act-row"><button class="dp-btn primary" data-root-add="log">➕ Log activity</button><button class="dp-btn" data-root-add="plan">🗓️ Plan a session</button></div></div>';
+      return;
+    }
+    root.innerHTML = '<div class="agenda">' + days.map(function (ymd) { return dayCardHtml(ymd, state.byDay[ymd], false); }).join('') + '</div>';
+    wireDayTargets('.wk-day');
+    var todayEl = document.getElementById('ag-today');
+    if (todayEl && typeof todayEl.scrollIntoView === 'function' && !docked()) {
+      todayEl.scrollIntoView({ block: 'start', behavior: 'auto' });
+    }
+  }
+  function renderWeek() {
+    var ws = parseLocalYmd(state.weekStart);
+    var html = '<div class="agenda">';
+    for (var i = 0; i < 7; i++) {
+      var ymd = ymdOf(new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + i));
+      html += dayCardHtml(ymd, state.byDayWide[ymd] || EMPTY_DAY(), true);
+    }
+    root.innerHTML = html + '</div>';
+    wireDayTargets('.wk-day');
+  }
+  root.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('[data-root-add]') : null;
+    if (b) doAdd(b.getAttribute('data-root-add'));
+  });
+
+  // ── Selection ──
+  function visibleRange() {
+    if (state.view === 'week' && state.weekStart) return [state.weekStart, ymdAddDays(state.weekStart, 6)];
+    var last = new Date(state.year, state.month, 0).getDate();
+    return [currentYm() + '-01', currentYm() + '-' + pad2(last)];
+  }
+  function inRange(ymd) { var r = visibleRange(); return ymd >= r[0] && ymd <= r[1]; }
+  function ensureSelection() {
+    if (!docked()) return;
+    if (state.openYmd && inRange(state.openYmd)) return;
+    var t = todayYmd();
+    state.openYmd = inRange(t) ? t : visibleRange()[0];
+    panelForm = null; panelDeleteId = null;
+  }
+  function markSelection() {
+    root.querySelectorAll('[data-ymd]').forEach(function (el) {
+      var on = el.getAttribute('data-ymd') === state.openYmd && (docked() || panelWrap.classList.contains('open'));
+      el.classList.toggle('is-sel', on);
+      el.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+  function selectedOrToday() { return state.openYmd || todayYmd(); }
+
+  function render() {
+    if (!state.data) return;
+    ensureSelection();
+    if (state.view === 'agenda') renderAgenda();
+    else if (state.view === 'week') renderWeek();
+    else renderMonth();
+    renderStats();
+    updateAddMenu();
+    if (state.openYmd) renderDayPanel();
+  }
+
+  // ── DAY PANEL ──
   function eventChip(ev) {
     if (ev.myStatus === 'going') return '<span class="chip going">Going</span>';
     if (ev.myStatus === 'interested') return '<span class="chip interested">Interested</span>';
     return '<span class="chip nr">Not responded</span>';
   }
   function planChip(p) {
-    if (p.status === 'done') return '<span class="chip done">Done</span>';
+    if (p.status === 'done') return '<span class="chip done">✓ Done</span>';
     if (p.status === 'skipped') return '<span class="chip skipped">Skipped</span>';
     return '<span class="chip planned">Planned</span>';
   }
-  // RSVP actions mirror the events page exactly: POST /api/events/:id/rsvp with
-  // going / interested / cancelled — cancelled deletes the RSVP row server-side.
   function rsvpBtn(evId, status, label, extraCls) {
     return '<button class="dp-btn' + (extraCls ? ' ' + extraCls : '') + '" data-cal-action="rsvp" data-id="' + esc(evId) + '" data-status="' + status + '">' + label + '</button>';
   }
@@ -647,16 +926,11 @@ button{font-family:var(--font)}
     }
     return '<div class="dp-act-row">' + btns.join('') + '</div>';
   }
-  // Plan actions: status transitions + delete are NEVER locked (mark-done rides
-  // with free activity logging; delete is the ungated exit). Only Edit — a
-  // content change — hides for locked viewers; the server enforces the same split.
-  var panelDeleteId = null; // plan id showing the series delete choice row
+  // Status transitions + delete never locked; only Edit hides for locked viewers.
   function planActionsHtml(p) {
-    // A series member's Delete swaps to an explicit three-way choice — a
-    // confirm() can't offer "just this" vs "this and future" vs abort.
     if (panelDeleteId === p.id) {
-      return '<div class="dp-act-row" style="align-items:center;flex-wrap:wrap">' +
-        '<span class="ag-meta" style="margin:0">Delete:</span>' +
+      return '<div class="dp-act-row" style="align-items:center">' +
+        '<span class="ag-meta">Delete:</span>' +
         '<button class="dp-btn danger" data-cal-action="plan-delete-one" data-id="' + esc(p.id) + '">Just this session</button>' +
         '<button class="dp-btn danger" data-cal-action="plan-delete-future" data-id="' + esc(p.id) + '">This + all future</button>' +
         '<button class="dp-btn" data-cal-action="plan-delete-cancel">Keep</button>' +
@@ -672,182 +946,50 @@ button{font-family:var(--font)}
     btns.push('<button class="dp-btn danger" data-cal-action="plan-delete" data-id="' + esc(p.id) + '">Delete</button>');
     return '<div class="dp-act-row">' + btns.join('') + '</div>';
   }
-  function eventItemHtml(ev, cls, withActions) {
-    var meta = [timeOf(ev.date), ev.club_name ? esc(ev.club_name) : null, ev.location ? esc(ev.location) : null]
-      .filter(Boolean).join(' · ');
-    // 44px square thumbnail from the same crop source (authenticated proxy),
-    // never the full banner. Imageless events keep today's row exactly.
+  function activityCardHtml(a) {
+    var stats = [];
+    var km = fmtKm(a.distanceKm);
+    if (km) stats.push('<div class="dc-stat"><b>' + esc(km) + '</b><span>Distance</span></div>');
+    if (a.durationMinutes) stats.push('<div class="dc-stat"><b>' + esc(fmtMinutes(a.durationMinutes)) + '</b><span>Duration</span></div>');
+    if (a.feeling) stats.push('<div class="dc-stat"><b>' + (FEELING_EMOJI[a.feeling] ? FEELING_EMOJI[a.feeling] + ' ' : '') + esc(feelingLabel(a.feeling)) + '</b><span>Feeling</span></div>');
+    return '<article class="dp-card act" style="' + sportVars(a.sport) + '">' +
+      '<div class="dc-top"><div class="dc-ic" aria-hidden="true">' + sportIcon(a.sport) + '</div>' +
+      '<div class="dc-main"><div class="dc-title">' + esc(a.title || sportName(a.sport)) + '</div>' +
+      '<div class="dc-sub">' + esc(sportName(a.sport)) + (timeOf(a.date) ? ' · ' + esc(timeOf(a.date)) : '') + '</div></div></div>' +
+      (stats.length ? '<div class="dc-stats">' + stats.join('') + '</div>' : '') +
+      (a.notes ? '<div class="dc-notes"><span class="dc-notes-l">Notes</span>' + esc(a.notes) + '</div>' : '') +
+      '</article>';
+  }
+  function planCardHtml(p) {
+    var meta = [esc(sportName(p.sport)), p.planned_duration ? esc(p.planned_duration) : null].filter(Boolean).join(' · ');
+    return '<article class="dp-card plan ' + esc(p.status || 'planned') + '">' +
+      '<div class="dc-top"><div class="dc-ic" style="--pbg:#F5F3FF;--ptx:#5B21B6" aria-hidden="true">' + (p.status === 'done' ? '✓' : sportIcon(p.sport)) + '</div>' +
+      '<div class="dc-main"><div class="dc-title">' + esc(p.title || ('Planned ' + sportName(p.sport).toLowerCase())) +
+      (p.series_id ? ' <span title="Repeats" aria-label="Part of a repeating series" style="color:var(--gray-500);font-weight:400">\u21bb</span>' : '') + '</div>' +
+      (meta ? '<div class="dc-sub">' + meta + '</div>' : '') + '</div>' + planChip(p) + '</div>' +
+      (p.notes ? '<div class="dc-meta">' + esc(p.notes) + '</div>' : '') +
+      planActionsHtml(p) + '</article>';
+  }
+  function eventCardHtml(ev) {
     var thumb = ev.image
-      ? '<img src="' + esc(window.BASE + '/api/events/' + encodeURIComponent(ev.id) + '/image?v=' + encodeURIComponent(ev.image)) + '" alt="" style="width:44px;height:44px;border-radius:6px;object-fit:cover;flex-shrink:0;align-self:flex-start">'
-      : '';
-    return '<div class="' + cls + (ev.myStatus === 'none' ? ' nr' : '') + '">' +
-      '<span class="ag-ic">' + sportIcon(ev.sport) + '</span>' + thumb +
-      '<div class="ag-body event-text"><div class="ag-title event-text">' + esc(ev.title || 'Event') + '</div>' +
-      (meta ? '<div class="ag-meta event-text">' + meta + '</div>' : '') +
-      (withActions ? eventActionsHtml(ev) : '') + '</div>' +
-      eventChip(ev) + '</div>';
-  }
-  function planItemHtml(p, cls, withActions) {
-    var meta = [esc(sportName(p.sport)), p.planned_duration ? esc(p.planned_duration) : null]
+      ? '<img src="' + esc(window.BASE + '/api/events/' + encodeURIComponent(ev.id) + '/image?v=' + encodeURIComponent(ev.image)) + '" alt="" style="width:36px;height:36px;border-radius:9px;object-fit:cover;flex-shrink:0">'
+      : '<div class="dc-ic" style="--pbg:var(--yellow-light);--ptx:#6B5000" aria-hidden="true">' + sportIcon(ev.sport) + '</div>';
+    var meta = [timeOf(ev.date) ? '🕒 ' + esc(timeOf(ev.date)) : null, ev.club_name ? '🏟️ ' + esc(ev.club_name) : null, ev.location ? '📍 ' + esc(ev.location) : null]
       .filter(Boolean).join(' · ');
-    return '<div class="' + cls + '">' +
-      '<span class="ag-ic">' + sportIcon(p.sport) + '</span>' +
-      '<div class="ag-body"><div class="ag-title">' + esc(p.title || ('Planned ' + sportName(p.sport).toLowerCase())) + (p.series_id ? ' <span title="Repeats" aria-label="Part of a repeating series" style="color:var(--gray-400);font-weight:400">\u21bb</span>' : '') + '</div>' +
-      (meta ? '<div class="ag-meta">' + meta + '</div>' : '') +
-      (p.notes ? '<div class="ag-meta">' + esc(p.notes) + '</div>' : '') +
-      (withActions ? planActionsHtml(p) : '') + '</div>' +
-      planChip(p) +
-      '</div>';
-  }
-  function activityItemHtml(a, cls) {
-    var meta = [esc(sportName(a.sport)), a.distance ? esc(a.distance) : null, a.duration ? esc(a.duration) : null]
-      .filter(Boolean).join(' · ');
-    return '<div class="' + cls + '">' +
-      '<span class="ag-ic">' + sportIcon(a.sport) + '</span>' +
-      '<div class="ag-body"><div class="ag-title">' + esc(a.title || sportName(a.sport)) + '</div>' +
-      (meta ? '<div class="ag-meta">' + meta + '</div>' : '') + '</div>' +
-      '<span class="chip done">Logged</span></div>';
+    return '<article class="dp-card ev' + (ev.myStatus === 'none' ? ' nr' : '') + '">' +
+      '<div class="dc-top">' + thumb +
+      '<div class="dc-main event-text"><div class="dc-title event-text">' + esc(ev.title || 'Event') + '</div></div>' + eventChip(ev) + '</div>' +
+      (meta ? '<div class="dc-meta event-text">' + meta + '</div>' : '') +
+      eventActionsHtml(ev) +
+      '<a class="dc-openlink" href="' + esc(window.BASE + '/events?event=' + encodeURIComponent(ev.id)) + '" aria-label="View event: ' + esc(ev.title || 'Event') + '">View event →</a>' +
+      '</article>';
   }
 
-  // ── MONTH GRID ──
-  function renderMonth() {
-    var y = state.year, m = state.month;
-    var first = new Date(y, m - 1, 1);
-    var daysInMonth = new Date(y, m, 0).getDate(); // integer month math
-    var lead = (first.getDay() + 6) % 7;           // Monday-first (app convention)
-    var today = todayYmd();
-    var html = '<div class="cal-labels"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>';
-    html += '<div class="cal-grid">';
-    for (var i = 0; i < lead; i++) html += '<div class="cal-day cd-empty"></div>';
-    for (var d = 1; d <= daysInMonth; d++) {
-      var ymd = y + '-' + pad2(m) + '-' + pad2(d);
-      var day = state.byDay[ymd] || { events: [], plans: [], activities: [] };
-      var cls = 'cal-day' + (ymd === today ? ' cd-today' : '');
-      html += '<div class="' + cls + '" data-ymd="' + ymd + '" role="button" tabindex="0" aria-label="' + ymd + '">';
-      html += '<span class="cd-num">' + d + '</span>';
-
-      // Desktop: up to 5 pills at the larger cell size, then a +N counter.
-      var pills = [];
-      day.events.forEach(function (ev) {
-        pills.push('<span class="cd-pill ' + (ev.myStatus === 'none' ? 'nr' : 'ev') + '">' + sportIcon(ev.sport) + ' ' + esc(ev.title || 'Event') + '</span>');
-      });
-      day.plans.forEach(function (p) {
-        pills.push('<span class="cd-pill plan ' + esc(p.status) + '">' + sportIcon(p.sport) + ' ' + esc(p.title || sportName(p.sport)) + '</span>');
-      });
-      day.activities.forEach(function (a) {
-        pills.push('<span class="cd-pill act">' + sportIcon(a.sport) + ' ' + esc(a.title || sportName(a.sport)) + '</span>');
-      });
-      if (pills.length) {
-        html += '<span class="cd-pills">' + pills.slice(0, 5).join('') +
-          (pills.length > 5 ? '<span class="cd-more">+' + (pills.length - 5) + ' more</span>' : '') + '</span>';
-      }
-
-      // Mobile: one dot per content type present (confirmed vs not-responded distinct).
-      var dots = '';
-      if (day.events.some(function (ev) { return ev.myStatus !== 'none'; })) dots += '<span class="cd-dot ev"></span>';
-      if (day.events.some(function (ev) { return ev.myStatus === 'none'; })) dots += '<span class="cd-dot nr"></span>';
-      if (day.plans.length) dots += '<span class="cd-dot plan"></span>';
-      if (day.activities.length) dots += '<span class="cd-dot act"></span>';
-      if (dots) html += '<span class="cd-dots">' + dots + '</span>';
-
-      html += '</div>';
-    }
-    html += '</div>';
-    root.innerHTML = html;
-    root.querySelectorAll('.cal-day[data-ymd]').forEach(function (cell) {
-      cell.addEventListener('click', function () { openDayPanel(cell.getAttribute('data-ymd')); });
-      cell.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDayPanel(cell.getAttribute('data-ymd')); } });
-    });
-  }
-
-  // ── AGENDA VIEW ──
-  function renderAgenda() {
-    var days = Object.keys(state.byDay).sort();
-    var today = todayYmd();
-    if (!days.length) {
-      root.innerHTML = '<div class="empty-state">Nothing on the calendar this month yet.<br>RSVP to an event or log an activity and it will show up here.</div>';
-      return;
-    }
-    var html = '<div class="agenda">';
-    days.forEach(function (ymd) {
-      var day = state.byDay[ymd];
-      var label = parseLocalYmd(ymd).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-      html += '<div class="ag-day' + (ymd === today ? ' today" id="ag-today' : '') + '">';
-      html += '<div class="ag-head" data-ymd="' + ymd + '"><span class="ag-date">' + label + '</span>' +
-        (ymd === today ? '<span class="ag-today-tag">Today</span>' : '') + '</div>';
-      html += '<div class="ag-items">';
-      day.events.forEach(function (ev) { html += eventItemHtml(ev, 'ag-item'); });
-      day.plans.forEach(function (p) { html += planItemHtml(p, 'ag-item'); });
-      day.activities.forEach(function (a) { html += activityItemHtml(a, 'ag-item'); });
-      html += '</div></div>';
-    });
-    html += '</div>';
-    root.innerHTML = html;
-    root.querySelectorAll('.ag-head[data-ymd]').forEach(function (head) {
-      head.addEventListener('click', function () { openDayPanel(head.getAttribute('data-ymd')); });
-    });
-    var todayEl = document.getElementById('ag-today');
-    if (todayEl && typeof todayEl.scrollIntoView === 'function') {
-      todayEl.scrollIntoView({ block: 'start', behavior: 'auto' });
-    }
-  }
-
-  function render() {
-    if (!state.data) return;
-    if (state.view === 'agenda') renderAgenda();
-    else if (state.view === 'week') renderWeek();
-    else renderMonth();
-  }
-
-  // ── WEEK VIEW ──
-  // Exactly the displayed week's seven days, Monday → Sunday, stacked in the
-  // agenda's card language. Reads the UNTRIMMED bucket: a week can reach into
-  // a neighbouring month and those days must still show their real items (the
-  // server's widened fetch window guarantees they were fetched — see
-  // ensureWeek's Monday-month rule). Empty days render as quiet rest-day rows,
-  // never skipped: a seven-day week always shows seven days.
-  function renderWeek() {
-    var today = todayYmd();
-    var ws = parseLocalYmd(state.weekStart);
-    var html = '<div class="agenda">';
-    for (var i = 0; i < 7; i++) {
-      var d = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + i);
-      var ymd = ymdOf(d);
-      var day = state.byDayWide[ymd] || { events: [], plans: [], activities: [] };
-      var label = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-      var isToday = ymd === today;
-      html += '<div class="ag-day wk-day' + (isToday ? ' today' : '') + '" data-ymd="' + ymd + '" role="button" tabindex="0" aria-label="' + ymd + '">';
-      html += '<div class="ag-head"><span class="ag-date">' + label + '</span>' +
-        (isToday ? '<span class="ag-today-tag">Today</span>' : '') + '</div>';
-      var items = '';
-      day.events.forEach(function (ev) { items += eventItemHtml(ev, 'ag-item'); });
-      day.plans.forEach(function (p) { items += planItemHtml(p, 'ag-item'); });
-      day.activities.forEach(function (a) { items += activityItemHtml(a, 'ag-item'); });
-      html += items
-        ? '<div class="ag-items">' + items + '</div>'
-        : '<div class="wk-rest">Rest day — nothing scheduled</div>';
-      html += '</div>';
-    }
-    html += '</div>';
-    root.innerHTML = html;
-    // The whole day card opens the day panel — rows and items alike (items in
-    // the stacked views are read-only; all actions live in the panel).
-    root.querySelectorAll('.wk-day').forEach(function (sec) {
-      sec.addEventListener('click', function () { openDayPanel(sec.getAttribute('data-ymd')); });
-      sec.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDayPanel(sec.getAttribute('data-ymd')); } });
-    });
-  }
-
-  // ── DAY PANEL (interactive: plan CRUD, Log-this handoff, RSVP) ──
-  // Actions live ONLY in the panel — the grid and agenda stay read-only and
-  // open the panel on click.
-
-  // Compact plan create/edit form. Date defaults to the open day; the sport
-  // select is built from the sports registry (window.ARENAS_SPORTS).
+  // Compact plan create/edit form (unchanged behaviour).
   function planFormHtml() {
     var editing = null;
     if (panelForm && panelForm.mode === 'edit') {
-      var day = state.byDayWide[state.openYmd] || { plans: [] }; // wide: panel can hold neighbour-month days
+      var day = state.byDayWide[state.openYmd] || { plans: [] };
       day.plans.forEach(function (p) { if (p.id === panelForm.planId) editing = p; });
       if (!editing) return '';
     }
@@ -857,10 +999,6 @@ button{font-family:var(--font)}
       return '<option value="' + esc(s.id) + '"' + (s.id === selSport ? ' selected' : '') + '>' +
         esc(s.emoji + ' ' + s.label) + '</option>';
     }).join('');
-    // Recurrence is CREATE-ONLY: an existing row is one occurrence; series
-    // shape never changes from the edit form (v1 — delete-and-recreate is the
-    // escape hatch). Editing a series member shows a plain "part of a series"
-    // note instead.
     var repeatCtl = '';
     if (!editing) {
       repeatCtl =
@@ -878,7 +1016,7 @@ button{font-family:var(--font)}
       repeatCtl = '<div class="ag-meta" style="margin:-2px 0 10px">↻ Part of a series — ' + esc(seriesLabel(editing.series)) + '. Changing the date takes this session out of the series.</div>';
     }
     return '<div class="dp-form">' +
-      '<div class="dp-form-err" id="dpf-err"></div>' +
+      '<div class="dp-form-err" id="dpf-err" role="alert"></div>' +
       '<div class="fi"><label for="dpf-date">Date</label><input type="date" id="dpf-date" value="' + esc(editing ? editing.date : state.openYmd) + '"></div>' +
       repeatCtl +
       '<div class="fi"><label for="dpf-sport">Sport</label><select id="dpf-sport">' + opts + '</select></div>' +
@@ -891,23 +1029,13 @@ button{font-family:var(--font)}
       '</div></div>';
   }
 
-  // ── Recurrence helpers (mirror the server's integer Y-M-D stepping) ──
-  function weekdayNameOf(ymd) {
-    return parseLocalYmd(ymd).toLocaleDateString('en-GB', { weekday: 'long' });
-  }
-  function fmtLongDate(ymd) {
-    return parseLocalYmd(ymd).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  }
+  function weekdayNameOf(ymd) { return parseLocalYmd(ymd).toLocaleDateString('en-GB', { weekday: 'long' }); }
+  function fmtLongDate(ymd) { return parseLocalYmd(ymd).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); }
   function seriesLabel(s) {
     var when = s.frequency === 'daily' ? 'every day'
       : s.frequency === 'weekly' ? 'every ' + weekdayNameOf(s.start_date)
       : 'every other ' + weekdayNameOf(s.start_date);
     return when + ' through ' + fmtLongDate(s.end_date);
-  }
-  function ymdAddDays(ymd, days) {
-    var p = ymd.split('-').map(Number);
-    var dt = new Date(p[0], p[1] - 1, p[2] + days);
-    return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
   }
   function countOccurrences(startYmd, frequency, untilYmd) {
     var step = frequency === 'daily' ? 1 : frequency === 'weekly' ? 7 : 14;
@@ -915,8 +1043,6 @@ button{font-family:var(--font)}
     for (var d = startYmd; d <= untilYmd; d = ymdAddDays(d, step)) { n++; if (n > 100) break; }
     return n;
   }
-  // Live copy under the reveal row: the form must state plainly what it
-  // creates — "Creates 12 sessions — every Friday through 30 Oct 2026."
   function updateRepeatUI() {
     var repEl = document.getElementById('dpf-repeat');
     var moreEl = document.getElementById('dpf-repeat-more');
@@ -926,7 +1052,6 @@ button{font-family:var(--font)}
     moreEl.style.display = '';
     var untilEl = document.getElementById('dpf-until');
     var date = (document.getElementById('dpf-date').value || '').trim();
-    // Default horizon: +8 weeks from the first session (set once per reveal).
     if (untilEl && !untilEl.value && date) untilEl.value = ymdAddDays(date, 56);
     var until = untilEl ? (untilEl.value || '').trim() : '';
     var sumEl = document.getElementById('dpf-repeat-summary');
@@ -941,55 +1066,200 @@ button{font-family:var(--font)}
     sumEl.textContent = 'Creates ' + n + ' session' + (n !== 1 ? 's' : '') + ' — ' + when + ' through ' + fmtLongDate(until) + '.';
   }
 
+  function planCreateAffordance() {
+    if (panelForm && panelForm.mode === 'create') return planFormHtml();
+    if (proLocked) return '<div class="dp-act-row"><button class="dp-btn primary" data-cal-action="upgrade">🔒 Upgrade to Pro →</button></div>';
+    return '<div class="dp-act-row"><button class="dp-btn" data-cal-action="plan-new">+ Plan a session</button></div>';
+  }
   function renderDayPanel() {
     var ymd = state.openYmd;
     if (!ymd) return;
-    // Wide bucket: a week row can open a day that sits outside the displayed
-    // month (identical to the trimmed bucket for in-month days).
-    var day = state.byDayWide[ymd] || { events: [], plans: [], activities: [] };
+    var day = state.byDayWide[ymd] || EMPTY_DAY();
+    var isToday = ymd === todayYmd();
     document.getElementById('dp-title').textContent =
-      parseLocalYmd(ymd).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      parseLocalYmd(ymd).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
     var html = '';
-    html += '<div class="dp-section-label">Events</div>';
-    html += day.events.length
-      ? day.events.map(function (ev) { return eventItemHtml(ev, 'dp-item', true); }).join('')
-      : '<div class="dp-empty">No events on this day.</div>';
-    html += '<div class="dp-section-label">Planned training</div>';
-    html += day.plans.length
-      ? day.plans.map(function (p) {
-          if (panelForm && panelForm.mode === 'edit' && panelForm.planId === p.id) return planFormHtml();
-          return planItemHtml(p, 'dp-item', true);
-        }).join('')
-      : '<div class="dp-empty">No planned sessions.</div>';
-    // Create affordance: form, or "+ Plan a session", or — for locked (gates on
-    // + free plan) viewers — the goals-tab locked CTA, verbatim markup.
-    if (panelForm && panelForm.mode === 'create') {
-      html += planFormHtml();
-    } else if (proLocked) {
-      html += '<div style="margin-top:10px"><button onclick="window.location.href=window.BASE + \'/billing\'" style="padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;border:1px solid var(--yellow-dark);background:var(--yellow);color:var(--gray-900);cursor:pointer">🔒 Upgrade to Pro →</button></div>';
+    var empty = !day.events.length && !day.plans.length && !day.activities.length;
+    if (empty && !panelForm) {
+      html = '<div class="dp-nothing"><div class="dp-nothing-ic" aria-hidden="true">🌤️</div>' +
+        '<div class="dp-nothing-t">Nothing on this day</div>' +
+        '<div class="dp-nothing-s">' + (ymd > todayYmd() ? 'Plan a session ahead, or log one once it’s done.' : 'Log what you did, or plan something for this day.') + '</div>' +
+        '<div class="dp-act-row">' +
+        '<button class="dp-btn primary" data-cal-action="add-log">➕ Log activity</button>' +
+        (proLocked
+          ? '<button class="dp-btn" data-cal-action="upgrade">🔒 Plan a session (Pro)</button>'
+          : '<button class="dp-btn" data-cal-action="plan-new">🗓️ Plan a session</button>') +
+        '</div></div>';
     } else {
-      html += '<div class="dp-act-row" style="margin-top:10px"><button class="dp-btn" data-cal-action="plan-new">+ Plan a session</button></div>';
+      html += '<section class="dp-section" aria-labelledby="dps-act"><div class="dp-section-head"><h3 class="dp-section-label" id="dps-act">Activities</h3></div>';
+      html += day.activities.length
+        ? day.activities.map(activityCardHtml).join('')
+        : '<div class="dp-empty">No logged activities.</div>';
+      html += '</section>';
+      html += '<section class="dp-section" aria-labelledby="dps-plan"><div class="dp-section-head"><h3 class="dp-section-label" id="dps-plan">' + (isToday ? 'Today’s plan' : 'Plan for this day') + '</h3>' +
+        '<button class="dp-link" data-cal-action="view-plans">View all plans</button></div>';
+      html += day.plans.length
+        ? day.plans.map(function (p) {
+            if (panelForm && panelForm.mode === 'edit' && panelForm.planId === p.id) return planFormHtml();
+            return planCardHtml(p);
+          }).join('')
+        : '<div class="dp-empty">No planned sessions.</div>';
+      html += planCreateAffordance();
+      html += '</section>';
+      html += '<section class="dp-section" aria-labelledby="dps-ev"><div class="dp-section-head"><h3 class="dp-section-label" id="dps-ev">Events</h3></div>';
+      html += day.events.length
+        ? day.events.map(eventCardHtml).join('')
+        : '<div class="dp-empty">No events on this day.</div>';
+      html += '</section>';
     }
-    html += '<div class="dp-section-label">Activities</div>';
-    html += day.activities.length
-      ? day.activities.map(function (a) { return activityItemHtml(a, 'dp-item'); }).join('')
-      : '<div class="dp-empty">No logged activities.</div>';
     document.getElementById('dp-body').innerHTML = html;
+    markSelection();
   }
 
-  window.openDayPanel = function (ymd) {
+  function applyPanelMode() {
+    if (docked()) {
+      panelWrap.classList.remove('open');
+      panelSheet.setAttribute('role', 'complementary');
+      panelSheet.setAttribute('aria-labelledby', 'dp-title');
+      panelSheet.removeAttribute('aria-modal');
+    } else {
+      panelSheet.setAttribute('role', 'dialog');
+      panelSheet.setAttribute('aria-modal', 'true');
+      panelSheet.setAttribute('aria-labelledby', 'dp-title');
+    }
+  }
+  window.openDayPanel = function (ymd, trigger) {
     state.openYmd = ymd;
-    panelForm = null;
+    panelForm = null; panelDeleteId = null;
     renderDayPanel();
-    document.getElementById('day-panel').classList.add('open');
+    updateAddMenu();
+    if (!docked()) {
+      sheetReturnFocus = trigger || document.activeElement;
+      panelWrap.classList.add('open');
+      markSelection();
+      document.getElementById('dp-close').focus();
+    }
   };
   window.closeDayPanel = function () {
+    if (docked()) return; // the docked panel is permanent
+    if (!panelWrap.classList.contains('open')) return;
     state.openYmd = null;
     panelForm = null;
-    document.getElementById('day-panel').classList.remove('open');
+    panelWrap.classList.remove('open');
+    markSelection();
+    updateAddMenu();
+    if (sheetReturnFocus && document.body.contains(sheetReturnFocus)) sheetReturnFocus.focus();
+    sheetReturnFocus = null;
   };
+  panelWrap.addEventListener('click', function (e) { if (e.target === panelWrap) closeDayPanel(); });
+  document.getElementById('dp-close').addEventListener('click', function () { closeDayPanel(); });
+  // Sheet focus trap (≤1024px only).
+  panelWrap.addEventListener('keydown', function (e) {
+    if (e.key !== 'Tab' || docked() || !panelWrap.classList.contains('open')) return;
+    var f = panelSheet.querySelectorAll('button:not([disabled]), a[href], input, select, textarea');
+    var vis = Array.prototype.filter.call(f, function (el) { return el.offsetParent !== null; });
+    if (!vis.length) return;
+    if (e.shiftKey && document.activeElement === vis[0]) { e.preventDefault(); vis[vis.length - 1].focus(); }
+    else if (!e.shiftKey && document.activeElement === vis[vis.length - 1]) { e.preventDefault(); vis[0].focus(); }
+  });
+
+  // Prev/next day: moves the visible month/week along when the day leaves it.
+  function stepDay(delta) {
+    var n = ymdAddDays(state.openYmd || todayYmd(), delta);
+    state.openYmd = n;
+    panelForm = null; panelDeleteId = null;
+    if (inRange(n)) { renderDayPanel(); updateAddMenu(); return; }
+    var d = parseLocalYmd(n);
+    if (state.view === 'week') {
+      var ws = mondayOf(d);
+      state.weekStart = ymdOf(ws);
+      if (ws.getFullYear() !== state.year || ws.getMonth() + 1 !== state.month) {
+        state.year = ws.getFullYear(); state.month = ws.getMonth() + 1;
+        syncHash(); load();
+      } else { syncHash(); updateLabel(); render(); }
+    } else {
+      state.year = d.getFullYear(); state.month = d.getMonth() + 1;
+      syncHash(); load();
+    }
+  }
+  document.getElementById('dp-prev').addEventListener('click', function () { stepDay(-1); });
+  document.getElementById('dp-next').addEventListener('click', function () { stepDay(1); });
+
+  dockMq.addEventListener ? dockMq.addEventListener('change', onDockChange) : dockMq.addListener(onDockChange);
+  function onDockChange() {
+    applyPanelMode();
+    if (!docked()) { state.openYmd = null; panelForm = null; }
+    render();
+  }
+
+  // ── + Add dropdown ──
+  var addBtn = document.getElementById('add-btn');
+  var addMenu = document.getElementById('add-menu');
+  function addItems() { return Array.prototype.slice.call(addMenu.querySelectorAll('[role="menuitem"]')); }
+  function shortDate(ymd) { return parseLocalYmd(ymd).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }); }
+  function updateAddMenu() {
+    var ymd = selectedOrToday();
+    var lbl = ymd === todayYmd() ? 'For today' : 'For ' + shortDate(ymd);
+    document.getElementById('am-log-sub').textContent = lbl;
+    document.getElementById('am-plan-sub').textContent = proLocked ? 'Pro feature' : lbl;
+  }
+  function openAddMenu(focusIdx) {
+    updateAddMenu();
+    addMenu.classList.add('open');
+    addBtn.setAttribute('aria-expanded', 'true');
+    var items = addItems();
+    (items[focusIdx] || items[0]).focus();
+  }
+  function closeAddMenu(returnFocus) {
+    if (!addMenu.classList.contains('open')) return;
+    addMenu.classList.remove('open');
+    addBtn.setAttribute('aria-expanded', 'false');
+    if (returnFocus) addBtn.focus();
+  }
+  addBtn.addEventListener('click', function () {
+    if (addMenu.classList.contains('open')) closeAddMenu(false); else openAddMenu(0);
+  });
+  addBtn.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); openAddMenu(0); }
+    if (e.key === 'ArrowUp') { e.preventDefault(); openAddMenu(2); }
+  });
+  addMenu.addEventListener('keydown', function (e) {
+    var items = addItems();
+    var i = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+    else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
+    else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeAddMenu(true); }
+    else if (e.key === 'Tab') closeAddMenu(false);
+  });
+  addMenu.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('[data-add]') : null;
+    if (!b) return;
+    closeAddMenu(false);
+    doAdd(b.getAttribute('data-add'));
+  });
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest || !e.target.closest('.add-wrap')) closeAddMenu(false);
+  });
+  function doAdd(kind) {
+    var ymd = selectedOrToday();
+    if (kind === 'log') { window.location.href = window.BASE + '/log?date=' + encodeURIComponent(ymd); return; }
+    if (kind === 'event') { window.location.href = window.BASE + '/events'; return; }
+    if (kind === 'plan') {
+      if (proLocked) { toast('Planning sessions is a Pro feature — upgrade from your Billing page.'); }
+      openDayPanel(ymd, addBtn);
+      if (!proLocked) {
+        panelForm = { mode: 'create' };
+        renderDayPanel();
+        var f = document.getElementById('dpf-date');
+        if (f) f.focus();
+      }
+    }
+  }
+
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') closeDayPanel();
+    if (e.key === 'Escape') { if (addMenu.classList.contains('open')) closeAddMenu(true); else closeDayPanel(); }
   });
 
   // ── Panel actions (one delegated handler; buttons carry data-cal-action) ──
@@ -1002,8 +1272,6 @@ button{font-family:var(--font)}
     }).catch(function () { toast('Something went wrong — please try again.'); btn.disabled = false; });
   }
   function deletePlan(id, btn, future) {
-    // The three-way choice row already IS the confirmation for series
-    // members; the confirm() stays for plain single sessions only.
     if (panelDeleteId !== id && !window.confirm('Delete this planned session? This cannot be undone.')) return;
     btn.disabled = true;
     api('DELETE', '/api/plans/' + encodeURIComponent(id) + (future ? '?scope=future' : '')).then(function (r) {
@@ -1050,7 +1318,6 @@ button{font-family:var(--font)}
         var s = r.json.series || {};
         toast('✓ ' + r.json.count + ' sessions planned — ' + (s.end_date ? seriesLabel({ frequency: rep, start_date: date, end_date: s.end_date }) : 'series created') + '.');
       } else if (wasEdit && r.json.detached) {
-        // Date change on a series member = honest, visible detachment.
         toast('✓ Saved — the new date takes this session out of its series; series-wide deletes won\u2019t touch it.');
       } else {
         toast(wasEdit ? '✓ Plan updated' : '✓ Session planned');
@@ -1070,7 +1337,6 @@ button{font-family:var(--font)}
     }).catch(function () { toast('Something went wrong — please try again.'); btn.disabled = false; });
   }
 
-  // The plan form is injected HTML — repeat controls are wired by delegation.
   ['change', 'input'].forEach(function (evt) {
     document.getElementById('dp-body').addEventListener(evt, function (e) {
       var id = e.target && e.target.id;
@@ -1082,14 +1348,16 @@ button{font-family:var(--font)}
     if (!btn || btn.disabled) return;
     var act = btn.getAttribute('data-cal-action');
     var id = btn.getAttribute('data-id') || '';
-    if (act === 'plan-new') { panelForm = { mode: 'create' }; panelDeleteId = null; renderDayPanel(); }
+    if (act === 'plan-new') {
+      panelForm = { mode: 'create' }; panelDeleteId = null; renderDayPanel();
+      var f = document.getElementById('dpf-date'); if (f) f.focus();
+    }
     else if (act === 'plan-edit') { panelForm = { mode: 'edit', planId: id }; panelDeleteId = null; renderDayPanel(); }
     else if (act === 'plan-cancel-form') { panelForm = null; renderDayPanel(); }
     else if (act === 'plan-save') submitPlanForm(btn);
     else if (act === 'plan-done') patchPlanStatus(id, 'done', btn);
     else if (act === 'plan-skip') patchPlanStatus(id, 'skipped', btn);
     else if (act === 'plan-delete') {
-      // Series members get the explicit choice row; solo plans keep confirm().
       var day = state.byDayWide[state.openYmd] || { plans: [] };
       var target = null;
       day.plans.forEach(function (p) { if (p.id === id) target = p; });
@@ -1101,6 +1369,12 @@ button{font-family:var(--font)}
     else if (act === 'plan-delete-cancel') { panelDeleteId = null; renderDayPanel(); }
     else if (act === 'plan-log') { window.location.href = window.BASE + '/log?plan=' + encodeURIComponent(id); }
     else if (act === 'rsvp') rsvpFromPanel(id, btn.getAttribute('data-status'), btn);
+    else if (act === 'add-log') { window.location.href = window.BASE + '/log?date=' + encodeURIComponent(state.openYmd || todayYmd()); }
+    else if (act === 'upgrade') { window.location.href = window.BASE + '/billing'; }
+    else if (act === 'view-plans') {
+      if (!docked()) closeDayPanel();
+      setView('agenda');
+    }
   });
 
   // ── Wire controls ──
@@ -1110,13 +1384,23 @@ button{font-family:var(--font)}
   document.getElementById('vt-month').addEventListener('click', function () { setView('month'); });
   document.getElementById('vt-week').addEventListener('click', function () { setView('week'); });
   document.getElementById('vt-agenda').addEventListener('click', function () { setView('agenda'); });
+  // Tablist arrow-key roving (keeps click behaviour identical).
+  document.querySelector('.view-toggle').addEventListener('keydown', function (e) {
+    var order = ['month', 'week', 'agenda'];
+    var i = order.indexOf(state.view);
+    var n = e.key === 'ArrowRight' ? (i + 1) % 3 : e.key === 'ArrowLeft' ? (i + 2) % 3 : -1;
+    if (n < 0) return;
+    e.preventDefault();
+    setView(order[n]);
+    document.getElementById('vt-' + order[n]).focus();
+  });
 
+  applyPanelMode();
   var hashForcedWeek = initFromHash();
   if (hashForcedWeek) { state.view = 'week'; } else { initView(); }
-  // A stored week preference arriving without a week hash still needs an anchor.
   if (state.view === 'week' && !state.weekStart) ensureWeek();
   renderToggle();
-  syncHash(true); // canonicalise the landed-on entry (never push on load)
+  syncHash(true);
   load();
 })();
 </script>

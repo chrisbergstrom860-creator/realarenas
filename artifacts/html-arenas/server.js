@@ -7570,6 +7570,21 @@ app.get(BASE + '/api/events', requireAuth, async (req, res) => {
       invitedEvents = invEvs || [];
     }
 
+    // A calendar deep link may target a past event (or one beyond the list
+    // cap). Add only that row, through the canonical read gate; denied and
+    // missing IDs both leave the normal list unchanged. Never broaden dates.
+    const focusedId = typeof req.query.event === 'string' ? req.query.event : '';
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(focusedId)) {
+      const focusedEvent = await getVisibleEvent(userId, focusedId);
+      if (focusedEvent && ![...upcomingEvents, ...clubEvents, ...myCreatedEvents, ...invitedEvents]
+        .some(e => e.id === focusedEvent.id)) {
+        const targetList = focusedEvent.created_by === userId ? myCreatedEvents
+          : focusedEvent.visibility === 'public' ? upcomingEvents
+          : focusedEvent.club_id ? clubEvents : invitedEvents;
+        targetList.push(focusedEvent);
+      }
+    }
+
     const allEvents = [...upcomingEvents, ...clubEvents, ...myCreatedEvents, ...invitedEvents];
     const allEventIds = [...new Set(allEvents.map(e => e.id))];
 

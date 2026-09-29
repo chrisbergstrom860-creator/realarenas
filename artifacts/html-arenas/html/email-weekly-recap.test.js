@@ -1,8 +1,11 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { renderRecapEmail } = require('./email-weekly-recap');
+const { SPORTS } = require('../sports');
 const { chromium } = require('playwright-core');
 const { execFileSync } = require('node:child_process');
+
+const sportColors = Object.fromEntries(SPORTS.map(({ id, colors }) => [id, colors.text]));
 
 const links = {
   recapUrl: 'https://realarenas.com/recaps/2026-09-28',
@@ -32,8 +35,8 @@ function recapWithExtras() {
   const row = recap();
   row.chart.extras = {
     sportSplit: [
-      { sport: 'running', label: 'Running', color: '#e85d04', sessions: 2, hours: 1.4, km: 13.4 },
-      { sport: 'yoga', label: 'Yoga', color: '#7462b6', sessions: 1, hours: 0.5, km: 0 }
+      { sport: 'running', label: 'Running', color: sportColors.running, sessions: 2, hours: 1.4, km: 13.4 },
+      { sport: 'yoga', label: 'Yoga', color: sportColors.yoga, sessions: 1, hours: 0.5, km: 0 }
     ],
     hoursBySport: {
       labels: Array.from({ length: 11 }, (_, index) => {
@@ -42,8 +45,8 @@ function recapWithExtras() {
       }),
       relative: Array.from({ length: 11 }, (_, index) => index === 10 ? 'last_week' : `${11 - index}_weeks_ago`),
       series: [
-        { sport: 'running', label: 'Running', color: '#e85d04', values: [0, 0.01, 0.4, 0, 0.8, 0, 0, 1, 0, 0, 1.4] },
-        { sport: 'yoga', label: 'Yoga', color: '#7462b6', values: [0, 0, 0.1, 0, 0.2, 0, 0, 0, 0, 0, 0.5] }
+        { sport: 'running', label: 'Running', color: sportColors.running, values: [0, 0.01, 0.4, 0, 0.8, 0, 0, 1, 0, 0, 1.4] },
+        { sport: 'yoga', label: 'Yoga', color: sportColors.yoga, values: [0, 0, 0.1, 0, 0.2, 0, 0, 0, 0, 0, 0.5] }
       ],
       totals: [0, 0.01, 0.5, 0, 1, 0, 0, 1, 0, 0, 1.9]
     }
@@ -65,8 +68,8 @@ test('stored extras render split after metrics and 11-week chart after prose, in
   const cells = email.html.match(/<td width="9\.09%" valign="bottom"[^>]*>.*?<\/td>/g) || [];
   assert.equal(cells.length, 11);
   assert.doesNotMatch(cells[0], /background-color:/, 'zero week is an empty slot');
-  assert.match(cells[1], /height:2px;background-color:#e85d04/, 'tiny nonzero segment has a two-pixel minimum');
-  assert.match(cells[10], /background-color:#e85d04.*background-color:#7462b6/);
+  assert.match(cells[1], new RegExp(`height:2px;background-color:${sportColors.running}`), 'tiny nonzero segment has a two-pixel minimum');
+  assert.match(cells[10], new RegExp(`background-color:${sportColors.running}.*background-color:${sportColors.yoga}`));
 });
 
 test('legacy rows and empty stored split add no new sections', () => {
@@ -112,7 +115,7 @@ test('stored sport labels are escaped in text nodes and invalid colors cannot en
   assert.doesNotMatch(email.html, /<script>|<img src=x/);
   row.chart.extras.hoursBySport.series[0].color = 'red;position:fixed';
   assert.throws(() => renderRecapEmail(row, {}, links), /invalid stored sport color/);
-  row.chart.extras.hoursBySport.series[0].color = '#e85d04';
+  row.chart.extras.hoursBySport.series[0].color = sportColors.running;
   row.chart.extras.hoursBySport.labels[0] = '"><script>alert(1)</script>';
   assert.throws(() => renderRecapEmail(row, {}, links), /invalid stored week start/);
 });

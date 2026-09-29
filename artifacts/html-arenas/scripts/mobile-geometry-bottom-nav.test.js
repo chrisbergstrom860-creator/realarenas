@@ -12,7 +12,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const css = readFileSync(resolve(root, 'html/arenas.css'), 'utf8');
 const expected = { itemCount: 0, activeCount: 0, log: true, ai: true };
 
-function fixture({ swapEdges = false, wrongBottom = false, badStyle = false } = {}) {
+function fixture({ swapEdges = false, wrongBottom = false, badStyle = false, ariaHiddenContent = false } = {}) {
   const aiStyle = [
     swapEdges ? 'left:auto;right:16px' : '',
     wrongBottom ? 'bottom:80px' : '',
@@ -25,7 +25,7 @@ function fixture({ swapEdges = false, wrongBottom = false, badStyle = false } = 
   .main .last-content { position:absolute; left:16px; bottom:140px; }
 </style></head>
 <body>
-  <main class="main"><p class="last-content">ordinary final content</p></main>
+  <main class="main"><p class="last-content" ${ariaHiddenContent ? 'aria-hidden="true"' : ''}>ordinary final content</p></main>
   <nav class="bottom-nav bn-has-fab" aria-label="Bottom navigation"></nav>
   <button class="bn-fab bn-fab-log" aria-label="Log activity" style="${logStyle}">＋</button>
   <button class="bn-fab bn-fab-ai" aria-label="Ask AI Insights" style="${aiStyle}">✦</button>
@@ -45,7 +45,7 @@ async function audit(options) {
   const page = await browser.newPage({ viewport: { width: 360, height: 840 } });
   try {
     await page.setContent(fixture(options));
-    return await page.evaluate(bottomNavExpr(expected));
+    return await page.evaluate(bottomNavExpr({ ...expected, ...(options?.ariaHiddenContent ? { paintedContentRoot: '.main' } : {}) }));
   } finally {
     await page.close();
   }
@@ -56,6 +56,12 @@ test('production CSS baseline passes exact FAB edges, safe-area bottom, and dark
   assert.equal(result.ok, true, JSON.stringify(result.checks));
   assert.equal(result.checks.find((check) => check.name.startsWith('AI FAB is exactly 72px')).ok, true);
   assert.equal(result.checks.find((check) => check.name.startsWith('AI FAB preserves')).ok, true);
+});
+
+test('calendar aggregate aria-label does not hide painted children from clearance geometry', async () => {
+  const result = await audit({ ariaHiddenContent: true });
+  assert.equal(result.ok, true, JSON.stringify(result.checks));
+  assert.equal(result.checks.find(check => check.name.startsWith('last visible content')).ok, true);
 });
 
 test('swapped FAB edges fail the side-specific contract', async () => {

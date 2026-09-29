@@ -234,9 +234,13 @@ export function bottomNavExpr(expected) {
   }
   const main = document.querySelector('.main');
   const hasHiddenAncestor = (el) => {
+    // Calendar day controls expose an aggregate aria-label and hide duplicate
+    // child text from AT. Those children remain *painted* and must participate
+    // in clearance geometry; aria-hidden is not a CSS visibility property.
+    const measurePaint = E.paintedContentRoot && el.closest(E.paintedContentRoot);
     for (let a = el; a && a !== document.body; a = a.parentElement) {
       const s = getComputedStyle(a);
-      if (a.hidden || a.getAttribute('aria-hidden') === 'true' || s.display === 'none'
+      if (a.hidden || (!measurePaint && a.getAttribute('aria-hidden') === 'true') || s.display === 'none'
         || s.visibility === 'hidden' || s.opacity === '0') return true;
     }
     return false;
@@ -256,7 +260,7 @@ export function bottomNavExpr(expected) {
   };
   const content = [];
   if (main) for (const el of main.querySelectorAll('*')) {
-    if (hasHiddenAncestor(el) || el.matches('script,style,template,svg defs,*[aria-hidden="true"]')
+    if (hasHiddenAncestor(el) || el.matches('script,style,template,svg defs')
      || el.closest('.bottom-nav,.bn-fab,.bn-fab-ai')) continue;
     let fixed = false;
     for (let a = el; a && a !== document.body; a = a.parentElement) {

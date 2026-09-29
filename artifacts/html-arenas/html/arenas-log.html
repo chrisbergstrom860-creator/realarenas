@@ -555,6 +555,15 @@ function prefillFromPlan(planId) {
 
 document.addEventListener('DOMContentLoaded', function () {
   resetActivityForm();
+  // ?date=YYYY-MM-DD (calendar "+ Add → Log activity") prefills the date field.
+  // Real calendar dates only; ?plan= below still wins when both are present.
+  var dateMatch = /[?&]date=(\d{4})-(\d{2})-(\d{2})(?:&|$)/.exec(window.location.search || '');
+  if (dateMatch) {
+    var dm = new Date(Number(dateMatch[1]), Number(dateMatch[2]) - 1, Number(dateMatch[3]));
+    if (dm.getMonth() + 1 === Number(dateMatch[2]) && dm.getDate() === Number(dateMatch[3])) {
+      document.getElementById('act-date').value = dateMatch[1] + '-' + dateMatch[2] + '-' + dateMatch[3];
+    }
+  }
   var planMatch = /[?&]plan=([^&]+)/.exec(window.location.search || '');
   if (planMatch) prefillFromPlan(decodeURIComponent(planMatch[1]));
 });

@@ -28,6 +28,7 @@ import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { launchBrowser, auditPage } from './lib/mobile-geometry.js';
 import { mustWrite, makeCleanup } from './lib/checked-writes.js';
+import { calendarGeometryExpr } from './lib/calendar-geometry.mjs';
 
 const require = createRequire(import.meta.url);
 const { signRecapEmailToken } = require('../recap-email-token.js');
@@ -1214,15 +1215,28 @@ const PAGES = [
     ] },
   // Mobile defaults to WEEK view (no .cal-grid) — wait on the shell, then
   // audit week (default) plus an explicit switch to month.
-  { user: 'creator', name: 'calendar', path: '/calendar', waitFor: '.main', root: 'body', bottomNav: athleteNav('Cal'),
+  { user: 'creator', name: 'calendar', path: '/calendar', waitFor: '.main', root: 'body',
+    bottomNav: { ...athleteNav('Cal'), paintedContentRoot: '#cal-root' },
     surfaces: [{ name: 'calendar body', sel: '.main', min: 1 }],
     steps: [
-      { name: 'month', js: `(document.querySelector('[data-view="month"], #view-month') || [...document.querySelectorAll('button')].find((b) => /month/i.test(b.textContent)) || {click(){}}).click()`,
-        surfaces: [{ name: 'month grid', sel: '.cal-grid', min: 7 }] },
+      { name: 'month', js: `document.querySelector('#vt-month').click(); location.hash='${dt(-4).slice(0, 7)}'`,
+        waitFor: '.cal-day[data-ymd="' + dt(-4) + '"]',
+        surfaces: [{ name: 'month grid', sel: '.cal-grid', min: 7 }],
+        checks: [{ name: 'month pills, painted text and wrapping stats', js: calendarGeometryExpr({ month: true, stats: true }) }] },
       // Day panel on a seeded long-title day (mobile = bottom-sheet layout).
-      { name: 'modal-day-panel', js: `window.openDayPanel('${dt(-4)}')`,
-        waitFor: '#day-panel.open', root: '#day-panel',
-        surfaces: [{ name: 'day panel body', sel: '#day-panel .modal-body', min: 1 }] }
+      { name: 'populated-day-panel', js: `window.openDayPanel('${dt(-4)}')`,
+        waitFor: '#day-panel .dp-card', root: '#day-panel',
+        surfaces: [{ name: 'day panel body', sel: '#dp-body', min: 1 }],
+        checks: [{ name: 'dock or bottom sheet, no grid overlap or painted escape', js: calendarGeometryExpr({ panel: true, month: true }) }] },
+      { name: 'empty-day-panel', js: `window.openDayPanel('2099-01-15')`,
+        waitFor: '#dp-body', root: '#day-panel',
+        checks: [{ name: 'empty dock or bottom sheet', js: calendarGeometryExpr({ panel: true, empty: true }) }] },
+      { name: 'week', js: `window.closeDayPanel(); document.querySelector('#vt-week').click()`,
+        waitFor: '.wk-day', surfaces: [{ name: 'week days', sel: '.agenda', min: 7 }],
+        checks: [{ name: 'week painted text containment', js: calendarGeometryExpr() }] },
+      { name: 'agenda', js: `document.querySelector('#vt-agenda').click()`,
+        waitFor: '.ag-pills .cp', surfaces: [{ name: 'agenda cards', sel: '.ag-pills', min: 1 }],
+        checks: [{ name: 'agenda painted text containment', js: calendarGeometryExpr() }] }
     ] },
   { user: 'creator', name: 'athletes', path: '/athletes', waitFor: '#athlete-grid > *', root: 'body', bottomNav: athleteNav(),
     // NOTE: .rec-strip / .nearby-grid / .network-stats exist only as dead
