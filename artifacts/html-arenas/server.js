@@ -30,6 +30,7 @@ const {
   computeStreaks
 } = require('./tzdate');
 const { buildFourWeekActivityGrid } = require('./activity-grid');
+const { buildCalendarMonthStats, calendarActivityDetails } = require('./calendar-stats');
 const { dedupeUsersById, mostLoggedSportByUser } = require('./feed-sidebar-data');
 const {
   FALLBACK_COPY: AI_INSIGHTS_FALLBACK,
@@ -10454,15 +10455,15 @@ app.delete(BASE + '/api/plans/:id', requireAuth, async (req, res) => {
 // live in the neighbouring UTC month. The client filters to the exact local
 // month, so the overlap costs a few extra rows, never a wrong day.
 app.get(BASE + '/api/calendar/month', requireAuth, async (req, res) => {
-  const empty = { events: [], activities: [], plans: [] };
-  // Default month: server-local today (client always passes its own).
+  // Stats use the same account timezone resolution as Profile Stats.
   const now = new Date();
-  const fallback = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const statsTz = getUserTimezone(req.user);
+  const fallback = monthKey(now, statsTz);
   const monthParam = (typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month))
     ? req.query.month : fallback;
   const [year, month] = monthParam.split('-').map(Number);
   if (month < 1 || month > 12) return res.status(400).json({ error: 'invalid_month' });
-  if (!supabaseAdmin) return res.json({ month: monthParam, ...empty });
+  if (!supabaseAdmin) return res.status(503).json({ error: 'Calendar unavailable' });
   try {
     const userId = req.user.id;
     // Window widened ±8 days: ±1 is required by the GRID itself (timestamps
@@ -10496,12 +10497,15 @@ app.get(BASE + '/api/calendar/month', requireAuth, async (req, res) => {
         : Promise.resolve({ data: [] }),
       supabaseAdmin.from('event_rsvps').select('event_id, status').eq('user_id', userId),
       supabaseAdmin.from('activities')
-        .select('id, sport, title, distance, duration, date')
+        .select('id, sport, title, distance, duration, date, notes, feeling', { count: 'exact' })
         .eq('user_id', userId).gte('date', startIso).lt('date', endIso),
       supabaseAdmin.from('planned_sessions').select('*').eq('user_id', userId)
         .gte('date', planStart).lt('date', planEnd)
     ]);
 
+    if (activitiesRes.error) throw activitiesRes.error;
+    // Never label a PostgREST row-limit truncation as complete month stats.
+    if (activitiesRes.count > (activitiesRes.data || []).length) throw new Error('Calendar activities exceed response limit');
     const clubEvents = clubEventsRes.data || [];
     const myRsvpRows = myRsvpsRes.data || [];
     const rsvpByEvent = {};
@@ -10556,12 +10560,13 @@ app.get(BASE + '/api/calendar/month', requireAuth, async (req, res) => {
     res.json({
       month: monthParam,
       events,
-      activities: activitiesRes.data || [],
+      activities: (activitiesRes.data || []).map(a => calendarActivityDetails(a, { parseDistanceKmUnitAware, parseDurationHours })),
+      stats: buildCalendarMonthStats(activitiesRes.data || [], monthParam, statsTz, now, { parseDistanceKmUnitAware, parseDurationHours }),
       plans: await attachPlanSeries(plansRes.data || [])
     });
   } catch (err) {
     console.log('Calendar month error:', err.message);
-    res.json({ month: monthParam, ...empty });
+    res.status(500).json({ error: 'Could not load calendar' });
   }
 });
 

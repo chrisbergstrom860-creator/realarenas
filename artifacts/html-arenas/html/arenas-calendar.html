@@ -309,6 +309,7 @@ button{font-family:var(--font)}
     var m = /[?&]_today=(\d{4}-\d{2}-\d{2})(?:&|$)/.exec(window.location.search);
     return m ? m[1] : null;
   })();
+  // Day bucketing uses browser-local Date getters; server month stats use account timezone, which may differ.
   function nowLocal() { return TODAY_OVERRIDE ? parseLocalYmd(TODAY_OVERRIDE) : new Date(); }
   function todayYmd() { return TODAY_OVERRIDE || ymdOf(new Date()); }
   // Parse YYYY-MM-DD as a LOCAL date (parseLocalDate rule — new Date('YYYY-MM-DD')
