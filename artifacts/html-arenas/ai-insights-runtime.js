@@ -7,6 +7,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const Anthropic = require('@anthropic-ai/sdk');
 const { SPORT_POINTS, DISTANCE_SPORTS } = require('./sports');
+const { parseDistanceKmUnitAware, parseDurationHours } = require('./html/arenas-parse');
 const { COUNTRY_NAMES, US_STATE_NAMES } = require('./countries');
 const {
   isValidTimezone, getUserTimezone, dateParts, dayKey, keyToEpochDays, addDaysToKey,
@@ -43,38 +44,6 @@ function prefsFromMeta(meta) {
     out[key] = typeof stored[key] === 'boolean' ? stored[key] : (PREF_DEFAULTS[key] !== false);
   });
   return out;
-}
-
-// Canonical parser copied from the server's shared scoring path.  Do not
-// introduce a unit-blind alternative: miles and swim metres must stay correct.
-function parseDistanceKmUnitAware(distance) {
-  if (distance == null) return 0;
-  const raw = String(distance).toLowerCase().replace(/,/g, '');
-  const n = parseFloat(raw.replace(/[^0-9.]/g, ''));
-  if (isNaN(n) || n <= 0) return 0;
-  if (raw.includes('km')) return n;
-  if (raw.includes('mi')) return n * 1.609;
-  if (raw.includes('m')) return n / 1000;
-  return n;
-}
-
-function parseDurationHours(duration) {
-  if (!duration) return 0;
-  const str = String(duration).toLowerCase().trim();
-  if (str.includes(':')) {
-    const parts = str.split(':');
-    const a = parseFloat(parts[0]) || 0;
-    const b = parseFloat(parts[1]) || 0;
-    return a > 12 ? a / 60 + b / 3600 : a + b / 60;
-  }
-  const hMatch = str.match(/(\d+(?:\.\d+)?)\s*h/);
-  const mMatch = str.match(/(\d+(?:\.\d+)?)\s*m/);
-  if (hMatch || mMatch) {
-    return (parseFloat(hMatch && hMatch[1]) || 0) + (parseFloat(mMatch && mMatch[1]) || 0) / 60;
-  }
-  const num = parseFloat(str.replace(/[^0-9.]/g, ''));
-  if (isNaN(num)) return 0;
-  return num > 12 ? num / 60 : num;
 }
 
 function calculatePoints(activities) {

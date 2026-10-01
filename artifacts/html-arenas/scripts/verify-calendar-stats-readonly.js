@@ -10,6 +10,7 @@ const { createClient } = require('@supabase/supabase-js');
 const tz = require('../tzdate');
 const { SPORT_POINTS } = require('../sports');
 const calendar = require('../calendar-stats');
+const parsers = require('../html/arenas-parse');
 const ROOT = path.join(__dirname, '..');
 
 function extractFunction(source, name) {
@@ -57,9 +58,9 @@ async function main() {
     } }
   });
   const source = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
-  const context = vm.createContext({ console, supabaseAdmin: admin, ...tz, ...calendar, SPORT_POINTS });
+  const context = vm.createContext({ console, supabaseAdmin: admin, ...tz, ...calendar, ...parsers, SPORT_POINTS });
   for (const name of [
-    'parseDistanceKmUnitAware', 'parseDurationHours', 'calculatePoints',
+    'calculatePoints',
     'eventImageVersion', 'attachPlanSeries', 'visibleEventsFilter',
     'buildEventAccessCtx', 'canUserSeeEvent'
   ]) vm.runInContext(extractFunction(source, name), context);

@@ -1,15 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const vm = require('node:vm');
-const path = require('node:path');
 const { buildCalendarMonthStats, calendarActivityDetails } = require('./calendar-stats');
-const { extractFunction } = require('./scripts/verify-calendar-stats-readonly');
-const source = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
-const parsers = vm.createContext({});
-for (const name of ['parseDurationHours', 'parseDistanceKmUnitAware']) {
-  vm.runInContext(extractFunction(source, name), parsers);
-}
+const parsers = require('./html/arenas-parse');
 const zone = 'America/Los_Angeles';
 const now = new Date('2026-09-15T20:00:00Z');
 const row = (date, distance = '5mi', duration = '1h 42m') => ({ date, distance, duration });
@@ -61,7 +53,10 @@ test('missing or unparseable distance is null and missing duration is zero', () 
   }
 });
 test('duration enrichment follows canonical colon and text parsing', () => {
-  for (const [duration, minutes] of [['45:00', 45], ['1:30', 90], ['45m', 45], ['1h 42m', 102]]) {
+  for (const [duration, minutes] of [
+    ['45:00', 45], ['1:30', 90], ['45m', 45], ['1h 42m', 102],
+    ['1:02:15', 62], ['0:59:59', 60], ['2:00:00', 120], ['1:75:00', 0]
+  ]) {
     assert.equal(calendarActivityDetails({ duration }, parsers).durationMinutes, minutes);
   }
 });

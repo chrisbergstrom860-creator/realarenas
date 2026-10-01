@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { ACTIVITY_FEELING_LABELS } = require('./html/arenas-activity-card.js');
 const { SPORTS } = require('./sports');
+const { parseDurationHours } = require('./html/arenas-parse');
 const ACTIVITY_FEELING_KEYS = Object.keys(ACTIVITY_FEELING_LABELS);
 const ACTIVITY_FEELING_KEY_PATTERN = ACTIVITY_FEELING_KEYS.join('|');
 const SPORTS_BY_ID = new Map(SPORTS.map((sport) => [sport.id, sport]));
@@ -602,23 +603,10 @@ function humanCalendarWhen(value, context, includeTime) {
 
 function durationMinutes(value) {
   if (!value) return null;
+  const hours = parseDurationHours(value);
+  // Retain the prose formatter's null convention for unparseable durations.
   const text = String(value).trim().toLowerCase();
-  let hours = 0;
-  if (text.includes(':')) {
-    const [first, second] = text.split(':').map((part) => parseFloat(part) || 0);
-    hours = first > 12 ? first / 60 + second / 3600 : first + second / 60;
-  } else {
-    const hourMatch = text.match(/(\d+(?:\.\d+)?)\s*h/);
-    const minuteMatch = text.match(/(\d+(?:\.\d+)?)\s*m/);
-    if (hourMatch || minuteMatch) {
-      hours = (parseFloat(hourMatch && hourMatch[1]) || 0) +
-        (parseFloat(minuteMatch && minuteMatch[1]) || 0) / 60;
-    } else {
-      const number = parseFloat(text.replace(/[^0-9.]/g, ''));
-      if (!Number.isFinite(number)) return null;
-      hours = number > 12 ? number / 60 : number;
-    }
-  }
+  if (!text.includes(':') && !/(\d+(?:\.\d+)?)\s*[hm]/.test(text) && !Number.isFinite(hours)) return null;
   const minutes = Math.round(hours * 60);
   return minutes > 0 ? minutes : null;
 }

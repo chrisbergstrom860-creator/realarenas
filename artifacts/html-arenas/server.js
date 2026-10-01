@@ -31,6 +31,7 @@ const {
 } = require('./tzdate');
 const { buildFourWeekActivityGrid } = require('./activity-grid');
 const { buildCalendarMonthStats, calendarActivityDetails } = require('./calendar-stats');
+const { parseDistanceKmUnitAware, parseDurationHours, formatPace } = require('./html/arenas-parse');
 const { dedupeUsersById, mostLoggedSportByUser } = require('./feed-sidebar-data');
 const {
   FALLBACK_COPY: AI_INSIGHTS_FALLBACK,
@@ -512,6 +513,9 @@ app.get(['/html/arenas-post-image.js', '/arenas-post-image.js'], (req, res) => {
 
 app.get(['/html/arenas-stat-tiles.js', '/arenas-stat-tiles.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-stat-tiles.js'));
+});
+app.get(['/html/arenas-parse.js', '/arenas-parse.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-parse.js'));
 });
 app.get(['/html/arenas-club-post-header.js', '/arenas-club-post-header.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-club-post-header.js'));
@@ -3058,16 +3062,7 @@ app.get(BASE + '/api/feed/activities', requireAuth, async (req, res) => {
 // app-wide when the profile hero (unit-aware) and Stats & PRs (unit-blind)
 // visibly disagreed on the same all-time total. Do not reintroduce a second
 // distance parser.
-function parseDistanceKmUnitAware(distance) {
-  if (distance == null) return 0;
-  const raw = String(distance).toLowerCase().replace(/,/g, '');
-  const n = parseFloat(raw.replace(/[^0-9.]/g, ''));
-  if (isNaN(n) || n <= 0) return 0;
-  if (raw.includes('km')) return n;
-  if (raw.includes('mi')) return n * 1.609;
-  if (raw.includes('m')) return n / 1000;
-  return n;
-}
+// Implementation is shared with the browser and recap runtime in arenas-parse.js.
 
 // Total leaderboard points for a set of activities. Distance is UNIT-AWARE:
 // "10 mi" credits 16.09 km, "2,000m" credits 2 km (parseDistanceKmUnitAware) —
@@ -3522,29 +3517,8 @@ app.post(BASE + '/api/clubs/:clubId/nudge-atrisk', requireAuth, async (req, res)
 });
 
 // ── TRAINING LOAD ──
-// Parse an activity's logged duration into hours. Handles "45", "45 min",
-// "1h 30m" and "1:30" formats. A bare number > 12 is treated as minutes,
-// otherwise as hours (members tend to log short sessions in minutes).
-function parseDurationHours(duration) {
-  if (!duration) return 0;
-  const str = String(duration).toLowerCase().trim();
-  if (str.includes(':')) {
-    const parts = str.split(':');
-    const a = parseFloat(parts[0]) || 0;
-    const b = parseFloat(parts[1]) || 0;
-    // The log form steers users to "45:00" (MM:SS) for short sessions, but "1:30"
-    // means 1h30m. Treat a first segment > 12 as minutes:seconds, else hours:minutes.
-    return a > 12 ? a / 60 + b / 3600 : a + b / 60;
-  }
-  const hMatch = str.match(/(\d+(?:\.\d+)?)\s*h/);
-  const mMatch = str.match(/(\d+(?:\.\d+)?)\s*m/);
-  if (hMatch || mMatch) {
-    return (parseFloat(hMatch && hMatch[1]) || 0) + (parseFloat(mMatch && mMatch[1]) || 0) / 60;
-  }
-  const num = parseFloat(str.replace(/[^0-9.]/g, ''));
-  if (isNaN(num)) return 0;
-  return num > 12 ? num / 60 : num;
-}
+// parseDurationHours comes from arenas-parse.js: legacy short formats plus
+// validated three-part H:MM:SS, including seconds.
 
 // Week-grid boundaries now come from weekStartKey (tzdate.js) in the viewing
 // coach's zone — the old server-local getWeekStart helper is gone with them.
@@ -8748,9 +8722,7 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
     if (pacedRuns.length) {
       const withPace = pacedRuns.map((a) => ({ a, pace: (parseDurationHours(a.duration) * 60) / km(a) }));
       const best = withPace.reduce((m, x) => x.pace < m.pace ? x : m);
-      const mins = Math.floor(best.pace);
-      const secs = Math.round((best.pace - mins) * 60);
-      prs.push({ icon: '⚡', label: 'Fastest pace · run', value: `${mins}:${String(secs).padStart(2, '0')} /km`, meta: fmtDate(best.a.date) + (best.a.title ? ' · ' + best.a.title : '') });
+      prs.push({ icon: '⚡', label: 'Fastest pace · run', value: formatPace(best.pace) + ' /km', meta: fmtDate(best.a.date) + (best.a.title ? ' · ' + best.a.title : '') });
     }
     const rides = acts.filter((a) => a.sport === 'cycling' && km(a) > 0);
     if (rides.length) {

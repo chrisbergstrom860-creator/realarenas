@@ -377,7 +377,7 @@ async function verifyWeeklyRecapRunnerAndStorage() {
       captured.length === providerCountBeforeRunner + 1 &&
       runnerProviderRecord?.envelope?.question === aiInsights.WEEKLY_RECAP_QUESTION &&
       Array.isArray(runnerProviderRecord?.envelope?.history) && runnerProviderRecord.envelope.history.length === 0 &&
-      runnerProviderRecord.body.system.some((block) => /WEEKLY_RECAP_MODE v2/.test(block.text)),
+      runnerProviderRecord.body.system.some((block) => block.text.includes(`WEEKLY_RECAP_MODE v${aiInsights.WEEKLY_RECAP_CONTRACT_VERSION}\n`)),
     JSON.stringify({ status: runner.status, stored: runnerStored && runnerStored.id, validated: runner.validated,
       serviceCalls, provider: runnerProviderRecord && runnerProviderRecord.envelope }));
   const lowHistoryProviderCount = captured.length;
@@ -2474,7 +2474,7 @@ async function verifyNoFixtureResidue(ids, clubIds) {
         check('last-month evidence uses the labelled previous month, never the current month',
           result.body.evidence.some((item) => item.path === `last12Months.${previousIndex}.sessions`) &&
           !result.body.evidence.some((item) => item.path === `last12Months.${currentIndex}.sessions`) &&
-          result.body.answer.includes('last month (August 2026)'),
+          result.body.answer.includes(`last month (${monthLabel(providerRecord.envelope.data.last12Months[previousIndex].month, true)})`),
           JSON.stringify(result.body));
       }
       if (question === 'How did I do last week on my weightlifting goal?') {
