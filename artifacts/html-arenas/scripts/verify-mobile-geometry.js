@@ -29,6 +29,7 @@ import { createRequire } from 'node:module';
 import { launchBrowser, auditPage } from './lib/mobile-geometry.js';
 import { mustWrite, makeCleanup } from './lib/checked-writes.js';
 import { calendarGeometryExpr } from './lib/calendar-geometry.mjs';
+import { logGeometryExpr } from './lib/log-geometry.mjs';
 
 const require = createRequire(import.meta.url);
 const { signRecapEmailToken } = require('../recap-email-token.js');
@@ -1250,8 +1251,40 @@ const PAGES = [
     ] },
   { user: 'member', name: 'clubs-directory', path: '/clubs', waitFor: '#club-grid > *', root: 'body', bottomNav: athleteNav(),
     surfaces: [{ name: 'club cards', sel: '#club-grid', min: 1 }] },
-  { user: 'creator', name: 'log', path: '/log', waitFor: 'form, #act-form, .main', root: 'body', bottomNav: athleteNav(null, false),
-    surfaces: [{ name: 'log form', sel: '.main', min: 1 }] },
+  { user: 'creator', name: 'log', path: '/log', waitFor: '#log-form', root: 'body', bottomNav: athleteNav(null, false),
+    surfaces: [{ name: 'log form', sel: '#log-form', min: 2 }, { name: 'log side', sel: '#log-side', min: 1 }],
+    checks: [{ name: 'log responsive columns, controls and painted text', js: logGeometryExpr() }],
+    steps: [
+      { name: 'selected-running', js: `(() => {
+          const chip = document.querySelector('#act-sport-chips [data-sport="running"]');
+          if (!chip) throw new Error('Log running selector missing');
+          chip.click();
+          const set = (id, value) => {
+            const el = document.getElementById(id);
+            if (!el) throw new Error('Log field missing: ' + id);
+            el.value = value; el.dispatchEvent(new Event('input', { bubbles: true }));
+          };
+          set('act-title', 'Morning running session');
+          set('sf-distance', '10.5 km'); set('sf-hr', '158 bpm');
+          set('sf-elev', '120m'); set('sf-cad', '178 spm');
+          set('sf-runtype', 'Long run');
+        })()`,
+        waitFor: '#log-preview .ac-title',
+        surfaces: [{ name: 'running controls', sel: '#act-sport-fields-body > div', min: 6 }],
+        checks: [{ name: 'selected running fields and live preview containment', js: logGeometryExpr({ populated: true }) }] },
+      { name: 'long-text-expanded-preview', js: `(() => {
+          const title = document.getElementById('act-title'), notes = document.getElementById('act-notes');
+          title.value = 'Long mountain endurance session — ' + 'UnbrokenRunningTitle'.repeat(8) + ' — steady effort and recovery';
+          notes.value = ('A long training note with steady effort, hills and recovery.\\n' + 'UnbrokenNotesToken'.repeat(8) + '\\n').repeat(4).slice(0, 500);
+          for (const el of [title, notes]) el.dispatchEvent(new Event('input', { bubbles: true }));
+          const toggle = document.querySelector('#log-preview-toggle');
+          if (innerWidth <= 1024 && toggle.getAttribute('aria-expanded') !== 'true') toggle.click();
+        })()`,
+        waitFor: '#log-preview .fa-notes',
+        surfaces: [{ name: 'expanded activity preview', sel: '#log-preview', min: 1 }],
+        checks: [{ name: 'long title, 500-character notes and painted containment (intentional notes clamp accepted)',
+          js: logGeometryExpr({ populated: true, expanded: true, longText: true }) }] }
+    ] },
   { user: 'creator', name: 'billing', path: '/billing', waitFor: '.main', root: 'body', bottomNav: athleteNav(),
     surfaces: [{ name: 'billing content', sel: '.main', min: 1 }] },
   // The ordinary Replit server intentionally has CLUB_PLAN_GATES_ENABLED unset,

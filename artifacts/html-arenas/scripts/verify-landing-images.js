@@ -50,6 +50,25 @@ const CHALLENGES_800 = asset('challenges-hero-800.avif');
 const CHALLENGES_1600 = asset('challenges-hero-1600.avif');
 const CHALLENGES_MOBILE = asset('challenges-hero-mobile.avif');
 const CHALLENGES_WIDTHS = [360, 380, 414, 768, 769, 1280, 1920];
+const LOG_800 = asset('log-hero-800.avif');
+const LOG_1600 = asset('log-hero-1600.avif');
+const LOG_MOBILE = asset('log-hero-mobile.avif');
+const LOG_EXPECTATIONS = [
+  { width: 360, images: [LOG_MOBILE, LOG_MOBILE, LOG_MOBILE] },
+  { width: 380, images: [LOG_MOBILE, LOG_MOBILE, LOG_MOBILE] },
+  { width: 768, images: [LOG_MOBILE, LOG_MOBILE, LOG_MOBILE] },
+  { width: 769, images: [LOG_800, LOG_1600, LOG_1600] },
+  { width: 1280, images: [LOG_1600, LOG_1600, LOG_1600] },
+  { width: 1920, images: [LOG_1600, LOG_1600, LOG_1600] }
+];
+const APPROVED_LOG_HERO_HASHES = {
+  'log-hero-800.avif': '7f98be14d8a87d2edb9307c2abab95a15b4344bb87e6fa24f863e2ad77597acb',
+  'log-hero-800.webp': '110bd0fae06745fc812fdb81e335815357886c3889ae4da83b51e3890112b83b',
+  'log-hero-1600.avif': '9822f62e4e19be0a821ab17f4d745ac2f6dbeb4c817811b98687e871c2489f81',
+  'log-hero-1600.webp': '35d9f910b8ab37ed3d1ffe27c75715f646f290f48e53d7d2ba991cc0e2a632f9',
+  'log-hero-mobile.avif': 'd8d18069908e7ba1cd829d97b082873e211c18570bfc781f622b2c18f7e4b00b',
+  'log-hero-mobile.webp': 'e4b8999dd386cd1b8ec2210b163700594b8e51c26b9107a5986a181c0c655587'
+};
 const APPROVED_LEADERBOARD_HERO_HASHES = {
   'leaderboards-hero-hiker-800.avif': 'e663dc32c5504b85fbb2e16670dcef8001bfd3d21c1877a044b06a6efe5d1649',
   'leaderboards-hero-hiker-800.webp': '3a9c8f714e0634f856034ff43924d6972a728de8eddb2ab3bba6fce1289f534d',
@@ -117,6 +136,7 @@ const AUTH_RE = /^auth-football-(?:800|1536)\.[0-9a-f]{12}\.(?:avif|webp)$/;
 const FEED_RE = /^feed-yoga-(?:800|1600)\.[0-9a-f]{12}\.(?:avif|webp)$/;
 const EVENTS_RE = /^events-hikers-(?:800|1600)\.[0-9a-f]{12}\.(?:avif|webp)$/;
 const CHALLENGES_RE = /^challenges-hero-(?:800|1600|mobile)\.[0-9a-f]{12}\.(?:avif|webp)$/;
+const LOG_RE = /^log-hero-(?:800|1600|mobile)\.[0-9a-f]{12}\.(?:avif|webp)$/;
 
 let passes = 0;
 let failures = 0;
@@ -163,7 +183,7 @@ function expectedAssetFiles() {
 function verifyManifestAndReferences() {
   const entries = Object.entries(MANIFEST.assets || {});
   const allowedFiles = new Set(entries.map(([, entry]) => entry.file));
-  check(null, 'manifest has the complete 54-image inventory', entries.length === 54, '54', String(entries.length));
+  check(null, 'manifest has the complete 60-image inventory', entries.length === 60, '60', String(entries.length));
   for (const [logicalName, entry] of entries) {
     const extension = path.extname(logicalName).replace('.', '');
     const pattern = new RegExp(`\\.${entry.sha256.slice(0, MANIFEST.hashLength)}\\.${extension}$`);
@@ -181,7 +201,8 @@ function verifyManifestAndReferences() {
     'arenas-leaderboards.html',
     'arenas-feed.html',
     'arenas-events.html',
-    'arenas-challenges.html'
+    'arenas-challenges.html',
+    'arenas-log.html'
   ]) {
     const html = fs.readFileSync(path.join(__dirname, '..', 'html', htmlName), 'utf8');
     const references = [...html.matchAll(/\/html\/landing-assets\/([^"'()\s,]+)/g)]
@@ -404,6 +425,94 @@ async function verifyEventsImageMatrix() {
         const events = requested.filter((file) => EVENTS_RE.test(file));
         assertImageRequests(caseKey, 'Events banner', expected, events);
         if (!failedCases.has(caseKey)) console.log(`  ok  ${caseKey} — ${receivedList(events)}`);
+        await context.close();
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
+async function verifyLogImageContract() {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'html', 'arenas-log.html'), 'utf8');
+  console.log('— Log hero responsive image contract —');
+  for (const [band, width, height] of [
+    ['800', 800, 267], ['1600', 1600, 533], ['mobile', 964, 723]
+  ]) {
+    for (const format of ['avif', 'webp']) {
+      const logicalName = `log-hero-${band}.${format}`;
+      const file = asset(logicalName);
+      const filePath = path.join(ASSET_DIR, file);
+      const metadata = await sharp(filePath).metadata();
+      check(null, `${file} dimensions`,
+        metadata.width === width && metadata.height === height,
+        `${width}x${height}`, `${metadata.width}x${metadata.height}`);
+      const digest = crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+      check(null, `${file} is an approved Log hero encode`,
+        digest === APPROVED_LOG_HERO_HASHES[logicalName],
+        APPROVED_LOG_HERO_HASHES[logicalName], digest);
+    }
+  }
+  const sources = [...html.matchAll(/<source\b[^>]*>/g)]
+    .map(([tag]) => tag).filter((tag) => tag.includes('log-hero-'));
+  check(null, 'Log mobile AVIF/WebP pair precedes desktop sources at <=768px',
+    sources.length === 4 && ['avif', 'webp'].every((format, index) =>
+      /media="\(max-width:\s*768px\)"/.test(sources[index]) &&
+      sources[index].includes(`type="image/${format}"`) &&
+      sources[index].includes(asset(`log-hero-mobile.${format}`)) &&
+      (!sources[index].includes('964w') || sources[index].includes('sizes="100vw"')) &&
+      sources[index + 2].includes(`${asset(`log-hero-800.${format}`)} 800w`) &&
+      sources[index + 2].includes(`${asset(`log-hero-1600.${format}`)} 1600w`) &&
+      sources[index + 2].includes('sizes="(min-width:1024px) calc(100vw - 216px), 100vw"') &&
+      !sources[index + 2].includes('media=')));
+}
+
+async function verifyLogImageMatrix() {
+  const browser = await chromium.launch({
+    headless: true, executablePath: EXECUTABLE, args: ['--no-sandbox']
+  });
+  // Exercise the authored page's real image markup and CSS without logging in
+  // or seeding data. Scripts are irrelevant to image selection; removing them
+  // avoids form/API side effects. The nav matches the server-injected shell
+  // selector used by the shared mobile stylesheet.
+  const matrixPage = fs.readFileSync(path.join(__dirname, '..', 'html', 'arenas-log.html'), 'utf8')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace('</body>', '<nav class="bottom-nav bn-has-fab" aria-label="Primary"></nav></body>');
+  console.log(`— Log hero browser matrix (${LOG_EXPECTATIONS.length * 3} fresh-cache cases) —`);
+  try {
+    for (const row of LOG_EXPECTATIONS) {
+      for (const dpr of [1, 2, 3]) {
+        const caseKey = `Log hero ${row.width}px DPR ${dpr}`;
+        const expected = row.images[dpr - 1];
+        const context = await browser.newContext({
+          viewport: { width: row.width, height: 500 }, deviceScaleFactor: dpr,
+          serviceWorkers: 'block', extraHTTPHeaders: { 'Cache-Control': 'no-cache' }
+        });
+        const page = await context.newPage();
+        const session = await context.newCDPSession(page);
+        await session.send('Network.setCacheDisabled', { cacheDisabled: true });
+        await page.route('**/html/log?verify-log-images=*', (route) => route.fulfill({
+          status: 200, contentType: 'text/html',
+          headers: { 'cache-control': 'no-store' }, body: matrixPage
+        }));
+        const requested = [];
+        page.on('request', (request) => {
+          const pathname = new URL(request.url()).pathname;
+          const prefix = '/html/landing-assets/';
+          if (pathname.startsWith(prefix)) requested.push(pathname.slice(prefix.length));
+        });
+        await page.goto(`${BASE_URL}/log?verify-log-images=${row.width}-${dpr}`, {
+          waitUntil: 'networkidle', timeout: 30000
+        });
+        const image = page.locator('picture img[src*="log-hero-"]');
+        await image.evaluate((img) => img.decode());
+        const selected = await image.evaluate((img) =>
+          new URL(img.currentSrc).pathname.split('/').pop());
+        check(caseKey, 'Log currentSrc selects the correct art direction',
+          selected === expected, expected, selected);
+        const images = requested.filter((file) => LOG_RE.test(file));
+        assertImageRequests(caseKey, 'Log hero', expected, images);
+        if (!failedCases.has(caseKey)) console.log(`  ok  ${caseKey} — ${receivedList(images)}`);
         await context.close();
       }
     }
@@ -742,18 +851,20 @@ function reportBoundaryFailures() {
   await verifyFeedImageContract();
   await verifyEventsImageContract();
   await verifyChallengesImageContract();
+  await verifyLogImageContract();
   await verifyBrowserMatrix();
   await verifyForClubsMatrix();
   await verifyAuthImageMatrix();
   await verifyFeedImageMatrix();
   await verifyEventsImageMatrix();
   await verifyChallengesImageMatrix();
+  await verifyLogImageMatrix();
   reportBoundaryFailures();
   if (failures) {
     console.log(`\nverify-landing-images FAILED (${failures} failures, ${passes} passes)`);
     process.exit(1);
   }
-  console.log(`\nverify-landing-images OK (${passes} assertions; ${EXPECTATIONS.length * 3 + 53 + CHALLENGES_WIDTHS.length * 3} browser cases; ${expectedAssetFiles().length} served files)`);
+  console.log(`\nverify-landing-images OK (${passes} assertions; ${EXPECTATIONS.length * 3 + 53 + CHALLENGES_WIDTHS.length * 3 + LOG_EXPECTATIONS.length * 3} browser cases; ${expectedAssetFiles().length} served files)`);
 })().catch((error) => {
   console.error('verify-landing-images FATAL:', error && error.stack ? error.stack : error);
   process.exit(1);

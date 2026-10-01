@@ -325,6 +325,42 @@
       "sha256": "3a9c8f714e0634f856034ff43924d6972a728de8eddb2ab3bba6fce1289f534d",
       "width": 800,
       "height": 267
+    },
+    "log-hero-1600.avif": {
+      "file": "log-hero-1600.9822f62e4e19.avif",
+      "sha256": "9822f62e4e19be0a821ab17f4d745ac2f6dbeb4c817811b98687e871c2489f81",
+      "width": 1600,
+      "height": 533
+    },
+    "log-hero-1600.webp": {
+      "file": "log-hero-1600.35d9f910b8ab.webp",
+      "sha256": "35d9f910b8ab37ed3d1ffe27c75715f646f290f48e53d7d2ba991cc0e2a632f9",
+      "width": 1600,
+      "height": 533
+    },
+    "log-hero-800.avif": {
+      "file": "log-hero-800.7f98be14d8a8.avif",
+      "sha256": "7f98be14d8a87d2edb9307c2abab95a15b4344bb87e6fa24f863e2ad77597acb",
+      "width": 800,
+      "height": 267
+    },
+    "log-hero-800.webp": {
+      "file": "log-hero-800.110bd0fae067.webp",
+      "sha256": "110bd0fae06745fc812fdb81e335815357886c3889ae4da83b51e3890112b83b",
+      "width": 800,
+      "height": 267
+    },
+    "log-hero-mobile.avif": {
+      "file": "log-hero-mobile.d8d18069908e.avif",
+      "sha256": "d8d18069908e7ba1cd829d97b082873e211c18570bfc781f622b2c18f7e4b00b",
+      "width": 964,
+      "height": 723
+    },
+    "log-hero-mobile.webp": {
+      "file": "log-hero-mobile.e4b8999dd386.webp",
+      "sha256": "e4b8999dd386cd1b8ec2210b163700594b8e51c26b9107a5986a181c0c655587",
+      "width": 964,
+      "height": 723
     }
   }
 }

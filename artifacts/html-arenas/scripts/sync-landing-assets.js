@@ -22,6 +22,7 @@ const DEFAULT_LOGICAL_ASSETS = [
   ...variants('feed-yoga', ['800', '1600']),
   ...variants('events-hikers', ['800', '1600']),
   ...variants('challenges-hero', ['800', '1600', 'mobile']),
+  ...variants('log-hero', ['800', '1600', 'mobile']),
   ...variants('analytics-weekly-activity', ['800', '1600']),
   ...variants('analytics-mobile-composite', [
     '380-2x', '380-3x', '390-2x', '390-3x',
@@ -55,7 +56,8 @@ async function syncLandingAssets(options = {}) {
     path.join(__dirname, '..', 'html', 'arenas-leaderboards.html'),
     path.join(__dirname, '..', 'html', 'arenas-feed.html'),
     path.join(__dirname, '..', 'html', 'arenas-events.html'),
-    path.join(__dirname, '..', 'html', 'arenas-challenges.html')
+    path.join(__dirname, '..', 'html', 'arenas-challenges.html'),
+    path.join(__dirname, '..', 'html', 'arenas-log.html')
   ];
   const logicalAssets = [...(options.logicalAssets || DEFAULT_LOGICAL_ASSETS)].sort();
   const previous = readManifest(manifestPath);
