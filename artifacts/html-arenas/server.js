@@ -32,6 +32,7 @@ const {
 const { buildFourWeekActivityGrid } = require('./activity-grid');
 const { buildCalendarMonthStats, calendarActivityDetails } = require('./calendar-stats');
 const { parseDistanceKmUnitAware, parseDurationHours, formatPace } = require('./html/arenas-parse');
+const { validate: validateActivityDuration } = require('./html/arenas-duration');
 const { dedupeUsersById, mostLoggedSportByUser } = require('./feed-sidebar-data');
 const {
   FALLBACK_COPY: AI_INSIGHTS_FALLBACK,
@@ -516,6 +517,9 @@ app.get(['/html/arenas-stat-tiles.js', '/arenas-stat-tiles.js'], (req, res) => {
 });
 app.get(['/html/arenas-parse.js', '/arenas-parse.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-parse.js'));
+});
+app.get(['/html/arenas-duration.js', '/arenas-duration.js'], (req, res) => {
+  res.sendFile(path.join(HTML, 'arenas-duration.js'));
 });
 app.get(['/html/arenas-club-post-header.js', '/arenas-club-post-header.js'], (req, res) => {
   res.sendFile(path.join(HTML, 'arenas-club-post-header.js'));
@@ -2778,6 +2782,10 @@ app.post(BASE + '/api/activities/create', requireAuth, async (req, res) => {
   const b = req.body || {};
   if (!b.sport) return res.json({ error: 'Please select a sport' });
   if (!b.title || !b.title.trim()) return res.json({ error: 'Please enter an activity title' });
+  const durationCheck = validateActivityDuration(b.duration);
+  if (!durationCheck.valid) {
+    return res.status(400).json({ error: durationCheck.error, field: 'duration' });
+  }
   // Notes are public (feed + club feeds); cap length server-side — the log
   // form's maxlength is UX only, not a security boundary. 500 chars matches
   // the planned-session notes limit.

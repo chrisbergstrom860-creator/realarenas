@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
+import { readFileSync } from 'node:fs';
 import { logGeometryExpr } from './lib/log-geometry.mjs';
 
 function probe({
@@ -83,6 +84,13 @@ function probe({
 }
 
 function rectFor(el) { return el.getBoundingClientRect(); }
+
+test('selected-running readiness targets visible controls while mobile preview is collapsed', () => {
+  const guard = readFileSync(new URL('./verify-mobile-geometry.js', import.meta.url), 'utf8');
+  const state = guard.slice(guard.indexOf("name: 'selected-running'"), guard.indexOf("name: 'long-text-expanded-preview'"));
+  assert.match(state, /waitFor: '#act-sport-fields-body #sf-distance'/);
+  assert.doesNotMatch(state, /waitFor: '#log-preview/);
+});
 
 for (const width of [360, 380, 414, 1280, 1440, 1920]) {
   test(`log columns and expanded long-text preview at ${width}px`, () => {

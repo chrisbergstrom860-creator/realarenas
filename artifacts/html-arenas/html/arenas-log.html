@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', function(){
 <link rel="stylesheet" href="/html/arenas.css">
 <script src="/html/arenas-club-create.js"></script>
 <script src="/html/arenas-parse.js"></script>
+<script src="/html/arenas-duration.js"></script>
 <script src="/html/arenas-stat-tiles.js"></script>
 <script src="/html/arenas-activity-card.js"></script>
 <style>
@@ -58,6 +59,9 @@ button{font-family:var(--font)}
 .log-preview-toggle{display:none;width:100%;background:none;border:none;cursor:pointer;justify-content:space-between;align-items:center;padding:14px 16px;font-size:13px;font-weight:700;color:var(--gray-900)}
 .log-preview-body{padding:0 12px 12px;min-width:0;overflow-wrap:anywhere}
 .log-preview-body .post-note-card{border:var(--border);border-radius:var(--radius);background:white;box-shadow:var(--shadow)}
+/* Plex Mono's 19px glyph bounds exceed the shared 16.5px stat line box.
+   Give preview values real vertical room, including wrapped units. */
+.log-preview-body .ac-stat .sv:not(.tx){line-height:1.4}
 .log-preview-empty{border:1.5px dashed var(--gray-200);border-radius:var(--radius);padding:28px 16px;text-align:center;color:var(--gray-400);font-size:13px;background:var(--gray-50)}
 .log-preview-empty span{display:block;font-size:22px;margin-bottom:6px}
 .log-tips{list-style:none;margin:0;padding:0 16px 14px}
@@ -83,6 +87,11 @@ button{font-family:var(--font)}
    their intrinsic width (~180px), which overflows narrow grid columns — the
    root cause of the per-sport panels spilling past the viewport on phones. */
 .main .form-input,.main .form-select,.main .form-textarea{width:100%;min-width:0}
+.duration-feedback{margin-top:6px;font-size:12px;line-height:1.4;overflow-wrap:anywhere;color:var(--gray-600)}
+.duration-error{color:#A32D2D}
+#act-duration[aria-invalid="true"]{border-color:#A32D2D}
+.duration-warning{margin-top:8px;padding:8px 10px;border:1px solid #fde68a;border-radius:var(--radius);background:var(--yellow-light);color:#7a5c00;font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+.duration-alternative{display:block;max-width:100%;margin-top:8px;padding:6px 9px;border:1px solid #7a5c00;border-radius:6px;background:white;color:#7a5c00;font-size:12px;line-height:1.4;cursor:pointer}
 @media (max-width:768px){
   .main{padding:20px 14px 90px;gap:14px}
   /* Per-sport detail panels (activitySportFields templates) carry inline
@@ -197,8 +206,14 @@ button{font-family:var(--font)}
               <input class="form-input" type="date" id="act-date">
             </div>
             <div>
-              <div style="font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Duration *</div>
-              <input class="form-input" type="text" id="act-duration" placeholder="e.g. 45:00 or 1h 20m">
+              <label for="act-duration" style="display:block;font-size:11px;font-weight:600;color:var(--gray-600);margin-bottom:4px">Duration *</label>
+              <input class="form-input" type="text" id="act-duration" placeholder="e.g. 45:00 or 1h 20m" aria-invalid="false" aria-describedby="act-duration-interpretation act-duration-error act-duration-warning-text">
+              <div class="duration-feedback" id="act-duration-interpretation" role="status" aria-live="polite" aria-atomic="true"></div>
+              <div class="duration-feedback duration-error" id="act-duration-error" aria-live="polite" aria-atomic="true" hidden></div>
+              <div class="duration-warning" id="act-duration-warning" hidden>
+                <div id="act-duration-warning-text" role="status" aria-live="polite" aria-atomic="true"></div>
+                <button type="button" class="duration-alternative" id="act-duration-use-alternative" onclick="useDurationAlternative()"></button>
+              </div>
             </div>
           </div>
 
@@ -291,6 +306,38 @@ button{font-family:var(--font)}
 var selectedActivitySport = null;
 var selectedActivityFeeling = null;
 var ACT_BASE = window.BASE || '';
+var durationTouched = false;
+var durationServerError = '';
+
+function showDurationError(message) {
+  var input = document.getElementById('act-duration');
+  var error = document.getElementById('act-duration-error');
+  error.textContent = message || '';
+  error.hidden = !message;
+  input.setAttribute('aria-invalid', message ? 'true' : 'false');
+}
+
+function updateDurationFeedback() {
+  var result = window.arenasDuration.inspect(actVal('act-duration') || '', selectedActivitySport, actVal('sf-distance'));
+  document.getElementById('act-duration-interpretation').textContent = result.valid ? 'Interpreted as ' + result.label : '';
+  showDurationError(durationServerError || (!result.valid && durationTouched ? result.error : ''));
+  var warning = result.warning;
+  var text = document.getElementById('act-duration-warning-text');
+  document.getElementById('act-duration-warning').hidden = !warning;
+  text.textContent = warning ? 'This duration gives a running pace of ' + warning.pace + '/km, outside 2:00–20:00/km. Did you mean ' + warning.alternativeLabel + ' (' + warning.alternativePace + '/km)?' +
+    (warning.alternativePlausible ? ' Change it only if that is what you intended.' : ' The alternative is also outside that range; check both duration and distance before choosing.') : '';
+  document.getElementById('act-duration-use-alternative').textContent = warning ? 'Use ' + warning.alternativeLabel + ' (' + warning.alternativeValue + ')' : '';
+  return result;
+}
+
+function useDurationAlternative() {
+  var input = document.getElementById('act-duration');
+  var result = window.arenasDuration.inspect(input.value, selectedActivitySport, actVal('sf-distance'));
+  if (!result.warning) return;
+  input.value = result.warning.alternativeValue;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.focus();
+}
 
 var activitySportFields = {
   running: {
@@ -441,6 +488,8 @@ function resetActivityForm() {
   document.getElementById('act-date').value = today;
   document.getElementById('act-title').value = '';
   document.getElementById('act-duration').value = '';
+  durationTouched = false;
+  durationServerError = '';
   document.getElementById('act-notes').value = '';
   updateNotesCount();
   document.querySelectorAll('.act-sport-chip, .act-feeling-chip').forEach(function(c){ c.classList.remove('selected'); });
@@ -502,9 +551,14 @@ async function saveActivity() {
   var duration = (actVal('act-duration') || '').trim();
   var notes = (actVal('act-notes') || '').trim();
 
+  durationTouched = true;
+  durationServerError = '';
+  if (!updateDurationFeedback().valid) {
+    document.getElementById('act-duration').focus();
+    return;
+  }
   if (!sport) { showActError('Please select a sport.'); return; }
   if (!title) { showActError('Please enter an activity title.'); return; }
-  if (!duration) { showActError('Please enter the duration.'); return; }
 
   var btn = document.getElementById('save-activity-btn');
   btn.textContent = 'Saving…';
@@ -569,7 +623,13 @@ async function saveActivity() {
     });
     var result = await response.json();
     if (result.error) {
-      showActError('Error saving: ' + result.error);
+      if (result.field === 'duration') {
+        durationServerError = result.error;
+        updateDurationFeedback();
+        document.getElementById('act-duration').focus();
+      } else {
+        showActError('Error saving: ' + result.error);
+      }
       btn.textContent = 'Save activity →';
       btn.disabled = false;
       return;
@@ -642,7 +702,7 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 
 <script>
-// ── LIVE PREVIEW + PACE AUTO-FILL (presentation only; submit untouched) ──
+// ── LIVE PREVIEW + PACE AUTO-FILL + DURATION FEEDBACK ──
 // Integration hooks for later controls: any 'input'/'change' event bubbling
 // out of #log-form re-runs pace auto-fill and the preview; programmatic
 // writes can call window.logActivityHooks.refresh().
@@ -661,8 +721,8 @@ document.addEventListener('DOMContentLoaded', function () {
     if (manualPace) return;
     if (pace.value !== '' && pace.value !== lastAutoPace) return;
     var km = window.arenasParse.parseDistanceKmUnitAware(v('sf-distance'));
-    var hrs = window.arenasParse.parseDurationHours(v('act-duration'));
-    var next = (km > 0 && hrs > 0) ? window.arenasParse.formatPace(hrs * 60 / (km / cfg.per)) + cfg.unit : '';
+    var duration = window.arenasDuration.validate(v('act-duration'));
+    var next = (Number.isFinite(km) && km > 0 && duration.valid) ? window.arenasParse.formatPace(duration.hours * 60 / (km / cfg.per)) + cfg.unit : '';
     if (next && next.length > 12) next = '';
     pace.value = next;
     lastAutoPace = next;
@@ -679,7 +739,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var prof = (window.ARENAS_DATA && window.ARENAS_DATA.profile) || {};
     var a = {
       sport: selectedActivitySport, title: title, notes: notes, feeling: selectedActivityFeeling,
-      duration: dur || null, distance: v('sf-distance') || null, pace: v('sf-pace') || null,
+      duration: window.arenasDuration.validate(dur).valid ? dur : null, distance: v('sf-distance') || null, pace: v('sf-pace') || null,
       avg_hr: v('sf-hr') || null, elevation: v('sf-elev') || null, avg_power: v('sf-power') || null,
       top_grade: v('sf-grade') || null, problems_count: v('sf-problems') || null, rpe: v('sf-rpe') || null,
       terrain: v('sf-terrain') || null, golf_strokes: v('sf-golfstrokes') || null, golf_course: v('sf-golfcourse') || null,
@@ -693,7 +753,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function schedulePreview() { clearTimeout(timer); timer = setTimeout(renderPreview, 100); }
-  function refresh() { recomputePace(); schedulePreview(); }
+  function refresh() { updateDurationFeedback(); recomputePace(); schedulePreview(); }
 
   window.toggleLogPreview = function () {
     var side = el('log-side'), open = !side.classList.contains('preview-open');
@@ -711,16 +771,19 @@ document.addEventListener('DOMContentLoaded', function () {
   var origFeeling = window.selectFeeling;
   window.selectFeeling = selectFeeling = function (btn, f) { origFeeling(btn, f); schedulePreview(); };
   var origReset = window.resetActivityForm;
-  window.resetActivityForm = resetActivityForm = function () { origReset(); lastAutoPace = ''; manualPace = false; schedulePreview(); };
+  window.resetActivityForm = resetActivityForm = function () { origReset(); lastAutoPace = ''; manualPace = false; refresh(); };
 
   document.addEventListener('DOMContentLoaded', function () {
     var form = el('log-form');
     function onEdit(e) {
+      if (e.target.id === 'act-duration') { durationTouched = true; durationServerError = ''; }
+      updateDurationFeedback();
       if (e.target.id === 'sf-pace') manualPace = true; else recomputePace();
       schedulePreview();
     }
     form.addEventListener('input', onEdit);
     form.addEventListener('change', onEdit);
+    el('act-duration').addEventListener('blur', function () { durationTouched = true; updateDurationFeedback(); });
     // Initial render after the DOMContentLoaded reset/?date= handler; ?plan=
     // prefill calls refresh() itself when its fetch completes.
     setTimeout(refresh, 0);

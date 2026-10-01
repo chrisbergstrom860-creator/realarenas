@@ -10,7 +10,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { launchBrowser } from './lib/mobile-geometry.js';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = path.resolve(fileURLToPath(new URL('../', import.meta.url)));
 const output = '/tmp/log-presentation';
 const origin = 'https://log-harness.invalid';
 const inspect = process.argv.includes('--inspect');
@@ -86,6 +86,7 @@ try {
   });
   for (const width of [360, 414, 1280, 1920]) {
     const page = await context.newPage();
+    page.setDefaultTimeout(5000);
     page.on('pageerror', e => report.browserErrors.push(`${width}: ${e.message}`));
     await page.setViewportSize({ width, height: 1000 });
     await page.goto(`${origin}/html/log?date=2026-09-26`, { waitUntil: 'networkidle' });
@@ -163,6 +164,15 @@ try {
       await duration(page, '1:05:00'); await settle(page);
       assert.equal(await page.locator('#sf-pace').inputValue(), '4:45/km');
     });
+    await check(`${width}: clearing manual pace stays empty until sport reset`, async () => {
+      await page.locator('#sf-pace').fill('');
+      await page.locator('#sf-distance').fill('12.4 km');
+      await duration(page, '1:02:15'); await settle(page);
+      assert.equal(await page.locator('#sf-pace').inputValue(), '');
+      await page.locator('#act-title').fill('Morning coastal run, edited');
+      await settle(page);
+      assert.equal(await page.locator('#sf-pace').inputValue(), '');
+    });
     await page.locator('[data-sport="swimming"]').click();
     await duration(page, '40:00');
     await page.locator('#sf-distance').fill('2,000m'); await settle(page);
@@ -176,6 +186,7 @@ try {
       await duration(page, '1:02:15'); await page.locator('#sf-distance').fill('12.4 km');
       await settle(page); assert.equal(await page.locator('#sf-pace').inputValue(), '5:01/km');
     });
+    if ([360, 414, 1280].includes(width)) await durationControls(page, width);
     await page.close();
   }
   await check('no browser errors', () => assert.deepEqual(report.browserErrors, []));
@@ -194,23 +205,80 @@ async function settle(page) {
   await page.waitForTimeout(180); // Real preview's 100ms debounce, not a reimplemented renderer.
 }
 async function duration(page, value) {
-  // Keep this adapter extensible as duration controls evolve. Hidden canonical
-  // act-duration is deliberately not filled behind the visible user's controls.
-  if (await page.locator('#act-duration').isVisible()) {
-    await page.locator('#act-duration').fill(value); return;
-  }
-  const parts = value.split(':').map(Number);
-  const [h, m, s] = parts.length === 3 ? parts : [0, ...parts];
-  for (const [part, short, number] of [['hours', 'h', h], ['minutes', 'm', m], ['seconds', 's', s]]) {
-    const selector = process.env[`LOG_DURATION_${part.toUpperCase()}_SELECTOR`] ||
-      `#act-duration-${part}, #act-duration-${short}, [data-duration-part="${part}"]`;
-    const control = page.locator(selector).first();
-    assert.ok(await control.count() && await control.isVisible(), `Visible duration ${part} control not found; configure LOG_DURATION_${part.toUpperCase()}_SELECTOR`);
-    if (await control.evaluate(el => el.tagName === 'SELECT')) await control.selectOption(String(number));
-    else await control.fill(String(number));
+  assert.ok(await page.locator('#act-duration').isVisible(), 'Real free-text duration control must remain visible');
+  await page.locator('#act-duration').fill(value);
+}
+async function durationControls(page, width) {
+  // Required fields are present before every invalid-save test, so a missing
+  // title or sport cannot accidentally mask a duration validation failure.
+  await page.locator('#act-title').fill('Duration interpretation training');
+  await page.locator('#act-date').fill('2026-09-26');
+  await page.locator('[data-sport="running"]').click();
+  await page.locator('#sf-distance').fill('1 km');
+  await duration(page, '5:30'); await settle(page);
+  await check(`${width}: running 5:30 + 1 km warns and means 5 h 30 min`, async () => {
+    assert.equal(await page.locator('#act-duration-interpretation').innerText(), 'Interpreted as 5 h 30 min');
+    assert.ok(await page.locator('#act-duration-warning').isVisible());
+    assert.match(await page.locator('#act-duration-warning').innerText(), /330:00\/km/);
+    assert.equal(await page.locator('#sf-pace').inputValue(), '330:00/km');
+    assert.equal(await page.locator('#act-duration').inputValue(), '5:30', 'Warning must not silently rewrite input');
+  });
+  await capture(page, width, 'duration-warning');
+  await page.locator('#act-duration-use-alternative').click(); await settle(page);
+  await check(`${width}: explicit switch → 0:05:30 and exact preview agreement`, async () => {
+    assert.equal(await page.locator('#act-duration').inputValue(), '0:05:30');
+    assert.equal(await page.locator('#act-duration-interpretation').innerText(), 'Interpreted as 5 min 30 s');
+    assert.equal(await page.locator('#sf-pace').inputValue(), '5:30/km');
+    assert.equal(await page.locator('#act-duration-warning').isVisible(), false);
+    const stats = await page.locator('#log-preview .ac-stat').evaluateAll(els =>
+      Object.fromEntries(els.map(el => [el.querySelector('.sl').textContent,
+        [...el.querySelector('.sv').childNodes].filter(node => node.nodeType === Node.TEXT_NODE)
+          .map(node => node.textContent).join('').trim()])));
+    assert.equal(stats.Duration, '0:05:30');
+    assert.equal(stats.Distance, '1 km');
+    assert.equal(stats.Pace, '5:30/km');
+    assert.equal(await page.locator('#act-duration').evaluate(el => document.activeElement === el), true);
+  });
+  await capture(page, width, 'duration-alternative');
+  await duration(page, '45:00'); await page.locator('#sf-distance').fill('5 km'); await settle(page);
+  await check(`${width}: running 45:00 + 5 km means 45 min without warning`, async () => {
+    assert.equal(await page.locator('#act-duration-interpretation').innerText(), 'Interpreted as 45 min');
+    assert.equal(await page.locator('#act-duration-warning').isVisible(), false);
+    assert.equal(await page.locator('#sf-pace').inputValue(), '9:00/km');
+  });
+  await page.locator('[data-sport="cycling"]').click();
+  await page.locator('#sf-distance').fill('1 km'); await duration(page, '5:30'); await settle(page);
+  await check(`${width}: cycling 5:30 interprets 5 h 30 min with no running warning`, async () => {
+    assert.equal(await page.locator('#act-duration-interpretation').innerText(), 'Interpreted as 5 h 30 min');
+    assert.equal(await page.locator('#act-duration-warning').isVisible(), false);
+  });
+  await page.locator('[data-sport="running"]').click();
+  await page.locator('#sf-distance').fill('1 km');
+  for (const invalid of ['1:02:', '1:75:00']) {
+    await duration(page, invalid); await settle(page);
+    await check(`${width}: invalid ${invalid} inline error; Save focuses input, no POST`, async () => {
+      assert.ok(await page.locator('#act-title').inputValue());
+      assert.ok(await page.locator('#act-date').inputValue());
+      assert.equal(await page.evaluate(() => selectedActivitySport), 'running');
+      assert.ok(await page.locator('#act-duration-error').isVisible());
+      assert.match(await page.locator('#act-duration-error').innerText(), /valid positive duration/i);
+      assert.equal(await page.locator('#act-duration').getAttribute('aria-invalid'), 'true');
+      assert.ok((await page.locator('#act-duration').getAttribute('aria-describedby')).split(/\s+/).includes('act-duration-error'));
+      assert.equal(await page.locator('#act-duration-interpretation').innerText(), '');
+      const before = report.forbiddenRequests.length;
+      await page.locator('#save-activity-btn').click(); await settle(page);
+      assert.equal(await page.locator('#act-duration').evaluate(el => document.activeElement === el), true);
+      assert.equal(report.forbiddenRequests.length, before, 'Invalid Save must not attempt POST or any live request');
+      assert.equal(await page.locator('#save-activity-btn').isDisabled(), false);
+    });
+    await capture(page, width, `duration-invalid-${invalid === '1:02:' ? 'trailing-colon' : 'minutes-range'}`);
   }
 }
 async function capture(page, width, state) {
+  // Clicks/fills may scroll controls into view. Reset before full-page capture
+  // so the real fixed navigation/header are consistently anchored at the top.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
   const geometry = await page.evaluate(() => {
     const visible = el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden';
     const overflow = [...document.querySelectorAll('#log-form input, #log-form select, #log-form textarea, #log-preview .post-note-card')]

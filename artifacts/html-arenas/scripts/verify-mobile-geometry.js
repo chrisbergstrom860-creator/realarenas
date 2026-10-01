@@ -1269,7 +1269,9 @@ const PAGES = [
           set('sf-elev', '120m'); set('sf-cad', '178 spm');
           set('sf-runtype', 'Long run');
         })()`,
-        waitFor: '#log-preview .ac-title',
+        // The populated preview remains intentionally collapsed on phones.
+        // Wait on visible running controls, not a hidden preview descendant.
+        waitFor: '#act-sport-fields-body #sf-distance',
         surfaces: [{ name: 'running controls', sel: '#act-sport-fields-body > div', min: 6 }],
         checks: [{ name: 'selected running fields and live preview containment', js: logGeometryExpr({ populated: true }) }] },
       { name: 'long-text-expanded-preview', js: `(() => {
