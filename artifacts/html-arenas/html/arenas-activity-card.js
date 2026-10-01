@@ -102,4 +102,39 @@
     }
     return html;
   };
+
+  // Full feed card, also used by the live Log Activity preview. The feed owns
+  // its wrapper, sort key and filter metadata; preview owns neither links nor
+  // kudos actions. Keep the non-preview markup identical to the feed grammar.
+  window.activityCardHtml = function (a, opts) {
+    opts = opts || {};
+    var preview = opts.preview === true;
+    var author = a.author || { name: 'Athlete' };
+    var name = author.name || 'Athlete';
+    var link = preview ? '' : window.athleteLinkAttrs(a.user_id, author.profilePublic);
+    var sport = (window.ARENAS_SPORTS_BY_ID || {})[a.sport];
+    var sportName = sport ? sport.label : (a.sport ? a.sport.charAt(0).toUpperCase() + a.sport.slice(1) : '');
+    var meta = preview
+      ? 'Just now' + (sportName ? ' · ' + esc(sportName) : '')
+      : window.arenasTimeAgo(a.created_at || a.date);
+    return '' +
+      '<div class="post-note-card" style="padding:16px 18px">' +
+        '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">' +
+          '<span' + link + ' style="display:contents">' +
+          window.avatarHtml(author.avatar_url || null, name, '', 'width:36px;height:36px;border-radius:50%;background:var(--gray-200);color:var(--gray-700);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0') +
+          '</span>' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-size:13px;font-weight:600;color:var(--gray-900)"><span' + link + '>' + esc(name) + '</span> <span style="font-weight:400;color:var(--gray-400)">logged an activity</span></div>' +
+            '<div style="font-size:11px;color:var(--gray-400)">' + meta + '</div>' +
+          '</div>' +
+          window.sportPillHtml(a.sport) +
+        '</div>' +
+      window.activityCardBody(a, { feeling: true }) +
+        (preview ? '' :
+        '<div class="pn-footer">' +
+          '<button class="pn-action' + (a.likedByMe ? ' liked' : '') + '" onclick="likeActivity(this,\'' + esc(a.id) + '\')">👍 ' + (a.likeCount || 0) + ' kudos</button>' +
+          '<span style="margin-left:auto;font-size:11px;color:var(--gray-400)">Activity</span>' +
+        '</div>') +
+      '</div>';
+  };
 })();
