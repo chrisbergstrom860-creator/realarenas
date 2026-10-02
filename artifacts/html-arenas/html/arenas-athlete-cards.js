@@ -102,7 +102,7 @@
         '<div class="adc-stats">' +
           '<div class="adc-stat"><span class="adc-stat-val">' + followers + '</span><span class="adc-stat-label">followers</span></div>' +
           '<div class="adc-stat"><span class="adc-stat-val">' + (a.postCount || 0) + '</span><span class="adc-stat-label">posts</span></div>' +
-          '<div class="adc-stat"><span class="adc-stat-val">' + sports.length + '</span><span class="adc-stat-label">sports</span></div>' +
+          '<div class="adc-stat"><span class="adc-stat-val">' + (a.sportsCount == null ? sports.length : a.sportsCount) + '</span><span class="adc-stat-label">sports</span></div>' +
         '</div>' +
         '<div class="adc-foot">' +
           '<div class="adc-mutual">' + followers + ' follower' + (followers === 1 ? '' : 's') + '</div>' +
@@ -155,7 +155,9 @@
       var f = filters();
       var list = visibleList();
       grid.className = (typeof opts.gridClass === 'function' ? opts.gridClass() : 'adc-grid adc-grid-2');
-      if (opts.countEl) opts.countEl.textContent = list.length + ' athlete' + (list.length === 1 ? '' : 's');
+      if (opts.countEl) opts.countEl.textContent = opts.total > athletes.length
+        ? 'Showing ' + list.length + ' of ' + opts.total + ' — refine with search'
+        : list.length + ' athlete' + (list.length === 1 ? '' : 's');
       if (!athletes.length) {
         var e0 = empt.none || { t: 'No athletes yet', s: 'As more people join Arenas they will appear here.' };
         grid.innerHTML = emptyHTML(e0.t, e0.s);

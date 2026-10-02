@@ -6480,22 +6480,25 @@ app.get(BASE + '/feed', requirePageAuth, async (req, res) => {
 // arenas-athlete-cards.js — ONE builder so the two surfaces can never drift
 // on shape or content.
 async function buildAthleteDirectory(viewerId) {
-  if (!supabaseAdmin) return { athletes: [], followingIds: [] };
+  if (!supabaseAdmin) return { athletes: [], followingIds: [], total: 0 };
   // Pull all users via the admin API and drop the viewer themselves.
-  const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 100 });
-  const others = ((list && list.users) || [])
+  const allUsers = [];
+  for (let page = 1; ; page++) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 100 });
+    if (error) throw error;
+    allUsers.push(...data.users);
+    if (data.users.length < 100) break;
+  }
+  const eligible = allUsers
     .filter(u => u.id !== viewerId)
     // Leaderboard opt-out = undiscoverable: excluded from the directory (and
     // the /athletes/:userId profile page 404s for them — same boundary).
-    .filter(u => prefsFromMeta(u.user_metadata || {}).show_on_leaderboards)
-    .slice(0, 50);
+    .filter(u => prefsFromMeta(u.user_metadata || {}).show_on_leaderboards);
+  const others = eligible.slice(0, 50);
   const athleteIds = others.map(u => u.id);
 
   // Who the viewer already follows.
-  const { data: following } = await supabaseAdmin
-    .from('follows')
-    .select('following_id')
-    .eq('follower_id', viewerId);
+  const following = await fetchAllRows('follows', q => q.eq('follower_id', viewerId).order('following_id'), 'following_id');
   const followingIds = (following || []).map(f => f.following_id).filter(Boolean);
 
   // Post and follower counts for the listed athletes (one query each).
@@ -6503,11 +6506,11 @@ async function buildAthleteDirectory(viewerId) {
   let followerRows = [];
   if (athleteIds.length) {
     const [pc, fc] = await Promise.all([
-      supabaseAdmin.from('posts').select('user_id').in('user_id', athleteIds),
-      supabaseAdmin.from('follows').select('following_id').in('following_id', athleteIds)
+      fetchAllRows('posts', q => q.in('user_id', athleteIds).order('id'), 'user_id'),
+      fetchAllRows('follows', q => q.in('following_id', athleteIds).order('following_id').order('follower_id'), 'following_id')
     ]);
-    postRows = pc.data || [];
-    followerRows = fc.data || [];
+    postRows = pc;
+    followerRows = fc;
   }
 
   const athletes = others.map(u => {
@@ -6515,12 +6518,14 @@ async function buildAthleteDirectory(viewerId) {
     const disp = displayFromUser(u);
     const initials = (disp.name || 'A')
       .split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+    const sportsRegistry = [...new Set((Array.isArray(meta.sports) ? meta.sports : []).filter(s => KNOWN_SPORTS.includes(s)))];
     return {
       id: u.id,
       name: disp.name,
       handle: disp.handle,
       avatar_url: disp.avatar_url || null,
       banner_url: meta.banner_url || null,
+      banner_card_url: meta.banner_card_url || null,
       bio: meta.bio || null,
       location: meta.location || null,
       // Structured place for the client-side search text (country/state
@@ -6530,6 +6535,8 @@ async function buildAthleteDirectory(viewerId) {
       state: disp.state,
       stateName: disp.stateName,
       sports: Array.isArray(meta.sports) ? meta.sports : [],
+      sportsRegistry,
+      sportsCount: sportsRegistry.length,
       initials,
       createdAt: u.created_at || null,
       postCount: postRows.filter(p => p.user_id === u.id).length,
@@ -6537,7 +6544,7 @@ async function buildAthleteDirectory(viewerId) {
       isFollowing: followingIds.includes(u.id)
     };
   });
-  return { athletes, followingIds };
+  return { athletes, followingIds, total: eligible.length };
 }
 
 // Directory feed for the my-profile "Athletes" tab (lazy-loaded on first
@@ -6545,7 +6552,7 @@ async function buildAthleteDirectory(viewerId) {
 app.get(BASE + '/api/athletes/directory', requireAuth, async (req, res) => {
   try {
     const dir = await buildAthleteDirectory(req.user.id);
-    res.json({ athletes: dir.athletes });
+    res.json({ athletes: dir.athletes, total: dir.total });
   } catch (err) {
     console.log('Athlete directory error:', err.message);
     res.status(500).json({ error: 'Could not load athletes' });
@@ -6565,6 +6572,7 @@ app.get(BASE + '/athletes', requirePageAuth, async (req, res) => {
       const dir = await buildAthleteDirectory(req.user.id);
       athleteData = {
         athletes: dir.athletes,
+        athletesTotal: dir.total,
         profile: displayFromUser(req.user),
         userId: req.user.id,
         followingIds: dir.followingIds,
@@ -6725,6 +6733,7 @@ app.get(BASE + '/athletes/:userId', requirePageAuth, async (req, res) => {
         const user = u && u.user;
         if (!user) return;
         const fm = user.user_metadata || {};
+        if (!prefsFromMeta(fm).show_on_leaderboards) return;
         const fd = displayFromUser(user);
         fUserMap[id] = {
           id,
@@ -11426,6 +11435,7 @@ app.post(BASE + '/api/account/delete', requireAuth, async (req, res) => {
     // 3d. Storage avatar, then the auth user LAST.
     if (meta.avatar_url) await deleteAvatarObject(meta.avatar_url, 'users/' + uid);
     if (meta.banner_url) await deleteAvatarObject(meta.banner_url, 'banners/' + uid);
+    if (meta.banner_card_url) await deleteAvatarObject(meta.banner_card_url, 'banners/' + uid);
     const { error: authErr } = await supabaseAdmin.auth.admin.deleteUser(uid);
     if (authErr) throw new Error('auth delete: ' + authErr.message);
 
@@ -12054,23 +12064,10 @@ app.post(BASE + '/api/profile/banner', requireAuth, avatarUploadSingle, async (r
   }
   avatarUploadsInFlight.add(lockKey);
   try {
-    const meta = Object.assign({}, req.user.user_metadata || {});
-    const prefix = 'banners/' + req.user.id;
-    const { publicUrl } = await processAndStoreAvatar({
-      buffer: req.file.buffer,
-      prefix,
-      previousUrl: meta.banner_url,
-      width: 1600,
-      height: 400
-    });
-    meta.banner_url = publicUrl;
-    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.user.id, { user_metadata: meta });
-    if (error) {
-      console.log('Banner metadata write error:', error.message);
-      await deleteAvatarObject(publicUrl, prefix).catch(() => {});
-      return res.status(500).json({ error: 'Could not save the new banner' });
-    }
-    res.json({ success: true, banner_url: publicUrl });
+    const pointers = await require('./profile-banner').saveBanner(
+      supabaseAdmin, req.user.id, req.file.buffer, req.user.user_metadata || {}
+    );
+    res.json({ success: true, ...pointers });
   } catch (err) {
     console.log('Banner upload error:', err.message);
     res.status(err.status || 500).json({ error: err.status ? err.message : 'Upload failed' });
@@ -12085,14 +12082,17 @@ app.delete(BASE + '/api/profile/banner', requireAuth, async (req, res) => {
   try {
     const meta = Object.assign({}, req.user.user_metadata || {});
     const oldUrl = meta.banner_url;
-    if (!oldUrl) return res.json({ success: true });
-    meta.banner_url = null;
-    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.user.id, { user_metadata: meta });
+    const oldCardUrl = meta.banner_card_url;
+    if (!oldUrl && !oldCardUrl) return res.json({ success: true });
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(req.user.id, {
+      user_metadata: { banner_url: null, banner_card_url: null }
+    });
     if (error) {
       console.log('Banner remove error:', error.message);
       return res.status(500).json({ error: 'Could not remove the banner' });
     }
     await deleteAvatarObject(oldUrl, 'banners/' + req.user.id);
+    await deleteAvatarObject(oldCardUrl, 'banners/' + req.user.id);
     res.json({ success: true });
   } catch (err) {
     console.log('Banner remove error:', err.message);
