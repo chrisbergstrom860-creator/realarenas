@@ -48,7 +48,23 @@ button,select,input,textarea{font-family:var(--font)}
 .main{display:flex;flex-direction:column;overflow:hidden;min-height:calc(100vh - var(--topbar-h))}
 
 /* ── FILTER BAR ── */
-.filter-zone{background:white;border-bottom:var(--border);position:sticky;top:0;z-index:150;padding:10px 20px;display:flex;flex-direction:column;gap:7px}
+/* ── HERO (Leaderboards/Log grammar, page-local names, centred text) ── */
+.athletes-hero{background:var(--gray-900);border-bottom:var(--border);position:relative;overflow:hidden}
+.athletes-hero::before{content:"";position:absolute;inset:0;background:rgba(3,7,18,.62);z-index:1}
+.athletes-hero picture{position:absolute;inset:0;display:block}
+.athletes-hero-bg{width:100%;height:100%;object-fit:cover;object-position:50% 40%;display:block}
+.athletes-hero-inner{min-height:232px;max-width:1280px;margin:0 auto;display:flex;align-items:center;justify-content:center;padding:40px 24px 36px;position:relative;z-index:2}
+.athletes-hero-text{min-width:0;max-width:680px;text-align:center}
+.athletes-hero-text .athletes-hero-eyebrow{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.14em;color:white;margin-bottom:10px}
+.athletes-hero-text h1{font-size:38px;line-height:1.08;font-weight:700;color:white;margin-bottom:10px;letter-spacing:-.025em}
+.athletes-hero-text .athletes-hero-sub{font-size:15px;line-height:1.45;color:white;max-width:560px;margin:0 auto}
+.filter-zone{background:white;border-bottom:var(--border);position:sticky;top:0;z-index:150;padding:10px 20px;display:flex;flex-direction:column;gap:9px}
+.athletes-toolbar-search{display:flex;align-items:center;gap:7px;background:var(--gray-50);border:var(--border);border-radius:7px;padding:5px 11px;min-width:0;flex:0 1 280px;transition:border-color .15s,box-shadow .15s}
+.athletes-toolbar-search:focus-within{border-color:var(--gray-400);box-shadow:0 0 0 3px rgba(107,114,128,.08)}
+.athletes-toolbar-search input{background:none;border:none;outline:none;font-size:13px;color:var(--gray-700);width:100%;min-width:0}
+.athletes-toolbar-search input::placeholder{color:var(--gray-500)}
+.sport-chip-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0;flex:1}
+.sport-chip-row .f-pill[data-sport]:not([data-sport="all"]).on{border-color:currentColor}
 .filter-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .f-group-label{font-size:11px;font-weight:600;color:var(--gray-500);flex-shrink:0;text-transform:uppercase;letter-spacing:.05em;margin-right:2px}
 .f-pill{padding:4px 13px;border-radius:20px;font-size:12px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer;transition:all .12s;white-space:nowrap;flex-shrink:0;user-select:none}
@@ -70,6 +86,7 @@ button,select,input,textarea{font-family:var(--font)}
    14px mobile). Page-local because the shared grid also renders inside the
    profile's already-padded Athletes tab. */
 #athlete-grid{padding:16px 20px}
+#athlete-grid.adc-grid-2{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
 .athletes-col::-webkit-scrollbar{width:4px}
 .athletes-col::-webkit-scrollbar-thumb{background:var(--gray-200);border-radius:2px}
 .sidebar-col{overflow-y:auto;padding:18px 16px;display:flex;flex-direction:column;gap:14px;border-left:var(--border)}
@@ -91,9 +108,10 @@ button,select,input,textarea{font-family:var(--font)}
    widths (769–~950px, sidebar still visible) three fixed 200px columns plus
    the grid gutter would overflow the clipped scrollport. */
 .adc-list .adc-head{flex:0 1 200px;min-width:0}
-.adc-list .adc-tags{flex:0 1 200px;min-width:0}
-.adc-list .adc-stats{flex:0 1 200px;min-width:0;grid-template-columns:repeat(3,minmax(0,1fr))}
+.adc-list .adc-tags{flex:0 1 300px;min-width:0}
+.adc-list .adc-stats{flex:0 1 240px;min-width:0;grid-template-columns:repeat(3,minmax(0,1fr))}
 .adc-list .adc-foot{flex:1;justify-content:flex-end;padding-top:0;border-top:none}
+.adc-list .adc-tags{flex-wrap:nowrap;overflow:hidden}
 
 /* Clubs to join */
 .club-suggest{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:var(--border);cursor:pointer;transition:background .1s}
@@ -158,6 +176,8 @@ button,select,input,textarea{font-family:var(--font)}
 
 /* ── TOAST ── */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--gray-900);color:white;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:500;z-index:999;transition:transform .3s ease;white-space:nowrap;box-shadow:var(--shadow-md)}
+.toast{visibility:hidden;pointer-events:none}
+.toast.show{visibility:visible}
 
 /* ── EMPTY STATE ── */
 .empty-state{text-align:center;padding:48px 24px;background:white;border-top:var(--border)}
@@ -170,7 +190,20 @@ button,select,input,textarea{font-family:var(--font)}
    the list view — three fixed 200px flex columns on desktop — wraps into
    stacked full-width rows so nothing overflows at ~380px. */
 @media (max-width:768px){
+  body:has(.bottom-nav) .toast{bottom:calc(var(--bn-clearance,80px) + 12px);max-width:calc(100vw - 28px);white-space:normal;text-align:center}
   body:has(.bottom-nav) #athlete-grid{padding:12px 14px}
+  body:has(.bottom-nav) #athlete-grid.adc-grid-2{grid-template-columns:1fr}
+  .athletes-hero::before{background:rgba(3,7,18,.66)}
+  .athletes-hero-inner{min-height:250px;padding:30px 16px 26px}
+  .athletes-hero-text h1{font-size:29px}
+  .athletes-hero-text .athletes-hero-sub{font-size:14px}
+  .filter-zone{padding:10px 14px}
+  .filter-row-main .f-right{margin-left:0;width:100%;flex-wrap:wrap}
+  .athletes-toolbar-search{flex:1 1 100%;order:-1}
+  /* Sport chips scroll horizontally instead of wrapping. */
+  .sport-chip-row{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin:0 -14px;padding:0 14px;flex:1 1 100%}
+  .sport-chip-row::-webkit-scrollbar{display:none}
+  body:has(.bottom-nav) .adc-list .adc-tags{flex-wrap:wrap}
   body:has(.bottom-nav) .adc-list .adc-card{flex-wrap:wrap;gap:8px}
   body:has(.bottom-nav) .adc-list .adc-head,
   body:has(.bottom-nav) .adc-list .adc-tags,
@@ -188,12 +221,7 @@ button,select,input,textarea{font-family:var(--font)}
     <img class="logo-icon" src="/html/arenas-icon.svg" alt="">
     <span class="logo-text">Arenas</span>
   </div>
-  <div class="topbar-center">
-    <div class="topbar-search">
-      <span style="color:var(--gray-400);font-size:13px">🔍</span>
-      <input type="text" id="search-input" placeholder="Search by name, sport, location, pace…" oninput="handleSearch(this.value)">
-    </div>
-  </div>
+  <div class="topbar-center"></div>
   <div class="topbar-actions">
     <div class="icon-btn" onclick="nav('/notifications')">🔔<div class="notif-dot"></div></div>
     <div style="position:relative" onmouseleave="document.getElementById('userMenu').style.display='none'">
@@ -233,24 +261,48 @@ button,select,input,textarea{font-family:var(--font)}
 <!-- MAIN -->
 <div class="main">
 
-  <!-- FILTER BAR -->
-  <div class="filter-zone">
-    <div class="filter-row">
-      <span class="f-group-label">Show</span>
+  <!-- HERO -->
+  <section class="athletes-hero" aria-labelledby="athletes-hero-title">
+    <picture>
+      <source media="(max-width:768px)" srcset="/html/landing-assets/athletes-hero-mobile.525e000ef99d.avif" type="image/avif">
+      <source media="(max-width:768px)" srcset="/html/landing-assets/athletes-hero-mobile.9b974e01f430.webp" type="image/webp">
+      <source srcset="/html/landing-assets/athletes-hero-800.1bf14d58865f.avif 800w, /html/landing-assets/athletes-hero-1600.5583690663af.avif 1600w" sizes="(min-width:1024px) calc(100vw - 216px), 100vw" type="image/avif">
+      <source srcset="/html/landing-assets/athletes-hero-800.edb9c4dbaf34.webp 800w, /html/landing-assets/athletes-hero-1600.0fd58ae8c898.webp 1600w" sizes="(min-width:1024px) calc(100vw - 216px), 100vw" type="image/webp">
+      <img src="/html/landing-assets/athletes-hero-800.edb9c4dbaf34.webp" class="athletes-hero-bg" alt="" width="800" height="267">
+    </picture>
+    <div class="athletes-hero-inner">
+      <div class="athletes-hero-text">
+        <p class="athletes-hero-eyebrow">ATHLETES</p>
+        <h1 id="athletes-hero-title">A global community of active people</h1>
+        <p class="athletes-hero-sub">Discover athletes, follow friends, and get inspired by people who share your passion.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- TOOLBAR: tabs · sport chips · search · count · sort · view -->
+  <div class="filter-zone" id="athletes-toolbar">
+    <div class="filter-row filter-row-main">
       <div class="f-pill on" data-show="all" onclick="setShow(this,'all')">All athletes</div>
       <div class="f-pill" data-show="following" onclick="setShow(this,'following')">Following</div>
       <div class="f-right">
+        <label class="athletes-toolbar-search">
+          <span style="color:var(--gray-400);font-size:13px" aria-hidden="true">🔍</span>
+          <input type="search" id="search-input" placeholder="Search name, sport, location…" aria-label="Search athletes" oninput="handleSearch(this.value)">
+        </label>
         <span class="athlete-count" id="athlete-count">Loading…</span>
-        <div class="view-toggle">
-          <div class="vt-btn on" id="vt-grid" onclick="setView('grid')">⊞ Grid</div>
-          <div class="vt-btn" id="vt-list" onclick="setView('list')">☰ List</div>
-        </div>
-        <select class="sort-select" onchange="setSort(this.value)">
+        <select class="sort-select" id="athlete-sort" onchange="setSort(this.value)" aria-label="Sort athletes">
           <option value="followers">Sort: Most followers</option>
           <option value="name">Sort: Name (A–Z)</option>
           <option value="new">Sort: New to Arenas</option>
         </select>
+        <div class="view-toggle" role="group" aria-label="View">
+          <div class="vt-btn on" id="vt-grid" onclick="setView('grid')">⊞ Grid</div>
+          <div class="vt-btn" id="vt-list" onclick="setView('list')">☰ List</div>
+        </div>
       </div>
+    </div>
+    <div class="filter-row">
+      <div class="sport-chip-row" id="athlete-sport-chips" role="group" aria-label="Filter by sport"></div>
     </div>
   </div>
 
@@ -351,6 +403,7 @@ function showToast(msg) {
   let show = 'all';        // 'all' | 'following'
   let sort = 'followers';  // 'followers' | 'name' | 'new'
   let query = '';
+  let sport = 'all';       // 'all' | registry sport id declared among listed athletes
 
   // Deep-link support: /athletes?q=term — the topbar search on the other
   // athlete-facing pages lands here with the query prefilled and applied.
@@ -370,7 +423,7 @@ function showToast(msg) {
     total: data.athletesTotal,
     base: B,
     source: 'athletes-page',
-    getFilters: function(){ return { show: show, query: query, sort: sort }; },
+    getFilters: function(){ return { show: show, query: query, sort: sort, sport: sport, view: view }; },
     gridClass: function(){ return 'adc-grid ' + (view === 'list' ? 'adc-list' : 'adc-grid-2'); },
     onCardClick: function(a){ window.openAthleteModal(a.id); },
     onFollowChange: function(a, isFollowing, followers){
@@ -388,7 +441,38 @@ function showToast(msg) {
     toast: window.showToast
   });
 
+  // Sport chips: "All sports" + registry sports declared by ≥1 listed athlete.
+  const chipRow = document.getElementById('athlete-sport-chips');
+  function renderSportChips(){
+    if (!chipRow) return;
+    const avail = window.ArenasAthleteCards.availableSports(athletes);
+    if (sport !== 'all' && !avail.some(s => s.id === sport)) sport = 'all';
+    chipRow.innerHTML = '<div class="f-pill' + (sport === 'all' ? ' on' : '') + '" data-sport="all" role="button" tabindex="0">All sports</div>' +
+      avail.map(s => '<div class="f-pill' + (sport === s.id ? ' on' : '') + '" data-sport="' + esc(s.id) + '" role="button" tabindex="0"' +
+        (sport === s.id ? ' style="background:' + s.colors.bg + ';color:' + s.colors.text + '"' : '') + '>' +
+        esc(window.arenasSportTag ? window.arenasSportTag(s.id) : s.label) + '</div>').join('');
+    chipRow.parentNode.style.display = avail.length ? '' : 'none';
+  }
+  if (chipRow) {
+    chipRow.addEventListener('click', function(ev){
+      const chip = ev.target.closest('[data-sport]');
+      if (chip) window.setSport(chip.dataset.sport);
+    });
+    chipRow.addEventListener('keydown', function(ev){
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      const chip = ev.target.closest('[data-sport]');
+      if (chip) { ev.preventDefault(); window.setSport(chip.dataset.sport); }
+    });
+  }
+
   // ── Public handlers referenced by inline markup ──
+  // Filters (show/sport/query/sort) are independent of view and persist
+  // across the Grid/List toggle.
+  window.setSport = function(val){
+    sport = (val && val !== 'all') ? String(val) : 'all';
+    renderSportChips();
+    cards.render();
+  };
   window.setView = function(type){
     view = (type === 'list') ? 'list' : 'grid';
     ['grid','list'].forEach(v => { const b = document.getElementById('vt-' + v); if (b) b.classList.toggle('on', v === view); });
@@ -435,12 +519,12 @@ function showToast(msg) {
     const handleEl = document.getElementById('modal-handle');
     if (handleEl) handleEl.textContent = a.location ? '📍 ' + a.location : '';
     const tagsEl = document.getElementById('modal-tags');
-    if (tagsEl) tagsEl.innerHTML = (a.sports || []).map(s => '<span class="mh-tag">' + esc(window.arenasSportTag(s)) + '</span>').join('');
+    if (tagsEl) tagsEl.innerHTML = window.ArenasAthleteCards.registrySports(a).map(s => '<span class="mh-tag">' + esc(window.arenasSportTag(s)) + '</span>').join('');
     const statsEl = document.getElementById('modal-stats');
     if (statsEl) statsEl.innerHTML =
       '<div class="modal-stat"><div class="mv">' + (a.followerCount || 0) + '</div><div class="ml">Followers</div></div>' +
       '<div class="modal-stat"><div class="mv">' + (a.postCount || 0) + '</div><div class="ml">Posts</div></div>' +
-      '<div class="modal-stat"><div class="mv">' + (a.sports ? a.sports.length : 0) + '</div><div class="ml">Sports</div></div>';
+      '<div class="modal-stat"><div class="mv">' + window.ArenasAthleteCards.sportsCount(a) + '</div><div class="ml">Sports</div></div>';
     const bioEl = document.getElementById('modal-bio-section');
     if (bioEl) bioEl.innerHTML = a.bio
       ? '<div><div class="modal-section-title">About</div><div style="font-size:13px;color:var(--gray-600);line-height:1.65">' + esc(a.bio) + '</div></div>'
@@ -485,6 +569,7 @@ function showToast(msg) {
     }
   };
 
+  renderSportChips();
   cards.render();
 })();
 </script>

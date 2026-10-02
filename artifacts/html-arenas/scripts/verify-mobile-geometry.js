@@ -30,6 +30,7 @@ import { launchBrowser, auditPage } from './lib/mobile-geometry.js';
 import { mustWrite, makeCleanup } from './lib/checked-writes.js';
 import { calendarGeometryExpr } from './lib/calendar-geometry.mjs';
 import { logGeometryExpr } from './lib/log-geometry.mjs';
+import { athletesGeometryExpr } from './lib/athletes-geometry.mjs';
 
 const require = createRequire(import.meta.url);
 const { signRecapEmailToken } = require('../recap-email-token.js');
@@ -62,7 +63,15 @@ async function mkUser(key) {
   const { data, error } = await admin.auth.admin.createUser({
     email: emails[key], password: PW, email_confirm: true,
     user_metadata: { name: userDefs[key], handle: 'geo_' + key, country: 'NO', state: 'Vestland',
-      sports: ['running', 'cycling'],
+      sports: key === 'f0' ? [] : key === 'f1' ? ['running'] : key === 'f2'
+        ? ['running', 'cycling', 'swimming']
+        : key === 'f3' ? ['running', 'cycling', 'swimming', 'hiking', 'yoga', 'golf']
+        : ['running', 'cycling'],
+      location: key.startsWith('f') ? 'Longyearbyen–Svalbard coastal endurance training community' : '',
+      // Public fixture image URL only: no storage writes or real profile changes.
+      banner_card_url: key === 'f2'
+        ? BASE + '/landing-assets/log-hero-800.110bd0fae067.webp'
+        : key === 'f3' ? 'data:image/webp;base64,broken' : null,
       // Phase 2 geometry covers the dependent email control on an opted-in
       // Pro account. This guard never invokes the runner or email transport.
       prefs: key === 'creator' ? { weekly_recap: true, weekly_recap_email: true } : {} }
@@ -1243,7 +1252,60 @@ const PAGES = [
     // NOTE: .rec-strip / .nearby-grid / .network-stats exist only as dead
     // prototype CSS — no DOM ever renders them, so they are not surfaces.
     surfaces: [{ name: 'directory cards', sel: '#athlete-grid', min: 4 }],
+    checks: [{ name: 'grid card containment', js: athletesGeometryExpr({ view: 'grid' }) }],
     steps: [
+      { name: 'banner-and-sport-fixtures', js: `(() => {
+          const present = document.querySelector('#athlete-grid .adc-card[data-user-id="${users.f2.id}"]');
+          const failed = document.querySelector('#athlete-grid .adc-card[data-user-id="${users.f3.id}"]');
+          if (!present || !failed) throw new Error('Directory fixture cards missing');
+          present.scrollIntoView({block:'center'});
+          const image = present.querySelector('.adc-banner-img');
+          return image.decode().then(() => {
+            if (!image.naturalWidth) throw new Error('Present banner did not load');
+            const brokenImage = failed.querySelector('.adc-banner-img');
+            if (brokenImage) brokenImage.dispatchEvent(new Event('error'));
+          });
+        })()`,
+        checks: [{ name: '0, 1, 3 and 6 sports plus banner fallback', js: `(() => {
+          const ids = ${JSON.stringify([users.f0.id, users.f1.id, users.f2.id, users.f3.id])};
+          const cards = ids.map(id => document.querySelector('#athlete-grid .adc-card[data-user-id="'+id+'"]'));
+          const chipCounts = cards.map(c => c.querySelectorAll('.adc-pill[data-sport]').length);
+          const failed = cards[3].querySelector('.adc-banner-img');
+          return {ok: chipCounts.join(',') === '0,1,3,3'
+            && cards[3].querySelector('.adc-pill-more').textContent === '+3'
+            && (!failed || getComputedStyle(failed).display === 'none'),
+            chipCounts};
+        })()` }] },
+      { name: 'list', js: `setView('list')`,
+        checks: [{ name: 'dense list containment and no banners', js: athletesGeometryExpr({ view: 'list' }) }] },
+      { name: 'filtered-list', js: `setSport('running'); handleSearch('Longyearbyen'); setView('grid'); setView('list');`,
+        checks: [{ name: 'view toggle keeps sport and query', js: `(() => {
+          const ids = [...document.querySelectorAll('#athlete-grid .adc-card')].map(c=>c.dataset.userId);
+          const expected = window.ARENAS_DATA.athletes.filter(a=>a.location && a.location.includes('Longyearbyen')
+            && a.sportsRegistry.includes('running')).map(a=>a.id);
+          return {ok: document.querySelector('#athlete-sport-chips [data-sport="running"]').classList.contains('on')
+            && ids.length > 0 && ids.length === expected.length && ids.every(id=>expected.includes(id)), ids};
+        })()` }] },
+      { name: 'empty-following-filter', js: `setShow(document.querySelector('[data-show="following"]'),'following'); handleSearch('no-match-geometry-sentinel');`,
+        checks: [{ name: 'honest no-match wording', js: `document.getElementById('athlete-grid').textContent.includes('No athletes match your search')` }] },
+      { name: 'following-grid', js: `handleSearch(''); setSport('all'); setView('grid');`,
+        checks: [{ name: 'Following renders only followed athletes', js: `(() => {
+          const cards = [...document.querySelectorAll('#athlete-grid .adc-card')];
+          return cards.length > 0 && cards.every(c=>c.querySelector('.adc-follow-btn').classList.contains('is-following'));
+        })()` }] },
+      { name: 'follow-confirmed', js: `(async () => {
+          setShow(document.querySelector('[data-show="all"]'),'all');
+          const button = document.querySelector('#athlete-grid .adc-follow-btn[data-user-id="${users.f6.id}"]');
+          if (!button) throw new Error('Follow fixture missing');
+          window.__geoFollowBefore = button.classList.contains('is-following');
+          button.scrollIntoView({block:'center'}); button.click();
+          for (let i=0;i<100;i++) {
+            await new Promise(r=>setTimeout(r,100));
+            if (!button.disabled && button.classList.contains('is-following') !== window.__geoFollowBefore) return;
+          }
+          throw new Error('Follow state did not change after server response');
+        })()`,
+        checks: [{ name: 'follow button containment', js: athletesGeometryExpr({ view: 'grid' }) }] },
       { name: 'modal-athlete-profile', js: `document.querySelector('#athlete-grid .adc-card[data-clickable]').click()`,
         // Batch A: quick-view opens via window.arenasOverlay (root created
         // per-open, no .open class); panel ids are unchanged.

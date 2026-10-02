@@ -69,6 +69,26 @@ const APPROVED_LOG_HERO_HASHES = {
   'log-hero-mobile.avif': 'd8d18069908e7ba1cd829d97b082873e211c18570bfc781f622b2c18f7e4b00b',
   'log-hero-mobile.webp': 'e4b8999dd386cd1b8ec2210b163700594b8e51c26b9107a5986a181c0c655587'
 };
+const ATHLETES_800 = asset('athletes-hero-800.avif');
+const ATHLETES_1600 = asset('athletes-hero-1600.avif');
+const ATHLETES_MOBILE = asset('athletes-hero-mobile.avif');
+// Required matrix: 360/380/768/1280/1920 × DPR 1/2/3 (+769 boundary).
+const ATHLETES_EXPECTATIONS = [
+  { width: 360, images: [ATHLETES_MOBILE, ATHLETES_MOBILE, ATHLETES_MOBILE] },
+  { width: 380, images: [ATHLETES_MOBILE, ATHLETES_MOBILE, ATHLETES_MOBILE] },
+  { width: 768, images: [ATHLETES_MOBILE, ATHLETES_MOBILE, ATHLETES_MOBILE] },
+  { width: 769, images: [ATHLETES_800, ATHLETES_1600, ATHLETES_1600] },
+  { width: 1280, images: [ATHLETES_1600, ATHLETES_1600, ATHLETES_1600] },
+  { width: 1920, images: [ATHLETES_1600, ATHLETES_1600, ATHLETES_1600] }
+];
+const APPROVED_ATHLETES_HERO_HASHES = {
+  'athletes-hero-800.avif': '1bf14d58865f96272f6585908a9a5a084c824651891f56fc9b91b9bba83ba4fa',
+  'athletes-hero-800.webp': 'edb9c4dbaf347f379c22453e9dc240fd2d1858bedde251947960e94b4396d03c',
+  'athletes-hero-1600.avif': '5583690663af2c05d5ce0d15891152f7bbef4c32ff8a23faa733c989e55b1fd2',
+  'athletes-hero-1600.webp': '0fd58ae8c8987ba9bc59fe732d8c34f044a72288ef03530b33c46374d9cf3fc6',
+  'athletes-hero-mobile.avif': '525e000ef99d26ab002a885fc624795c15b66cb1daa68296d0f2e07b3a967a5c',
+  'athletes-hero-mobile.webp': '9b974e01f430e92da09fe1f8a5a60bfcd3de3fb57791c920283eb64361891782'
+};
 const APPROVED_LEADERBOARD_HERO_HASHES = {
   'leaderboards-hero-hiker-800.avif': 'e663dc32c5504b85fbb2e16670dcef8001bfd3d21c1877a044b06a6efe5d1649',
   'leaderboards-hero-hiker-800.webp': '3a9c8f714e0634f856034ff43924d6972a728de8eddb2ab3bba6fce1289f534d',
@@ -137,6 +157,7 @@ const FEED_RE = /^feed-yoga-(?:800|1600)\.[0-9a-f]{12}\.(?:avif|webp)$/;
 const EVENTS_RE = /^events-hikers-(?:800|1600)\.[0-9a-f]{12}\.(?:avif|webp)$/;
 const CHALLENGES_RE = /^challenges-hero-(?:800|1600|mobile)\.[0-9a-f]{12}\.(?:avif|webp)$/;
 const LOG_RE = /^log-hero-(?:800|1600|mobile)\.[0-9a-f]{12}\.(?:avif|webp)$/;
+const ATHLETES_RE = /^athletes-hero-(?:800|1600|mobile)\.[0-9a-f]{12}\.(?:avif|webp)$/;
 
 let passes = 0;
 let failures = 0;
@@ -183,7 +204,7 @@ function expectedAssetFiles() {
 function verifyManifestAndReferences() {
   const entries = Object.entries(MANIFEST.assets || {});
   const allowedFiles = new Set(entries.map(([, entry]) => entry.file));
-  check(null, 'manifest has the complete 60-image inventory', entries.length === 60, '60', String(entries.length));
+  check(null, 'manifest has the complete 66-image inventory', entries.length === 66, '66', String(entries.length));
   for (const [logicalName, entry] of entries) {
     const extension = path.extname(logicalName).replace('.', '');
     const pattern = new RegExp(`\\.${entry.sha256.slice(0, MANIFEST.hashLength)}\\.${extension}$`);
@@ -202,7 +223,8 @@ function verifyManifestAndReferences() {
     'arenas-feed.html',
     'arenas-events.html',
     'arenas-challenges.html',
-    'arenas-log.html'
+    'arenas-log.html',
+    'arenas-athletes.html'
   ]) {
     const html = fs.readFileSync(path.join(__dirname, '..', 'html', htmlName), 'utf8');
     const references = [...html.matchAll(/\/html\/landing-assets\/([^"'()\s,]+)/g)]
@@ -512,6 +534,94 @@ async function verifyLogImageMatrix() {
           selected === expected, expected, selected);
         const images = requested.filter((file) => LOG_RE.test(file));
         assertImageRequests(caseKey, 'Log hero', expected, images);
+        if (!failedCases.has(caseKey)) console.log(`  ok  ${caseKey} — ${receivedList(images)}`);
+        await context.close();
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+}
+
+async function verifyAthletesImageContract() {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'html', 'arenas-athletes.html'), 'utf8');
+  console.log('— Athletes hero responsive image contract —');
+  for (const [band, width, height] of [
+    ['800', 800, 267], ['1600', 1600, 533], ['mobile', 964, 723]
+  ]) {
+    for (const format of ['avif', 'webp']) {
+      const logicalName = `athletes-hero-${band}.${format}`;
+      const file = asset(logicalName);
+      const filePath = path.join(ASSET_DIR, file);
+      const metadata = await sharp(filePath).metadata();
+      check(null, `${file} dimensions`,
+        metadata.width === width && metadata.height === height,
+        `${width}x${height}`, `${metadata.width}x${metadata.height}`);
+      const digest = crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+      check(null, `${file} is an approved Athletes hero encode`,
+        digest === APPROVED_ATHLETES_HERO_HASHES[logicalName],
+        APPROVED_ATHLETES_HERO_HASHES[logicalName], digest);
+    }
+  }
+  const sources = [...html.matchAll(/<source\b[^>]*>/g)]
+    .map(([tag]) => tag).filter((tag) => tag.includes('athletes-hero-'));
+  check(null, 'Athletes mobile AVIF/WebP pair precedes desktop sources at <=768px',
+    sources.length === 4 && ['avif', 'webp'].every((format, index) =>
+      /media="\(max-width:\s*768px\)"/.test(sources[index]) &&
+      sources[index].includes(`type="image/${format}"`) &&
+      sources[index].includes(asset(`athletes-hero-mobile.${format}`)) &&
+      (!sources[index].includes('964w') || sources[index].includes('sizes="100vw"')) &&
+      sources[index + 2].includes(`${asset(`athletes-hero-800.${format}`)} 800w`) &&
+      sources[index + 2].includes(`${asset(`athletes-hero-1600.${format}`)} 1600w`) &&
+      sources[index + 2].includes('sizes="(min-width:1024px) calc(100vw - 216px), 100vw"') &&
+      !sources[index + 2].includes('media=')));
+}
+
+async function verifyAthletesImageMatrix() {
+  const browser = await chromium.launch({
+    headless: true, executablePath: EXECUTABLE, args: ['--no-sandbox']
+  });
+  // Exercise the authored page's real image markup and CSS without logging in
+  // or seeding data. Scripts are irrelevant to image selection; removing them
+  // avoids form/API side effects. The nav matches the server-injected shell
+  // selector used by the shared mobile stylesheet.
+  const matrixPage = fs.readFileSync(path.join(__dirname, '..', 'html', 'arenas-athletes.html'), 'utf8')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace('</body>', '<nav class="bottom-nav bn-has-fab" aria-label="Primary"></nav></body>');
+  console.log(`— Athletes hero browser matrix (${ATHLETES_EXPECTATIONS.length * 3} fresh-cache cases) —`);
+  try {
+    for (const row of ATHLETES_EXPECTATIONS) {
+      for (const dpr of [1, 2, 3]) {
+        const caseKey = `Athletes hero ${row.width}px DPR ${dpr}`;
+        const expected = row.images[dpr - 1];
+        const context = await browser.newContext({
+          viewport: { width: row.width, height: 500 }, deviceScaleFactor: dpr,
+          serviceWorkers: 'block', extraHTTPHeaders: { 'Cache-Control': 'no-cache' }
+        });
+        const page = await context.newPage();
+        const session = await context.newCDPSession(page);
+        await session.send('Network.setCacheDisabled', { cacheDisabled: true });
+        await page.route('**/html/athletes?verify-athletes-images=*', (route) => route.fulfill({
+          status: 200, contentType: 'text/html',
+          headers: { 'cache-control': 'no-store' }, body: matrixPage
+        }));
+        const requested = [];
+        page.on('request', (request) => {
+          const pathname = new URL(request.url()).pathname;
+          const prefix = '/html/landing-assets/';
+          if (pathname.startsWith(prefix)) requested.push(pathname.slice(prefix.length));
+        });
+        await page.goto(`${BASE_URL}/athletes?verify-athletes-images=${row.width}-${dpr}`, {
+          waitUntil: 'networkidle', timeout: 30000
+        });
+        const image = page.locator('picture img[src*="athletes-hero-"]');
+        await image.evaluate((img) => img.decode());
+        const selected = await image.evaluate((img) =>
+          new URL(img.currentSrc).pathname.split('/').pop());
+        check(caseKey, 'Athletes currentSrc selects the correct art direction',
+          selected === expected, expected, selected);
+        const images = requested.filter((file) => ATHLETES_RE.test(file));
+        assertImageRequests(caseKey, 'Athletes hero', expected, images);
         if (!failedCases.has(caseKey)) console.log(`  ok  ${caseKey} — ${receivedList(images)}`);
         await context.close();
       }
@@ -852,6 +962,7 @@ function reportBoundaryFailures() {
   await verifyEventsImageContract();
   await verifyChallengesImageContract();
   await verifyLogImageContract();
+  await verifyAthletesImageContract();
   await verifyBrowserMatrix();
   await verifyForClubsMatrix();
   await verifyAuthImageMatrix();
@@ -859,12 +970,13 @@ function reportBoundaryFailures() {
   await verifyEventsImageMatrix();
   await verifyChallengesImageMatrix();
   await verifyLogImageMatrix();
+  await verifyAthletesImageMatrix();
   reportBoundaryFailures();
   if (failures) {
     console.log(`\nverify-landing-images FAILED (${failures} failures, ${passes} passes)`);
     process.exit(1);
   }
-  console.log(`\nverify-landing-images OK (${passes} assertions; ${EXPECTATIONS.length * 3 + 53 + CHALLENGES_WIDTHS.length * 3 + LOG_EXPECTATIONS.length * 3} browser cases; ${expectedAssetFiles().length} served files)`);
+  console.log(`\nverify-landing-images OK (${passes} assertions; ${EXPECTATIONS.length * 3 + 53 + CHALLENGES_WIDTHS.length * 3 + LOG_EXPECTATIONS.length * 3 + ATHLETES_EXPECTATIONS.length * 3} browser cases; ${expectedAssetFiles().length} served files)`);
 })().catch((error) => {
   console.error('verify-landing-images FATAL:', error && error.stack ? error.stack : error);
   process.exit(1);

@@ -36,6 +36,24 @@ const HERO_CONFIGS = {
     // Full-height exact 4:3 crop: runner's centre (~1451px in source)
     // is at 70% of crop width. Her head and entire ponytail stay inside.
     mobileCrop: { left: 776, top: 0, width: 964, height: 723 }
+  },
+  athletes: {
+    label: 'Athletes',
+    prefix: 'athletes-hero',
+    source: path.join(__dirname, '..', 'hero-sources', 'athletes-hero-source.png'),
+    sourceWidth: 2172,
+    sourceHeight: 724,
+    targets: [
+      { suffix: '800', width: 800, height: 267 },
+      { suffix: '1600', width: 1600, height: 533 }
+    ],
+    position: 'centre',
+    // Five-panel collage (runner, cyclist, snowboarder, basketball, golfer).
+    // Proposed full-height 4:3 rectangle kept unchanged after inspection:
+    // cyclist face (~x640–755), snowboarder face (~x1170–1300) and the
+    // basketball player's face (~x1350–1510) are whole; runner and golfer
+    // panels fall entirely outside, so no face is cut mid-face.
+    mobileCrop: { left: 604, top: 0, width: 964, height: 723 }
   }
 };
 

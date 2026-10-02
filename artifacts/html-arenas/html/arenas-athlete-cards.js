@@ -7,8 +7,8 @@
 //
 // Data contract: the athlete objects come from buildAthleteDirectory() in
 // server.js (id, name, avatar_url, bio, location, countryName, stateName,
-// state, sports[], level, initials, createdAt, postCount, followerCount,
-// isFollowing) — served to the page via ARENAS_DATA.athletes and to the tab
+// state, sports[], sportsRegistry[], sportsCount, banner_url, banner_card_url,
+// initials, createdAt, postCount, followerCount, isFollowing) — served to the page via ARENAS_DATA.athletes and to the tab
 // via GET /api/athletes/directory.
 //
 // Usage:
@@ -18,7 +18,8 @@
 //     countEl: el | null,        // optional "N athletes" text target
 //     base: window.BASE || '',
 //     source: 'athletes-page',   // tag for cross-surface follow events
-//     getFilters: function () { return { show: 'all'|'following', query: '', sort: 'followers'|'name'|'new' }; },
+//     getFilters: function () { return { show: 'all'|'following', query: '', sort: 'followers'|'name'|'new', sport: 'all'|registryId, view: 'grid'|'list' }; },
+//     total: number | undefined, // eligible athletes before the server display cap
 //     gridClass: function () { return 'adc-grid adc-grid-2'; },
 //     emptyStates: { none: {t,s}, noFollowing: {t,s}, noMatch: {t,s} },
 //     onCardClick: function (athlete) {} | null,   // null → cards not clickable
@@ -62,10 +63,48 @@
     return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
   }
 
-  function sportColorStyle(id) {
+  function sportById(id) {
+    var map = window.ARENAS_SPORTS_BY_ID;
+    if (map) return map[id] || null;
     var found = null;
     (window.ARENAS_SPORTS || []).forEach(function (s) { if (s.id === id) found = s; });
+    return found;
+  }
+
+  function sportColorStyle(id) {
+    var found = sportById(id);
     return found ? 'background:' + found.colors.bg + ';color:' + found.colors.text + ';border-color:' + found.colors.border : '';
+  }
+
+  // Registry sports only (deduped, declared order). Server sends
+  // sportsRegistry; fall back to filtering the raw field so older payloads
+  // never show legacy/unknown values as chips or count them.
+  function registrySports(a) {
+    if (Array.isArray(a.sportsRegistry)) return a.sportsRegistry.slice();
+    var seen = {};
+    return (a.sports || []).filter(function (id) {
+      if (!sportById(id) || seen[id]) return false;
+      seen[id] = true; return true;
+    });
+  }
+  function sportsCount(a) {
+    return a.sportsCount == null ? registrySports(a).length : a.sportsCount;
+  }
+
+  // Filter chips: registry sports declared by at least one listed athlete,
+  // in registry order.
+  function availableSports(list) {
+    var declared = {};
+    (list || []).forEach(function (a) { registrySports(a).forEach(function (id) { declared[id] = true; }); });
+    return (window.ARENAS_SPORTS || []).filter(function (s) { return declared[s.id]; });
+  }
+
+  // Banner fallback: gradient from the athlete's first registry sport colours.
+  function bannerGradient(a) {
+    var s = sportById(registrySports(a)[0]);
+    return s
+      ? 'linear-gradient(120deg,' + s.colors.bg + ' 0%,' + s.colors.border + ' 100%)'
+      : 'linear-gradient(120deg,var(--yellow-light) 0%,var(--gray-100) 100%)';
   }
 
   // Country/state fold in as display names + the USPS code so "United
@@ -75,16 +114,34 @@
       .join(' ').toLowerCase();
   }
 
-  function cardHTML(a, directoryIndex, listIndex, clickable) {
+  function chipsHTML(a) {
+    var reg = registrySports(a);
+    var shown = reg.slice(0, 3).map(function (id) {
+      var label = window.arenasSportTag ? window.arenasSportTag(id) : sportName(id);
+      return '<span class="adc-pill" data-sport="' + esc(id) + '" style="' + sportColorStyle(id) + '">' + esc(label) + '</span>';
+    }).join('');
+    var more = reg.length > 3 ? '<span class="adc-pill adc-pill-more">+' + (reg.length - 3) + '</span>' : '';
+    return shown + more;
+  }
+
+  // view: 'grid' (banner strip + overlapping avatar) | 'list' (row; NO
+  // banner element and therefore no banner request).
+  function cardHTML(a, directoryIndex, listIndex, clickable, view) {
     var av = avColor(directoryIndex);
-    var sports = a.sports || [];
-    var primary = sports[0] || null;
-    var sportStyle = primary ? sportColorStyle(primary) : '';
-    var sportLabel = primary ? (window.arenasSportTag ? window.arenasSportTag(primary) : sportName(primary)) : null;
     var followers = a.followerCount || 0;
+    var isGrid = view !== 'list';
+    var banner = '';
+    if (isGrid) {
+      banner = '<div class="adc-banner" style="background:' + bannerGradient(a) + '">' +
+        (a.banner_card_url
+          ? '<img class="adc-banner-img" src="' + esc(a.banner_card_url) + '" alt="" loading="lazy" decoding="async" width="640" height="160">'
+          : '') +
+        '</div>';
+    }
     return '' +
-      '<div class="adc-card" data-user-id="' + esc(a.id) + '"' + (clickable ? ' data-clickable="1"' : '') +
+      '<div class="adc-card' + (isGrid ? ' adc-card-grid' : ' adc-card-row') + '" data-user-id="' + esc(a.id) + '"' + (clickable ? ' data-clickable="1"' : '') +
         ' style="animation-delay:' + (listIndex * 0.03) + 's">' +
+        banner +
         '<div class="adc-head">' +
           window.avatarHtml(a.avatar_url || null, a.name || 'Athlete', 'adc-av', 'background:' + av.bg + ';color:' + av.color) +
           // Text block gets an explicit class: a positional .adc-head>div rule
@@ -93,19 +150,16 @@
           // shipped once as stretched/unrounded avatars.
           '<div class="adc-head-main">' +
             '<div class="adc-name">' + esc(a.name || 'Athlete') + '</div>' +
-            '<div class="adc-location">' + (a.location ? '📍 ' + esc(a.location) : '📍 Location not set') + (sports.length ? ' · ' + esc(sports.map(sportName).join(', ')) : '') + '</div>' +
+            '<div class="adc-location">' + (a.location ? '📍 ' + esc(a.location) : '📍 Location not set') + '</div>' +
           '</div>' +
         '</div>' +
-        '<div class="adc-tags">' +
-          (sportLabel ? '<span class="adc-pill" style="' + sportStyle + '">' + esc(sportLabel) + '</span>' : '') +
-        '</div>' +
+        '<div class="adc-tags">' + chipsHTML(a) + '</div>' +
         '<div class="adc-stats">' +
           '<div class="adc-stat"><span class="adc-stat-val">' + followers + '</span><span class="adc-stat-label">followers</span></div>' +
           '<div class="adc-stat"><span class="adc-stat-val">' + (a.postCount || 0) + '</span><span class="adc-stat-label">posts</span></div>' +
-          '<div class="adc-stat"><span class="adc-stat-val">' + (a.sportsCount == null ? sports.length : a.sportsCount) + '</span><span class="adc-stat-label">sports</span></div>' +
+          '<div class="adc-stat"><span class="adc-stat-val">' + sportsCount(a) + '</span><span class="adc-stat-label">sports</span></div>' +
         '</div>' +
         '<div class="adc-foot">' +
-          '<div class="adc-mutual">' + followers + ' follower' + (followers === 1 ? '' : 's') + '</div>' +
           '<button class="adc-follow-btn' + (a.isFollowing ? ' is-following' : '') + '" data-user-id="' + esc(a.id) + '">' +
             (a.isFollowing ? 'Following' : 'Follow') +
           '</button>' +
@@ -142,6 +196,7 @@
       var list = athletes.slice();
       if (f.show === 'following') list = list.filter(function (a) { return a.isFollowing; });
       if (f.query) list = list.filter(function (a) { return searchText(a).indexOf(f.query) !== -1; });
+      if (f.sport && f.sport !== 'all') list = list.filter(function (a) { return registrySports(a).indexOf(f.sport) !== -1; });
       var sort = f.sort || 'followers';
       list.sort(function (a, b) {
         if (sort === 'name') return (a.name || '').localeCompare(b.name || '');
@@ -162,16 +217,22 @@
         var e0 = empt.none || { t: 'No athletes yet', s: 'As more people join Arenas they will appear here.' };
         grid.innerHTML = emptyHTML(e0.t, e0.s);
       } else if (!list.length) {
-        var e1 = (f.show === 'following')
-          ? (empt.noFollowing || { t: 'Not following anyone yet', s: 'Follow athletes and they will show up here.' })
-          : (f.query
-            ? (empt.noMatch || { t: 'No matches', s: 'No athletes match your search.' })
-            : { t: 'No athletes', s: 'Nothing to show right now.' });
+        // Search wins over the tab: an empty search inside Following is a
+        // search miss, not "not following anyone".
+        var sportLbl = (f.sport && f.sport !== 'all') ? sportName(f.sport) : '';
+        var followingAny = athletes.some(function (a) { return a.isFollowing; });
+        var e1 = f.query
+          ? (empt.noMatch || { t: 'No athletes match your search', s: 'Try a different name, sport or location.' })
+          : (sportLbl
+            ? (empt.noSport || { t: 'No ' + sportLbl.toLowerCase() + ' athletes here', s: f.show === 'following' ? 'Nobody you follow lists ' + sportLbl + ' yet.' : 'Pick another sport or show all sports.' })
+            : ((f.show === 'following' && !followingAny)
+              ? (empt.noFollowing || { t: 'Not following anyone yet', s: 'Follow athletes and they will show up here.' })
+              : { t: 'No athletes', s: 'Nothing to show right now.' }));
         grid.innerHTML = emptyHTML(e1.t, e1.s);
       } else {
         var clickable = typeof opts.onCardClick === 'function';
         grid.innerHTML = list.map(function (a, i) {
-          return cardHTML(a, athletes.indexOf(a), i, clickable);
+          return cardHTML(a, athletes.indexOf(a), i, clickable, f.view === 'list' ? 'list' : 'grid');
         }).join('');
       }
       if (typeof opts.onRender === 'function') opts.onRender(list.length);
@@ -236,6 +297,16 @@
       }
     }
 
+    // A failed banner load falls back to the sport gradient underneath
+    // (error does not bubble — capture phase on the grid).
+    grid.addEventListener('error', function (ev) {
+      var t = ev.target;
+      if (t && t.classList && t.classList.contains('adc-banner-img')) {
+        t.parentNode && t.parentNode.classList.add('adc-banner-failed');
+        t.remove();
+      }
+    }, true);
+
     // One delegated listener: follow buttons + (optional) card clicks. No
     // inline onclick globals, so multiple instances can coexist on a page.
     grid.addEventListener('click', function (ev) {
@@ -272,6 +343,10 @@
     esc: esc,
     avColor: avColor,
     sportName: sportName,
-    searchText: searchText
+    searchText: searchText,
+    registrySports: registrySports,
+    sportsCount: sportsCount,
+    availableSports: availableSports,
+    cardHTML: cardHTML
   };
 })();

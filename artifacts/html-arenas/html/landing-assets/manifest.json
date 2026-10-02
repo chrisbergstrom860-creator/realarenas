@@ -122,6 +122,42 @@
       "width": 800,
       "height": 600
     },
+    "athletes-hero-1600.avif": {
+      "file": "athletes-hero-1600.5583690663af.avif",
+      "sha256": "5583690663af2c05d5ce0d15891152f7bbef4c32ff8a23faa733c989e55b1fd2",
+      "width": 1600,
+      "height": 533
+    },
+    "athletes-hero-1600.webp": {
+      "file": "athletes-hero-1600.0fd58ae8c898.webp",
+      "sha256": "0fd58ae8c8987ba9bc59fe732d8c34f044a72288ef03530b33c46374d9cf3fc6",
+      "width": 1600,
+      "height": 533
+    },
+    "athletes-hero-800.avif": {
+      "file": "athletes-hero-800.1bf14d58865f.avif",
+      "sha256": "1bf14d58865f96272f6585908a9a5a084c824651891f56fc9b91b9bba83ba4fa",
+      "width": 800,
+      "height": 267
+    },
+    "athletes-hero-800.webp": {
+      "file": "athletes-hero-800.edb9c4dbaf34.webp",
+      "sha256": "edb9c4dbaf347f379c22453e9dc240fd2d1858bedde251947960e94b4396d03c",
+      "width": 800,
+      "height": 267
+    },
+    "athletes-hero-mobile.avif": {
+      "file": "athletes-hero-mobile.525e000ef99d.avif",
+      "sha256": "525e000ef99d26ab002a885fc624795c15b66cb1daa68296d0f2e07b3a967a5c",
+      "width": 964,
+      "height": 723
+    },
+    "athletes-hero-mobile.webp": {
+      "file": "athletes-hero-mobile.9b974e01f430.webp",
+      "sha256": "9b974e01f430e92da09fe1f8a5a60bfcd3de3fb57791c920283eb64361891782",
+      "width": 964,
+      "height": 723
+    },
     "auth-football-1536.avif": {
       "file": "auth-football-1536.89a13a7b2e2b.avif",
       "sha256": "89a13a7b2e2b4c0d0bbfa434491027675a89ef53966dc2a0e5b001e9d694891d",

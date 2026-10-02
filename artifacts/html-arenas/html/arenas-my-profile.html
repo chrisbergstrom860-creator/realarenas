@@ -3191,13 +3191,16 @@ if (logHashMatch) {
   var grid = document.getElementById('ath-tab-grid');
   if (!htab || !grid) return;
   var state = { show: 'all', q: '' };
-  var inst = null, loading = false, dirAthletes = [];
+  var inst = null, loading = false, dirAthletes = [], dirTotal = 0;
 
   function summaryText() {
     var el = document.getElementById('ath-tab-summary');
     if (!el || !inst) return;
     var followingCount = dirAthletes.filter(function (a) { return a.isFollowing; }).length;
-    el.textContent = dirAthletes.length + ' athlete' + (dirAthletes.length === 1 ? '' : 's') + ' on Arenas · following ' + followingCount;
+    // Server caps the directory at 50; total = eligible athletes (viewer excluded).
+    el.textContent = (dirTotal > dirAthletes.length
+      ? 'Showing ' + dirAthletes.length + ' of ' + dirTotal + ' athletes — refine with search'
+      : dirAthletes.length + ' athlete' + (dirAthletes.length === 1 ? '' : 's') + ' on Arenas') + ' · following ' + followingCount;
   }
 
   window.athTabSearch = function (v) {
@@ -3227,18 +3230,20 @@ if (logHashMatch) {
         loading = false;
         if (!data || data.error || !Array.isArray(data.athletes)) throw new Error((data && data.error) || 'bad payload');
         dirAthletes = data.athletes;
+        dirTotal = typeof data.total === 'number' ? data.total : dirAthletes.length;
         inst = window.ArenasAthleteCards.mount({
           athletes: dirAthletes,
           gridEl: grid,
           countEl: null,
+          total: dirTotal,
           base: B,
           source: 'profile-athletes-tab',
-          getFilters: function () { return { show: state.show, query: state.q, sort: 'followers' }; },
+          getFilters: function () { return { show: state.show, query: state.q, sort: 'followers', sport: 'all', view: 'grid' }; },
           gridClass: function () { return 'adc-grid adc-grid-2'; },
           emptyStates: {
             none: { t: 'No other athletes yet', s: 'As more people join Arenas they will appear here.' },
             noFollowing: { t: 'Not following anyone yet', s: 'Switch to All and follow athletes — they will show up here and in your feed.' },
-            noMatch: { t: 'No matches', s: 'No athletes match your search.' }
+            noMatch: { t: 'No athletes match your search', s: 'Try a different name, sport or location.' }
           },
           // Straight to the public profile — the directory payload already
           // excludes opted-out athletes, so every card here is reachable.

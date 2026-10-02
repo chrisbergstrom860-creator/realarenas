@@ -85,4 +85,11 @@ test('truncated directory renders an explicit total, not a false platform count'
   renderer = ctx.window.ArenasAthleteCards.mount({ athletes: [], total: 71, gridEl: grid, countEl: count });
   renderer.render();
   assert.equal(count.textContent, 'Showing 0 of 71 — refine with search');
+  ctx.window.avatarHtml = () => '<span class="adc-av">A</span>';
+  renderer = ctx.window.ArenasAthleteCards.mount({
+    athletes: Array.from({ length: 50 }, (_, i) => ({ id: String(i), name: 'Athlete', sports: [] })),
+    total: 71, gridEl: grid, countEl: count
+  });
+  renderer.render();
+  assert.equal(count.textContent, 'Showing 50 of 71 — refine with search');
 });
