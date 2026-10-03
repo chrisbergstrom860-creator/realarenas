@@ -10,7 +10,13 @@ function load(db, instant, ref) {
     : fs.readFileSync(path.join(root, 'server.js'), 'utf8');
   class Clock extends Date { constructor(...args) { super(...(args.length ? args : [instant])); } static now() { return new Date(instant).getTime(); } }
   const routes = {};
-  const dates = require('../../tzdate');
+  let dates = require('../../tzdate');
+  if (ref) {
+    const dateSource = execFileSync('git', ['show', `${ref}:artifacts/html-arenas/tzdate.js`], { encoding: 'utf8' });
+    const dateCtx = { module: { exports: {} }, Date: Clock, Intl };
+    vm.runInNewContext(dateSource, dateCtx);
+    dates = dateCtx.module.exports;
+  }
   const ctx = vm.createContext({
     ...dates, ...require('../../sports'), ...require('../../html/arenas-parse'),
     // Required modules otherwise retain Node's real clock outside this VM.

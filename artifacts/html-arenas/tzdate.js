@@ -142,7 +142,9 @@ function zoneMidnightUtc(key, tz) {
 // same-day rows collapse via the key Set, so callers pass raw activity lists.
 // `nowMs` is injectable for tests; production callers omit it.
 function computeStreaks(activities, tz, nowMs) {
+  const todayKey = dayKey(nowMs == null ? new Date() : new Date(nowMs), tz);
   const days = [...new Set((activities || []).map((a) => dayKey(a.date, tz)))]
+    .filter((key) => key <= todayKey)
     .sort()
     .map(keyToEpochDays);
   let longestStreak = 0, run = 0;
@@ -153,8 +155,9 @@ function computeStreaks(activities, tz, nowMs) {
   }
   let currentStreak = 0;
   if (days.length > 0) {
-    const today = keyToEpochDays(dayKey(nowMs == null ? new Date() : new Date(nowMs), tz));
-    if (today - days[days.length - 1] <= 1) {
+    const today = keyToEpochDays(todayKey);
+    const gap = today - days[days.length - 1];
+    if (gap >= 0 && gap <= 1) {
       currentStreak = 1;
       for (let i = days.length - 1; i > 0; i--) {
         if (days[i] - days[i - 1] === 1) currentStreak++;

@@ -8630,7 +8630,7 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
     const allActivities = await fetchAllRows('activities',
       q => q.eq('user_id', req.user.id).order('date', { ascending: true }).order('id', { ascending: true }),
       'id, sport, title, distance, duration, date');
-    const acts = allActivities || [];
+    const acts = (allActivities || []).filter(a => dayKey(a.date, statsTz) <= dayKey(now, statsTz));
     // Period-filtered activities for hero stats and breakdowns. "This month" /
     // "this year" mean calendar membership in the USER'S zone (key comparisons),
     // so a late-evening Pacific activity stored after UTC midnight still counts
@@ -9714,6 +9714,7 @@ function goalNaturalUnit(goal) {
 }
 
 function goalProgressInWindow(goal, activities, streaks, tz, window, nowMs) {
+  const today = dayKey(new Date(nowMs == null ? Date.now() : nowMs), tz);
   const target = Number(goal.target_value) || 0;
   const targetCmp = goal.type === 'distance' && goal.unit === 'mi' ? target * MI_TO_KM : target;
   let progressCmp = 0;
@@ -9724,7 +9725,7 @@ function goalProgressInWindow(goal, activities, streaks, tz, window, nowMs) {
   } else {
     const matches = activities.filter((a) => {
       const key = dayKey(a.date, tz);
-      if (key < window.startKey || key >= window.endKeyExcl) return false;
+      if (key > today || key < window.startKey || key >= window.endKeyExcl) return false;
       if (goal.sport) return a.sport === goal.sport;
       if (goal.type === 'distance') return DISTANCE_SPORTS.includes(a.sport);
       return true;
@@ -9939,7 +9940,7 @@ async function enrichGoalRows(userId, rows, tz, {
   const acts = await fetchAllRows('activities',
     q => q.eq('user_id', userId).order('date', { ascending: true }).order('id', { ascending: true }),
     includeRecentHistory ? 'id, sport, distance, duration, date' : 'sport, distance, duration, date');
-  const activities = acts || [];
+  const activities = (acts || []).filter(a => dayKey(a.date, tz) <= dayKey(now, tz));
   const streaks = computeStreaks(activities, tz, now.getTime());
   return rows.map((goal) => ({
     ...enrichGoal(goal, activities, streaks, tz, { now, dayStablePace }),
