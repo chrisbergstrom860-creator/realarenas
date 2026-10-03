@@ -18,7 +18,8 @@ function load(db, instant, ref) {
     dates = dateCtx.module.exports;
   }
   const ctx = vm.createContext({
-    ...dates, ...require('../../sports'), ...require('../../html/arenas-parse'),
+    ...dates, ...require('../../sports'), ...require('../../html/arenas-parse'), ...require('../../stats-window'),
+    STATS_PERIODS: require('../../stats-window').PERIODS,
     // Required modules otherwise retain Node's real clock outside this VM.
     computeStreaks: (rows, tz, nowMs) => dates.computeStreaks(rows, tz, nowMs ?? Clock.now()),
     supabaseAdmin: db, Date: Clock, console, BASE: '', requireAuth() {},

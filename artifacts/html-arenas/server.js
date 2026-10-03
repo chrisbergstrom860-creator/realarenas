@@ -29,6 +29,7 @@ const {
   addDaysToKey, keyToUtcDate, weekStartKey, monthKey, zoneMidnightUtc,
   computeStreaks
 } = require('./tzdate');
+const { PERIODS: STATS_PERIODS, statsWindow, statsTotals, statsComparison, statsWeeks } = require('./stats-window');
 const { buildFourWeekActivityGrid } = require('./activity-grid');
 const { buildCalendarMonthStats, calendarActivityDetails } = require('./calendar-stats');
 const { parseDistanceKmUnitAware, parseDurationHours, formatPace } = require('./html/arenas-parse');
@@ -8618,11 +8619,12 @@ app.get(BASE + '/recaps/:weekStart', requirePageAuth, async (req, res) => {
 
 // Profile stats & PRs computed from the signed-in user's own `activities`.
 // Hero stats and the sport breakdown respect the `period` filter; streaks,
-// the 12-week chart, and personal records are always all-time (per spec).
+// personal records stay all-time; totals and weekly charts use the selected window.
 app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analytics'), async (req, res) => {
   try {
     if (!supabaseAdmin) return res.status(503).json({ error: 'Service unavailable' });
-    const period = req.query.period === 'month' || req.query.period === 'year' ? req.query.period : 'all';
+    const period = req.query.period === undefined ? '12w' : req.query.period;
+    if (!STATS_PERIODS.includes(period)) return res.status(400).json({ error: 'invalid_period' });
     const now = new Date();
     const statsTz = getUserTimezone(req.user);
 
@@ -8631,22 +8633,13 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
       q => q.eq('user_id', req.user.id).order('date', { ascending: true }).order('id', { ascending: true }),
       'id, sport, title, distance, duration, date');
     const acts = (allActivities || []).filter(a => dayKey(a.date, statsTz) <= dayKey(now, statsTz));
-    // Period-filtered activities for hero stats and breakdowns. "This month" /
-    // "this year" mean calendar membership in the USER'S zone (key comparisons),
-    // so a late-evening Pacific activity stored after UTC midnight still counts
-    // toward the Pacific user's current month. 'all' keeps the legacy epoch cut.
-    let periodActs;
-    if (period === 'month') {
-      const nowMonth = monthKey(now, statsTz);
-      periodActs = acts.filter((a) => monthKey(a.date, statsTz) === nowMonth);
-    } else if (period === 'year') {
-      const nowYear = dateParts(now, statsTz).y;
-      periodActs = acts.filter((a) => { const p = dateParts(a.date, statsTz); return !!p && p.y === nowYear; });
-    } else {
-      // 'all' means ALL activities — the exact same set the profile hero's
-      // "km logged" sums, so the two all-time totals can never diverge.
-      periodActs = acts;
-    }
+    // Half-open account-day bounds; comparisons cover the same calendar-day
+    // length immediately before the chosen window, including across DST.
+    const selectedWindow = statsWindow(acts, period, statsTz, now);
+    const inWindow = (a, w) => { const k = dayKey(a.date, statsTz); return k >= w.start && k < w.end; };
+    const periodActs = acts.filter(a => inWindow(a, selectedWindow));
+    const previous = selectedWindow.previous
+      ? { ...selectedWindow.previous, ...statsTotals(acts.filter(a => inWindow(a, selectedWindow.previous))) } : null;
 
     // Canonical unit-aware parser — the same one the profile hero uses.
     const km = (a) => parseDistanceKmUnitAware(a.distance);
@@ -8671,43 +8664,11 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
     const weeksSpan = Math.max(1, (now - firstDate) / (7 * 86400000));
     const avgPerWeek = Math.round((periodActs.length / weeksSpan) * 10) / 10;
 
-    // ── Weekly chart (last N weeks, always recent regardless of period).
-    // `weeks` is whitelisted to the UI's range options; anything else falls
-    // back to the historic 12. Computed on-read from the same all-time
-    // activities query — no extra fetch, no stored aggregates. ──
-    const wq = parseInt(req.query.weeks, 10);
-    const chartWeeks = wq === 6 || wq === 12 || wq === 24 ? wq : 12;
-    const weeklyChart = [];
-    for (let i = chartWeeks - 1; i >= 0; i--) {
-      // Week membership via user-zone day keys; the label renders the key at
-      // UTC so it can never drift a day from the bucket it names.
-      const wStartK = weekStartKey(now, statsTz, i);
-      const wEndK = addDaysToKey(wStartK, 7);
-      const wActs = acts.filter((a) => { const k = dayKey(a.date, statsTz); return k >= wStartK && k < wEndK; });
-      // Per-sport hours for the stacked columns. Tenths are handed out by
-      // largest remainder so the segments always sum EXACTLY to the labeled
-      // weekly total (independent per-sport rounding could drift by 0.1h).
-      const wTotalTenths = Math.round(wActs.reduce((s, a) => s + parseDurationHours(a.duration), 0) * 10);
-      const wSportHours = {};
-      wActs.forEach((a) => {
-        const sp = a.sport || 'other';
-        wSportHours[sp] = (wSportHours[sp] || 0) + parseDurationHours(a.duration);
-      });
-      const wEntries = Object.entries(wSportHours).map(([sport, h]) => ({ sport, exact: h * 10, tenths: Math.floor(h * 10) }));
-      const wUsed = wEntries.reduce((s, e) => s + e.tenths, 0);
-      wEntries.slice()
-        .sort((a, b) => (b.exact - Math.floor(b.exact)) - (a.exact - Math.floor(a.exact)))
-        .slice(0, Math.max(0, wTotalTenths - wUsed))
-        .forEach((e) => { e.tenths += 1; });
-      weeklyChart.push({
-        label: keyToUtcDate(wStartK).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).replace(' ', ''),
-        hours: wTotalTenths / 10,
-        // Dominant sport first; zero-tenth slivers dropped (they'd render as
-        // 0.0h segments — dishonest noise).
-        bySport: wEntries.filter((e) => e.tenths > 0).sort((a, b) => b.tenths - a.tenths)
-          .map((e) => ({ sport: e.sport, hours: e.tenths / 10 }))
-      });
-    }
+    // ── Multi-metric weekly chart, clipped to the selected window.
+    // All-time chart coverage caps at 104 weeks, not all-time totals or PRs.
+    // Computed from the same paginated history with no additional reads. ──
+    const { weeklyChart, weeklyCoverage } = statsWeeks(acts, selectedWindow, period, statsTz, now);
+    const chartWeeks = weeklyChart.length;
 
     // ── Sport breakdown (period) ──
     const sportMap = {};
@@ -8770,15 +8731,19 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
       const monthTotals = {};
       acts.forEach((a) => {
         const key = monthKey(a.date, statsTz);
-        monthTotals[key] = (monthTotals[key] || 0) + km(a);
+        monthTotals[key] = (monthTotals[key] || 0) + parseDurationHours(a.duration);
       });
       const bestMonth = Object.entries(monthTotals).reduce((m, x) => x[1] > m[1] ? x : m);
-      prs.push({ icon: '📍', label: 'Biggest month', value: Math.round(bestMonth[1] * 10) / 10 + ' km', meta: keyToUtcDate(bestMonth[0]).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) + ' · across all sports' });
+      prs.push({ icon: '📍', label: 'Biggest month', value: Math.round(bestMonth[1] * 10) / 10 + 'h', meta: keyToUtcDate(bestMonth[0]).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) + ' · across all sports' });
     }
 
     res.json({
       period,
       chartWeeks,
+      window: { start: selectedWindow.start, end: selectedWindow.end, days: selectedWindow.days },
+      previous,
+      comparison: statsComparison({ activities: periodActs.length, totalKm, totalHours }, previous),
+      weeklyCoverage,
       hero: { activities: periodActs.length, totalKm, totalHours, totalPoints },
       streaks: { current: currentStreak, longest: longestStreak, avgPerWeek },
       weekStrip,
