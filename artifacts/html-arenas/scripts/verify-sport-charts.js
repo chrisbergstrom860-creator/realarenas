@@ -25,13 +25,14 @@ import path from 'path';
 import vm from 'vm';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
-import { createClient } from '@supabase/supabase-js';
 import { launchBrowser } from './lib/mobile-geometry.js';
 
 const require = createRequire(import.meta.url);
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BASE_URL = 'http://localhost:80/html';
-const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+// Seeded E2E is opt-in (VERIFY_E2E=1); unit checks are seed-free.
+const RUN_E2E = process.env.VERIFY_E2E === '1';
+let admin = null;
 
 let failures = 0;
 function check(name, ok, detail) {
@@ -44,6 +45,7 @@ const sandbox = { window: {} };
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(ROOT, 'html', 'arenas-sport-charts.js'), 'utf8'), sandbox);
 const buildSportCharts = sandbox.window.buildSportCharts;
+const SC = sandbox.window.ArenasSportCharts;
 
 const SPORTS = require(path.join(ROOT, 'sports.js')).SPORTS;
 const COLORS = {};
@@ -147,10 +149,48 @@ function fixedCases() {
   check('rendered pairwise ΔE >= 20', min >= 20, min.toFixed(1) + ' (' + pair + ')');
 }
 
+// ── Composable cards: donut + legend sessions, summary table, bars ──
+function composableCases() {
+  console.log('— composable exports (donut / summary / bars) —');
+  const bd = [
+    { sport: 'cycling', sessions: 8, km: 120, hours: 6.5 },
+    { sport: 'weightlifting', sessions: 3, km: 0, hours: 2.5 },
+    { sport: 'golf', sessions: 1, km: 0, hours: 0 },
+    { sport: 'swimming', sessions: 0, km: 0, hours: 0 }
+  ];
+  const d = SC.donut(bd, COLORS, false);
+  check('donut: hole drawn', d.includes('class="donut-hole"') && /r="44" fill="white"/.test(d));
+  check('donut: centre total "12 sessions"', /class="donut-total"[^>]*>12<\/text>/.test(d) && d.includes('>SESSIONS</text>') && d.includes('12 sessions'));
+  check('donut: legend percentages 67/25/8 (sum 100)', JSON.stringify(legendPcts(d)) === '[67,25,8]', JSON.stringify(legendPcts(d)));
+  const sess = [...d.matchAll(/class="sc-legend-sessions"[^>]*>(\d+)</g)].map((m) => +m[1]);
+  check('donut: legend sessions column 8/3/1', JSON.stringify(sess) === '[8,3,1]', JSON.stringify(sess));
+  const inSlice = [...d.matchAll(/fill="#FFFFFF">(\d+)%<\/text>/g)].map((m) => +m[1]);
+  check('donut: in-slice % labels kept (no outside labels)', inSlice.length >= 2 && !/text-anchor="(start|end)"/.test(d), JSON.stringify(inSlice));
+  check('donut: zero-session sport omitted', !d.includes('Swimming'));
+  const one = SC.donut([{ sport: 'running', sessions: 5, km: 40, hours: 4 }], COLORS, false);
+  check('donut single sport: ring + 100% on the ring, centre total 5', /<circle cx="100" cy="100" r="80" fill="#C2410C"/.test(one) && /y="38"[^>]*>100%</.test(one) && /class="donut-total"[^>]*>5</.test(one));
+  check('donut singular unit "SESSION"', SC.donut([{ sport: 'running', sessions: 1, km: 4, hours: 0.5 }], COLORS, false).includes('>SESSION</text>'));
+
+  const t = SC.summaryTable(bd, COLORS);
+  const ths = [...t.matchAll(/<th[^>]*>([^<]+)<\/th>/g)].map((m) => m[1]);
+  check('summary: header Sport / Sessions / Distance / Time', JSON.stringify(ths) === '["Sport","Sessions","Distance","Time"]', JSON.stringify(ths));
+  check('summary: only sports with ≥1 session (3 rows)', (t.match(/class="sc-sum-row"/g) || []).length === 3 && !t.includes('Swimming'));
+  check('summary: zero distance → —', /data-sport="weightlifting".*?<td[^>]*>3<\/td><td[^>]*>—<\/td>/.test(t));
+  check('summary: 120 km and 6.5h', t.includes('>120 km<') && t.includes('>6.5h<'));
+
+  const sb = SC.sessionsBars(bd, COLORS, false), tb = SC.timeBars(bd, COLORS, false);
+  check('bars: separate sessions + time SVGs', sb.includes('Sessions per sport') && tb.includes('Hours per sport') && (sb.match(/<svg /g) || []).length === 1);
+  check('bars: zero-session sport omitted', (sb.match(/<rect /g) || []).length === 3 && (tb.match(/<rect /g) || []).length === 3);
+  check('bars: legacy wrapper output byte-identical to composed bar charts', buildSportCharts(bd, COLORS, false).includes(sb.slice(0, 400)));
+  check('empty / all-zero → "" for every card', ['donut', 'summaryTable', 'sessionsBars', 'timeBars'].every((k) => SC[k]([{ sport: 'golf', sessions: 0, km: 0, hours: 0 }], COLORS, false) === '' && SC[k]([], COLORS, false) === ''));
+}
+
 // ── E2E ──
 const EMAIL = 'vsc-user@arenas-test.dev';
 const PW = 'ArenasTest!234';
 async function e2e() {
+  if (!RUN_E2E) { console.log('— e2e skipped (set VERIFY_E2E=1 with the dev server up) —'); return; }
+  admin = require('@supabase/supabase-js').createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
   console.log('— e2e (live page vs /api/profile/stats) —');
   // All seeding happens INSIDE the try so the finally cleanup always runs —
   // a mid-seed or login failure must not orphan the fixed-email account.
@@ -192,7 +232,7 @@ async function e2e() {
   const cookieHeader = rawCookies.join('; ');
 
   const api = await (await fetch(BASE_URL + '/api/profile/stats?period=all', { headers: { Cookie: cookieHeader } })).json();
-  const bd = api.sportBreakdown || [];
+  const bd = (api.sportBreakdown || []).filter((s) => s.sessions > 0);
   check('api breakdown has 3 sports', bd.length === 3, JSON.stringify(bd.map((s) => s.sport)));
   const bySport = {};
   bd.forEach((s) => { bySport[s.sport] = s; });
@@ -233,8 +273,9 @@ async function e2e() {
         // stack chart is also svg[role="img"] inside #sp-stats-body, and
         // closest() from it finds the outer stats layout grid, not the
         // By-sport charts grid.
-        const card = pieSvg && pieSvg.closest('div[style*="border-radius"]');
-        const grid = pieSvg && pieSvg.closest('div[style*="grid-template-columns"]');
+        // Donut + summary live in the #sp-sport-row two-up (stacks <=768).
+        const card = document.getElementById('sp-sport-row');
+        const grid = card;
         return {
           svgCount: svgs.length,
           sessionsLabels: sessionsSvg ? texts(sessionsSvg) : [],
@@ -291,7 +332,7 @@ async function e2e() {
       // "1fr 1fr" grids to one column (arenas.css bottom-nav block), and
       // <=560px the builder itself renders the stacked narrow variant — so
       // everything at or below 768 is a single column.
-      check(w + ': ' + (width > 768 ? '2-column bar row under full-width pie' : 'stacked single column'),
+      check(w + ': ' + (width > 768 ? 'donut + summary side by side' : 'donut above summary (stacked)'),
         width > 768 ? got.gridCols === 2 : got.gridCols === 1, String(got.gridCols));
       // No horizontal clipping anywhere in the card, and no page scroll.
       check(w + ': card has no horizontal overflow', got.cardOverflowX <= 2, String(got.cardOverflowX));
@@ -312,6 +353,7 @@ async function e2e() {
 }
 
 fixedCases();
+composableCases();
 await e2e();
 console.log(failures ? failures + ' FAILURE(S)' : 'ALL PASS');
 process.exit(failures ? 1 : 0);

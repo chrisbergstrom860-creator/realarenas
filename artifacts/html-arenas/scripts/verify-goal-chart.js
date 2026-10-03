@@ -96,6 +96,10 @@ try {
     const { page, context, errors } = await open(u, width);
     const { active } = await api(page, '/api/goals');
     const stats = await api(page, '/api/profile/stats');
+    check(`${width}: weekly chart precedes goals, streak and sport cards`, await page.evaluate(() => {
+      const nodes = [document.querySelector('#sp-weekly-card'), document.querySelector('#gvw-card'), document.querySelector('#gvw-streak')];
+      return nodes.every(Boolean) && nodes.slice(1).every((n, i) => nodes[i].compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING);
+    }));
     check(`${width}: panels weekly/monthly, Custom absent`, await page.locator('.gvw-panel').evaluateAll(ps => ps.map(p => p.dataset.period).join(',') === 'weekly,monthly'));
     check(`${width}: tabs visible only for present goal types`, await page.locator('.gvw-tab').evaluateAll(ts =>
       ts.map(t => t.closest('.gvw-panel').dataset.period + ':' + t.dataset.type).join(',') === 'weekly:frequency,monthly:duration,monthly:distance'));

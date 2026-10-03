@@ -1091,6 +1091,52 @@ const PAGES = [
             document.querySelectorAll('.gvw-tile-goal').length === 1
         }))()` }
       ] },
+      ...['6w','12w','6m','1y','all'].map(period => ({
+        name: 'stats-period-' + period,
+        js: `(async () => {
+          document.querySelector('.sp-period[data-p="${period}"]').click();
+          for(let i=0;i<100;i++) {
+            if(document.querySelector('.sp-kpis') && !document.querySelector('.sp-loading')) {
+              await new Promise(r=>setTimeout(r,800)); break;
+            }
+            await new Promise(r=>setTimeout(r,100));
+          }
+        })()`,
+        waitFor: '.sp-kpis',
+        surfaces: [{name:'period KPIs',sel:'.sp-kpis',min:4}],
+        checks: [{name:'four KPIs, responsive rows, donut and summary',js:`(() => {
+          const k = document.querySelector('.sp-kpis');
+          const columns = getComputedStyle(k).gridTemplateColumns.split(' ').length;
+          const rows = [...document.querySelectorAll('.sp-2up')];
+          return {ok:k.children.length===4 && columns===(innerWidth<=768?2:4) &&
+            rows.length===2 && rows.every(r=>getComputedStyle(r).gridTemplateColumns.split(' ').length===(innerWidth<=768?1:2)) &&
+            document.querySelectorAll('#sp-stats-body svg[role="img"]').length>=3};
+        })()`}]
+      })),
+      ...[52,104].map(count => ({
+        name:'stats-dense-' + count,
+        js:`(async () => {
+          const original = window.fetch;
+          window.fetch = async function(input, init) {
+            const r = await original.call(window,input,init);
+            if(!String(input).includes('/api/profile/stats')) return r;
+            window.fetch=original;
+            const p=await r.clone().json();
+            const w=p.weeklyChart[p.weeklyChart.length-1];
+            p.weeklyChart=Array.from({length:${count}},(_,i)=>({...w,label:'1Jan',isPartial:i===${count-1}}));
+            p.weeklyCoverage={buckets:${count},capped:${count===104}};
+            return new Response(JSON.stringify(p),{status:200,headers:{'Content-Type':'application/json'}});
+          };
+          document.querySelector('.sp-period[data-p="all"]').click();
+          await new Promise(r=>setTimeout(r,1500));
+          window.fetch=original;
+        })()`, waitFor:'.sp-kpis',
+        surfaces:[{name:'dense weekly chart',sel:'#sp-weekly-card',min:1}],
+        checks:[{name:'exact dense bucket count and all values',js:`(() => ({
+          ok: document.querySelectorAll('#sp-weekly-chart .wk-col').length===${count} &&
+            document.querySelectorAll('#sp-weekly-chart .wk-val').length===${count}
+        }))()`}]
+      })),
       { name: 'stats-five-groups', js: `(async () => {
           const originalFetch = window.fetch;
           // One response-only layout fixture: five enriched sessions goals.

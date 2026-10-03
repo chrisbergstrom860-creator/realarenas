@@ -346,7 +346,9 @@ export function auditExpr(rootSel, ignoreOverlapSels = [], ignoreClippingSels = 
           && a.scrollHeight > a.clientHeight + T;
         const horizontalScroll = /(auto|scroll)/.test(s.overflowX + s.overflow)
           && a.scrollWidth > a.clientWidth + T;
-        const explicitHorizontalClip = /(hidden|clip)/.test(s.overflowX + s.overflow);
+        // The shorthand can be "auto hidden": vertical clipping must not
+        // classify a reachable horizontal chart scrollport as clipped.
+        const explicitHorizontalClip = /(hidden|clip)/.test(s.overflowX);
         const horizontalScrollAllowed = /(auto|scroll)/.test(s.overflowX + s.overflow)
           && !a.matches('.ai-sheet-body');
         const checkHorizontal = explicitHorizontalClip

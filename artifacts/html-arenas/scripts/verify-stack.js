@@ -12,16 +12,21 @@
 //    labeled weekly total (largest-remainder tenths), across weeks=6/12/24,
 //    with zero weeks reported honestly. Cleans up afterwards.
 //
-// Run with the dev server up: node artifacts/html-arenas/scripts/verify-stack.js
+// Unit + static: node artifacts/html-arenas/scripts/verify-stack.js
+// Seeded E2E (dev server up): VERIFY_E2E=1 node artifacts/html-arenas/scripts/verify-stack.js
 
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { createClient } = require('@supabase/supabase-js');
+
 
 const ROOT = path.join(__dirname, '..');
 const BASE_URL = 'http://localhost:80/html';
-const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+// Seeded E2E is opt-in (VERIFY_E2E=1) — the unit + static checks below are
+// seed-free and run anywhere. The client is created lazily so a missing env
+// never breaks the unit run.
+const RUN_E2E = process.env.VERIFY_E2E === '1';
+let admin = null;
 
 let failures = 0;
 function check(name, ok, detail) {
@@ -48,7 +53,7 @@ function fixedCases() {
   const html = buildWeeklyStack(weekly, COLORS, 6, false);
 
   // Every stacked column's flex-basis percentages sum to 100.
-  const stacks = html.split('flex-direction:column">').slice(1);
+  const stacks = html.split('class="wk-bar"').slice(1);
   const sums = [];
   stacks.forEach((s) => {
     const segs = [...s.matchAll(/flex:0 0 ([\d.]+)%/g)].map((m) => parseFloat(m[1]));
@@ -79,20 +84,82 @@ function fixedCases() {
   check('all-zero range renders no legend', !empty.includes('border-top:var(--border)'));
 }
 
+function metricCases() {
+  console.log('— metric option, partial bucket, label density —');
+  const mk = (n, partial) => Array.from({ length: n }, (_, i) => ({
+    label: 'W' + i, start: '', end: '', isPartial: partial && i === n - 1,
+    hours: 3, km: 42.5, sessions: 4,
+    bySport: [{ sport: 'cycling', hours: 2, km: 40, sessions: 1 }, { sport: 'running', hours: 1, km: 2.5, sessions: 3 }]
+  }));
+  const w12 = mk(12, true);
+  const h = buildWeeklyStack(w12, COLORS, { metric: 'hours', width: 900 });
+  const k = buildWeeklyStack(w12, COLORS, { metric: 'km', width: 900 });
+  const s = buildWeeklyStack(w12, COLORS, { metric: 'sessions', width: 900 });
+  check('hours metric labels "3h"', h.includes('>3h</div>') && h.includes('data-metric="hours"'));
+  check('km metric labels "42.5 km"', k.includes('>42.5 km</div>') && k.includes('data-metric="km"'));
+  check('sessions metric labels "4"', s.includes('>4</div>') && s.includes('data-metric="sessions"'));
+  check('km segment shares follow km (cycling 94.118%)', k.includes('flex:0 0 94.118%'));
+  check('sessions segment shares follow sessions (running 75%)', s.includes('flex:0 0 75.000%'));
+  check('km tooltip unit', k.includes('title="Cycling · 40 km"'));
+  const order = (html) => [...(html.split('wk-legend"')[1] || '').matchAll(/<\/span>\S+ (\w+)<\/div>/g)].map((m) => m[1]).filter((t) => t !== 'progress');
+  check('legend sorted by hours: Cycling, Running', JSON.stringify(order(h)) === '["Cycling","Running"]', JSON.stringify(order(h)));
+  check('legend sorted by sessions: Running, Cycling', JSON.stringify(order(s)) === '["Running","Cycling"]', JSON.stringify(order(s)));
+  check('final bucket labelled "This week"', h.includes('>This week</div>') && !h.includes('>Now<'));
+  check('partial final bucket: dashed outline', (h.match(/wk-partial/g) || []).length === 1 && h.includes('dashed var(--gray-500)'));
+  check('partial final bucket: reduced fill', h.includes('opacity:.42'));
+  check('partial legend key "In progress"', h.includes('In progress'));
+  const full = buildWeeklyStack(mk(12, false), COLORS, { metric: 'hours', width: 900 });
+  check('complete final week: no dashed outline', !full.includes('wk-partial') && full.includes('>This week</div>'));
+  const zeroKm = buildWeeklyStack([{ label: 'A', hours: 1, km: 0, sessions: 1, bySport: [{ sport: 'yoga', hours: 1, km: 0, sessions: 1 }] }], COLORS, { metric: 'km', width: 600 });
+  check('km metric: zero-km week → baseline tick, no legend', zeroKm.includes('wk-zero') && !zeroKm.includes('wk-legend"'));
+
+  // Every bar keeps its visible total across 6–104 bars and widths; dense
+  // ranges scroll locally with a min slot >= the widest label; only axis
+  // dates thin; final bucket always labelled.
+  const AS = sandbox.window.ArenasStack;
+  for (const n of [6, 12, 26, 52, 104]) {
+    for (const width of [336, 600, 1200]) {
+      for (const metric of ['hours', 'km', 'sessions']) {
+        const html = buildWeeklyStack(mk(n, true), COLORS, { metric, width });
+        const vals = (html.match(/class="wk-val"/g) || []).length; // fixture has no zero weeks
+        const axes = [...html.matchAll(/class="wk-axis"[^>]*>([^<]*)</g)].filter((m) => m[1]).length;
+        const lw = AS.labelPx(AS.metrics[metric].fmt(metric === 'km' ? 42.5 : metric === 'hours' ? 3 : 4));
+        const d = AS.density(n, width, metric, lw);
+        const scroll = html.includes('class="wk-scroll"');
+        check(`n=${n} w=${width} ${metric}: ${n}/${n} values, ${axes} dates, slot ${d.slot.toFixed(1)}>=${lw}${scroll ? ', scrolls' : ''}`,
+          vals === n && d.slot >= lw && d.slot * d.axisEvery >= 46 && axes <= Math.ceil(n / d.axisEvery) + 1 &&
+          html.includes('>This week</div>') && (html.match(/class="wk-col"/g) || []).length === n &&
+          scroll === (d.slot * n > width - 28 + 0.5));
+      }
+    }
+  }
+  check('104 bars @360 scroll locally with fixed inner width + hint', (() => { const h = buildWeeklyStack(mk(104, true), COLORS, { metric: 'hours', width: 336 }); return h.includes('overflow-x:auto') && /data-scroll="1"[^>]*width:\d+px/.test(h) && h.includes('Scroll for earlier weeks'); })());
+  check('12 bars @1200 fit without scrolling', !buildWeeklyStack(mk(12, true), COLORS, { metric: 'km', width: 1200 }).includes('wk-scroll'));
+  const zh = (m) => buildWeeklyStack([{ label: 'A', hours: 0, km: 0, sessions: 0, bySport: [] }, ...mk(3, true)], COLORS, { metric: m, width: 600 });
+  check('zero week: value label above baseline in every metric (0h / 0 km / 0)', ['hours', 'km', 'sessions'].every((m) => (zh(m).match(/class="wk-val"/g) || []).length === 4) && zh('hours').includes('>0h</div>') && zh('km').includes('>0 km</div>') && />0<\/div><div class="wk-bar wk-zero/.test(zh('sessions')));
+  check('legacy wrapper: zero week stays unlabelled', !buildWeeklyStack([{ label: 'A', hours: 0, bySport: [] }, { label: 'B', hours: 2, bySport: [{ sport: 'running', hours: 2 }] }], COLORS, 6, false).includes('>0h<'));
+}
+
 function staticOrderChecks() {
   console.log('— static page checks —');
   const page = fs.readFileSync(path.join(ROOT, 'html', 'arenas-my-profile.html'), 'utf8');
-  const iSport = page.indexOf('🏅 By sport');
-  const iPrs = page.indexOf('🏆 Personal records');
-  const iWeekly = page.indexOf('📊 Weekly activity');
-  check('card order: By sport → Personal records → Weekly activity',
-    iSport > -1 && iPrs > iSport && iWeekly > iPrs,
-    JSON.stringify({ iSport, iPrs, iWeekly }));
-  check('weeks localStorage preference untouched', page.includes('arenas_stats_weeks'));
-  check('range pills intact (weekPill 6/12/24)', page.includes('weekPill(6) + weekPill(12) + weekPill(24)'));
+  const render = page.slice(page.indexOf('// Section order: period control'));
+  const seq = ['spKpis(r)', 'spWeeklyCard(r)', 'gvwCard(r)', 'sportRow', 'spPrsCard(r.prs)', 'barsRow'].map((t) => render.indexOf(t));
+  check('section order: KPIs → Weekly → Goals/Streak → Sport row → PRs → Bars', seq.every((v, i) => v > -1 && (i === 0 || v > seq[i - 1])), JSON.stringify(seq));
+  check('period control 6W/12W/6M/1Y/All', ['6w', '12w', '6m', '1y', 'all'].every((p) => page.includes(`setStatsPeriod(this,'${p}')`)));
+  check('period persisted + legacy weeks migration', page.includes("'arenas_stats_period'") && page.includes("{ 6: '6w', 12: '12w', 24: '6m' }"));
+  check('metric persisted (arenas_stats_metric)', page.includes("'arenas_stats_metric'"));
+  check('comparison copy is "vs previous period" (equal-length window)', page.includes('vs previous period') && !page.includes("vs previous ' + SP_PERIOD_LABEL"));
+  check('API called with period only (no weeks param)', page.includes("'/api/profile/stats?period=' + encodeURIComponent(spPeriod))") && !page.includes('&weeks='));
+  check('old three-stat strip / four-total row removed', !page.includes('Avg sessions / week') && !page.includes('Points earned</div>'));
+  check('104-week cap note', page.includes('Showing the last 104 weeks'));
+  check('dense chart scrolled to end on render', page.includes('sc.scrollLeft = sc.scrollWidth'));
+  check('goals caption', page.includes('Goals use their own weekly and monthly windows'));
 }
 
 async function e2e() {
+  if (!RUN_E2E) { console.log('— e2e skipped (set VERIFY_E2E=1 with the dev server up) —'); return; }
+  admin = require('@supabase/supabase-js').createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
   console.log('— e2e: seeded hours across sports and weeks —');
   const email = 'stack-check@arenas-test.dev';
   const password = 'Stackcheck!12345';
@@ -134,11 +201,15 @@ async function e2e() {
       .map((c) => c.split(';')[0]).join('; ');
     check('login sets session cookies', cookie.includes('sb_access_token'));
 
-    for (const weeks of [6, 12, 24]) {
-      const r = await fetch(BASE_URL + '/api/profile/stats?period=all&weeks=' + weeks, { headers: { Cookie: cookie } });
+    const bad400 = await fetch(BASE_URL + '/api/profile/stats?period=bogus', { headers: { Cookie: cookie } });
+    check('unknown period → 400', bad400.status === 400, String(bad400.status));
+    for (const [period, weeks] of [['6w', 6], ['12w', 12]]) {
+      const r = await fetch(BASE_URL + '/api/profile/stats?period=' + period, { headers: { Cookie: cookie } });
       const stats = await r.json();
       const wc = stats.weeklyChart;
-      check('weeks=' + weeks + ' returns ' + weeks + ' buckets', wc.length === weeks, String(wc.length));
+      check(period + ' returns ' + weeks + ' buckets', wc.length === weeks, String(wc.length));
+      check(period + ': final bucket isPartial is boolean, buckets carry km + sessions',
+        typeof wc[wc.length - 1].isPartial === 'boolean' && wc.every((w) => typeof w.km === 'number' && typeof w.sessions === 'number'));
       // THE core assertion: per week, segment hours sum EXACTLY to the
       // labeled total (tenths math, no float fuzz allowed).
       const bad = wc.filter((w) => {
@@ -150,7 +221,7 @@ async function e2e() {
       check('weeks=' + weeks + ': zero weeks have empty bySport', zeroOk);
     }
 
-    const r12 = await fetch(BASE_URL + '/api/profile/stats?period=all&weeks=12', { headers: { Cookie: cookie } });
+    const r12 = await fetch(BASE_URL + '/api/profile/stats?period=12w', { headers: { Cookie: cookie } });
     const wc12 = (await r12.json()).weeklyChart;
     const nonZero = wc12.filter((w) => w.hours > 0);
     check('hours spread across multiple weeks', nonZero.length >= 3, String(nonZero.length));
@@ -172,6 +243,7 @@ async function e2e() {
 
 (async () => {
   fixedCases();
+  metricCases();
   staticOrderChecks();
   await e2e();
   console.log(failures === 0 ? '\nAll checks passed.' : '\n' + failures + ' CHECK(S) FAILED');

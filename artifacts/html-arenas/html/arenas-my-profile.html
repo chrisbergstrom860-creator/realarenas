@@ -353,6 +353,58 @@ button,select,input,textarea{font-family:var(--font)}
 /* "ⓘ How points work" link — same treatment on leaderboards, challenges and profile. */
 .hpw-link{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--gray-500);text-decoration:none}
 .hpw-link:hover{color:var(--gray-700);text-decoration:underline}
+/* ── STATS & PRs: period control, KPI tiles, cards ── */
+.sp-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 16px;border-bottom:var(--border);background:white}
+.sp-window{font-size:11px;color:var(--gray-500);font-family:var(--mono);margin-top:2px;min-height:14px}
+.sp-seg{display:inline-flex;border:var(--border);border-radius:8px;overflow:hidden;background:white}
+.sp-period{border:0;border-left:var(--border);background:white;padding:6px 12px;font-size:12px;font-weight:500;color:var(--gray-600);cursor:pointer;min-height:32px;white-space:nowrap;transition:background .12s,color .12s}
+.sp-period:first-child{border-left:0}
+.sp-period:hover{background:var(--gray-50)}
+.sp-period.on{background:var(--yellow-light);color:#7a5c00;font-weight:600}
+.sp-period:focus-visible{outline:2px solid var(--gray-900);outline-offset:-2px}
+.sp-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px}
+.sp-kpi{background:white;border:var(--border);border-radius:var(--radius-lg);padding:14px 16px;min-width:0;min-height:96px;box-sizing:border-box}
+.sp-kpi-label{font-size:10px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;gap:4px 6px;flex-wrap:wrap}
+.sp-kpi-tag{white-space:nowrap;font-size:9px;font-weight:600;letter-spacing:.04em;color:var(--gray-400);border:var(--border);border-radius:10px;padding:0 6px;text-transform:none}
+.sp-kpi-val{font-size:26px;font-weight:700;font-family:var(--mono);color:var(--gray-900);line-height:1;margin:8px 0 6px;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp-kpi-val small{font-size:14px;font-weight:600;color:var(--gray-500);margin-left:2px}
+.sp-kpi-delta{font-size:11px;font-family:var(--mono);color:var(--gray-500);line-height:1.35}
+.sp-kpi-delta.up{color:#047857}
+.sp-kpi-delta.down{color:var(--gray-500)}
+.sp-kpi-delta .vs{color:var(--gray-400);font-family:var(--font)}
+.sp-card{margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden;min-width:0}
+.sp-card-hdr{padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.sp-card-title{font-size:12px;font-weight:600;color:var(--gray-900)}
+.sp-card-sub{font-size:11px;color:var(--gray-400)}
+.sp-card-body{padding:16px}
+.sp-note{font-size:11px;color:var(--gray-500);padding:0 14px 12px}
+.sp-2up{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 12px 12px}
+.sp-2up > .sp-card{margin:0}
+.sp-metric{display:inline-flex;border:var(--border);border-radius:8px;overflow:hidden;background:white}
+.sp-metric button{border:0;border-left:var(--border);background:white;padding:4px 10px;font-size:11px;font-weight:500;color:var(--gray-600);cursor:pointer;min-height:28px}
+.sp-metric button:first-child{border-left:0}
+.sp-metric button.on{background:var(--yellow-light);color:#7a5c00;font-weight:600}
+.sp-metric button:focus-visible{outline:2px solid var(--gray-900);outline-offset:-2px}
+.sp-prs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;padding:12px 14px}
+.sp-pr{border:var(--border);border-radius:10px;padding:12px;background:white;min-width:0}
+.sp-pr-more{display:none}
+.sp-prs.expanded .sp-pr-more{display:block}
+.sp-viewall{border:0;background:none;padding:2px 0;font-size:12px;font-weight:600;color:var(--gray-700);cursor:pointer;font-family:inherit}
+.sp-viewall:hover{text-decoration:underline}
+.sp-empty-period{padding:28px 16px;text-align:center;font-size:13px;color:var(--gray-500)}
+.gvw-caption{font-size:11px;color:var(--gray-400);margin-top:2px}
+.sk{position:relative;overflow:hidden;background:var(--gray-100)!important;border-color:var(--gray-100)!important}
+.sk::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);transform:translateX(-100%);animation:sk-sweep 1.3s ease infinite}
+@keyframes sk-sweep{to{transform:translateX(100%)}}
+@media (max-width:1024px){.sp-prs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:768px){
+  .sp-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sp-2up{grid-template-columns:minmax(0,1fr)}
+  .sp-kpi-val{font-size:22px}
+  .sp-toolbar{padding:10px 12px}
+  .sp-seg{width:100%}
+  .sp-period{flex:1;padding:6px 4px}
+}
 /* ── GOALS vs ACTUAL + ACTIVITY STREAK (Stats tab) ── */
 .gvw-card{margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);padding:16px}
 .gvw-hdr{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
@@ -570,16 +622,24 @@ button,select,input,textarea{font-family:var(--font)}
 
 <!-- ═══ STATS & PRs TAB ═══ -->
 <div class="tab-content" id="tab-stats">
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:var(--border);background:white">
-    <div style="font-size:13px;font-weight:600">Stats &amp; PRs</div>
-    <div style="display:flex;gap:5px">
-      <div class="sp-period" data-p="month" onclick="setStatsPeriod(this,'month')" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">This month</div>
-      <div class="sp-period" data-p="year" onclick="setStatsPeriod(this,'year')" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;border:var(--border);background:white;color:var(--gray-600);cursor:pointer">This year</div>
-      <div class="sp-period" data-p="all" onclick="setStatsPeriod(this,'all')" style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:500;border:1px solid var(--yellow-dark);background:var(--yellow-light);color:#7a5c00;cursor:pointer">All time</div>
+  <div class="sp-toolbar">
+    <div class="sp-toolbar-title">
+      <div style="font-size:13px;font-weight:600">Stats &amp; PRs</div>
+      <div class="sp-window" id="sp-window"></div>
+    </div>
+    <div class="sp-seg" role="tablist" aria-label="Stats period">
+      <button type="button" role="tab" class="sp-period" data-p="6w" onclick="setStatsPeriod(this,'6w')">6W</button>
+      <button type="button" role="tab" class="sp-period" data-p="12w" onclick="setStatsPeriod(this,'12w')">12W</button>
+      <button type="button" role="tab" class="sp-period" data-p="6m" onclick="setStatsPeriod(this,'6m')">6M</button>
+      <button type="button" role="tab" class="sp-period" data-p="1y" onclick="setStatsPeriod(this,'1y')">1Y</button>
+      <button type="button" role="tab" class="sp-period" data-p="all" onclick="setStatsPeriod(this,'all')">All time</button>
     </div>
   </div>
   <div id="sp-stats-body">
-    <div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Loading stats…</div>
+    <div class="sp-skel" aria-label="Loading stats">
+      <div class="sp-kpis"><div class="sp-kpi sk"></div><div class="sp-kpi sk"></div><div class="sp-kpi sk"></div><div class="sp-kpi sk"></div></div>
+      <div class="sp-card sk" style="height:250px"></div>
+    </div>
   </div>
 </div>
 
@@ -1860,24 +1920,51 @@ if (logHashMatch) {
 <script>
 // ── STATS & PRs TAB ── real data computed from the user's own activities.
 (function () {
-  var spPeriod = 'all';
-  // Weekly-chart range (6/12/24), persisted per the key-naming convention.
-  // Anything unexpected in storage falls back to the historic 12.
-  var spWeeks = (function () {
+  // One period control (6W | 12W | 6M | 1Y | All time), default 12W,
+  // persisted as arenas_stats_period. Migrates the retired weekly-range key
+  // (arenas_stats_weeks 6/12/24 → 6w/12w/6m) once, then drops it.
+  var SP_PERIODS = ['6w', '12w', '6m', '1y', 'all'];
+  var SP_PERIOD_LABEL = { '6w': '6 weeks', '12w': '12 weeks', '6m': '6 months', '1y': '12 months', all: 'All time' };
+  var SP_METRICS = [['hours', 'Hours'], ['km', 'Distance'], ['sessions', 'Sessions']];
+  var spPeriod = (function () {
     try {
-      var v = parseInt(localStorage.getItem('arenas_stats_weeks'), 10);
-      return v === 6 || v === 12 || v === 24 ? v : 12;
-    } catch (e) { return 12; }
+      var saved = localStorage.getItem('arenas_stats_period');
+      if (SP_PERIODS.indexOf(saved) !== -1) return saved;
+      var legacy = parseInt(localStorage.getItem('arenas_stats_weeks'), 10);
+      var mapped = { 6: '6w', 12: '12w', 24: '6m' }[legacy];
+      if (mapped) {
+        localStorage.setItem('arenas_stats_period', mapped);
+        localStorage.removeItem('arenas_stats_weeks');
+        return mapped;
+      }
+    } catch (e) {}
+    return '12w';
   })();
+  var spMetric = (function () {
+    try {
+      var m = localStorage.getItem('arenas_stats_metric');
+      return m === 'hours' || m === 'km' || m === 'sessions' ? m : 'hours';
+    } catch (e) { return 'hours'; }
+  })();
+  var spLast = null;        // last good /api/profile/stats response
+  var spColors = null;      // registry palette for the charts
+  var spReq = 0;            // request token: stale responses never paint
 
-  window.setStatsWeeks = function (n) {
-    if (n === spWeeks) return;
-    spWeeks = n;
-    try { localStorage.setItem('arenas_stats_weeks', String(n)); } catch (e) {}
-    // Compute-then-swap: the old chart stays visible until the new range's
-    // data has arrived, so there is never a wrong-range flash.
-    loadProfileStats();
+  window.setStatsMetric = function (m) {
+    if (m === spMetric || !SP_METRICS.some(function (x) { return x[0] === m; })) return;
+    spMetric = m;
+    try { localStorage.setItem('arenas_stats_metric', m); } catch (e) {}
+    spRenderWeekly();
   };
+
+  function spSyncPeriodButtons() {
+    document.querySelectorAll('.sp-period').forEach(function (p) {
+      var on = p.getAttribute('data-p') === spPeriod;
+      p.classList.toggle('on', on);
+      p.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+  }
+  spSyncPeriodButtons();
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -1977,14 +2064,14 @@ if (logHashMatch) {
 
   // Section markup. `stats` = /api/profile/stats response (for the streak block).
   function gvwCard(stats) {
-    var head = '<div class="gvw-hdr"><div class="gvw-hdr-icon">🎯</div><div><div class="gvw-h">Goals vs actual</div><div class="gvw-sub">See how you\'re progressing across your sports</div></div>' +
+    var head = '<div class="gvw-hdr"><div class="gvw-hdr-icon">🎯</div><div><div class="gvw-h">Goals vs actual</div><div class="gvw-sub">See how you\'re progressing across your sports</div><div class="gvw-caption">Goals use their own weekly and monthly windows</div></div>' +
       '<div class="gvw-legend"><span><i class="gvw-sw goal"></i>Goal</span><span><i class="gvw-sw act"></i>Actual</span><span><i class="gvw-sw exp"></i>Expected by today</span></div></div>';
     var goalsHtml = '';
     if (goalsActive) {
       var panels = gvwPanels();
       goalsHtml = gvwHasBarGoals()
         ? '<div id="gvw-card" class="gvw-card">' + head + '<div class="gvw-grid">' + panels.map(gvwPanelHtml).join('') + '</div></div>'
-        : '<div id="gvw-card" class="gvw-card gvw-empty"><div class="gvw-empty-icon">🎯</div><div class="gvw-empty-text">Set weekly or monthly goals to see your progress here</div>' +
+        : '<div id="gvw-card" class="gvw-card gvw-empty"><div class="gvw-empty-icon">🎯</div><div class="gvw-empty-text">Set weekly or monthly goals to see your progress here<div class="gvw-caption">Goals use their own weekly and monthly windows</div></div>' +
           '<button type="button" class="btn btn-yellow gvw-empty-cta" onclick="document.getElementById(\'htab-goals\').click()">Set a goal</button></div>';
     }
     return goalsHtml + gvwStreakHtml(stats);
@@ -2091,13 +2178,134 @@ if (logHashMatch) {
   window.__gvw = { spec: gvwChartSpec };
 
   window.setStatsPeriod = function (el, period) {
-    document.querySelectorAll('.sp-period').forEach(function (p) {
-      p.style.background = 'white'; p.style.color = 'var(--gray-600)'; p.style.border = 'var(--border)';
-    });
-    el.style.background = 'var(--yellow-light)'; el.style.border = '1px solid var(--yellow-dark)'; el.style.color = '#7a5c00';
+    if (SP_PERIODS.indexOf(period) === -1) return;
     spPeriod = period;
+    try { localStorage.setItem('arenas_stats_period', period); } catch (e) {}
+    spSyncPeriodButtons();
     loadProfileStats();
   };
+
+  // ── Stats helpers ──
+  function spDay(key) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(key || ''));
+    return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null;
+  }
+  function spFmtDay(d) {
+    return d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '';
+  }
+  // window.end is EXCLUSIVE (tomorrow's day key) — the label shows end − 1.
+  function spWindowLabel(w) {
+    if (!w || !w.start || !w.end) return '';
+    var s = spDay(w.start), e = spDay(w.end);
+    if (!s || !e) return '';
+    var last = new Date(e.getTime() - 86400000);
+    return spFmtDay(s) + ' – ' + spFmtDay(last) + ' · ' + w.days + ' day' + (w.days !== 1 ? 's' : '');
+  }
+  function spNum(n, digits) {
+    var v = Number(n) || 0;
+    return v.toLocaleString('en-GB', { maximumFractionDigits: digits == null ? 1 : digits });
+  }
+  function spDelta(pct, previousEmpty, noun) {
+    if (previousEmpty) return '<div class="sp-kpi-delta">No activity in the previous period</div>';
+    if (pct == null) return '<div class="sp-kpi-delta">No activity in the previous period</div>';
+    var p = Number(pct);
+    var rounded = Math.round(p * 10) / 10;
+    if (rounded === 0) return '<div class="sp-kpi-delta">→ 0% <span class="vs">vs previous period</span></div>';
+    var up = rounded > 0;
+    return '<div class="sp-kpi-delta ' + (up ? 'up' : 'down') + '">' + (up ? '▲ +' : '▼ ') + spNum(rounded) + '% <span class="vs">vs previous period</span></div>';
+  }
+  function spKpis(r) {
+    var c = r.comparison;           // null for All time → no comparison line
+    var h = r.hero || {};
+    var st = r.streaks || {};
+    var line = function (key, noun) { return c ? spDelta(c[key], c.previousEmpty, noun) : ''; };
+    var cur = Number(st.current) || 0, best = Number(st.longest) || 0;
+    return '<div class="sp-kpis">' +
+      '<div class="sp-kpi" data-kpi="activities"><div class="sp-kpi-label">Total activities</div><div class="sp-kpi-val">' + spNum(h.activities, 0) + '</div>' + line('activitiesPct', 'activities') + '</div>' +
+      '<div class="sp-kpi" data-kpi="time"><div class="sp-kpi-label">Total time</div><div class="sp-kpi-val">' + spNum(h.totalHours) + '<small>h</small></div>' + line('hoursPct', 'recorded time') + '</div>' +
+      '<div class="sp-kpi" data-kpi="distance"><div class="sp-kpi-label">Total distance</div><div class="sp-kpi-val">' + spNum(h.totalKm) + '<small>km</small></div>' + line('kmPct', 'distance') + '</div>' +
+      '<div class="sp-kpi" data-kpi="streak"><div class="sp-kpi-label">Current streak <span class="sp-kpi-tag">All-time</span></div><div class="sp-kpi-val">' + cur + '<small> day' + (cur !== 1 ? 's' : '') + '</small></div><div class="sp-kpi-delta">Best: ' + best + ' day' + (best !== 1 ? 's' : '') + '</div></div>' +
+    '</div>';
+  }
+  function spCard(title, sub, inner, extraCls) {
+    return '<div class="sp-card' + (extraCls ? ' ' + extraCls : '') + '"><div class="sp-card-hdr"><div class="sp-card-title">' + title + '</div>' + (sub ? '<div class="sp-card-sub">' + sub + '</div>' : '') + '</div>' + inner + '</div>';
+  }
+  function spWeeklyCard(r) {
+    var n = (r.weeklyChart || []).length;
+    var toggle = '<div class="sp-metric" role="tablist" aria-label="Weekly metric">' + SP_METRICS.map(function (m) {
+      var on = m[0] === spMetric;
+      return '<button type="button" role="tab" aria-selected="' + on + '" data-m="' + m[0] + '" class="' + (on ? 'on' : '') + '" onclick="setStatsMetric(\'' + m[0] + '\')">' + m[1] + '</button>';
+    }).join('') + '</div>';
+    var cov = r.weeklyCoverage || {};
+    return '<div class="sp-card" id="sp-weekly-card">' +
+      '<div class="sp-card-hdr"><div><div class="sp-card-title">📊 Weekly activity</div><div class="sp-card-sub">' + n + ' week' + (n !== 1 ? 's' : '') + ' · Monday-start · ends today</div></div>' + toggle + '</div>' +
+      '<div id="sp-weekly-chart"></div>' +
+      (cov.capped ? '<div class="sp-note" id="sp-weekly-cap">Showing the last 104 weeks</div>' : '') +
+    '</div>';
+  }
+  // Re-renders only the weekly chart (metric toggle / resize) from cache.
+  function spRenderWeekly() {
+    var host = document.getElementById('sp-weekly-chart');
+    if (!host || !spLast) return;
+    document.querySelectorAll('#sp-weekly-card .sp-metric button').forEach(function (b) {
+      var on = b.getAttribute('data-m') === spMetric;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    var width = host.clientWidth || (window.innerWidth - 24);
+    host.innerHTML = typeof buildWeeklyStack === 'function'
+      ? buildWeeklyStack(spLast.weeklyChart || [], spColors || {}, { metric: spMetric, width: width, narrow: width <= 480 })
+      : '';
+    // Dense ranges scroll locally — start pinned to the end so the partial
+    // "This week" bar is visible first.
+    var sc = host.querySelector('.wk-scroll');
+    if (sc) sc.scrollLeft = sc.scrollWidth;
+  }
+  var spResizeT = null;
+  var spLastW = window.innerWidth;
+  window.addEventListener('resize', function () {
+    if (window.innerWidth === spLastW) return;
+    spLastW = window.innerWidth;
+    clearTimeout(spResizeT);
+    spResizeT = setTimeout(spRenderWeekly, 150);
+  });
+
+  // Personal records: four primary cards in a fixed order; a missing record
+  // is skipped and the slot filled from the remaining records in order.
+  var PR_PRIMARY = ['Longest ride', 'Longest activity', 'Biggest week', 'Biggest month'];
+  var PR_FILL = ['Longest run', 'Fastest pace · run'];
+  function spOrderPrs(prs) {
+    var by = {};
+    (prs || []).forEach(function (p) { by[p.label] = p; });
+    var known = PR_PRIMARY.concat(PR_FILL);
+    var ordered = known.filter(function (l) { return by[l]; }).map(function (l) { return by[l]; });
+    (prs || []).forEach(function (p) { if (known.indexOf(p.label) === -1) ordered.push(p); });
+    return { primary: ordered.slice(0, 4), more: ordered.slice(4) };
+  }
+  function spPrCard(pr, more) {
+    return '<div class="sp-pr' + (more ? ' sp-pr-more' : '') + '" data-pr="' + esc(pr.label) + '">' +
+      '<div style="font-size:16px;margin-bottom:6px">' + esc(pr.icon) + '</div>' +
+      '<div style="font-size:10px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">' + esc(pr.label) + '</div>' +
+      '<div style="font-size:17px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">' + esc(pr.value) + '</div>' +
+      '<div style="font-size:10px;color:var(--gray-400);margin-top:3px">' + esc(pr.meta) + '</div>' +
+    '</div>';
+  }
+  window.spTogglePrs = function (btn) {
+    var grid = document.getElementById('sp-prs');
+    if (!grid) return;
+    var open = grid.classList.toggle('expanded');
+    btn.textContent = open ? 'Show fewer' : 'View all';
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
+  function spPrsCard(prs) {
+    if (!prs || !prs.length) return '';
+    var o = spOrderPrs(prs);
+    var btn = o.more.length ? '<button type="button" class="sp-viewall" aria-expanded="false" aria-controls="sp-prs" onclick="spTogglePrs(this)">View all</button>' : '<div class="sp-card-sub">from logged activities</div>';
+    return '<div class="sp-card" id="sp-prs-card"><div class="sp-card-hdr"><div class="sp-card-title">🏆 All-time records</div>' + btn + '</div>' +
+      '<div class="sp-prs" id="sp-prs">' + o.primary.map(function (p) { return spPrCard(p, false); }).join('') + o.more.map(function (p) { return spPrCard(p, true); }).join('') + '</div></div>';
+  }
+  // Exposed for seed-free checks.
+  window.__spStats = { orderPrs: spOrderPrs, windowLabel: spWindowLabel };
 
   async function loadProfileStats() {
     var body = document.getElementById('sp-stats-body');
@@ -2118,25 +2326,25 @@ if (logHashMatch) {
         '</div>';
       return;
     }
+    var token = ++spReq;
+    var failHtml = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-500)">Could not load stats. <button type="button" class="sp-viewall" onclick="this.disabled=true;window.__spReload()">Try again</button></div>';
     try {
       // Goals fetched in parallel with the stats; a goals failure degrades to
       // "no card" and can never break the rest of the tab.
       var goalsFetch = fetch(window.BASE + '/api/goals')
         .then(function (r2) { return r2.json(); })
         .catch(function () { return null; });
-      var response = await fetch(window.BASE + '/api/profile/stats?period=' + encodeURIComponent(spPeriod) + '&weeks=' + spWeeks);
+      var response = await fetch(window.BASE + '/api/profile/stats?period=' + encodeURIComponent(spPeriod));
       var r = await response.json();
       var gj = await goalsFetch;
+      if (token !== spReq) return;   // a newer period was requested
       goalsActive = (gj && !gj.error && Array.isArray(gj.active)) ? gj.active : [];
-      if (r.error) {
-        body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Could not load stats.</div>';
-        return;
-      }
+      if (!response.ok || r.error) { body.innerHTML = failHtml; return; }
+
+      var winEl = document.getElementById('sp-window');
+      if (winEl) winEl.textContent = spPeriod === 'all' ? 'All time · ' + spWindowLabel(r.window) : spWindowLabel(r.window);
 
       if (r.hero.activities === 0 && r.prs.length === 0) {
-        // Goals with zero activities still chart honestly (goal bar vs a
-        // zero-stub actual) — the card sits at the bottom here too, below
-        // the empty-stats note, matching the tab's card-last placement.
         body.innerHTML =
           '<div style="text-align:center;padding:48px 24px">' +
           '<div style="font-size:36px;margin-bottom:12px">📊</div>' +
@@ -2148,91 +2356,52 @@ if (logHashMatch) {
         return;
       }
 
-      // Sport breakdown palette derived from the sports registry ("bar" is the
-      // registry's text color — same hexes as the historic literal).
+      // Sport palette derived from the sports registry ("bar" is the
+      // registry's text color — same hexes across every chart).
       var sportColors = {};
       (window.ARENAS_SPORTS || []).forEach(function (s) {
         sportColors[s.id] = { bg: s.colors.bg, bar: s.colors.text, icon: s.emoji, name: s.label };
       });
+      spColors = sportColors;
+      spLast = r;
 
-      var nWeeks = r.weeklyChart.length;
-      var narrow = window.innerWidth <= 480;
-      // Stacked columns by sport (shared builder: arenas-stack.js) — same
-      // registry colors as the By-sport bars + pie, legend of present sports,
-      // honest zero-week ticks, total label unchanged.
-      var weeklyStack = typeof buildWeeklyStack === 'function'
-        ? buildWeeklyStack(r.weeklyChart, sportColors, nWeeks, narrow)
+      var SC = window.ArenasSportCharts;
+      var hasSport = SC && SC.rows(r.sportBreakdown).length > 0;
+      // The builders need to know whether they're in a one-column card: every
+      // two-up row stacks at <=768, so a card is ~full width there and ~half
+      // width on desktop.
+      var vw = window.innerWidth;
+      var halfNarrow = vw <= 560 || (vw > 768 && vw < 1000);
+      var sportRow = hasSport
+        ? '<div class="sp-2up" id="sp-sport-row">' +
+            spCard('🏅 Activity by sport', 'share of sessions', '<div class="sp-card-body">' + SC.donut(r.sportBreakdown, sportColors, halfNarrow) + '</div>') +
+            spCard('📋 Activity summary', SP_PERIOD_LABEL[spPeriod].toLowerCase(), SC.summaryTable(r.sportBreakdown, sportColors)) +
+          '</div>'
+        : spCard('🏅 Activity by sport', '', '<div class="sp-empty-period">No activities in this period.</div>');
+      var barsRow = hasSport
+        ? '<div class="sp-2up" id="sp-bars-row">' +
+            spCard('Sessions by sport', '', '<div class="sp-card-body">' + SC.sessionsBars(r.sportBreakdown, sportColors, vw <= 560) + '</div>') +
+            spCard('Total time by sport', '', '<div class="sp-card-body">' + SC.timeBars(r.sportBreakdown, sportColors, vw <= 560) + '</div>') +
+          '</div>'
         : '';
 
-      // Range switcher pills — same chip language as the period pills above.
-      var weekPill = function (n) {
-        var on = n === spWeeks;
-        return '<div class="sp-weeks" onclick="setStatsWeeks(' + n + ')" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;cursor:pointer;border:' + (on ? '1px solid var(--yellow-dark)' : 'var(--border)') + ';background:' + (on ? 'var(--yellow-light)' : 'white') + ';color:' + (on ? '#7a5c00' : 'var(--gray-600)') + '">' + n + 'w</div>';
-      };
-
-      // Three charts + exact-figures table (shared builder:
-      // arenas-sport-charts.js — replaced the bar-list + arenas-pie.js pie).
-      // Sessions basis for the pie, registry color per sport in all three
-      // charts, distance carried by the table. Recomputed on every period
-      // switch because this whole renderer re-runs. Empty breakdown → '' (the
-      // card itself is already hidden in that case).
-      // The By-sport card stacks (narrow) up to 560px, not 480: its desktop
-      // pie row is a non-shrinking 300px pie + 24px gap + content-sized
-      // nowrap legend (~470px min) — between 481 and ~560px the single-column
-      // mobile-shell card is too narrow for that row and it would clip.
-      var chartsNarrow = window.innerWidth <= 560;
-      var sportCharts = typeof buildSportCharts === 'function'
-        ? buildSportCharts(r.sportBreakdown, sportColors, chartsNarrow)
-        : '';
-
-      var prCards = r.prs.map(function (pr) {
-        return '' +
-          '<div style="border:var(--border);border-radius:10px;padding:12px;background:white">' +
-            '<div style="font-size:16px;margin-bottom:6px">' + esc(pr.icon) + '</div>' +
-            '<div style="font-size:10px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">' + esc(pr.label) + '</div>' +
-            '<div style="font-size:17px;font-weight:700;font-family:var(--mono);color:var(--gray-900)">' + esc(pr.value) + '</div>' +
-            '<div style="font-size:10px;color:var(--gray-400);margin-top:3px">' + esc(pr.meta) + '</div>' +
-          '</div>';
-      }).join('');
-
+      // Section order: period control (toolbar) → KPI tiles → Weekly
+      // activity → Goals vs actual → Activity streak → Activity by sport +
+      // Activity summary → Personal records → Sessions + Total time by sport.
       body.innerHTML =
-        '<div style="display:grid;grid-template-columns:repeat(4,1fr);background:white;border-bottom:var(--border)">' +
-          '<div style="padding:14px 16px;border-right:var(--border);text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1">' + r.hero.activities + '</div><div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Activities</div></div>' +
-          '<div style="padding:14px 16px;border-right:var(--border);text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1">' + r.hero.totalKm.toLocaleString() + '</div><div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Total km</div></div>' +
-          '<div style="padding:14px 16px;border-right:var(--border);text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1">' + r.hero.totalHours + 'h</div><div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Total time</div></div>' +
-          '<div style="padding:14px 16px;text-align:center"><div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1">' + r.hero.totalPoints.toLocaleString() + '</div><div style="font-size:10px;color:var(--gray-400);margin-top:4px;text-transform:uppercase;letter-spacing:.04em">Points earned</div></div>' +
-        '</div>' +
-        '<div style="margin:12px;background:white;border:var(--border);border-radius:var(--radius-lg);display:grid;grid-template-columns:1fr 1fr 1fr;overflow:hidden">' +
-          '<div style="padding:12px 14px;border-right:var(--border);display:flex;align-items:center;gap:10px"><div style="font-size:18px">🔥</div><div><div style="font-size:15px;font-weight:700;font-family:var(--mono);line-height:1;color:#E6B800">' + r.streaks.current + ' day' + (r.streaks.current !== 1 ? 's' : '') + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px">Current streak</div></div></div>' +
-          '<div style="padding:12px 14px;border-right:var(--border);display:flex;align-items:center;gap:10px"><div style="font-size:18px">🏆</div><div><div style="font-size:15px;font-weight:700;font-family:var(--mono);line-height:1">' + r.streaks.longest + ' day' + (r.streaks.longest !== 1 ? 's' : '') + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px">Longest streak</div></div></div>' +
-          '<div style="padding:12px 14px;display:flex;align-items:center;gap:10px"><div style="font-size:18px">📅</div><div><div style="font-size:15px;font-weight:700;font-family:var(--mono);line-height:1">' + r.streaks.avgPerWeek + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px">Avg sessions / week</div></div></div>' +
-        '</div>' +
-        // Card order: By sport → Personal records → Weekly activity →
-        // Goals vs actual + Activity streak (bottom of the tab; with no
-        // non-streak goals the goals card becomes a compact "Set a goal" CTA).
-        (r.sportBreakdown.length > 0 ?
-          '<div style="margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
-            '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between"><div style="font-size:12px;font-weight:600">🏅 By sport</div><div style="font-size:11px;color:var(--gray-400)">sessions · distance · time</div></div>' +
-            // Desktop: Sessions | Time | Share-of-sessions side by side, the
-            // compact exact-figures table underneath. Narrow: the three
-            // charts stack vertically (pie legend below the pie).
-            sportCharts +
-          '</div>' : '') +
-        (r.prs.length > 0 ?
-          '<div style="margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
-            '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between"><div style="font-size:12px;font-weight:600">🏆 Personal records</div><div style="font-size:11px;color:var(--gray-400)">from logged activities · all time</div></div>' +
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px 14px">' + prCards + '</div>' +
-          '</div>' : '') +
-        '<div style="margin:0 12px 14px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
-          '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div style="font-size:12px;font-weight:600">📊 Weekly activity · last ' + nWeeks + ' weeks</div><div style="display:flex;align-items:center;gap:6px">' + weekPill(6) + weekPill(12) + weekPill(24) + '<div style="font-size:11px;color:var(--gray-400);margin-left:4px">hours per week</div></div></div>' +
-          weeklyStack +
-        '</div>' +
-        gvwCard(r);
+        spKpis(r) +
+        spWeeklyCard(r) +
+        gvwCard(r) +
+        sportRow +
+        spPrsCard(r.prs) +
+        barsRow;
+      spRenderWeekly();
       gvwMountCharts();
     } catch (err) {
-      body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Could not load stats.</div>';
+      if (token === spReq) body.innerHTML = failHtml;
     }
   }
+  window.__spReload = loadProfileStats;
 
   // Load the stats when the Stats & PRs tab is opened (mirrors the Activities hook).
   var statsHtab = document.getElementById('htab-stats');

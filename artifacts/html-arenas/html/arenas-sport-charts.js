@@ -69,7 +69,10 @@
   }
 
   // ── Pie + full legend (largest-remainder percentages) ──
-  function piePanel(rows, colors, narrow) {
+  function piePanel(rows, colors, narrow, opts) {
+    opts = opts || {};
+    var donut = !!opts.donut;
+    var LR = donut ? 62 : 50; // label radius: mid-ring for the donut
     var total = rows.reduce(function (a, s) { return a + s.sessions; }, 0);
     var data = rows.map(function (s) {
       var exact = (s.sessions / total) * 100;
@@ -90,19 +93,19 @@
     var sliceLabel = function (pct, midDeg) {
       var txt = pct + '%';
       var mid = (midDeg * Math.PI) / 180;
-      return '<text x="' + (100 + 50 * Math.cos(mid)).toFixed(2) + '" y="' + (100 + 50 * Math.sin(mid)).toFixed(2) +
+      return '<text x="' + (100 + LR * Math.cos(mid)).toFixed(2) + '" y="' + (100 + LR * Math.sin(mid)).toFixed(2) +
         '" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="700" font-family="ui-monospace,monospace" fill="#FFFFFF">' + txt + '</text>';
     };
     var fits = function (exact, pct) {
       var theta = (exact / 100) * 2 * Math.PI;
-      return theta * 50 >= String(pct + '%').length * 7.2 + 6;
+      return theta * LR >= String(pct + '%').length * 7.2 + 6;
     };
     var parts = [];
     if (data.length === 1) {
       // One sport = a full circle; that's the honest picture.
       var sc1 = colors[data[0].sport] || FALLBACK;
       parts.push('<circle cx="100" cy="100" r="80" fill="' + sc1.bar + '"/>');
-      parts.push('<text x="100" y="100" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="700" font-family="ui-monospace,monospace" fill="#FFFFFF">' + data[0].pct + '%</text>');
+      parts.push('<text x="100" y="' + (donut ? 38 : 100) + '" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="700" font-family="ui-monospace,monospace" fill="#FFFFFF">' + data[0].pct + '%</text>');
     } else {
       var cum = 0;
       data.forEach(function (d) {
@@ -125,13 +128,27 @@
     // Every sport in the legend (swatch · name · percent) at 15px — the legend
     // is the pie's only complete listing, so it reads as body text, not fine
     // print.
+    if (donut) {
+      // Donut hole + centre total. The hole is drawn over the slices so the
+      // slice geometry (and the in-slice label fit rule) is untouched.
+      parts.push('<circle class="donut-hole" cx="100" cy="100" r="44" fill="white"/>');
+      parts.push('<text class="donut-total" x="100" y="96" text-anchor="middle" dominant-baseline="middle" font-size="22" font-weight="700" font-family="ui-monospace,monospace" fill="#111827">' + total + '</text>');
+      parts.push('<text class="donut-unit" x="100" y="116" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="600" letter-spacing=".06em" fill="#6B7280">SESSION' + (total !== 1 ? 'S' : '') + '</text>');
+    }
+    var sessionsBy = {};
+    rows.forEach(function (r) { sessionsBy[r.sport] = r.sessions; });
     var legend = data.map(function (d) {
       var sc = colors[d.sport] || FALLBACK;
-      return '<div style="display:flex;align-items:center;gap:10px;font-size:15px;color:var(--gray-600);white-space:nowrap">' +
-        '<span style="width:18px;height:18px;border-radius:4px;background:' + sc.bar + ';flex-shrink:0"></span>' +
-        '<span style="overflow:hidden;text-overflow:ellipsis">' + sc.icon + ' ' + esc(sc.name || d.sport) + '</span>' +
-        '<span style="font-family:var(--mono);color:var(--gray-500);margin-left:auto">' + d.pct + '%</span></div>';
+      return '<div class="sc-legend-row" style="display:flex;align-items:center;gap:10px;font-size:' + (donut ? 14 : 15) + 'px;color:var(--gray-600);white-space:nowrap">' +
+        '<span style="width:' + (donut ? 14 : 18) + 'px;height:' + (donut ? 14 : 18) + 'px;border-radius:4px;background:' + sc.bar + ';flex-shrink:0"></span>' +
+        '<span style="overflow:hidden;text-overflow:ellipsis;' + (donut ? 'flex:1;min-width:0;color:var(--gray-800)' : '') + '">' + sc.icon + ' ' + esc(sc.name || d.sport) + '</span>' +
+        '<span style="font-family:var(--mono);color:var(--gray-500);margin-left:auto;' + (donut ? 'width:44px;text-align:right' : '') + '">' + d.pct + '%</span>' +
+        (donut ? '<span class="sc-legend-sessions" style="font-family:var(--mono);color:var(--gray-900);font-weight:600;width:40px;text-align:right">' + sessionsBy[d.sport] + '</span>' : '') +
+        '</div>';
     }).join('');
+    if (donut) {
+      legend = '<div style="display:flex;gap:10px;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--gray-400);padding-bottom:2px;border-bottom:1px solid var(--gray-100)"><span style="flex:1">Sport</span><span style="width:44px;text-align:right">Share</span><span style="width:40px;text-align:right">Sess.</span></div>' + legend;
+    }
     // Desktop: the pie panel now spans the FULL card width (top row of the
     // grid below), so there is always room for the legend BESIDE a larger
     // pie — 300px pie + 16 gap + content-sized legend (~144px) needs ~460px
@@ -144,9 +161,14 @@
     // grid stacks to one column): legend below a column-filling pie (capped
     // 300px) — beside it would squeeze the pie on a 360px viewport. viewBox
     // stays 200, so in-slice label fit is size-invariant.
+    var size = donut ? (narrow ? 220 : 180) : 300;
     var svg = '<svg viewBox="0 0 200 200" style="' + (narrow
-      ? 'width:100%;max-width:300px;height:auto'
-      : 'width:300px;height:300px;flex-shrink:0') + ';display:block" role="img" aria-label="Share of sessions by sport">' + parts.join('') + '</svg>';
+      ? 'width:100%;max-width:' + size + 'px;height:auto'
+      : 'width:' + size + 'px;height:' + size + 'px;flex-shrink:0') + ';display:block" role="img" aria-label="Share of sessions by sport' + (donut ? ', ' + total + ' sessions' : '') + '">' + parts.join('') + '</svg>';
+    if (donut) {
+      return '<div class="sc-donut" style="display:flex;' + (narrow ? 'flex-direction:column;align-items:center;gap:16px' : 'align-items:center;gap:22px') + ';min-width:0">' +
+        svg + '<div class="sc-legend" style="display:flex;flex-direction:column;gap:9px;min-width:0;flex:1;' + (narrow ? 'align-self:stretch' : 'max-width:300px') + '">' + legend + '</div></div>';
+    }
     return (
       '<div style="display:flex;flex-direction:column;align-items:center;gap:12px;min-width:0">' +
       '<div style="display:flex;' + (narrow
@@ -177,6 +199,58 @@
     return '<div>' + body + '</div>';
   }
 
+  // ── Activity summary table (header row Sport / Sessions / Distance / Time)
+  function summaryTable(rows, colors) {
+    var th = 'font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--gray-400);text-align:right;padding:10px 14px';
+    var td = 'font-family:var(--mono);color:var(--gray-700);text-align:right;padding:10px 14px;white-space:nowrap;border-top:1px solid var(--gray-100)';
+    var body = rows.map(function (s) {
+      var sc = colors[s.sport] || FALLBACK;
+      return '<tr class="sc-sum-row" data-sport="' + esc(s.sport) + '">' +
+        '<td style="padding:10px 14px;border-top:1px solid var(--gray-100);font-weight:600;color:var(--gray-900);max-width:0;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+          '<span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:' + sc.bar + ';margin-right:8px;vertical-align:0"></span>' + sc.icon + ' ' + esc(sc.name || s.sport) + '</td>' +
+        '<td style="' + td + '">' + s.sessions + '</td>' +
+        '<td style="' + td + '">' + (s.km > 0 ? s.km + ' km' : '—') + '</td>' +
+        '<td style="' + td + '">' + (s.hours > 0 ? s.hours + 'h' : '—') + '</td>' +
+        '</tr>';
+    }).join('');
+    return '<table class="sc-summary" style="width:100%;border-collapse:collapse;font-size:13px;table-layout:auto">' +
+      '<thead><tr><th style="' + th + ';text-align:left">Sport</th><th style="' + th + '">Sessions</th><th style="' + th + '">Distance</th><th style="' + th + '">Time</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table>';
+  }
+
+  function activeRows(breakdown) {
+    return (breakdown || []).filter(function (s) { return s.sessions > 0; });
+  }
+  function sessionsRows(rows) {
+    return rows.map(function (s) { return { sport: s.sport, value: s.sessions, label: String(s.sessions) }; });
+  }
+  function timeRows(rows) {
+    return rows.map(function (s) { return { sport: s.sport, value: s.hours, label: s.hours > 0 ? s.hours + 'h' : '—' }; });
+  }
+
+  // Composable exports — each returns '' for an empty (zero-session) set so
+  // the caller's card gate owns the empty state. No chart code is duplicated:
+  // these call the same barChart / piePanel the legacy wrapper uses.
+  window.ArenasSportCharts = {
+    rows: activeRows,
+    donut: function (breakdown, colors, narrow) {
+      var rows = activeRows(breakdown);
+      return rows.length ? piePanel(rows, colors, narrow, { donut: true }) : '';
+    },
+    summaryTable: function (breakdown, colors) {
+      var rows = activeRows(breakdown);
+      return rows.length ? summaryTable(rows, colors) : '';
+    },
+    sessionsBars: function (breakdown, colors, narrow) {
+      var rows = activeRows(breakdown);
+      return rows.length ? barChart(sessionsRows(rows), colors, 'Sessions', 'Sessions per sport', narrow) : '';
+    },
+    timeBars: function (breakdown, colors, narrow) {
+      var rows = activeRows(breakdown);
+      return rows.length ? barChart(timeRows(rows), colors, 'Time', 'Hours per sport', narrow) : '';
+    }
+  };
+
   // breakdown: [{ sport, sessions, km, hours }] (server order preserved)
   // colors:    { sportId: { bar, icon, name } } from the sports registry
   // narrow:    true stacks the three charts vertically (mobile)
@@ -184,12 +258,9 @@
     var rows = (breakdown || []).filter(function (s) { return s.sessions > 0; });
     if (rows.length === 0) return '';
 
-    var sessions = barChart(rows.map(function (s) {
-      return { sport: s.sport, value: s.sessions, label: String(s.sessions) };
-    }), colors, 'Sessions', 'Sessions per sport', narrow);
-    var time = barChart(rows.map(function (s) {
-      return { sport: s.sport, value: s.hours, label: s.hours > 0 ? s.hours + 'h' : '—' };
-    }), colors, 'Time', 'Hours per sport', narrow);
+    // Legacy wrapper (kept for compatibility): same output as before.
+    var sessions = barChart(sessionsRows(rows), colors, 'Sessions', 'Sessions per sport', narrow);
+    var time = barChart(timeRows(rows), colors, 'Time', 'Hours per sport', narrow);
     var pie = piePanel(rows, colors, narrow);
 
     // Layout: the pie panel spans the full card width on top (at the 956px
