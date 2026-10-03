@@ -658,8 +658,14 @@ for (let i = 0; i < 28; i++) {
 for (const b of ['first_steps', 'early_bird', 'regular', 'joined_club', 'challenger', 'hat_trick']) {
   await ins('achievements', { user_id: C, badge_id: b });
 }
-// goal for creator (Goals tab + overview mini-card)
-await ins('goals', { user_id: C, type: 'distance', sport: 'running', target_value: 80, unit: 'km', period: 'weekly', status: 'active' });
+// Mixed-metric panels and the separate streak block, within the active cap.
+for (const g of [
+  { type: 'frequency', sport: 'running', target_value: 4, period: 'weekly' },
+  { type: 'duration', sport: null, target_value: 6, period: 'weekly' },
+  { type: 'frequency', sport: null, target_value: 12, period: 'monthly' },
+  { type: 'distance', sport: 'cycling', target_value: 80, unit: 'mi', period: 'monthly' },
+  { type: 'streak', sport: null, target_value: 7, period: 'weekly' }
+]) await ins('goals', { user_id: C, status: 'active', ...g });
 
 // posts w/ kudos + comments (the flex action rows), long content
 const POSTS = [];
@@ -1067,7 +1073,7 @@ const PAGES = [
       // waitFor the goals-vs-actual bars: they arrive in the same innerHTML
       // assignment as the by-sport svgs, and the render now awaits the goals
       // fetch too — the step's 250ms settle alone is not enough.
-      { name: 'stats', js: htab('stats'), waitFor: '#gvw-card .gvw-bar', surfaces: [
+      { name: 'stats', js: htab('stats'), waitFor: '#gvw-card .gc-bar', surfaces: [
         { name: 'stats & PRs body', sel: '#sp-stats-body', min: 1 },
         // By-sport redesign: exactly the three chart SVGs (Sessions, Time,
         // Share of sessions) — weekly stack is divs, so svg count = charts.
@@ -1075,8 +1081,50 @@ const PAGES = [
         // Goals vs actual card (creator has a seeded weekly goal): header +
         // chart body must render at every width (the surface check counts
         // CHILDREN of the matched element, so target the card, not the bars).
-        { name: 'goals vs actual card', sel: '#gvw-card', min: 2 }
+        { name: 'goals vs actual card', sel: '#gvw-card', min: 2 },
+        { name: 'activity streak block', sel: '#gvw-streak', min: 2 }
+      ], checks: [
+        { name: 'weekly/monthly mixed types plus calendar-day streak', js: `(() => ({
+          ok: document.querySelectorAll('.gvw-panel').length === 2 &&
+            document.querySelectorAll('.gvw-tab').length === 4 &&
+            document.querySelectorAll('.gvw-day').length === 7 &&
+            document.querySelectorAll('.gvw-tile-goal').length === 1
+        }))()` }
       ] },
+      { name: 'stats-five-groups', js: `(async () => {
+          const originalFetch = window.fetch;
+          // One response-only layout fixture: five enriched sessions goals.
+          // The saved goals and subsequent Goals-tab reads stay untouched.
+          window.fetch = async function(input, init) {
+            const response = await originalFetch.call(window, input, init);
+            if (!String(input).includes('/api/goals')) return response;
+            window.fetch = originalFetch;
+            const payload = await response.clone().json();
+            payload.active = payload.active.map((g,i) => ({...g, type:'frequency',
+              sport:['running','cycling','swimming','weightlifting',null][i],
+              period:'weekly', unit:null, target:i+4, progress:i+1, expectedProgress:2,
+              onTrack:true, isComplete:false}));
+            return new Response(JSON.stringify(payload), {status:200, headers:{'Content-Type':'application/json'}});
+          };
+          setStatsPeriod(document.querySelector('.sp-period[data-p="all"]'),'all');
+          for(let i=0;i<100;i++) {
+            if(document.querySelectorAll('#gvw-card .gc-group').length===5) break;
+            await new Promise(r=>setTimeout(r,100));
+          }
+          window.fetch = originalFetch;
+        })()`, waitFor: '#gvw-card .gc-group:nth-of-type(5)', surfaces: [
+          { name: 'five goal chart', sel: '#gvw-card', min: 2 },
+          { name: 'streak with five chart goals', sel: '#gvw-streak', min: 2 }
+        ], checks: [
+          { name: 'five groups with non-overlapping printed values', js: `(() => {
+            const values = [...document.querySelectorAll('#gvw-card .gc-value')].map(n=>n.getBoundingClientRect());
+            const ok = document.querySelectorAll('#gvw-card .gc-group').length === 5 &&
+              values.length === 10 && values.every((a,i)=>values.every((b,j)=>i>=j ||
+              Math.min(a.right,b.right)-Math.max(a.left,b.left)<.5 ||
+              Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)<.5));
+            return {ok, values:values.length};
+          })()` }
+        ] },
       { name: 'achievements', js: htab('achievements'), surfaces: [{ name: 'achievements tab', sel: '#tab-achievements .content-cols-full', min: 1 }] },
       { name: 'following', js: htab('following'), surfaces: [{ name: 'following grid', sel: '.following-grid', min: 2 }] },
       { name: 'goals', js: htab('goals'), surfaces: [{ name: 'goals tab', sel: '#tab-goals', min: 1 }] },

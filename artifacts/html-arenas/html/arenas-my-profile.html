@@ -353,6 +353,78 @@ button,select,input,textarea{font-family:var(--font)}
 /* "ⓘ How points work" link — same treatment on leaderboards, challenges and profile. */
 .hpw-link{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--gray-500);text-decoration:none}
 .hpw-link:hover{color:var(--gray-700);text-decoration:underline}
+/* ── GOALS vs ACTUAL + ACTIVITY STREAK (Stats tab) ── */
+.gvw-card{margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);padding:16px}
+.gvw-hdr{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.gvw-hdr-icon{width:38px;height:38px;border-radius:50%;background:var(--yellow-light);display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0}
+.gvw-h{font-size:16px;font-weight:700;color:var(--gray-900);letter-spacing:-.01em}
+.gvw-sub{font-size:12px;color:var(--gray-500)}
+.gvw-legend{margin-left:auto;display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--gray-600)}
+.gvw-legend span{display:inline-flex;align-items:center;gap:6px}
+.gvw-sw{display:inline-block;width:12px;height:12px;border-radius:3px}
+.gvw-sw.goal{background:#6B7280}.gvw-sw.act{background:var(--yellow);box-shadow:inset 0 0 0 1px #E6B800}
+.gvw-sw.exp{height:3px;width:14px;border-radius:2px;background:var(--gray-900)}
+.gvw-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.gvw-panel{border:var(--border);border-radius:10px;padding:14px 12px 8px;min-width:0}
+.gvw-panel-hdr{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.gvw-panel-title{font-size:15px;font-weight:700;color:var(--gray-900)}
+.gvw-tabs{display:inline-flex;border:var(--border);border-radius:8px;overflow:hidden}
+.gvw-tab{border:0;border-left:var(--border);background:white;padding:5px 11px;font-size:12px;font-weight:500;color:var(--gray-600);cursor:pointer;min-height:30px}
+.gvw-tab:first-child{border-left:0}
+.gvw-tab.on{background:var(--yellow-light);color:#7a5c00;font-weight:600}
+.gvw-tab:focus-visible{outline:2px solid var(--gray-900);outline-offset:-2px}
+.gvw-chart{min-height:212px}
+.gvw-panel-none{display:flex;align-items:center;justify-content:center;min-height:120px;font-size:13px;color:var(--gray-500);text-align:center}
+.gvw-chart-error{margin:6px 4px;padding:8px 10px;border-radius:8px;background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;font-size:12px}
+.gvw-tip{min-height:18px;padding:2px 4px 4px;font-size:11px;color:var(--gray-600);line-height:1.4}
+.gc-svg .gc-group{cursor:pointer;outline:none}
+.gc-svg .gc-group:focus-visible .gc-hit{fill:rgba(255,210,30,.18);stroke:var(--gray-900);stroke-width:1.5}
+.gc-svg .gc-value{font-family:var(--mono);font-weight:600;fill:var(--gray-800)}
+.gc-svg .gc-label{font-family:var(--font);font-weight:600;fill:var(--gray-700)}
+.gc-svg .gc-status{font-family:var(--font);fill:var(--gray-500)}
+.gc-svg .gc-status[data-status="on"]{fill:#047857}
+.gc-svg .gc-status[data-status="behind"]{fill:#9A3412}
+.gc-svg .gc-status[data-status="done"]{fill:#047857;font-weight:700}
+.gvw-empty{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.gvw-empty-icon{font-size:22px}
+.gvw-empty-text{flex:1;min-width:180px;font-size:13px;color:var(--gray-600)}
+.gvw-streak-now{margin-left:auto;display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit;text-align:right;padding:4px;border-radius:8px}
+.gvw-streak-now:focus-visible{outline:2px solid var(--gray-900);outline-offset:2px}
+.gvw-streak-n{display:block;font-size:14px;color:var(--gray-900)}
+.gvw-streak-copy{display:block;font-size:11px;color:var(--gray-500)}
+.gvw-chev{width:28px;height:28px;border-radius:50%;border:var(--border);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--gray-600);flex-shrink:0}
+.gvw-streak-body{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px;align-items:center}
+.gvw-week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.gvw-day{display:flex;flex-direction:column;align-items:center;gap:2px;position:relative;min-width:0}
+.gvw-dow{font-size:11px;font-weight:700;color:var(--gray-800)}
+.gvw-date{font-size:10px;color:var(--gray-500);white-space:nowrap;font-family:var(--mono)}
+.gvw-mark{margin-top:6px;width:34px;height:34px;border-radius:9px;background:var(--gray-100);border:1px solid var(--gray-200);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--gray-900);position:relative;z-index:1}
+.gvw-day.active .gvw-mark{background:var(--yellow);border-color:#E6B800}
+.gvw-day.today .gvw-mark{outline:2px solid var(--gray-900);outline-offset:2px}
+.gvw-day.future{opacity:.45}
+.gvw-day.linked::after{content:'';position:absolute;bottom:16px;left:50%;width:100%;height:3px;background:var(--yellow);z-index:0}
+.gvw-tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.gvw-tile{display:flex;gap:10px;align-items:flex-start;padding:12px;border-radius:10px;min-width:0}
+.gvw-tile.cur{background:#FFF7ED;border:1px solid #FED7AA}
+.gvw-tile.long{background:var(--yellow-light);border:1px solid #fde68a}
+.gvw-tile-ic{font-size:20px}
+.gvw-tile-v{font-size:24px;font-weight:700;font-family:var(--mono);line-height:1;color:var(--gray-900)}
+.gvw-tile-l{font-size:12px;font-weight:600;color:var(--gray-800);margin-top:3px}
+.gvw-tile-u{font-size:11px;color:var(--gray-500)}
+.gvw-tile-goal{font-size:11px;color:var(--gray-700);margin-top:5px}
+.gvw-pace{font-weight:600}.gvw-pace.on{color:#047857}.gvw-pace.behind{color:#9A3412}
+.gvw-sgoals{margin-top:12px;border-top:var(--border);padding-top:10px;display:flex;flex-direction:column;gap:6px}
+.gvw-sgoal{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--gray-700);flex-wrap:wrap}
+.gvw-sgoal-v{font-family:var(--mono);font-size:11px}
+@media (max-width:1000px){.gvw-streak-body{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:768px){.gvw-grid{grid-template-columns:minmax(0,1fr)}.gvw-legend{margin-left:0;width:100%}}
+@media (max-width:400px){
+  .gvw-card{padding:12px}
+  .gvw-panel{padding:12px 6px 6px}
+  .gvw-mark{width:28px;height:28px;font-size:13px}
+  .gvw-date{font-size:9px}
+  .gvw-streak-now{margin-left:0;width:100%;justify-content:space-between;text-align:left}
+}
 </style>
 </head>
 <body>
@@ -1813,153 +1885,210 @@ if (logHashMatch) {
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
-  // ── GOALS vs ACTUAL card ──
-  // Values come EXCLUSIVELY from /api/goals enrichment (progress/target as
-  // the server computed them) and are formatted through the SAME shared
-  // window.__goalFmt the Goals tab uses — this chart never recomputes a
-  // number, so it can never disagree with the Goals tab.
+  // ── GOALS vs ACTUAL + ACTIVITY STREAK ──
+  // Values come EXCLUSIVELY from /api/goals enrichment (target / progress /
+  // expectedProgress / onTrack / isComplete and, for distance, targetKm /
+  // progressKm / expectedKm) and /api/profile/stats (streaks, weekStrip).
+  // This client never recomputes a number. Charts render through the shared
+  // window.ArenasCharts.renderGrouped (html/arenas-insights.js).
   var goalsActive = null;      // last /api/goals active list (null = fetch failed)
-  var GVW_GOAL_GRAY = '#6B7280';   // 4.83:1 on white; 3.34:1 vs the yellow
-  var GVW_YELLOW_STROKE = '#E6B800';
+  var gvwTabSel = {};          // period -> selected tab type, kept across re-renders
+  var gvwObserver = null;
+  var GVW_PERIODS = [['weekly', 'This week'], ['monthly', 'This month'], ['custom', 'Custom']];
+  var GVW_TABS = [['frequency', 'Sessions'], ['duration', 'Hours'], ['distance', 'Distance']];
 
-  function gvwSportLabel(g) {
-    if (g.sport) {
-      var s = (window.ARENAS_SPORTS_BY_ID || {})[g.sport];
-      if (s) return s.label;
-      var t = String(g.sport);
-      return t.charAt(0).toUpperCase() + t.slice(1);
-    }
-    return g.type === 'distance' ? 'Any distance sport' : 'Any sport';
+  function gvwSport(g) {
+    if (!g.sport) return { emoji: '🏆', label: 'Any sport' };
+    var s = (window.ARENAS_SPORTS_BY_ID || {})[g.sport];
+    if (s) return { emoji: s.emoji, label: s.label };
+    var t = String(g.sport);
+    return { emoji: (window.ARENAS_SPORT_ICONS || {})[g.sport] || '🏅', label: t.charAt(0).toUpperCase() + t.slice(1) };
   }
-  function gvwMetric(g) {
-    if (g.type === 'distance') return 'Distance (' + g.unit + ')';
-    if (g.type === 'frequency') return 'Sessions';
-    if (g.type === 'duration') return 'Hours';
-    return 'Streak (days)';
-  }
-  // Same uppercase title treatment as the By-sport card's chart panels.
-  function gvwPanelTitle(t) {
-    return '<div style="font-size:13px;font-weight:700;color:var(--gray-700);text-transform:uppercase;letter-spacing:.05em">' + esc(t) + '</div>';
-  }
+  function gvwFmt() { return window.__goalFmt || { num: function (n) { return String(n); }, unit: function () { return ''; } }; }
+  function gvwStatus(g) { return g.isComplete ? 'done' : (g.onTrack ? 'on' : 'behind'); }
 
-  // Bar pairs for one period panel — bars byte-identical to the shipped
-  // treatment (gray goal, yellow+stroke actual, per-pair scale, printed
-  // values, uncapped overshoot). Padding lives on the panel cell.
-  function gvwBarsInner(shown, narrow, fmt) {
-    var inner;
-    if (narrow) {
-      // Phones: horizontal bars — full-width label line, then goal and actual
-      // rows with the value at the end. No truncation at any label length.
-      inner = '<div style="display:flex;flex-direction:column;gap:12px">' + shown.map(function (g) {
-        var scale = Math.max(Number(g.target) || 0, Number(g.progress) || 0) || 1;
-        var row = function (kind, val, style) {
-          var pct = Math.max(1, Math.round((val / scale) * 100));
-          return '<div style="display:flex;align-items:center;gap:8px">' +
-            '<span style="width:36px;flex-shrink:0;font-size:9px;text-transform:uppercase;letter-spacing:.04em;color:var(--gray-400)">' + kind + '</span>' +
-            '<div style="flex:1;height:12px;background:var(--gray-100);border-radius:3px;overflow:hidden"><div class="gvw-bar" data-goal-id="' + esc(g.id) + '" data-kind="' + kind.toLowerCase() + '" data-value="' + val + '" style="width:' + pct + '%;height:100%;border-radius:3px;' + style + '"></div></div>' +
-            '<span style="width:56px;flex-shrink:0;text-align:right;font-size:10px;font-family:var(--mono);color:var(--gray-600)">' + fmt.num(val) + '</span>' +
-          '</div>';
-        };
-        return '<div class="gvw-item" data-goal-id="' + esc(g.id) + '">' +
-          '<div style="font-size:11px;font-weight:600;color:var(--gray-700);margin-bottom:5px">' + esc(gvwSportLabel(g)) + ' — ' + esc(gvwMetric(g)) + '</div>' +
-          row('Goal', Number(g.target) || 0, 'background:' + GVW_GOAL_GRAY) +
-          '<div style="height:4px"></div>' +
-          row('Actual', Number(g.progress) || 0, 'background:var(--yellow);box-shadow:inset 0 0 0 1px ' + GVW_YELLOW_STROKE) +
-        '</div>';
-      }).join('') + '</div>';
-    } else {
-      // Desktop: vertical grouped bars, one pair per goal, two-line text label.
-      // Each pair is scaled to its own max(goal, actual) — goals mix units, so
-      // there is deliberately NO shared axis; the printed values are the truth.
-      inner = '<div style="display:flex;align-items:flex-end;gap:18px;justify-content:space-around">' + shown.map(function (g) {
-        var scale = Math.max(Number(g.target) || 0, Number(g.progress) || 0) || 1;
-        var bar = function (kind, val, style) {
-          var h = Math.max(2, Math.round((val / scale) * 118));
-          return '<div style="display:flex;flex-direction:column;align-items:center;gap:3px;justify-content:flex-end">' +
-            '<div style="font-size:9px;font-family:var(--mono);color:var(--gray-600)">' + fmt.num(val) + '</div>' +
-            '<div class="gvw-bar" data-goal-id="' + esc(g.id) + '" data-kind="' + kind + '" data-value="' + val + '" style="width:26px;height:' + h + 'px;border-radius:3px 3px 0 0;' + style + '"></div>' +
-          '</div>';
-        };
-        return '<div class="gvw-item" data-goal-id="' + esc(g.id) + '" style="display:flex;flex-direction:column;align-items:center;gap:7px;min-width:0">' +
-          '<div style="display:flex;align-items:flex-end;gap:6px;height:150px">' +
-            bar('goal', Number(g.target) || 0, 'background:' + GVW_GOAL_GRAY) +
-            bar('actual', Number(g.progress) || 0, 'background:var(--yellow);box-shadow:inset 0 0 0 1px ' + GVW_YELLOW_STROKE) +
-          '</div>' +
-          '<div style="text-align:center;line-height:1.35"><div style="font-size:11px;font-weight:600;color:var(--gray-700)">' + esc(gvwSportLabel(g)) + '</div><div style="font-size:10px;color:var(--gray-400)">' + esc(gvwMetric(g)) + '</div></div>' +
-        '</div>';
-      }).join('') + '</div>';
-    }
-    return inner;
+  // One chart spec for a panel+tab. Distance charts are always in km using the
+  // server's *Km fields; tooltips show the goal's original unit and values.
+  function gvwChartSpec(goals, type) {
+    var fmt = gvwFmt();
+    var counts = {};
+    goals.forEach(function (g) { var k = (g.sport || '_any'); counts[k] = (counts[k] || 0) + 1; });
+    var groups = [], missing = [];
+    goals.forEach(function (g) {
+      var sp = gvwSport(g);
+      var dup = counts[g.sport || '_any'] > 1;
+      var origUnit = type === 'distance' ? g.unit : fmt.unit(g);
+      var label = sp.label + (dup ? ' · ' + fmt.num(g.target) + (type === 'duration' ? '' : ' ') + origUnit : '');
+      var goal, actual, expected;
+      if (type === 'distance') {
+        // Server always supplies km fields; if one is ever absent, say so
+        // explicitly instead of silently dropping (or converting) the goal.
+        if (g.targetKm == null || g.progressKm == null || g.expectedKm == null) { missing.push(sp.emoji + ' ' + label); return; }
+        goal = g.targetKm; actual = g.progressKm; expected = g.expectedKm;
+      } else { goal = g.target; actual = g.progress; expected = g.expectedProgress; }
+      var full = sp.emoji + ' ' + label;
+      groups.push({
+        id: g.id, emoji: sp.emoji, label: label, goal: Number(goal) || 0, actual: Number(actual) || 0,
+        expected: expected == null ? null : Number(expected), status: gvwStatus(g),
+        goalTip: full + ' — Goal: ' + fmt.num(g.target) + ' ' + origUnit,
+        actualTip: full + ' — Actual: ' + fmt.num(g.progress) + ' ' + origUnit
+      });
+    });
+    return {
+      title: type === 'distance' ? 'Distance' : type === 'duration' ? 'Hours' : 'Sessions',
+      unit: type === 'distance' ? 'km' : type === 'duration' ? 'h' : 'sessions',
+      integer: type === 'frequency', groups: groups, missing: missing
+    };
   }
 
-  // Streak heat map row: squares are progress toward the TARGET, not
-  // calendar days — min(streak, target) fill yellow left-to-right; a broken
-  // streak resets to zero and every square goes gray. Overshoot keeps all
-  // squares full; the printed "N of M" is the honest channel for the excess
-  // (never clamped). Squares stay a fixed 14px and wrap to more rows for
-  // large targets — shrinking them goes illegible fast at 360px.
-  function gvwHeatRow(g, fmt) {
-    var target = Math.max(1, Math.round(Number(g.target) || 0));
-    var prog = Math.max(0, Math.round(Number(g.progress) || 0));
-    var filled = Math.min(prog, target);
-    var squares = '';
-    for (var i = 0; i < target; i++) {
-      var on = i < filled;
-      squares += '<div class="gvw-sq" data-filled="' + (on ? '1' : '0') + '" style="width:14px;height:14px;border-radius:3px;flex-shrink:0;background:' +
-        (on ? 'var(--yellow);box-shadow:inset 0 0 0 1px ' + GVW_YELLOW_STROKE : 'var(--gray-100)') + '"></div>';
+  function gvwPanels() {
+    var bar = (goalsActive || []).filter(function (g) { return g.type !== 'streak'; });
+    return GVW_PERIODS.map(function (p) {
+      var goals = bar.filter(function (g) { return g.period === p[0]; });
+      var tabs = GVW_TABS.filter(function (t) { return goals.some(function (g) { return g.type === t[0]; }); });
+      var sel = gvwTabSel[p[0]];
+      if (!tabs.some(function (t) { return t[0] === sel; })) sel = tabs.length ? tabs[0][0] : null;
+      gvwTabSel[p[0]] = sel;
+      return { period: p[0], label: p[1], goals: goals, tabs: tabs, sel: sel };
+    // This week + This month always show (when any bar goal exists); Custom
+    // only when it has goals.
+    }).filter(function (p) { return p.period !== 'custom' || p.goals.length > 0; });
+  }
+  function gvwHasBarGoals() {
+    return (goalsActive || []).some(function (g) { return g.type !== 'streak'; });
+  }
+
+  function gvwPanelHtml(p) {
+    if (!p.goals.length) {
+      return '<section class="gvw-panel gvw-panel-empty" data-period="' + p.period + '">' +
+        '<div class="gvw-panel-hdr"><div class="gvw-panel-title">' + esc(p.label) + '</div></div>' +
+        '<div class="gvw-panel-none">No ' + (p.period === 'weekly' ? 'weekly' : 'monthly') + ' goals yet</div>' +
+      '</section>';
     }
-    return '<div class="gvw-heat-row" data-goal-id="' + esc(g.id) + '" data-target="' + target + '" data-progress="' + prog + '">' +
-      '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px">' +
-        '<div style="font-size:11px;font-weight:600;color:var(--gray-700)">' + esc(gvwSportLabel(g)) + ' — ' + esc(gvwMetric(g)) + '</div>' +
-        '<div class="gvw-heat-value" style="font-size:10px;font-family:var(--mono);color:var(--gray-600);flex-shrink:0">' + fmt.num(prog) + ' of ' + fmt.num(target) + '</div>' +
-      '</div>' +
-      '<div style="display:flex;flex-wrap:wrap;gap:4px">' + squares + '</div>' +
+    return '<section class="gvw-panel" data-period="' + p.period + '">' +
+      '<div class="gvw-panel-hdr"><div class="gvw-panel-title">' + esc(p.label) + '</div>' +
+        '<div class="gvw-tabs" role="tablist">' + p.tabs.map(function (t) {
+          var on = t[0] === p.sel;
+          return '<button type="button" role="tab" class="gvw-tab' + (on ? ' on' : '') + '" aria-selected="' + on + '" data-period="' + p.period + '" data-type="' + t[0] + '" onclick="gvwSelectTab(\'' + p.period + '\',\'' + t[0] + '\')">' + t[1] + '</button>';
+        }).join('') + '</div></div>' +
+      '<div class="gvw-chart" data-period="' + p.period + '" data-type="' + (p.sel || '') + '"></div>' +
+    '</section>';
+  }
+
+  // Section markup. `stats` = /api/profile/stats response (for the streak block).
+  function gvwCard(stats) {
+    var head = '<div class="gvw-hdr"><div class="gvw-hdr-icon">🎯</div><div><div class="gvw-h">Goals vs actual</div><div class="gvw-sub">See how you\'re progressing across your sports</div></div>' +
+      '<div class="gvw-legend"><span><i class="gvw-sw goal"></i>Goal</span><span><i class="gvw-sw act"></i>Actual</span><span><i class="gvw-sw exp"></i>Expected by today</span></div></div>';
+    var goalsHtml = '';
+    if (goalsActive) {
+      var panels = gvwPanels();
+      goalsHtml = gvwHasBarGoals()
+        ? '<div id="gvw-card" class="gvw-card">' + head + '<div class="gvw-grid">' + panels.map(gvwPanelHtml).join('') + '</div></div>'
+        : '<div id="gvw-card" class="gvw-card gvw-empty"><div class="gvw-empty-icon">🎯</div><div class="gvw-empty-text">Set weekly or monthly goals to see your progress here</div>' +
+          '<button type="button" class="btn btn-yellow gvw-empty-cta" onclick="document.getElementById(\'htab-goals\').click()">Set a goal</button></div>';
+    }
+    return goalsHtml + gvwStreakHtml(stats);
+  }
+
+  function gvwStreakHtml(stats) {
+    if (!stats || !stats.streaks) return '';
+    var st = stats.streaks, strip = Array.isArray(stats.weekStrip) ? stats.weekStrip : [];
+    var cur = Number(st.current) || 0, longest = Number(st.longest) || 0;
+    var today = strip.filter(function (d) { return d.isToday; })[0];
+    var copy = today && today.active ? 'Nice — you\'ve logged today'
+      : cur > 0 ? 'Log an activity today to keep it going!' : 'Log an activity to start a streak';
+    var fmt = gvwFmt();
+    // Streak goals: an Any-sport goal annotates the Current tile (its own
+    // server progress/onTrack); sport-scoped goals get their own rows so the
+    // global streak is never presented as a sport streak, and none are lost.
+    var sgs = (goalsActive || []).filter(function (g) { return g.type === 'streak'; });
+    // Tile goal: first Any-sport streak goal, else the first sport-scoped one.
+    var anyGoal = sgs.filter(function (g) { return !g.sport; })[0] || sgs[0] || null;
+    var others = sgs.filter(function (g) { return g !== anyGoal; });
+    // A scoped goal names its sport and its OWN progress so the global
+    // Current number is never read as that sport's streak.
+    var scopedNote = anyGoal && anyGoal.sport
+      ? '<span class="gvw-tile-scope">' + esc(gvwSport(anyGoal).emoji + ' ' + gvwSport(anyGoal).label) + ': ' + fmt.num(anyGoal.progress) + ' ' + (Number(anyGoal.progress) === 1 ? 'day' : 'days') + '</span> · '
+      : '';
+    // Streak goals report pace only (On pace / Behind) — "Done" is a bar state.
+    var pace = function (g) { var on = !!g.onTrack; return '<span class="gvw-pace ' + (on ? 'on' : 'behind') + '">' + (on ? 'On pace' : 'Behind') + '</span>'; };
+    var days = function (n) { return n === 1 ? 'day' : 'days'; };
+    var dayHtml = strip.map(function (d, i) {
+      // Account-timezone day keys from the server; formatted as UTC so the
+      // browser's own timezone can never shift the label.
+      var dt = new Date(String(d.date) + 'T00:00:00Z');
+      var lbl = isNaN(dt.getTime()) ? '' : dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+      var next = strip[i + 1];
+      var link = d.active && next && next.active ? ' linked' : '';
+      return '<div class="gvw-day' + (d.active ? ' active' : '') + (d.isToday ? ' today' : '') + (d.isFuture ? ' future' : '') + link + '" data-date="' + esc(d.date) + '" data-active="' + (d.active ? 1 : 0) + '">' +
+        '<div class="gvw-dow">' + esc(d.weekday) + '</div><div class="gvw-date">' + esc(lbl) + '</div>' +
+        '<div class="gvw-mark" role="img" aria-label="' + esc(d.weekday + ' ' + lbl + ': ' + (d.active ? 'active' : d.isFuture ? 'upcoming' : 'no activity') + (d.isToday ? ' (today)' : '')) + '">' + (d.active ? '✓' : '') + '</div></div>';
+    }).join('');
+    return '<div id="gvw-streak" class="gvw-card gvw-streak">' +
+      '<div class="gvw-hdr"><div class="gvw-hdr-icon">🔥</div><div><div class="gvw-h">Activity streak</div><div class="gvw-sub">Stay consistent and build momentum</div></div>' +
+        '<a class="gvw-streak-now" href="' + esc((window.BASE || '') + '/calendar') + '" aria-label="' + esc(cur + ' ' + days(cur) + ' in a row. ' + copy + ' Open calendar') + '"><span><b class="gvw-streak-n">' + cur + ' ' + days(cur) + ' in a row</b><span class="gvw-streak-copy">' + esc(copy) + '</span></span><span class="gvw-chev" aria-hidden="true">›</span></a></div>' +
+      '<div class="gvw-streak-body"><div class="gvw-week">' + dayHtml + '</div>' +
+        '<div class="gvw-tiles">' +
+          '<div class="gvw-tile cur"><div class="gvw-tile-ic">🔥</div><div><div class="gvw-tile-v">' + cur + '</div><div class="gvw-tile-l">Current streak</div><div class="gvw-tile-u">' + days(cur) + '</div>' +
+            (anyGoal ? '<div class="gvw-tile-goal" data-goal-id="' + esc(anyGoal.id) + '"' + (anyGoal.sport ? ' data-sport="' + esc(anyGoal.sport) + '"' : '') + '>' + scopedNote + 'Goal: ' + fmt.num(anyGoal.target) + ' days · ' + pace(anyGoal) + '</div>' : '') + '</div></div>' +
+          '<div class="gvw-tile long"><div class="gvw-tile-ic">🏆</div><div><div class="gvw-tile-v">' + longest + '</div><div class="gvw-tile-l">Longest streak</div><div class="gvw-tile-u">' + days(longest) + '</div></div></div>' +
+        '</div></div>' +
+      (others.length ? '<div class="gvw-sgoals">' + others.map(function (g) {
+        var sp = gvwSport(g);
+        return '<div class="gvw-sgoal" data-goal-id="' + esc(g.id) + '"><span>' + esc(sp.emoji + ' ' + sp.label) + ' streak goal</span><span class="gvw-sgoal-v">' + fmt.num(g.progress) + ' / ' + fmt.num(g.target) + ' days · ' + pace(g) + '</span></div>';
+      }).join('') + '</div>' : '') +
     '</div>';
   }
 
-  function gvwCard() {
-    var gs = goalsActive || [];
-    if (!gs.length) return ''; // no goals (or goals unavailable) → no card
-    var narrow = window.innerWidth <= 480;
-    var fmt = window.__goalFmt || { num: function (n) { return String(n); } };
-    // Full partition: every active goal lands in exactly one place — streaks
-    // (whatever their deadline period) in the heat map, everything else in
-    // its period's panel. Empty sections don't render at all.
-    var streakGs = gs.filter(function (g) { return g.type === 'streak'; });
-    var barGs = gs.filter(function (g) { return g.type !== 'streak'; });
-    var panels = [['weekly', 'Weekly'], ['monthly', 'Monthly'], ['custom', 'Custom']].map(function (p) {
-      return { period: p[0], label: p[1], goals: barGs.filter(function (g) { return g.period === p[0]; }) };
-    }).filter(function (p) { return p.goals.length > 0; });
-
-    // Same panel chrome as the By-sport card: grid cells, border dividers
-    // (right on desktop, bottom stacked on phones), 20/16 padding, uppercase
-    // title. Equal 1fr columns — By-sport's 1.25fr exists only for its pie.
-    var grid = '';
-    if (panels.length) {
-      var cells = panels.map(function (p, i) {
-        var last = i === panels.length - 1;
-        return '<div class="gvw-panel" data-period="' + p.period + '" style="padding:20px 16px;min-width:0;display:flex;flex-direction:column;gap:14px;' +
-          (narrow ? (last ? '' : 'border-bottom:var(--border)') : (last ? '' : 'border-right:var(--border)')) + '">' +
-          gvwBarsInner(p.goals, narrow, fmt) +
-          '<div style="margin-top:auto">' + gvwPanelTitle(p.label) + '</div>' +
-        '</div>';
-      }).join('');
-      grid = '<div style="display:grid;grid-template-columns:' + (narrow ? '1fr' : 'repeat(' + panels.length + ',1fr)') + '">' + cells + '</div>';
+  // Draw every chart host from its own measured width; redraw on resize.
+  function gvwMountCharts() {
+    if (gvwObserver) { gvwObserver.disconnect(); gvwObserver = null; }
+    var hosts = document.querySelectorAll('.gvw-chart');
+    if (!hosts.length || !window.ArenasCharts) return;
+    var panels = {}; gvwPanels().forEach(function (p) { panels[p.period] = p; });
+    var draw = function (host) {
+      var p = panels[host.getAttribute('data-period')];
+      var type = host.getAttribute('data-type');
+      if (!p || !type) { host.innerHTML = ''; return; }
+      var w = Math.round(host.getBoundingClientRect().width);
+      if (!(w > 0) || String(w) === host.getAttribute('data-w')) return;
+      host.setAttribute('data-w', String(w));
+      var spec = gvwChartSpec(p.goals.filter(function (g) { return g.type === type; }), type);
+      host.innerHTML = (spec.groups.length ? window.ArenasCharts.renderGrouped(spec, w) : '') +
+        (spec.missing.length ? '<div class="gvw-chart-error" role="alert">⚠️ Distance data unavailable for ' + esc(spec.missing.join(', ')) + '. Reload to try again.</div>' : '') +
+        '<div class="gvw-tip" role="status" aria-live="polite"></div>';
+    };
+    hosts.forEach(draw);
+    if (typeof ResizeObserver === 'function') {
+      gvwObserver = new ResizeObserver(function (entries) { entries.forEach(function (e) { draw(e.target); }); });
+      hosts.forEach(function (h) { gvwObserver.observe(h); });
     }
-    var heat = '';
-    if (streakGs.length) {
-      heat = '<div class="gvw-heat" style="' + (panels.length ? 'border-top:var(--border);' : '') + 'padding:16px;display:flex;flex-direction:column;gap:14px">' +
-        streakGs.map(function (g) { return gvwHeatRow(g, fmt); }).join('') +
-        gvwPanelTitle('Streaks') +
-      '</div>';
-    }
-    return '<div id="gvw-card" style="margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
-      '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">' +
-        '<div style="font-size:12px;font-weight:600">🎯 Goals vs actual</div>' +
-        '<div style="font-size:11px;color:var(--gray-400)">goal grey · actual yellow · each pair on its own scale</div>' +
-      '</div>' + grid + heat +
-    '</div>';
   }
+  window.gvwSelectTab = function (period, type) {
+    gvwTabSel[period] = type;
+    var panel = document.querySelector('.gvw-panel[data-period="' + period + '"]');
+    if (!panel) return;
+    panel.querySelectorAll('.gvw-tab').forEach(function (b) {
+      var on = b.getAttribute('data-type') === type;
+      b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on));
+    });
+    var host = panel.querySelector('.gvw-chart');
+    host.setAttribute('data-type', type); host.removeAttribute('data-w');
+    gvwMountCharts();
+  };
+  // Keyboard focus or tap on a bar pair shows its full summary under the chart
+  // (SVG <title> tooltips are hover-only).
+  function gvwShowTip(e) {
+    var grp = e.target && e.target.closest ? e.target.closest('.gc-group') : null;
+    var host = grp && grp.closest('.gvw-chart');
+    if (!host) return;
+    var tip = host.querySelector('.gvw-tip');
+    if (tip) tip.textContent = grp.getAttribute('data-gc-tip') || '';
+  }
+  document.addEventListener('focusin', gvwShowTip);
+  document.addEventListener('click', gvwShowTip);
+  // Pure spec builder for seed-free checks (no state mutation exposed).
+  window.__gvw = { spec: gvwChartSpec };
 
   window.setStatsPeriod = function (el, period) {
     document.querySelectorAll('.sp-period').forEach(function (p) {
@@ -2014,7 +2143,8 @@ if (logHashMatch) {
           '<div style="font-size:15px;font-weight:600;color:var(--gray-900);margin-bottom:6px">No stats yet</div>' +
           '<div style="font-size:13px;color:var(--gray-500);line-height:1.6">Log your first activity and your stats, streaks, and personal records will appear here.</div>' +
           '</div>' +
-          gvwCard();
+          gvwCard(r);
+        gvwMountCharts();
         return;
       }
 
@@ -2078,9 +2208,8 @@ if (logHashMatch) {
           '<div style="padding:12px 14px;display:flex;align-items:center;gap:10px"><div style="font-size:18px">📅</div><div><div style="font-size:15px;font-weight:700;font-family:var(--mono);line-height:1">' + r.streaks.avgPerWeek + '</div><div style="font-size:9px;color:var(--gray-400);text-transform:uppercase;letter-spacing:.04em;margin-top:2px">Avg sessions / week</div></div></div>' +
         '</div>' +
         // Card order: By sport → Personal records → Weekly activity →
-        // Goals vs actual (moved to the bottom of the tab; hidden entirely
-        // when there are no active goals — the create CTA lives in the
-        // Goals tab, and no gap is left because gvwCard() returns '').
+        // Goals vs actual + Activity streak (bottom of the tab; with no
+        // non-streak goals the goals card becomes a compact "Set a goal" CTA).
         (r.sportBreakdown.length > 0 ?
           '<div style="margin:0 12px 12px;background:white;border:var(--border);border-radius:var(--radius-lg);overflow:hidden">' +
             '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between"><div style="font-size:12px;font-weight:600">🏅 By sport</div><div style="font-size:11px;color:var(--gray-400)">sessions · distance · time</div></div>' +
@@ -2098,7 +2227,8 @@ if (logHashMatch) {
           '<div style="padding:10px 14px;border-bottom:var(--border);background:var(--gray-50);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div style="font-size:12px;font-weight:600">📊 Weekly activity · last ' + nWeeks + ' weeks</div><div style="display:flex;align-items:center;gap:6px">' + weekPill(6) + weekPill(12) + weekPill(24) + '<div style="font-size:11px;color:var(--gray-400);margin-left:4px">hours per week</div></div></div>' +
           weeklyStack +
         '</div>' +
-        gvwCard();
+        gvwCard(r);
+      gvwMountCharts();
     } catch (err) {
       body.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:var(--gray-400)">Could not load stats.</div>';
     }

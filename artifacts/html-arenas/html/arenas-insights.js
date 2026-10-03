@@ -161,6 +161,144 @@
     return '<div class="ai-chart-shell"><div class="ai-chart-title">' + escapeAiHtml(titleText) + '</div>' + svg + legend + caption + '</div>';
   }
 
+  // ── GROUPED-BAR MODE (Goals vs actual) ─────────────────────────────────────
+  // renderInsightsChart above is untouched, so every Insights/recap chart stays
+  // byte-identical (verify-insights-chart.js). Reuses the shared axis/grid/label
+  // classes (ai-chart-grid, ai-chart-axis-label, ai-chart-shell) and SVG <title>
+  // tooltips; each bar pair is also keyboard-focusable with a full summary.
+  //
+  // spec = {
+  //   title?: string, unit?: string, integer?: boolean,   // integer ticks (sessions)
+  //   groups: [{ id, label, emoji?, goal, actual, expected?,  // numbers, chart unit
+  //              goalTip?, actualTip?,                        // tooltip text override
+  //              status?: 'on'|'behind'|'done'|'' }]
+  // }
+  // Returns '' when width is not measurable (same contract as renderInsightsChart).
+  // DOM hooks: .gc-shell[data-gc-scale-max][data-gc-plot-top][data-gc-plot-bottom]
+  //   g.gc-group[data-gc-index][data-goal-id][data-gc-tip][tabindex=0]
+  //   rect.gc-bar.gc-goal|.gc-actual[data-goal-id][data-value]
+  //   line.gc-expected[data-goal-id][data-value]  (only when expected is finite)
+  //   text.gc-value[data-kind=goal|actual], text.gc-label[data-full-label],
+  //   text.gc-status[data-status]
+  function renderGroupedChart(spec, measuredWidth) {
+    spec = spec || {};
+    var groups = Array.isArray(spec.groups) ? spec.groups : [];
+    var width = Number(measuredWidth);
+    if (!(width > 0)) return '';
+    width = Math.max(160, Math.round(width));
+    var unit = spec.unit == null ? '' : String(spec.unit);
+    var count = Math.max(1, groups.length);
+    var narrow = width < 420;
+    var height = narrow ? 212 : 232;
+    var margin = { top: 22, right: 4, bottom: 46, left: 30 };
+    var plotWidth = Math.max(1, width - margin.left - margin.right);
+    var plotHeight = Math.max(1, height - margin.top - margin.bottom);
+    var bottom = margin.top + plotHeight;
+    function num(v) { var n = Number(v); return isFinite(n) && n >= 0 ? n : 0; }
+    function has(v) { return v != null && v !== '' && isFinite(Number(v)); }
+    function fmt(v) {
+      var n = num(v);
+      if (Math.abs(n - Math.round(n)) < 0.000001) return String(Math.round(n));
+      return n.toFixed(1).replace(/\.0$/, '');
+    }
+    var maxValue = 0;
+    groups.forEach(function (g) {
+      [g && g.goal, g && g.actual, g && has(g.expected) ? g.expected : 0].forEach(function (v) { if (num(v) > maxValue) maxValue = num(v); });
+    });
+    var scaleMax, ticks = [];
+    if (spec.integer) {
+      var top = Math.max(1, Math.ceil(maxValue));
+      // Dynamic 1/2/5×10^n integer step: ≤4 intervals (≤5 ticks) for any
+      // finite target, however large.
+      var imag = Math.max(1, Math.pow(10, Math.floor(Math.log(top / 4) / Math.LN10)));
+      var step = imag * 10;
+      [1, 2, 5, 10].some(function (m) { if (Math.ceil(top / (m * imag)) <= 4) { step = m * imag; return true; } return false; });
+      scaleMax = Math.ceil(top / step) * step;
+      for (var t = 0; t <= scaleMax; t += step) ticks.push(t);
+    } else {
+      var raw = maxValue > 0 ? maxValue : 1;
+      var mag = Math.pow(10, Math.floor(Math.log(raw / 4) / Math.LN10));
+      var nice = [1, 2, 2.5, 5, 10].map(function (m) { return m * mag; });
+      var st = nice[nice.length - 1];
+      for (var k = 0; k < nice.length; k += 1) { if (raw / nice[k] <= 4) { st = nice[k]; break; } }
+      scaleMax = Math.ceil(raw / st - 1e-9) * st;
+      for (var q = 0; q <= 4 && q * st <= scaleMax + 1e-9; q += 1) ticks.push(Math.round(q * st * 100) / 100);
+    }
+    function yFor(v) { return bottom - (num(v) / scaleMax) * plotHeight; }
+    var slot = plotWidth / count;
+    var barW = Math.max(6, Math.min(30, (slot - 10) / 2));
+    var pairGap = Math.min(4, Math.max(2, slot * 0.05));
+    var valueFont = narrow ? 9.5 : 10.5;
+    var labelFont = narrow ? 10 : 11.5;
+    // ~0.56em per glyph for Source Sans 3; long labels end in an ellipsis.
+    var maxChars = Math.max(3, Math.floor((slot - 4) / (labelFont * 0.56)));
+    // Emoji/pictographs render ~2 glyphs wide; variation selectors/ZWJ are 0.
+    function cw(ch) {
+      var c = ch.codePointAt(0);
+      if (c === 0xFE0F || c === 0x200D) return 0;
+      return c >= 0x2190 ? 2 : 1;
+    }
+    function clip(text) {
+      var chars = Array.from(String(text)), total = 0, i;
+      for (i = 0; i < chars.length; i += 1) total += cw(chars[i]);
+      if (total <= maxChars) return chars.join('');
+      var used = 0, outChars = [];
+      for (i = 0; i < chars.length; i += 1) {
+        if (used + cw(chars[i]) > maxChars - 1) break;
+        used += cw(chars[i]); outChars.push(chars[i]);
+      }
+      return (outChars.join('').replace(/\s+$/, '') || chars[0]) + '…';
+    }
+    var titleText = spec.title == null ? 'Goals vs actual' : String(spec.title);
+    var aria = titleText + (unit ? ' (' + unit + ')' : '') + '. ' + groups.map(function (g) {
+      return String(g.label) + ': goal ' + fmt(g.goal) + ', actual ' + fmt(g.actual);
+    }).join('; ') + '.';
+    // role=group (not img) so each focusable bar pair stays in the a11y tree.
+    var svg = '<svg class="ai-chart-svg gc-svg" role="group" aria-label="' + escapeAiHtml(aria) +
+      '" width="100%" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '" preserveAspectRatio="none" focusable="false">';
+    ticks.forEach(function (v) {
+      var y = yFor(v);
+      svg += '<line class="ai-chart-grid" x1="' + margin.left + '" y1="' + y + '" x2="' + (width - margin.right) + '" y2="' + y + '"></line>' +
+        '<text class="ai-chart-axis-label" x="' + (margin.left - 6) + '" y="' + (y + 3) + '" text-anchor="end">' + escapeAiHtml(fmt(v)) + '</text>';
+    });
+    groups.forEach(function (g, i) {
+      var cx = margin.left + slot * i + slot / 2;
+      var gx = cx - pairGap / 2 - barW, ax = cx + pairGap / 2;
+      var gv = num(g.goal), av = num(g.actual);
+      var gy = yFor(gv), ay = yFor(av);
+      var gh = Math.max(gv > 0 ? 1.5 : 0, bottom - gy), ah = Math.max(av > 0 ? 1.5 : 0, bottom - ay);
+      var id = escapeAiHtml(g.id == null ? '' : g.id);
+      var label = (g.emoji ? g.emoji + ' ' : '') + String(g.label == null ? '' : g.label);
+      var goalTip = g.goalTip || (label + ' — Goal: ' + fmt(gv) + (unit ? ' ' + unit : ''));
+      var actualTip = g.actualTip || (label + ' — Actual: ' + fmt(av) + (unit ? ' ' + unit : ''));
+      var expectedTip = has(g.expected) ? label + ' — Expected by today: ' + fmt(g.expected) + (unit ? ' ' + unit : '') : '';
+      var statusWord = g.status === 'done' ? 'Done' : g.status === 'on' ? 'On pace' : g.status === 'behind' ? 'Behind' : '';
+      var summary = [goalTip, actualTip, expectedTip, statusWord].filter(Boolean).join('. ');
+      // Keyboard + touch: each pair is focusable and carries its full summary
+      // (data-gc-tip is shown by the host page on focus/tap).
+      svg += '<g class="gc-group" role="img" tabindex="0" aria-label="' + escapeAiHtml(summary) + '" data-gc-tip="' + escapeAiHtml(summary) + '" data-gc-index="' + i + '" data-goal-id="' + id + '">';
+      svg += '<rect class="gc-hit" x="' + (margin.left + slot * i) + '" y="' + margin.top + '" width="' + slot + '" height="' + (plotHeight + margin.bottom - 4) + '" fill="transparent"></rect>';
+      svg += '<rect class="gc-bar gc-goal" data-goal-id="' + id + '" data-value="' + gv + '" x="' + gx + '" y="' + (bottom - gh) + '" width="' + barW + '" height="' + gh + '" rx="2.5" fill="#6B7280"><title>' + escapeAiHtml(goalTip) + '</title></rect>';
+      svg += '<rect class="gc-bar gc-actual" data-goal-id="' + id + '" data-value="' + av + '" x="' + ax + '" y="' + (bottom - ah) + '" width="' + barW + '" height="' + ah + '" rx="2.5" fill="#FFD21E" stroke="#E6B800" stroke-width="1"><title>' + escapeAiHtml(actualTip) + '</title></rect>';
+      if (av <= 0) svg += '<line class="gc-zero" x1="' + ax + '" y1="' + (bottom - 0.75) + '" x2="' + (ax + barW) + '" y2="' + (bottom - 0.75) + '" stroke="#E6B800" stroke-width="1.5"></line>';
+      svg += '<text class="gc-value" data-kind="goal" x="' + (gx + barW / 2) + '" y="' + (bottom - gh - 4) + '" text-anchor="middle" font-size="' + valueFont + '">' + escapeAiHtml(fmt(gv)) + '</text>';
+      // Keep the printed actual clear of the expected tick when they meet.
+      var avY = bottom - ah - 4;
+      if (has(g.expected)) { var tickY = yFor(g.expected); if (tickY > bottom - ah - 16 && tickY < bottom - ah + 2) avY = Math.min(avY, tickY - 5); }
+      svg += '<text class="gc-value" data-kind="actual" x="' + (ax + barW / 2) + '" y="' + avY + '" text-anchor="middle" font-size="' + valueFont + '">' + escapeAiHtml(fmt(av)) + '</text>';
+      if (has(g.expected)) {
+        var ey = yFor(g.expected);
+        svg += '<line class="gc-expected" data-goal-id="' + id + '" data-value="' + num(g.expected) + '" x1="' + (ax - 3) + '" y1="' + ey + '" x2="' + (ax + barW + 3) + '" y2="' + ey + '" stroke="#111827" stroke-width="2" stroke-linecap="round"><title>' + escapeAiHtml(expectedTip) + '</title></line>';
+      }
+      svg += '<text class="gc-label" data-full-label="' + escapeAiHtml(label) + '" x="' + cx + '" y="' + (bottom + 17) + '" text-anchor="middle" font-size="' + labelFont + '"><title>' + escapeAiHtml(label) + '</title>' + escapeAiHtml(clip(label)) + '</text>';
+      var status = g.status === 'done' ? '✓ Done' : statusWord;
+      if (status) svg += '<text class="gc-status" data-status="' + escapeAiHtml(g.status) + '" x="' + cx + '" y="' + (bottom + 33) + '" text-anchor="middle" font-size="' + (narrow ? 9.5 : 10.5) + '">' + escapeAiHtml(status) + '</text>';
+      svg += '</g>';
+    });
+    svg += '</svg>';
+    return '<div class="ai-chart-shell gc-shell" data-gc-scale-max="' + scaleMax + '" data-gc-plot-top="' + margin.top + '" data-gc-plot-bottom="' + bottom + '">' + svg + '</div>';
+  }
+
   function usageText() {
     if (!conversation.usage) return '';
     return conversation.usage.used + ' of ' + conversation.usage.limit + ' questions used · resets ' +
@@ -519,4 +657,5 @@
   }
 
   window.ArenasInsights = { mount: mount, mountStoredRecap: mountStoredRecap, unmount: unmount };
+  window.ArenasCharts = Object.assign(window.ArenasCharts || {}, { renderGrouped: renderGroupedChart });
 })(window);
