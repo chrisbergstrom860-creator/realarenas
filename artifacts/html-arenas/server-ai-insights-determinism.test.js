@@ -98,12 +98,16 @@ test('Goals API and AI context have day-rounded onTrack parity at the injected c
       activityQueryCalls.push(['order', column, options]);
       return this;
     },
+    range(from, to) {
+      activityQueryCalls.push(['range', from, to]);
+      return this;
+    },
     then(resolve) {
       return Promise.resolve({ data: queriedActivities }).then(resolve);
     }
   };
   const { getDateRange, buildClubPointsLeaderboard, goalWindow, goalProgressInWindow, priorClosedGoalWindows, recentGoalHistory, enrichGoal, enrichGoalRows } = loadFunctions(
-    ['getDateRange', 'fetchActivitiesForUsers', 'bucketActivities', 'buildClubPointsLeaderboard', 'goalWindow', 'goalNaturalUnit', 'goalProgressInWindow', 'priorClosedGoalWindows', 'recentGoalHistory', 'enrichGoal', 'enrichGoalRows'],
+    ['getDateRange', 'fetchActivitiesForUsers', 'fetchAllRows', 'bucketActivities', 'buildClubPointsLeaderboard', 'goalWindow', 'goalNaturalUnit', 'goalProgressInWindow', 'priorClosedGoalWindows', 'recentGoalHistory', 'enrichGoal', 'enrichGoalRows'],
     {
       Date: GuardedDate,
       MI_TO_KM: 1.609,
@@ -180,13 +184,15 @@ test('Goals API and AI context have day-rounded onTrack parity at the injected c
   });
   assert.deepEqual(activityQueryCalls.map((call) => call.slice(0, 2)), [
     ['select', 'id, sport, distance, duration, date'],
+    ['range', 0],
     ['eq', 'user_id'],
     ['order', 'date'],
     ['order', 'id']
   ]);
-  assert.equal(activityQueryCalls[1][2], 'user-1');
-  assert.equal(activityQueryCalls[2][2].ascending, true);
+  assert.equal(activityQueryCalls[1][2], 999);
+  assert.equal(activityQueryCalls[2][2], 'user-1');
   assert.equal(activityQueryCalls[3][2].ascending, true);
+  assert.equal(activityQueryCalls[4][2].ascending, true);
 
   // This is the old divergence point: at local midday on March 8, seven of
   // 31 sessions satisfies seven completed calendar days, but not 7.5 elapsed
@@ -370,5 +376,5 @@ test('AI context queries and weekly sport buckets pin tie ordering', () => {
   assert.match(source, /\.order\('created_at', \{ ascending: true \}\)\.order\('id', \{ ascending: true \}\)\.limit\(5\)/);
   assert.match(source, /\.eq\('user_id', user\.id\)\s+\.order\('club_id', \{ ascending: true \}\)/);
   assert.match(source, /\.order\('created_at', \{ ascending: true \}\)\.order\('user_id', \{ ascending: true \}\)/);
-  assert.match(source, /if \(includeRecentHistory\) \{\s+activityQuery = activityQuery\.order\('date', \{ ascending: true \}\)\.order\('id', \{ ascending: true \}\)/);
+  assert.match(functionSourceFrom(source, 'enrichGoalRows'), /fetchAllRows\('activities',\s+q => q\.eq\('user_id', userId\)\.order\('date', \{ ascending: true \}\)\.order\('id', \{ ascending: true \}\)/);
 });

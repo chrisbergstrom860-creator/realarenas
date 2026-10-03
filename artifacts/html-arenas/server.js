@@ -8627,15 +8627,9 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
     const statsTz = getUserTimezone(req.user);
 
     // All activities for streaks + PRs (PRs are always all-time).
-    const { data: allActivities, error } = await supabaseAdmin
-      .from('activities')
-      .select('id, sport, title, distance, duration, date')
-      .eq('user_id', req.user.id)
-      .order('date', { ascending: true });
-    if (error) {
-      console.log('Profile stats query error:', error.message);
-      return res.status(500).json({ error: 'Could not load stats' });
-    }
+    const allActivities = await fetchAllRows('activities',
+      q => q.eq('user_id', req.user.id).order('date', { ascending: true }).order('id', { ascending: true }),
+      'id, sport, title, distance, duration, date');
     const acts = allActivities || [];
     // Period-filtered activities for hero stats and breakdowns. "This month" /
     // "this year" mean calendar membership in the USER'S zone (key comparisons),
@@ -8665,6 +8659,13 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
 
     // ── Streaks (always all-time, shared helper, user's zone) ──
     const { currentStreak, longestStreak } = computeStreaks(acts, statsTz);
+    const todayKey = dayKey(now, statsTz);
+    const mondayKey = weekStartKey(now, statsTz);
+    const activeDays = new Set(acts.map(a => dayKey(a.date, statsTz)));
+    const weekStrip = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((weekday, i) => {
+      const date = addDaysToKey(mondayKey, i);
+      return { date, weekday, active: activeDays.has(date), isToday: date === todayKey, isFuture: date > todayKey };
+    });
     // Avg sessions per week over the period (or since first activity in period).
     const firstDate = periodActs.length > 0 ? new Date(periodActs[0].date) : now;
     const weeksSpan = Math.max(1, (now - firstDate) / (7 * 86400000));
@@ -8780,6 +8781,7 @@ app.get(BASE + '/api/profile/stats', requireAuth, requireProPlan('training_analy
       chartWeeks,
       hero: { activities: periodActs.length, totalKm, totalHours, totalPoints },
       streaks: { current: currentStreak, longest: longestStreak, avgPerWeek },
+      weekStrip,
       weeklyChart,
       sportBreakdown,
       prs
@@ -9846,6 +9848,12 @@ function enrichGoal(goal, activities, streaks, tz, { now = new Date(), dayStable
     : Math.min(1, Math.max(0, (now - start) / (end - start || 1)));
   const progressFrac = targetCmp > 0 ? progressCmp / targetCmp : 0;
   const onTrack = isComplete || (!expired && progressFrac >= elapsedFrac);
+  // Chart expectations always use completed local calendar days, including
+  // when a caller explicitly requests the legacy exact-time pace comparison.
+  const expectedFrac = Math.min(1, Math.max(0,
+    (keyToEpochDays(dayKey(now, tz)) - keyToEpochDays(window.startKey)) /
+    (keyToEpochDays(window.endKeyExcl) - keyToEpochDays(window.startKey) || 1)));
+  const expectedProgress = Math.round(target * expectedFrac * 100) / 100;
   return {
     id: goal.id,
     type: goal.type,
@@ -9858,6 +9866,14 @@ function enrichGoal(goal, activities, streaks, tz, { now = new Date(), dayStable
     createdAt: goal.created_at,
     target,
     progress,
+    expectedProgress,
+    ...(goal.type === 'distance' ? {
+      // Convert the same displayed values used by the Goals tab. Do not
+      // introduce a second rounding step that changes mi→km comparisons.
+      targetKm: target * (goal.unit === 'mi' ? MI_TO_KM : 1),
+      progressKm: progress * (goal.unit === 'mi' ? MI_TO_KM : 1),
+      expectedKm: expectedProgress * (goal.unit === 'mi' ? MI_TO_KM : 1)
+    } : {}),
     pct,
     isComplete,
     windowStart: start.toISOString(),
@@ -9920,13 +9936,9 @@ async function enrichGoalRows(userId, rows, tz, {
   now = new Date(),
   dayStablePace = true
 } = {}) {
-  let activityQuery = supabaseAdmin.from('activities')
-    .select(includeRecentHistory ? 'id, sport, distance, duration, date' : 'sport, distance, duration, date')
-    .eq('user_id', userId);
-  if (includeRecentHistory) {
-    activityQuery = activityQuery.order('date', { ascending: true }).order('id', { ascending: true });
-  }
-  const { data: acts } = await activityQuery;
+  const acts = await fetchAllRows('activities',
+    q => q.eq('user_id', userId).order('date', { ascending: true }).order('id', { ascending: true }),
+    includeRecentHistory ? 'id, sport, distance, duration, date' : 'sport, distance, duration, date');
   const activities = acts || [];
   const streaks = computeStreaks(activities, tz, now.getTime());
   return rows.map((goal) => ({
